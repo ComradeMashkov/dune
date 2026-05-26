@@ -1,3 +1,12 @@
+const PI: real64 = 3.141592653589793;
+const TAU: real64 = PI * 2.0;
+const E: real64 = 2.718281828459045;
+const INVERSE_E: real64 = 1.0 / E;
+const PI32: real32 = 3.1415927;
+const TAU32: real32 = PI32 * 2.0;
+const E32: real32 = 2.7182817;
+const INVERSE_E32: real32 = 1.0 / E32;
+
 fn square(value: int) -> int {
     return value * value;
 }
@@ -48,4 +57,887 @@ fn square(value: real32) -> real32 {
 
 fn square(value: real64) -> real64 {
     return value * value;
+}
+
+fn cube(value: int) -> int {
+    return value * value * value;
+}
+
+fn cube(value: i8) -> i8 {
+    return value * value * value;
+}
+
+fn cube(value: i16) -> i16 {
+    return value * value * value;
+}
+
+fn cube(value: i32) -> i32 {
+    return value * value * value;
+}
+
+fn cube(value: i64) -> i64 {
+    return value * value * value;
+}
+
+fn cube(value: isize) -> isize {
+    return value * value * value;
+}
+
+fn cube(value: u8) -> u8 {
+    return value * value * value;
+}
+
+fn cube(value: u16) -> u16 {
+    return value * value * value;
+}
+
+fn cube(value: u32) -> u32 {
+    return value * value * value;
+}
+
+fn cube(value: u64) -> u64 {
+    return value * value * value;
+}
+
+fn cube(value: usize) -> usize {
+    return value * value * value;
+}
+
+fn cube(value: real32) -> real32 {
+    return value * value * value;
+}
+
+fn cube(value: real64) -> real64 {
+    return value * value * value;
+}
+
+fn abs(value: int) -> int {
+    if value < 0 {
+        return 0 - value;
+    }
+
+    return value;
+}
+
+fn abs(value: i8) -> i8 {
+    if value < 0 {
+        return 0 - value;
+    }
+
+    return value;
+}
+
+fn abs(value: i16) -> i16 {
+    if value < 0 {
+        return 0 - value;
+    }
+
+    return value;
+}
+
+fn abs(value: i32) -> i32 {
+    if value < 0 {
+        return 0 - value;
+    }
+
+    return value;
+}
+
+fn abs(value: i64) -> i64 {
+    if value < 0 {
+        return 0 - value;
+    }
+
+    return value;
+}
+
+fn abs(value: isize) -> isize {
+    if value < 0 {
+        return 0 - value;
+    }
+
+    return value;
+}
+
+fn abs(value: u8) -> u8 {
+    return value;
+}
+
+fn abs(value: u16) -> u16 {
+    return value;
+}
+
+fn abs(value: u32) -> u32 {
+    return value;
+}
+
+fn abs(value: u64) -> u64 {
+    return value;
+}
+
+fn abs(value: usize) -> usize {
+    return value;
+}
+
+fn abs(value: real32) -> real32 {
+    if value < 0.0 {
+        return 0.0 - value;
+    }
+
+    return value;
+}
+
+fn abs(value: real64) -> real64 {
+    if value < 0.0 {
+        return 0.0 - value;
+    }
+
+    return value;
+}
+
+fn min(left: int, right: int) -> int {
+    if left < right {
+        return left;
+    }
+
+    return right;
+}
+
+fn min(left: i8, right: i8) -> i8 {
+    if left < right {
+        return left;
+    }
+
+    return right;
+}
+
+fn min(left: i16, right: i16) -> i16 {
+    if left < right {
+        return left;
+    }
+
+    return right;
+}
+
+fn min(left: i32, right: i32) -> i32 {
+    if left < right {
+        return left;
+    }
+
+    return right;
+}
+
+fn min(left: i64, right: i64) -> i64 {
+    if left < right {
+        return left;
+    }
+
+    return right;
+}
+
+fn min(left: isize, right: isize) -> isize {
+    if left < right {
+        return left;
+    }
+
+    return right;
+}
+
+fn min(left: u8, right: u8) -> u8 {
+    if left < right {
+        return left;
+    }
+
+    return right;
+}
+
+fn min(left: u16, right: u16) -> u16 {
+    if left < right {
+        return left;
+    }
+
+    return right;
+}
+
+fn min(left: u32, right: u32) -> u32 {
+    if left < right {
+        return left;
+    }
+
+    return right;
+}
+
+fn min(left: u64, right: u64) -> u64 {
+    if left < right {
+        return left;
+    }
+
+    return right;
+}
+
+fn min(left: usize, right: usize) -> usize {
+    if left < right {
+        return left;
+    }
+
+    return right;
+}
+
+fn min(left: real32, right: real32) -> real32 {
+    if left < right {
+        return left;
+    }
+
+    return right;
+}
+
+fn min(left: real64, right: real64) -> real64 {
+    if left < right {
+        return left;
+    }
+
+    return right;
+}
+
+fn max(left: int, right: int) -> int {
+    if left > right {
+        return left;
+    }
+
+    return right;
+}
+
+fn max(left: i8, right: i8) -> i8 {
+    if left > right {
+        return left;
+    }
+
+    return right;
+}
+
+fn max(left: i16, right: i16) -> i16 {
+    if left > right {
+        return left;
+    }
+
+    return right;
+}
+
+fn max(left: i32, right: i32) -> i32 {
+    if left > right {
+        return left;
+    }
+
+    return right;
+}
+
+fn max(left: i64, right: i64) -> i64 {
+    if left > right {
+        return left;
+    }
+
+    return right;
+}
+
+fn max(left: isize, right: isize) -> isize {
+    if left > right {
+        return left;
+    }
+
+    return right;
+}
+
+fn max(left: u8, right: u8) -> u8 {
+    if left > right {
+        return left;
+    }
+
+    return right;
+}
+
+fn max(left: u16, right: u16) -> u16 {
+    if left > right {
+        return left;
+    }
+
+    return right;
+}
+
+fn max(left: u32, right: u32) -> u32 {
+    if left > right {
+        return left;
+    }
+
+    return right;
+}
+
+fn max(left: u64, right: u64) -> u64 {
+    if left > right {
+        return left;
+    }
+
+    return right;
+}
+
+fn max(left: usize, right: usize) -> usize {
+    if left > right {
+        return left;
+    }
+
+    return right;
+}
+
+fn max(left: real32, right: real32) -> real32 {
+    if left > right {
+        return left;
+    }
+
+    return right;
+}
+
+fn max(left: real64, right: real64) -> real64 {
+    if left > right {
+        return left;
+    }
+
+    return right;
+}
+
+fn clamp(value: int, lower: int, upper: int) -> int {
+    if value < lower {
+        return lower;
+    }
+
+    if value > upper {
+        return upper;
+    }
+
+    return value;
+}
+
+fn clamp(value: i8, lower: i8, upper: i8) -> i8 {
+    if value < lower {
+        return lower;
+    }
+
+    if value > upper {
+        return upper;
+    }
+
+    return value;
+}
+
+fn clamp(value: i16, lower: i16, upper: i16) -> i16 {
+    if value < lower {
+        return lower;
+    }
+
+    if value > upper {
+        return upper;
+    }
+
+    return value;
+}
+
+fn clamp(value: i32, lower: i32, upper: i32) -> i32 {
+    if value < lower {
+        return lower;
+    }
+
+    if value > upper {
+        return upper;
+    }
+
+    return value;
+}
+
+fn clamp(value: i64, lower: i64, upper: i64) -> i64 {
+    if value < lower {
+        return lower;
+    }
+
+    if value > upper {
+        return upper;
+    }
+
+    return value;
+}
+
+fn clamp(value: isize, lower: isize, upper: isize) -> isize {
+    if value < lower {
+        return lower;
+    }
+
+    if value > upper {
+        return upper;
+    }
+
+    return value;
+}
+
+fn clamp(value: u8, lower: u8, upper: u8) -> u8 {
+    if value < lower {
+        return lower;
+    }
+
+    if value > upper {
+        return upper;
+    }
+
+    return value;
+}
+
+fn clamp(value: u16, lower: u16, upper: u16) -> u16 {
+    if value < lower {
+        return lower;
+    }
+
+    if value > upper {
+        return upper;
+    }
+
+    return value;
+}
+
+fn clamp(value: u32, lower: u32, upper: u32) -> u32 {
+    if value < lower {
+        return lower;
+    }
+
+    if value > upper {
+        return upper;
+    }
+
+    return value;
+}
+
+fn clamp(value: u64, lower: u64, upper: u64) -> u64 {
+    if value < lower {
+        return lower;
+    }
+
+    if value > upper {
+        return upper;
+    }
+
+    return value;
+}
+
+fn clamp(value: usize, lower: usize, upper: usize) -> usize {
+    if value < lower {
+        return lower;
+    }
+
+    if value > upper {
+        return upper;
+    }
+
+    return value;
+}
+
+fn clamp(value: real32, lower: real32, upper: real32) -> real32 {
+    if value < lower {
+        return lower;
+    }
+
+    if value > upper {
+        return upper;
+    }
+
+    return value;
+}
+
+fn clamp(value: real64, lower: real64, upper: real64) -> real64 {
+    if value < lower {
+        return lower;
+    }
+
+    if value > upper {
+        return upper;
+    }
+
+    return value;
+}
+
+fn sqrt(value: real64) -> real64 {
+    if value <= 0.0 {
+        return 0.0;
+    }
+
+    let guess: real64 = value;
+    let index = 0;
+    while index < 24 {
+        guess = (guess + value / guess) / 2.0;
+        index = index + 1;
+    }
+
+    return guess;
+}
+
+fn sqrt(value: real32) -> real32 {
+    if value <= 0.0 {
+        return 0.0;
+    }
+
+    let guess: real32 = value;
+    let index = 0;
+    while index < 16 {
+        guess = (guess + value / guess) / 2.0;
+        index = index + 1;
+    }
+
+    return guess;
+}
+
+fn normalize_radians(value: real64) -> real64 {
+    let x: real64 = value;
+
+    while x > PI {
+        x = x - TAU;
+    }
+
+    while x < 0.0 - PI {
+        x = x + TAU;
+    }
+
+    return x;
+}
+
+fn normalize_radians(value: real32) -> real32 {
+    let x: real32 = value;
+
+    while x > PI32 {
+        x = x - TAU32;
+    }
+
+    while x < 0.0 - PI32 {
+        x = x + TAU32;
+    }
+
+    return x;
+}
+
+fn sin(value: real64) -> real64 {
+    let x: real64 = normalize_radians(value);
+    let term: real64 = x;
+    let sum: real64 = x;
+    let n: real64 = 1.0;
+
+    while n < 12.0 {
+        let a: real64 = 2.0 * n;
+        let b: real64 = 2.0 * n + 1.0;
+        term = (0.0 - term) * x * x / (a * b);
+        sum = sum + term;
+        n = n + 1.0;
+    }
+
+    return sum;
+}
+
+fn sin(value: real32) -> real32 {
+    let x: real32 = normalize_radians(value);
+    let term: real32 = x;
+    let sum: real32 = x;
+    let n: real32 = 1.0;
+
+    while n < 8.0 {
+        let a: real32 = 2.0 * n;
+        let b: real32 = 2.0 * n + 1.0;
+        term = (0.0 - term) * x * x / (a * b);
+        sum = sum + term;
+        n = n + 1.0;
+    }
+
+    return sum;
+}
+
+fn cos(value: real64) -> real64 {
+    let x: real64 = normalize_radians(value);
+    let term: real64 = 1.0;
+    let sum: real64 = 1.0;
+    let n: real64 = 1.0;
+
+    while n < 12.0 {
+        let a: real64 = 2.0 * n - 1.0;
+        let b: real64 = 2.0 * n;
+        term = (0.0 - term) * x * x / (a * b);
+        sum = sum + term;
+        n = n + 1.0;
+    }
+
+    return sum;
+}
+
+fn cos(value: real32) -> real32 {
+    let x: real32 = normalize_radians(value);
+    let term: real32 = 1.0;
+    let sum: real32 = 1.0;
+    let n: real32 = 1.0;
+
+    while n < 8.0 {
+        let a: real32 = 2.0 * n - 1.0;
+        let b: real32 = 2.0 * n;
+        term = (0.0 - term) * x * x / (a * b);
+        sum = sum + term;
+        n = n + 1.0;
+    }
+
+    return sum;
+}
+
+fn tan(value: real64) -> real64 {
+    return sin(value) / cos(value);
+}
+
+fn tan(value: real32) -> real32 {
+    return sin(value) / cos(value);
+}
+
+fn exp(value: real64) -> real64 {
+    let x: real64 = value;
+    let scale = 0;
+
+    while x > 1.0 {
+        x = x - 1.0;
+        scale = scale + 1;
+    }
+
+    while x < 0.0 - 1.0 {
+        x = x + 1.0;
+        scale = scale - 1;
+    }
+
+    let term: real64 = 1.0;
+    let sum: real64 = 1.0;
+    let n: real64 = 1.0;
+    while n < 28.0 {
+        term = term * x / n;
+        sum = sum + term;
+        n = n + 1.0;
+    }
+
+    while scale > 0 {
+        sum = sum * E;
+        scale = scale - 1;
+    }
+
+    while scale < 0 {
+        sum = sum / E;
+        scale = scale + 1;
+    }
+
+    return sum;
+}
+
+fn exp(value: real32) -> real32 {
+    let x: real32 = value;
+    let scale = 0;
+    let negative_one: real32 = 0.0 - 1.0;
+
+    while x > 1.0 {
+        x = x - 1.0;
+        scale = scale + 1;
+    }
+
+    while x < negative_one {
+        x = x + 1.0;
+        scale = scale - 1;
+    }
+
+    let term: real32 = 1.0;
+    let sum: real32 = 1.0;
+    let n: real32 = 1.0;
+    while n < 18.0 {
+        term = term * x / n;
+        sum = sum + term;
+        n = n + 1.0;
+    }
+
+    while scale > 0 {
+        sum = sum * E32;
+        scale = scale - 1;
+    }
+
+    while scale < 0 {
+        sum = sum / E32;
+        scale = scale + 1;
+    }
+
+    return sum;
+}
+
+fn ln(value: real64) -> real64 {
+    if value <= 0.0 {
+        return 0.0;
+    }
+
+    let x: real64 = value;
+    let scale_value: real64 = 0.0;
+
+    while x > E {
+        x = x / E;
+        scale_value = scale_value + 1.0;
+    }
+
+    while x < INVERSE_E {
+        x = x * E;
+        scale_value = scale_value - 1.0;
+    }
+
+    let y: real64 = (x - 1.0) / (x + 1.0);
+    let y2: real64 = y * y;
+    let term: real64 = y;
+    let sum: real64 = 0.0;
+    let n: real64 = 1.0;
+
+    while n < 39.0 {
+        sum = sum + term / n;
+        term = term * y2;
+        n = n + 2.0;
+    }
+
+    return 2.0 * sum + scale_value;
+}
+
+fn ln(value: real32) -> real32 {
+    if value <= 0.0 {
+        return 0.0;
+    }
+
+    let x: real32 = value;
+    let scale_value: real32 = 0.0;
+
+    while x > E32 {
+        x = x / E32;
+        scale_value = scale_value + 1.0;
+    }
+
+    while x < INVERSE_E32 {
+        x = x * E32;
+        scale_value = scale_value - 1.0;
+    }
+
+    let y: real32 = (x - 1.0) / (x + 1.0);
+    let y2: real32 = y * y;
+    let term: real32 = y;
+    let sum: real32 = 0.0;
+    let n: real32 = 1.0;
+
+    while n < 25.0 {
+        sum = sum + term / n;
+        term = term * y2;
+        n = n + 2.0;
+    }
+
+    return 2.0 * sum + scale_value;
+}
+
+fn pow(base: real64, exponent: int) -> real64 {
+    let result: real64 = 1.0;
+    let count = exponent;
+    if count < 0 {
+        count = 0 - count;
+    }
+
+    while count > 0 {
+        result = result * base;
+        count = count - 1;
+    }
+
+    if exponent < 0 {
+        return 1.0 / result;
+    }
+
+    return result;
+}
+
+fn pow(base: real32, exponent: int) -> real32 {
+    let result: real32 = 1.0;
+    let count = exponent;
+    if count < 0 {
+        count = 0 - count;
+    }
+
+    while count > 0 {
+        result = result * base;
+        count = count - 1;
+    }
+
+    if exponent < 0 {
+        return 1.0 / result;
+    }
+
+    return result;
+}
+
+fn pow(base: real64, exponent: real64) -> real64 {
+    return exp(exponent * ln(base));
+}
+
+fn pow(base: real32, exponent: real32) -> real32 {
+    return exp(exponent * ln(base));
+}
+
+fn floor(value: real64) -> real64 {
+    let result: real64 = 0.0;
+    if value >= 0.0 {
+        while result + 1.0 <= value {
+            result = result + 1.0;
+        }
+        return result;
+    }
+
+    while result > value {
+        result = result - 1.0;
+    }
+    return result;
+}
+
+fn floor(value: real32) -> real32 {
+    let result: real32 = 0.0;
+    if value >= 0.0 {
+        while result + 1.0 <= value {
+            result = result + 1.0;
+        }
+        return result;
+    }
+
+    while result > value {
+        result = result - 1.0;
+    }
+    return result;
+}
+
+fn ceil(value: real64) -> real64 {
+    let result: real64 = floor(value);
+    if result < value {
+        return result + 1.0;
+    }
+
+    return result;
+}
+
+fn ceil(value: real32) -> real32 {
+    let result: real32 = floor(value);
+    if result < value {
+        return result + 1.0;
+    }
+
+    return result;
+}
+
+fn round(value: real64) -> real64 {
+    if value >= 0.0 {
+        return floor(value + 0.5);
+    }
+
+    return ceil(value - 0.5);
+}
+
+fn round(value: real32) -> real32 {
+    if value >= 0.0 {
+        return floor(value + 0.5);
+    }
+
+    return ceil(value - 0.5);
 }

@@ -43,6 +43,14 @@ std::unique_ptr<Expression> make_method_call(std::unique_ptr<Expression> receive
     return expression;
 }
 
+std::unique_ptr<Expression> make_member(std::unique_ptr<Expression> receiver, std::string name,
+                                        SourceLocation location) {
+    auto expression =
+        std::make_unique<Expression>(Expression{ExpressionKind::member, std::move(name), std::move(receiver), nullptr});
+    expression->location = location;
+    return expression;
+}
+
 std::unique_ptr<Expression> make_array(std::vector<std::unique_ptr<Expression>> elements, SourceLocation location) {
     auto expression = std::make_unique<Expression>(Expression{ExpressionKind::array, "", nullptr, nullptr});
     expression->arguments = std::move(elements);
@@ -145,6 +153,10 @@ Statement Parser::statement() {
         return let_statement();
     }
 
+    if (match(TokenType::const_keyword)) {
+        return const_statement();
+    }
+
     if (match(TokenType::return_keyword)) {
         return return_statement();
     }
@@ -210,8 +222,23 @@ Statement Parser::function_statement() {
     consume(TokenType::left_brace, "expected '{' before function body");
 
     Statement statement{StatementKind::function, name.lexeme, nullptr, block(), {}};
+
     statement.type = return_type;
     statement.parameters = std::move(parsed_parameters);
+    statement.location = location_from_token(keyword);
+    return statement;
+}
+
+Statement Parser::const_statement() {
+    const Token& keyword = previous();
+    const Token& name = consume(TokenType::identifier, "expected constant name after const");
+    TypeAnnotation declared_type = optional_type_annotation();
+    consume(TokenType::equal, "expected '=' after constant name");
+    std::unique_ptr<Expression> value = expression();
+    consume(TokenType::semicolon, "expected ';' after const statement");
+
+    Statement statement{StatementKind::const_statement, name.lexeme, std::move(value), {}, {}};
+    statement.type = declared_type;
     statement.location = location_from_token(keyword);
     return statement;
 }
@@ -502,10 +529,13 @@ std::unique_ptr<Expression> Parser::call() {
         if (match(TokenType::dot)) {
             const SourceLocation location = expr->location;
             const Token& member = consume(TokenType::identifier, "expected member name after '.'");
-            consume(TokenType::left_paren, "expected '(' after module function name");
-            std::vector<std::unique_ptr<Expression>> parsed_arguments = arguments();
-            consume(TokenType::right_paren, "expected ')' after module function arguments");
-            expr = make_method_call(std::move(expr), member.lexeme, std::move(parsed_arguments), location);
+            if (match(TokenType::left_paren)) {
+                std::vector<std::unique_ptr<Expression>> parsed_arguments = arguments();
+                consume(TokenType::right_paren, "expected ')' after module function arguments");
+                expr = make_method_call(std::move(expr), member.lexeme, std::move(parsed_arguments), location);
+            } else {
+                expr = make_member(std::move(expr), member.lexeme, location);
+            }
             continue;
         }
 

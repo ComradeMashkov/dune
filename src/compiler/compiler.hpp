@@ -16,7 +16,9 @@ public:
 
 private:
     void collect_functions(const std::vector<Statement>& statements);
+    void collect_global_constants(const std::vector<Statement>& statements);
     void compile_function(const Statement& statement);
+    void compile_global_constants();
     void compile_statements(const std::vector<Statement>& statements);
     void compile_statement(const Statement& statement);
     void compile_expression(const Expression& expression);
@@ -33,6 +35,7 @@ private:
     std::unordered_map<std::string, std::size_t> locals_;
     std::unordered_map<std::string, Type> local_types_;
     std::unordered_map<std::string, std::size_t> functions_;
+    std::vector<const Statement*> global_constants_;
     std::unordered_map<const Expression*, Type> expression_types_;
     std::unordered_map<const Expression*, std::string> resolved_calls_;
     std::vector<Instruction>* instructions_ = nullptr;

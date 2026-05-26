@@ -41,9 +41,11 @@ private:
     TypedValue emit_index_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_text_literal(const std::string& lexeme);
     void emit_function(const Statement& statement, std::ostream& output);
+    void emit_global_constants(std::ostream& output);
     void emit_print(const TypedValue& value, std::ostream& output);
     void collect_functions(const Program& program);
     void collect_function(const Statement& statement);
+    void collect_global_constants(const Program& program);
 
     std::string next_register();
     std::string next_label(std::string_view name);
@@ -62,6 +64,7 @@ private:
     std::unordered_map<const Expression*, std::string> resolved_calls_;
     std::unordered_map<std::string, FunctionSignature> functions_;
     std::unordered_map<std::string, Local> locals_;
+    std::vector<const Statement*> global_constants_;
     std::vector<std::string> string_globals_;
     Type current_return_type_;
     std::size_t register_count_ = 0;

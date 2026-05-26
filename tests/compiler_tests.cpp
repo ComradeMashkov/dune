@@ -103,6 +103,22 @@ bool compiles_arrays_and_module_calls() {
     return passed;
 }
 
+bool compiles_module_constants() {
+    const dune::Bytecode bytecode = compile_source("import math; print(math.PI);");
+
+    bool saw_constant_store = false;
+    bool saw_member_load = false;
+    for (const dune::Instruction& instruction : bytecode.instructions) {
+        saw_constant_store = saw_constant_store || instruction.op == dune::OpCode::store_local;
+        saw_member_load = saw_member_load || instruction.op == dune::OpCode::load_local;
+    }
+
+    bool passed = true;
+    passed = expect(saw_constant_store, "expected module constant store") && passed;
+    passed = expect(saw_member_load, "expected module member load") && passed;
+    return passed;
+}
+
 } // namespace
 
 int main() {
@@ -110,6 +126,7 @@ int main() {
     passed = compiles_function_table_and_call() && passed;
     passed = compiles_unit_call_statement() && passed;
     passed = compiles_arrays_and_module_calls() && passed;
+    passed = compiles_module_constants() && passed;
 
     return passed ? 0 : 1;
 }

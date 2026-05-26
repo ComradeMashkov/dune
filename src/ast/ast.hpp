@@ -58,6 +58,7 @@ enum class ExpressionKind {
     boolean,
     array,
     index,
+    member,
     binary,
     call,
     method_call,
@@ -74,6 +75,7 @@ struct Expression {
 
 enum class StatementKind {
     let,
+    const_statement,
     assign,
     print,
     block,

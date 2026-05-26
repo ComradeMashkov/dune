@@ -66,6 +66,28 @@ Modules are loaded from `.dn` files. The standard library currently includes
 `stdlib/math.dn`; array operations such as `len` and `push` are methods on array
 values.
 
+The `math` module currently provides constants and overloaded numeric functions:
+
+- `PI`, `TAU`, `E`, `INVERSE_E`
+- `PI32`, `TAU32`, `E32`, `INVERSE_E32`
+
+- `square(value)`
+- `cube(value)`
+- `abs(value)`
+- `min(left, right)`
+- `max(left, right)`
+- `clamp(value, lower, upper)`
+- `sqrt(value)`
+- `sin(value)`
+- `cos(value)`
+- `tan(value)`
+- `exp(value)`
+- `ln(value)`
+- `pow(base, exponent)`
+- `floor(value)`
+- `ceil(value)`
+- `round(value)`
+
 Functions can be overloaded by parameter types:
 
 ```dn
@@ -140,6 +162,7 @@ The current release implements a small compiled language with:
 - AST
 - arithmetic
 - variables
+- constants
 - typed functions
 - overloaded functions
 - static scalar types

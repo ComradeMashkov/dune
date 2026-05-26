@@ -82,8 +82,9 @@ std::vector<Statement> ModuleLoader::load_module(const std::string& module_name,
 
     qualify_module_program(module, module_name);
     for (Statement& statement : module.statements) {
-        if (statement.kind != StatementKind::function && statement.kind != StatementKind::import_statement) {
-            throw std::runtime_error("module '" + module_name + "' can only contain imports and functions");
+        if (statement.kind != StatementKind::function && statement.kind != StatementKind::const_statement &&
+            statement.kind != StatementKind::import_statement) {
+            throw std::runtime_error("module '" + module_name + "' can only contain imports, constants, and functions");
         }
 
         statements.push_back(std::move(statement));
@@ -127,51 +128,67 @@ Program ModuleLoader::parse_file(const std::filesystem::path& path) const {
 
 void ModuleLoader::qualify_module_program(Program& program, const std::string& module_name) const {
     std::unordered_set<std::string> local_functions;
+    std::unordered_set<std::string> local_constants;
     for (const Statement& statement : program.statements) {
         if (statement.kind == StatementKind::function) {
             local_functions.insert(statement.name);
         }
+
+        if (statement.kind == StatementKind::const_statement) {
+            local_constants.insert(statement.name);
+        }
     }
 
     for (Statement& statement : program.statements) {
+        if (statement.kind == StatementKind::const_statement) {
+            qualify_statement(statement, module_name, local_functions, local_constants);
+            statement.name = module_name + "." + statement.name;
+        }
+
         if (statement.kind == StatementKind::function) {
-            qualify_statement(statement, module_name, local_functions);
+            qualify_statement(statement, module_name, local_functions, local_constants);
             statement.name = module_name + "." + statement.name;
         }
     }
 }
 
 void ModuleLoader::qualify_statement(Statement& statement, const std::string& module_name,
-                                     const std::unordered_set<std::string>& local_functions) const {
+                                     const std::unordered_set<std::string>& local_functions,
+                                     const std::unordered_set<std::string>& local_constants) const {
     if (statement.expression != nullptr) {
-        qualify_expression(*statement.expression, module_name, local_functions);
+        qualify_expression(*statement.expression, module_name, local_functions, local_constants);
     }
 
     for (Statement& child : statement.body) {
-        qualify_statement(child, module_name, local_functions);
+        qualify_statement(child, module_name, local_functions, local_constants);
     }
 
     for (Statement& child : statement.else_body) {
-        qualify_statement(child, module_name, local_functions);
+        qualify_statement(child, module_name, local_functions, local_constants);
     }
 }
 
 void ModuleLoader::qualify_expression(Expression& expression, const std::string& module_name,
-                                      const std::unordered_set<std::string>& local_functions) const {
+                                      const std::unordered_set<std::string>& local_functions,
+                                      const std::unordered_set<std::string>& local_constants) const {
     if (expression.kind == ExpressionKind::call && local_functions.contains(expression.lexeme)) {
         expression.lexeme = module_name + "." + expression.lexeme;
     }
 
+    if (expression.kind == ExpressionKind::identifier && local_constants.contains(expression.lexeme)) {
+        expression.lexeme = module_name + "." + expression.lexeme;
+    }
+
     if (expression.left != nullptr) {
-        qualify_expression(*expression.left, module_name, local_functions);
+        qualify_expression(*expression.left, module_name, local_functions, local_constants);
     }
 
     if (expression.right != nullptr) {
-        qualify_expression(*expression.right, module_name, local_functions);
+        qualify_expression(*expression.right, module_name, local_functions, local_constants);
     }
 
     for (std::unique_ptr<Expression>& argument : expression.arguments) {
-        qualify_expression(*argument, module_name, local_functions);
+        qualify_expression(*argument, module_name, local_functions, local_constants);
     }
 }
 

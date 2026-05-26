@@ -107,12 +107,18 @@ void TypeChecker::check(const Program& program) {
     functions_.clear();
     overloads_.clear();
     imports_.clear();
+    global_constants_.clear();
+    known_modules_.clear();
     expression_types_.clear();
     resolved_calls_.clear();
 
     for (const Statement& statement : program.statements) {
         if (statement.kind == StatementKind::function) {
             collect_function(statement);
+        }
+
+        if (statement.kind == StatementKind::const_statement) {
+            collect_known_module(statement.name);
         }
     }
 
@@ -127,10 +133,22 @@ void TypeChecker::check(const Program& program) {
     }
 
     variables_.clear();
+    constants_.clear();
     current_function_ = nullptr;
     for (const Statement& statement : program.statements) {
         if (statement.kind != StatementKind::function && statement.kind != StatementKind::import_statement) {
             check_statement(statement);
+        }
+    }
+
+    for (const std::string& constant : constants_) {
+        if (!is_qualified_module_name(constant)) {
+            continue;
+        }
+
+        const auto variable = variables_.find(constant);
+        if (variable != variables_.end()) {
+            global_constants_.emplace(variable->first, variable->second);
         }
     }
 
@@ -171,6 +189,7 @@ void TypeChecker::collect_function(const Statement& statement) {
             diagnostic(statement.location, "duplicate overload for function '" + statement.name + "'"));
     }
 
+    collect_known_module(signature.name);
     overloads_[signature.name].push_back(signature.key);
     functions_.emplace(signature.key, std::move(signature));
 }
@@ -186,6 +205,7 @@ void TypeChecker::check_function(const Statement& statement) {
         find_function_by_key(function_key(statement.name, parameters), statement.location);
 
     variables_.clear();
+    constants_.clear();
     for (std::size_t index = 0; index < statement.parameters.size(); ++index) {
         const Parameter& parameter = statement.parameters[index];
         if (variables_.contains(parameter.name)) {
@@ -207,7 +227,8 @@ void TypeChecker::check_function(const Statement& statement) {
 
 void TypeChecker::check_statement(const Statement& statement) {
     switch (statement.kind) {
-    case StatementKind::let: {
+    case StatementKind::let:
+    case StatementKind::const_statement: {
         TypeAnnotation expected = statement.type;
         Type actual = check_expression(*statement.expression, expected);
         if (!expected.has_type) {
@@ -227,12 +248,19 @@ void TypeChecker::check_statement(const Statement& statement) {
         }
 
         variables_[statement.name] = expected.type;
+        if (statement.kind == StatementKind::const_statement) {
+            constants_.insert(statement.name);
+        }
         return;
     }
     case StatementKind::assign: {
         const auto variable = variables_.find(statement.name);
         if (variable == variables_.end()) {
             throw std::runtime_error(diagnostic(statement.location, "undefined variable '" + statement.name + "'"));
+        }
+        if (constants_.contains(statement.name)) {
+            throw std::runtime_error(
+                diagnostic(statement.location, "cannot assign to constant '" + statement.name + "'"));
         }
 
         expect_type(variable->second, check_expression(*statement.expression, expected_type(variable->second)),
@@ -298,11 +326,17 @@ Type TypeChecker::check_expression(const Expression& expression, const TypeAnnot
     switch (expression.kind) {
     case ExpressionKind::identifier: {
         const auto variable = variables_.find(expression.lexeme);
-        if (variable == variables_.end()) {
+        if (variable != variables_.end()) {
+            actual = variable->second;
+            break;
+        }
+
+        const auto global_constant = global_constants_.find(expression.lexeme);
+        if (global_constant == global_constants_.end()) {
             throw std::runtime_error(diagnostic(expression.location, "undefined variable '" + expression.lexeme + "'"));
         }
 
-        actual = variable->second;
+        actual = global_constant->second;
         break;
     }
     case ExpressionKind::number:
@@ -327,6 +361,9 @@ Type TypeChecker::check_expression(const Expression& expression, const TypeAnnot
         break;
     case ExpressionKind::index:
         actual = check_index_expression(expression);
+        break;
+    case ExpressionKind::member:
+        actual = check_member_expression(expression);
         break;
     case ExpressionKind::binary:
         actual = check_binary_expression(expression, expected);
@@ -436,6 +473,32 @@ Type TypeChecker::check_method_call_expression(const Expression& expression, con
                                                                  expression.lexeme + "'"));
 }
 
+Type TypeChecker::check_member_expression(const Expression& expression) {
+    if (expression.left != nullptr && expression.left->kind == ExpressionKind::identifier) {
+        const std::string module_name = expression.left->lexeme;
+        if (is_known_module(module_name)) {
+            expect_imported_module(module_name, expression.location);
+            const std::string qualified_name = module_name + "." + expression.lexeme;
+            const auto variable = variables_.find(qualified_name);
+            if (variable != variables_.end()) {
+                return variable->second;
+            }
+
+            const auto global_constant = global_constants_.find(qualified_name);
+            if (global_constant == global_constants_.end()) {
+                throw std::runtime_error(diagnostic(expression.location, "module '" + module_name + "' has no value '" +
+                                                                             expression.lexeme + "'"));
+            }
+
+            return global_constant->second;
+        }
+    }
+
+    const Type receiver = check_expression(*expression.left);
+    throw std::runtime_error(diagnostic(expression.location, "type '" + type_name(receiver) + "' has no member '" +
+                                                                 expression.lexeme + "'"));
+}
+
 Type TypeChecker::check_array_method_call(const Type& receiver, const Expression& expression) {
     if (expression.lexeme == "len") {
         if (!expression.arguments.empty()) {
@@ -513,7 +576,7 @@ TypeChecker::resolve_overload(const std::string& name, const std::vector<std::un
         }
 
         if (expected.has_type && same_type(expected.type, function.return_type)) {
-            score += 4;
+            score += 100;
         }
 
         if (score > best_score) {
@@ -611,6 +674,7 @@ bool TypeChecker::statement_returns(const Statement& statement) const {
         return !statement.else_body.empty() && statements_return(statement.body) &&
                statements_return(statement.else_body);
     case StatementKind::let:
+    case StatementKind::const_statement:
     case StatementKind::assign:
     case StatementKind::print:
     case StatementKind::while_statement:
@@ -680,7 +744,11 @@ bool TypeChecker::is_numeric_type(const Type& type) const {
 }
 
 bool TypeChecker::can_coerce_integer_literal(const Expression& expression, const Type& target) const {
-    return expression.kind == ExpressionKind::number && is_numeric_type(target);
+    if (expression.kind == ExpressionKind::number && is_numeric_type(target)) {
+        return true;
+    }
+
+    return expression.kind == ExpressionKind::floating && is_real_type(target.kind);
 }
 
 void TypeChecker::check_integer_literal_range(const Expression& expression, const Type& target) const {
@@ -754,7 +822,25 @@ void TypeChecker::expect_imported_module(const std::string& module, SourceLocati
     }
 }
 
+void TypeChecker::collect_known_module(const std::string& name) {
+    const std::size_t separator = name.find('.');
+    if (separator == std::string::npos || separator == 0) {
+        return;
+    }
+
+    known_modules_.insert(name.substr(0, separator));
+}
+
+bool TypeChecker::is_qualified_module_name(const std::string& name) const {
+    const std::size_t separator = name.find('.');
+    return separator != std::string::npos && separator > 0;
+}
+
 bool TypeChecker::is_known_module(const std::string& module) const {
+    if (known_modules_.contains(module)) {
+        return true;
+    }
+
     const std::string prefix = module + ".";
     for (const auto& [name, signature] : functions_) {
         (void)signature;

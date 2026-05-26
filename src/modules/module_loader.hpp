@@ -23,9 +23,11 @@ private:
     Program parse_file(const std::filesystem::path& path) const;
     void qualify_module_program(Program& program, const std::string& module_name) const;
     void qualify_statement(Statement& statement, const std::string& module_name,
-                           const std::unordered_set<std::string>& local_functions) const;
+                           const std::unordered_set<std::string>& local_functions,
+                           const std::unordered_set<std::string>& local_constants) const;
     void qualify_expression(Expression& expression, const std::string& module_name,
-                            const std::unordered_set<std::string>& local_functions) const;
+                            const std::unordered_set<std::string>& local_functions,
+                            const std::unordered_set<std::string>& local_constants) const;
 
     std::vector<std::filesystem::path> search_paths_;
     std::unordered_set<std::string> loaded_modules_;

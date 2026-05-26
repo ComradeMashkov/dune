@@ -30,6 +30,7 @@ private:
     Statement statement();
     Statement assignment_statement();
     Statement block_statement();
+    Statement const_statement();
     Statement function_statement();
     Statement import_statement();
     Statement if_statement();

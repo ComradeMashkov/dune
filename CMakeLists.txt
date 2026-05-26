@@ -249,7 +249,7 @@ add_test(
         ${CMAKE_COMMAND}
         -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/arrays_modules.dn
-        -D EXPECTED_OUTPUT="4\n4\n25\n49\n2.25"
+        -D EXPECTED_OUTPUT="4\n4\n25\n49\n2.25\n8\n27\n4\n9\n10\n2.5\n2.5\n3\n2\n3\n3\n8\n0\n1\n0\n1\n0\n0"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
 )
 
@@ -315,7 +315,7 @@ add_test(
         -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/arrays_modules.dn
         -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/arrays_modules_native
-        -D EXPECTED_OUTPUT="4\n4\n25\n49\n2.25"
+        -D EXPECTED_OUTPUT="4\n4\n25\n49\n2.25\n8\n27\n4\n9\n10\n2.5\n2.5\n3\n2\n3\n3\n8\n0\n1\n0\n1\n0\n0"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
 )
 

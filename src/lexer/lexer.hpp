@@ -8,6 +8,7 @@ namespace dune {
 
 enum class TokenType {
     let,
+    const_keyword,
     fn_keyword,
     import_keyword,
     return_keyword,

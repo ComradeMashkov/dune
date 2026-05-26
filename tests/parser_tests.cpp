@@ -251,6 +251,37 @@ bool parses_arrays_imports_and_module_calls() {
     return passed;
 }
 
+bool parses_constants_and_module_members() {
+    const dune::Program program = parse_source("import math; const tau: real64 = math.PI * 2.0; print(math.PI);");
+
+    if (!expect(program.statements.size() == 3, "expected import, const, and print statements")) {
+        return false;
+    }
+
+    bool passed = true;
+    const dune::Statement& const_statement = program.statements[1];
+    passed = expect(const_statement.kind == dune::StatementKind::const_statement, "expected const statement") && passed;
+    passed = expect(const_statement.name == "tau", "expected const name") && passed;
+    passed = expect(const_statement.type.type.kind == dune::ValueType::real_type, "expected real64 const") && passed;
+    passed =
+        expect(const_statement.expression->kind == dune::ExpressionKind::binary, "expected const binary") && passed;
+    passed = expect(const_statement.expression->left->kind == dune::ExpressionKind::member,
+                    "expected module member on left side") &&
+             passed;
+    passed = expect(const_statement.expression->left->lexeme == "PI", "expected PI member") && passed;
+    passed = expect(const_statement.expression->left->left->kind == dune::ExpressionKind::identifier,
+                    "expected module identifier") &&
+             passed;
+    passed = expect(const_statement.expression->left->left->lexeme == "math", "expected math receiver") && passed;
+
+    const dune::Statement& print_statement = program.statements[2];
+    passed =
+        expect(print_statement.expression->kind == dune::ExpressionKind::member, "expected print member") && passed;
+    passed = expect(print_statement.expression->lexeme == "PI", "expected print PI member") && passed;
+
+    return passed;
+}
+
 } // namespace
 
 int main() {
@@ -262,6 +293,7 @@ int main() {
     passed = parses_extended_types() && passed;
     passed = parses_standard_types_and_unit_calls() && passed;
     passed = parses_arrays_imports_and_module_calls() && passed;
+    passed = parses_constants_and_module_members() && passed;
 
     return passed ? 0 : 1;
 }

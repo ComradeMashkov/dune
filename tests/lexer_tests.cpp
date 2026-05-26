@@ -301,5 +301,22 @@ int main() {
                            }) &&
              passed;
 
+    passed = expect_tokens("const tau: real64 = math.PI * 2.0;",
+                           {
+                               {const_keyword, "const"},
+                               {identifier, "tau"},
+                               {colon, ":"},
+                               {real64_keyword, "real64"},
+                               {equal, "="},
+                               {identifier, "math"},
+                               {dot, "."},
+                               {identifier, "PI"},
+                               {star, "*"},
+                               {float_number, "2.0"},
+                               {semicolon, ";"},
+                               {eof, ""},
+                           }) &&
+             passed;
+
     return passed ? 0 : 1;
 }

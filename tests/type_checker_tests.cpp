@@ -73,12 +73,31 @@ int main() {
                           "let exact: real64 = math.square(1.5); let base: u64 = 7; let wide: u64 = math.square(base);",
                           "expected arrays and modules to validate") &&
              passed;
+    passed = expect_valid("import math; let rough: real32 = 1.5; let exact: real64 = math.abs(0.0 - 2.5); "
+                          "let small: i16 = math.clamp(12, 0, 10); let wide: u64 = 9; "
+                          "let high: u64 = math.max(wide, 2); let low: int = math.min(4, 9); "
+                          "let cubed: int = math.cube(3); let pi: real64 = math.PI; "
+                          "let pi32: real32 = math.PI32; let tau: real64 = math.TAU; let e: real64 = math.E; "
+                          "let rounded: real64 = math.round(pi); let rooted: real64 = math.sqrt(9.0); "
+                          "let raised: real64 = math.pow(2.0, 3); let wave: real64 = math.sin(0.0); "
+                          "let turn: real64 = math.cos(0.0); let slope: real64 = math.tan(0.0); "
+                          "let grown: real64 = math.exp(0.0); let logged: real64 = math.ln(1.0); "
+                          "let low_real: real64 = math.floor(2.9); let high_real: real64 = math.ceil(2.1); "
+                          "let wrapped: real64 = math.normalize_radians(tau);",
+                          "expected expanded math functions to validate") &&
+             passed;
+    passed = expect_valid("let rough: real32 = 1.5; let ok: bool = rough < 2.5;",
+                          "expected real32 literal comparison to validate") &&
+             passed;
     passed = expect_valid("let values: [int] = [];", "expected typed empty array to validate") && passed;
     passed = expect_error_contains("let x: int = true;", "expected type 'int' but got 'bool'",
                                    "expected let type mismatch") &&
              passed;
     passed = expect_error_contains("let x: bool = true; x = 1;", "expected type 'bool' but got 'int'",
                                    "expected assignment type mismatch") &&
+             passed;
+    passed = expect_error_contains("const x: int = 1; x = 2;", "cannot assign to constant 'x'",
+                                   "expected const assignment error") &&
              passed;
     passed = expect_error_contains("print(true + 1);", "expected numeric type but got 'bool'",
                                    "expected invalid binary operation") &&
@@ -126,6 +145,13 @@ int main() {
     passed = expect_error_contains("import math; print(math.square(true));",
                                    "no overload for function 'math.square' with argument types (bool)",
                                    "expected math.square type mismatch") &&
+             passed;
+    passed = expect_error_contains("import math; print(math.clamp(1, 2));",
+                                   "no overload for function 'math.clamp' with argument types (int, int)",
+                                   "expected math.clamp arity mismatch") &&
+             passed;
+    passed = expect_error_contains("import math; print(math.UNKNOWN);", "module 'math' has no value 'UNKNOWN'",
+                                   "expected missing module value") &&
              passed;
     passed = expect_error_contains("fn choose(value: i64) -> i64 { return value; } "
                                    "fn choose(value: u64) -> u64 { return value; } print(choose(1));",

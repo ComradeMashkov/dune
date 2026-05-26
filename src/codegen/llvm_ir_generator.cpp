@@ -2,7 +2,9 @@
 
 #include "typechecker/type_checker.hpp"
 
+#include <bit>
 #include <cctype>
+#include <cstdint>
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
@@ -21,7 +23,15 @@ bool is_real_type(ValueType type) {
     return type == ValueType::real32_type || type == ValueType::real_type;
 }
 
-std::string real_literal(const std::string& lexeme) {
+std::string real_literal(const std::string& lexeme, const Type& type) {
+    if (type.kind == ValueType::real32_type) {
+        const double rounded = static_cast<double>(static_cast<float>(std::stod(lexeme)));
+        const std::uint64_t bits = std::bit_cast<std::uint64_t>(rounded);
+        std::ostringstream output;
+        output << "0x" << std::uppercase << std::hex << std::setw(16) << std::setfill('0') << bits;
+        return output.str();
+    }
+
     std::ostringstream output;
     output << std::scientific << std::setprecision(16) << std::stod(lexeme);
     return output.str();
@@ -36,7 +46,9 @@ void LlvmIrGenerator::generate(const Program& program, std::ostream& output) {
     expression_types_ = checker.expression_types();
     resolved_calls_ = checker.resolved_calls();
     functions_.clear();
+    global_constants_.clear();
     string_globals_.clear();
+    collect_global_constants(program);
     collect_functions(program);
     register_count_ = 0;
     label_count_ = 0;
@@ -77,6 +89,14 @@ void LlvmIrGenerator::collect_functions(const Program& program) {
     for (const Statement& statement : program.statements) {
         if (statement.kind == StatementKind::function) {
             collect_function(statement);
+        }
+    }
+}
+
+void LlvmIrGenerator::collect_global_constants(const Program& program) {
+    for (const Statement& statement : program.statements) {
+        if (statement.kind == StatementKind::const_statement && statement.name.find('.') != std::string::npos) {
+            global_constants_.push_back(&statement);
         }
     }
 }
@@ -127,6 +147,8 @@ void LlvmIrGenerator::emit_function(const Statement& statement, std::ostream& ou
         locals_.emplace(parameter.name, Local{pointer, type});
     }
 
+    emit_global_constants(output);
+
     const bool terminated = emit_statements(statement.body, output);
     if (!terminated) {
         output << "  ret " << llvm_type(signature->second.return_type) << ' '
@@ -134,6 +156,21 @@ void LlvmIrGenerator::emit_function(const Statement& statement, std::ostream& ou
     }
 
     output << "}\n\n";
+}
+
+void LlvmIrGenerator::emit_global_constants(std::ostream& output) {
+    for (const Statement* statement : global_constants_) {
+        const TypedValue value = emit_expression(*statement->expression, output);
+        auto existing = locals_.find(statement->name);
+        if (existing == locals_.end()) {
+            const std::string pointer = next_register();
+            output << "  " << pointer << " = alloca " << llvm_type(value.type) << '\n';
+            existing = locals_.emplace(statement->name, Local{pointer, value.type}).first;
+        }
+
+        output << "  store " << llvm_type(value.type) << ' ' << value.name << ", ptr " << existing->second.pointer
+               << '\n';
+    }
 }
 
 bool LlvmIrGenerator::emit_statements(const std::vector<Statement>& statements, std::ostream& output) {
@@ -148,7 +185,8 @@ bool LlvmIrGenerator::emit_statements(const std::vector<Statement>& statements, 
 
 bool LlvmIrGenerator::emit_statement(const Statement& statement, std::ostream& output) {
     switch (statement.kind) {
-    case StatementKind::let: {
+    case StatementKind::let:
+    case StatementKind::const_statement: {
         const TypedValue value = emit_expression(*statement.expression, output);
         auto existing = locals_.find(statement.name);
         if (existing == locals_.end()) {
@@ -260,12 +298,12 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_expression(const Expression& e
     }
     case ExpressionKind::number:
         if (is_real_type(type->second.kind)) {
-            return TypedValue{real_literal(expression.lexeme), type->second};
+            return TypedValue{real_literal(expression.lexeme, type->second), type->second};
         }
 
         return TypedValue{expression.lexeme, type->second};
     case ExpressionKind::floating:
-        return TypedValue{real_literal(expression.lexeme), type->second};
+        return TypedValue{real_literal(expression.lexeme, type->second), type->second};
     case ExpressionKind::character:
         return TypedValue{decode_glyph_literal(expression.lexeme), make_type(ValueType::glyph_type)};
     case ExpressionKind::string:
@@ -276,6 +314,21 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_expression(const Expression& e
         return emit_array_literal(expression, output);
     case ExpressionKind::index:
         return emit_index_expression(expression, output);
+    case ExpressionKind::member:
+        if (expression.left->kind == ExpressionKind::identifier) {
+            const std::string name = expression.left->lexeme + "." + expression.lexeme;
+            const auto local = locals_.find(name);
+            if (local == locals_.end()) {
+                throw std::runtime_error("undefined variable '" + name + "'");
+            }
+
+            const std::string value = next_register();
+            output << "  " << value << " = load " << llvm_type(local->second.type) << ", ptr " << local->second.pointer
+                   << '\n';
+            return TypedValue{value, local->second.type};
+        }
+
+        throw std::runtime_error("unknown member expression");
     case ExpressionKind::binary:
         return emit_binary_expression(expression, output);
     case ExpressionKind::call:

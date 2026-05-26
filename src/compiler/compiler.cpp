@@ -190,10 +190,12 @@ Bytecode Compiler::compile(const Program& program) {
     locals_.clear();
     local_types_.clear();
     functions_.clear();
+    global_constants_.clear();
     expression_types_ = type_checker.expression_types();
     resolved_calls_ = type_checker.resolved_calls();
     instructions_ = &bytecode_.instructions;
 
+    collect_global_constants(program.statements);
     collect_functions(program.statements);
     compile_statements(program.statements);
 
@@ -228,6 +230,14 @@ void Compiler::collect_functions(const std::vector<Statement>& statements) {
     }
 }
 
+void Compiler::collect_global_constants(const std::vector<Statement>& statements) {
+    for (const Statement& statement : statements) {
+        if (statement.kind == StatementKind::const_statement && statement.name.find('.') != std::string::npos) {
+            global_constants_.push_back(&statement);
+        }
+    }
+}
+
 void Compiler::compile_function(const Statement& statement) {
     std::vector<Type> parameters;
     parameters.reserve(statement.parameters.size());
@@ -245,12 +255,21 @@ void Compiler::compile_function(const Statement& statement) {
         declare_local(parameter.name, parameter.type.has_type ? parameter.type.type : make_type(ValueType::int_type));
     }
 
+    compile_global_constants();
     compile_statements(statement.body);
     emit(OpCode::push_constant,
          add_constant(default_value(statement.type.has_type ? statement.type.type : make_type(ValueType::int_type))));
     emit(OpCode::return_value);
 
     function.local_count = locals_.size();
+}
+
+void Compiler::compile_global_constants() {
+    for (const Statement* statement : global_constants_) {
+        compile_expression(*statement->expression);
+        const Type type = statement->type.has_type ? statement->type.type : expression_type(*statement->expression);
+        emit(OpCode::store_local, declare_local(statement->name, type));
+    }
 }
 
 void Compiler::compile_statements(const std::vector<Statement>& statements) {
@@ -261,7 +280,8 @@ void Compiler::compile_statements(const std::vector<Statement>& statements) {
 
 void Compiler::compile_statement(const Statement& statement) {
     switch (statement.kind) {
-    case StatementKind::let: {
+    case StatementKind::let:
+    case StatementKind::const_statement: {
         compile_expression(*statement.expression);
         const Type type = statement.type.has_type ? statement.type.type : expression_type(*statement.expression);
         emit(OpCode::store_local, declare_local(statement.name, type));
@@ -355,6 +375,13 @@ void Compiler::compile_expression(const Expression& expression) {
         compile_expression(*expression.right);
         emit(OpCode::load_index);
         return;
+    case ExpressionKind::member:
+        if (expression.left->kind == ExpressionKind::identifier) {
+            emit(OpCode::load_local, resolve_local(expression.left->lexeme + "." + expression.lexeme));
+            return;
+        }
+
+        throw std::runtime_error("unknown member '" + expression.lexeme + "'");
     case ExpressionKind::call:
         for (const std::unique_ptr<Expression>& argument : expression.arguments) {
             compile_expression(*argument);
