@@ -12,14 +12,10 @@ std::unique_ptr<Expression> make_leaf(ExpressionKind kind, std::string lexeme) {
     return std::make_unique<Expression>(Expression{kind, std::move(lexeme), nullptr, nullptr});
 }
 
-std::unique_ptr<Expression> make_binary(
-    std::unique_ptr<Expression> left,
-    std::string lexeme,
-    std::unique_ptr<Expression> right
-) {
+std::unique_ptr<Expression> make_binary(std::unique_ptr<Expression> left, std::string lexeme,
+                                        std::unique_ptr<Expression> right) {
     return std::make_unique<Expression>(
-        Expression{ExpressionKind::binary, std::move(lexeme), std::move(left), std::move(right)}
-    );
+        Expression{ExpressionKind::binary, std::move(lexeme), std::move(left), std::move(right)});
 }
 
 } // namespace

@@ -6,8 +6,7 @@
 
 namespace dune {
 
-VirtualMachine::VirtualMachine(Bytecode bytecode)
-    : bytecode_(std::move(bytecode)), locals_(bytecode_.local_count, 0) {}
+VirtualMachine::VirtualMachine(Bytecode bytecode) : bytecode_(std::move(bytecode)), locals_(bytecode_.local_count, 0) {}
 
 void VirtualMachine::run(std::ostream& output) {
     for (std::size_t ip = 0; ip < bytecode_.instructions.size(); ++ip) {
