@@ -274,6 +274,16 @@ add_test(
 )
 
 add_test(
+    NAME cli_generics_bounds
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/generics_bounds.dn
+        -D EXPECTED_OUTPUT="42\nok\nlang\n144\n2.25\n18"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
     NAME cli_build_native_hello
     COMMAND
         ${CMAKE_COMMAND}
@@ -359,6 +369,28 @@ add_test(
         -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/stdlib_primitives_native
         -D EXPECTED_OUTPUT="d\nlanguage\ndune\nlanguage\n3\n2\n4\n9\n1\n2\n4\n2\n9\n5\n9\n1\n8\n2\ndune\n42\n7"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
+)
+
+add_test(
+    NAME cli_build_native_generics_bounds
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/generics_bounds.dn
+        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/generics_bounds_native
+        -D EXPECTED_OUTPUT="42\nok\nlang\n144\n2.25\n18"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
+)
+
+add_test(
+    NAME cli_build_native_bounds_check
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/native_bounds_error.dn
+        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/native_bounds_error
+        -D EXPECTED_ERROR="array index out of bounds"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_failure_case.cmake
 )
 
 add_test(

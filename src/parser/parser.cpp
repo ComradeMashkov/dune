@@ -96,6 +96,12 @@ Type make_array_type(Type element) {
     return Type{ValueType::array_type, std::make_shared<Type>(std::move(element))};
 }
 
+Type make_generic_type(std::string name) {
+    Type type{ValueType::generic_type, nullptr};
+    type.name = std::move(name);
+    return type;
+}
+
 std::string decode_string_literal(const std::string& lexeme) {
     std::string result;
     for (std::size_t index = 1; index + 1 < lexeme.size(); ++index) {
@@ -396,6 +402,12 @@ Statement Parser::for_statement() {
 Statement Parser::function_statement(bool is_extern) {
     const Token& keyword = previous();
     const Token& name = consume(TokenType::identifier, "expected function name after fn");
+    std::vector<GenericParameter> parsed_generics;
+    if (match(TokenType::less)) {
+        parsed_generics = generic_parameters();
+        consume(TokenType::greater, "expected '>' after generic parameters");
+    }
+
     consume(TokenType::left_paren, "expected '(' after function name");
     std::vector<Parameter> parsed_parameters = parameters();
     consume(TokenType::right_paren, "expected ')' after function parameters");
@@ -417,6 +429,7 @@ Statement Parser::function_statement(bool is_extern) {
         Statement statement{StatementKind::function, name.lexeme, nullptr, {}, {}};
         statement.type = return_type;
         statement.parameters = std::move(parsed_parameters);
+        statement.generic_parameters = std::move(parsed_generics);
         statement.location = location_from_token(keyword);
         statement.is_extern = true;
         statement.extern_symbol = std::move(extern_symbol);
@@ -429,6 +442,7 @@ Statement Parser::function_statement(bool is_extern) {
 
     statement.type = return_type;
     statement.parameters = std::move(parsed_parameters);
+    statement.generic_parameters = std::move(parsed_generics);
     statement.location = location_from_token(keyword);
     return statement;
 }
@@ -553,6 +567,31 @@ std::vector<Parameter> Parser::parameters() {
     return parsed_parameters;
 }
 
+std::vector<GenericParameter> Parser::generic_parameters() {
+    std::vector<GenericParameter> parsed_parameters;
+
+    while (true) {
+        const Token& name = consume(TokenType::identifier, "expected generic parameter name");
+        std::string bound;
+        if (match(TokenType::colon)) {
+            if (!check(TokenType::identifier) && !check(TokenType::int_keyword) && !check(TokenType::real_keyword)) {
+                throw std::runtime_error("expected generic bound name");
+            }
+
+            const Token& bound_name = advance();
+            bound = bound_name.lexeme;
+        }
+
+        parsed_parameters.push_back(GenericParameter{name.lexeme, std::move(bound), location_from_token(name)});
+
+        if (!match(TokenType::comma)) {
+            break;
+        }
+    }
+
+    return parsed_parameters;
+}
+
 std::vector<std::unique_ptr<Expression>> Parser::arguments() {
     std::vector<std::unique_ptr<Expression>> parsed_arguments;
 
@@ -656,6 +695,10 @@ TypeAnnotation Parser::type_annotation() {
         TypeAnnotation element = type_annotation();
         consume(TokenType::right_bracket, "expected ']' after array element type");
         return TypeAnnotation{true, make_array_type(std::move(element.type))};
+    }
+
+    if (match(TokenType::identifier)) {
+        return TypeAnnotation{true, make_generic_type(previous().lexeme)};
     }
 
     throw std::runtime_error("expected type annotation");

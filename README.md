@@ -132,7 +132,7 @@ for let i = 0; i < middle.len(); i = i + 1 {
 print(c_sqrt(81.0));
 ```
 
-The `math` module currently provides constants and overloaded numeric functions:
+The `math` module currently provides constants and generic numeric functions:
 
 - `PI`, `TAU`, `E`, `INVERSE_E`
 - `PI32`, `TAU32`, `E32`, `INVERSE_E32`
@@ -154,7 +154,7 @@ The `math` module currently provides constants and overloaded numeric functions:
 - `ceil(value)`
 - `round(value)`
 
-The `array` module provides overloaded helpers for common element types:
+The `array` module provides generic helpers for common element types:
 
 - `copy(values)`
 - `reverse(values)`
@@ -191,6 +191,19 @@ fn show(value: bool) -> int {
 }
 ```
 
+Functions can also be generic. A generic parameter can be unbounded, or it can
+use one of the current built-in bounds: `integer`, `numeric`, or `real`.
+
+```dn
+fn identity<T>(value: T) -> T {
+  return value;
+}
+
+fn square<T: numeric>(value: T) -> T {
+  return value * value;
+}
+```
+
 Supported scalar types:
 
 - `int`, `bool`
@@ -208,6 +221,7 @@ Indexing and slicing:
 
 - arrays: `values[index]`, `values[start:end]`, `values[:end]`, `values[start:]`
 - text: `message[index]` returns `glyph`; text slices return `text`
+- native output checks array/text indexes, slices, and empty `pop()` calls at runtime
 
 Built-in receiver methods:
 
@@ -266,6 +280,7 @@ The current release implements a small compiled language with:
 - explicit casts with `as`
 - typed functions
 - overloaded functions
+- generic functions with basic bounds
 - static scalar types
 - booleans
 - signed and unsigned integer widths
@@ -291,6 +306,7 @@ The current release implements a small compiled language with:
 - bytecode
 - VM
 - LLVM native backend
+- runtime bounds checks
 - CLI
 - tests
 - CI

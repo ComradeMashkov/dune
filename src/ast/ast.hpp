@@ -31,11 +31,13 @@ enum class ValueType {
     text_type,
     unit_type,
     array_type,
+    generic_type,
 };
 
 struct Type {
     ValueType kind = ValueType::int_type;
     std::shared_ptr<Type> element;
+    std::string name;
 };
 
 struct TypeAnnotation {
@@ -46,6 +48,12 @@ struct TypeAnnotation {
 struct Parameter {
     std::string name;
     TypeAnnotation type;
+    SourceLocation location;
+};
+
+struct GenericParameter {
+    std::string name;
+    std::string bound;
     SourceLocation location;
 };
 
@@ -102,6 +110,7 @@ struct Statement {
     std::vector<Statement> else_body;
     TypeAnnotation type;
     std::vector<Parameter> parameters;
+    std::vector<GenericParameter> generic_parameters;
     SourceLocation location;
     std::unique_ptr<Statement> initializer;
     std::unique_ptr<Statement> increment;

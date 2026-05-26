@@ -169,6 +169,16 @@ int main() {
                              "print(text.is_digit('7')); print(text.is_alpha('Z'));"),
                   "6\n3\n1\n1\n2\n9\ndune language\n1\n6\n2\n1\n1\n", "expected array and text stdlib module output") &&
         passed;
+    passed = expect_eq(run_source("import array; import math; "
+                                  "fn identity<T>(value: T) -> T { return value; } "
+                                  "fn twice<T: numeric>(value: T) -> T { return value + value; } "
+                                  "let words: [text] = [\"dune\", \"lang\"]; "
+                                  "let reversed: [text] = array.reverse(words); "
+                                  "let rough: real32 = 1.5; "
+                                  "print(identity(42)); print(identity(\"ok\")); print(array.first(reversed)); "
+                                  "print(math.square(12)); print(math.square(rough)); print(twice(9));"),
+                       "42\nok\nlang\n144\n2.25\n18\n", "expected generic functions and generic stdlib output") &&
+             passed;
     passed = expect_throws("print(missing);", "expected undefined variable to throw") && passed;
     passed = expect_throws("missing = 1;", "expected undefined assignment to throw") && passed;
     passed = expect_throws("print(1 / 0);", "expected division by zero to throw") && passed;

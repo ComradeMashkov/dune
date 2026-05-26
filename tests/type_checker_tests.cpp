@@ -157,6 +157,16 @@ int main() {
                           "let digit: bool = text.is_digit('7'); let alpha: bool = text.is_alpha('x');",
                           "expected array and text stdlib modules to validate") &&
              passed;
+    passed = expect_valid("import array; import math; "
+                          "fn identity<T>(value: T) -> T { return value; } "
+                          "fn twice<T: numeric>(value: T) -> T { return value + value; } "
+                          "let number: int = identity(42); let label: text = identity(\"ok\"); "
+                          "let words: [text] = [\"dune\", \"lang\"]; let first: text = array.first(words); "
+                          "let small: u16 = 12; let squared: u16 = math.square(small); "
+                          "let rough: real32 = 1.5; let real_square: real32 = math.square(rough); "
+                          "let doubled: int = twice(9);",
+                          "expected generic functions and stdlib generics to validate") &&
+             passed;
     passed = expect_fixture_valid("import feature_exports; let answer: int = feature_exports.ANSWER; "
                                   "let value: int = feature_exports.public();",
                                   "expected exported module members to validate") &&
@@ -262,6 +272,9 @@ int main() {
     passed = expect_error_contains("import math; print(math.clamp(1, 2));",
                                    "no overload for function 'math.clamp' with argument types (int, int)",
                                    "expected math.clamp arity mismatch") &&
+             passed;
+    passed = expect_error_contains("fn bad<T: nope>(value: T) -> T { return value; } print(bad(1));",
+                                   "unknown generic bound 'nope'", "expected unknown generic bound error") &&
              passed;
     passed = expect_error_contains("import math; print(math.UNKNOWN);", "module 'math' does not export 'UNKNOWN'",
                                    "expected missing module value") &&
