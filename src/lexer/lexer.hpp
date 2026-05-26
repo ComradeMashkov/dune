@@ -12,6 +12,7 @@ enum class TokenType {
     export_keyword,
     extern_keyword,
     fn_keyword,
+    impl_keyword,
     import_keyword,
     return_keyword,
     print,

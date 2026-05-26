@@ -217,9 +217,39 @@ bool compiles_generic_functions() {
     }
 
     bool passed = true;
-    passed = expect(identity_count >= 2, "expected generated identity overloads") && passed;
-    passed = expect(twice_count >= 1, "expected generated bounded numeric overload") && passed;
+    passed = expect(identity_count == 2, "expected only called identity overloads") && passed;
+    passed = expect(twice_count == 1, "expected only called bounded numeric overload") && passed;
     passed = expect(call_count == 3, "expected three generic call instructions") && passed;
+    return passed;
+}
+
+bool compiles_stdlib_extension_methods() {
+    const dune::Bytecode bytecode = compile_source("import array; import text; "
+                                                   "let values: [int] = [1, 2, 3]; "
+                                                   "print(values.first()); print(values.append(4).last()); "
+                                                   "let message: text = \" dune \"; print(message.trim());");
+
+    int call_count = 0;
+    bool saw_array_first = false;
+    bool saw_array_last = false;
+    bool saw_text_trim = false;
+    for (const dune::Bytecode::Function& function : bytecode.functions) {
+        saw_array_first = saw_array_first || function.name == "array.first";
+        saw_array_last = saw_array_last || function.name == "array.last";
+        saw_text_trim = saw_text_trim || function.name == "text.trim";
+    }
+
+    for (const dune::Instruction& instruction : bytecode.instructions) {
+        if (instruction.op == dune::OpCode::call) {
+            ++call_count;
+        }
+    }
+
+    bool passed = true;
+    passed = expect(saw_array_first, "expected array.first extension specialization") && passed;
+    passed = expect(saw_array_last, "expected array.last extension specialization") && passed;
+    passed = expect(saw_text_trim, "expected text.trim extension function") && passed;
+    passed = expect(call_count == 4, "expected four stdlib extension method calls") && passed;
     return passed;
 }
 
@@ -234,6 +264,7 @@ int main() {
     passed = compiles_operators_casts_and_methods() && passed;
     passed = compiles_stdlib_primitives() && passed;
     passed = compiles_generic_functions() && passed;
+    passed = compiles_stdlib_extension_methods() && passed;
 
     return passed ? 0 : 1;
 }

@@ -147,25 +147,31 @@ int main() {
                           "for let i = 0; i < 3; i = i + 1 { if i == 1 { continue; } break; }",
                           "expected externs, slices, text indexing, and for loops to validate") &&
              passed;
-    passed = expect_valid("import array; import text; "
-                          "let values: [int] = [1, 2, 3]; let reversed: [int] = array.reverse(values); "
-                          "let total: int = array.sum(reversed); let has: bool = array.contains(values, 2); "
-                          "let ranged: [int] = array.range(2, 5); "
-                          "let message: text = \" dune \"; let stripped: text = text.trim(message); "
-                          "let ends: bool = text.ends_with(stripped, \"ne\"); "
-                          "let where: int = text.index_of(stripped, 'n'); let count: int = text.count(stripped, 'd'); "
-                          "let digit: bool = text.is_digit('7'); let alpha: bool = text.is_alpha('x');",
-                          "expected array and text stdlib modules to validate") &&
-             passed;
+    passed =
+        expect_valid("import array; import text; "
+                     "let values: [int] = [1, 2, 3]; let reversed: [int] = array.reverse(values); "
+                     "let total: int = array.sum(reversed); let has: bool = array.contains(values, 2); "
+                     "let ranged: [int] = array.range(2, 5); "
+                     "let message: text = \" dune \"; let stripped: text = text.trim(message); "
+                     "let ends: bool = text.ends_with(stripped, \"ne\"); "
+                     "let where: int = text.index_of(stripped, 'n'); let count: int = text.count(stripped, 'd'); "
+                     "let first: int = values.first(); let added: [int] = values.append(4); "
+                     "let direct_trim: text = message.trim(); let direct_ends: bool = direct_trim.ends_with(\"ne\"); "
+                     "let digit: bool = text.is_digit('7'); let alpha: bool = text.is_alpha('x');",
+                     "expected array and text stdlib modules to validate") &&
+        passed;
     passed = expect_valid("import array; import math; "
                           "fn identity<T>(value: T) -> T { return value; } "
                           "fn twice<T: numeric>(value: T) -> T { return value + value; } "
                           "let number: int = identity(42); let label: text = identity(\"ok\"); "
-                          "let words: [text] = [\"dune\", \"lang\"]; let first: text = array.first(words); "
+                          "let words: [text] = [\"dune\", \"lang\"]; let first: text = words.reverse().first(); "
                           "let small: u16 = 12; let squared: u16 = math.square(small); "
                           "let rough: real32 = 1.5; let real_square: real32 = math.square(rough); "
                           "let doubled: int = twice(9);",
                           "expected generic functions and stdlib generics to validate") &&
+             passed;
+    passed = expect_valid("fn only_bad<T>(value: T) -> T { return value + value; } print(only_bad(1));",
+                          "expected generic functions to instantiate only used types") &&
              passed;
     passed = expect_fixture_valid("import feature_exports; let answer: int = feature_exports.ANSWER; "
                                   "let value: int = feature_exports.public();",
@@ -233,7 +239,10 @@ int main() {
                                    "expected array push type mismatch") &&
              passed;
     passed = expect_error_contains("let values: [int] = [1]; values.contains(1);",
-                                   "array type has no method 'contains'", "expected unknown array method") &&
+                                   "type '[int]' has no method 'contains'", "expected missing array module method") &&
+             passed;
+    passed = expect_error_contains("let values: [int] = [1]; values.first();", "type '[int]' has no method 'first'",
+                                   "expected missing array import for method") &&
              passed;
     passed = expect_error_contains("let message: text = \"ok\"; message.contains(1);",
                                    "expected type 'text' but got 'int'", "expected text method argument mismatch") &&

@@ -61,7 +61,7 @@ private:
                            std::ostream& output);
     void emit_slice_bounds_check(const std::string& start, const std::string& end, const std::string& length,
                                  std::ostream& output);
-    void collect_functions(const Program& program);
+    void collect_functions(const std::vector<Statement>& statements);
     void collect_function(const Statement& statement);
     void collect_global_constants(const Program& program);
 

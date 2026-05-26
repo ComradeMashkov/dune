@@ -240,6 +240,10 @@ Statement Parser::statement() {
         return function_statement();
     }
 
+    if (match(TokenType::impl_keyword)) {
+        return impl_statement();
+    }
+
     if (match(TokenType::import_keyword)) {
         return import_statement();
     }
@@ -347,6 +351,12 @@ Statement Parser::export_statement() {
         return statement;
     }
 
+    if (match(TokenType::impl_keyword)) {
+        Statement statement = impl_statement();
+        statement.exported = true;
+        return statement;
+    }
+
     if (match(TokenType::const_keyword)) {
         Statement statement = const_statement();
         statement.exported = true;
@@ -442,6 +452,39 @@ Statement Parser::function_statement(bool is_extern) {
 
     statement.type = return_type;
     statement.parameters = std::move(parsed_parameters);
+    statement.generic_parameters = std::move(parsed_generics);
+    statement.location = location_from_token(keyword);
+    return statement;
+}
+
+Statement Parser::impl_statement() {
+    const Token& keyword = previous();
+    std::vector<GenericParameter> parsed_generics;
+    if (match(TokenType::less)) {
+        parsed_generics = generic_parameters();
+        consume(TokenType::greater, "expected '>' after generic parameters");
+    }
+
+    TypeAnnotation receiver_type = type_annotation();
+    consume(TokenType::left_brace, "expected '{' before impl body");
+
+    std::vector<Statement> methods;
+    while (!check(TokenType::right_brace) && !is_at_end()) {
+        bool exported = false;
+        if (match(TokenType::export_keyword)) {
+            exported = true;
+        }
+
+        consume(TokenType::fn_keyword, "expected function in impl body");
+        Statement method = function_statement();
+        method.exported = exported;
+        methods.push_back(std::move(method));
+    }
+
+    consume(TokenType::right_brace, "expected '}' after impl body");
+
+    Statement statement{StatementKind::impl_statement, "", nullptr, std::move(methods), {}};
+    statement.type = std::move(receiver_type);
     statement.generic_parameters = std::move(parsed_generics);
     statement.location = location_from_token(keyword);
     return statement;

@@ -39,6 +39,7 @@ private:
     Statement extern_statement();
     Statement for_statement();
     Statement function_statement(bool is_extern = false);
+    Statement impl_statement();
     Statement import_statement();
     Statement if_statement();
     Statement let_statement();

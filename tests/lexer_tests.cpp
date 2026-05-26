@@ -410,5 +410,46 @@ int main() {
                            }) &&
              passed;
 
+    passed = expect_tokens("// leading comment\n"
+                           "export impl<T> [T] { // methods\n"
+                           "fn first() -> T { return self[0]; }\n"
+                           "} // trailing comment\n"
+                           "let half = 8 / 2;",
+                           {
+                               {export_keyword, "export"},
+                               {impl_keyword, "impl"},
+                               {less, "<"},
+                               {identifier, "T"},
+                               {greater, ">"},
+                               {left_bracket, "["},
+                               {identifier, "T"},
+                               {right_bracket, "]"},
+                               {left_brace, "{"},
+                               {fn_keyword, "fn"},
+                               {identifier, "first"},
+                               {left_paren, "("},
+                               {right_paren, ")"},
+                               {arrow, "->"},
+                               {identifier, "T"},
+                               {left_brace, "{"},
+                               {return_keyword, "return"},
+                               {identifier, "self"},
+                               {left_bracket, "["},
+                               {number, "0"},
+                               {right_bracket, "]"},
+                               {semicolon, ";"},
+                               {right_brace, "}"},
+                               {right_brace, "}"},
+                               {let, "let"},
+                               {identifier, "half"},
+                               {equal, "="},
+                               {number, "8"},
+                               {slash, "/"},
+                               {number, "2"},
+                               {semicolon, ";"},
+                               {eof, ""},
+                           }) &&
+             passed;
+
     return passed ? 0 : 1;
 }
