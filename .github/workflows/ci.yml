@@ -41,10 +41,6 @@ jobs:
           choco install ninja -y
           echo "C:/Program Files/LLVM/bin" >> "$GITHUB_PATH"
 
-      - name: Load MSVC environment on Windows
-        if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
-
       - name: Configure
         run: |
           lint_flag="-D DUNE_ENABLE_LINT=ON"
