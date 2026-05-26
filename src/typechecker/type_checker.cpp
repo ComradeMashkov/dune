@@ -13,6 +13,169 @@ TypeAnnotation expected_type(Type type) {
     return TypeAnnotation{true, std::move(type)};
 }
 
+Type clone_type(const Type& type) {
+    Type result{type.kind, nullptr};
+    result.name = type.name;
+    if (type.element != nullptr) {
+        result.element = std::make_shared<Type>(clone_type(*type.element));
+    }
+
+    return result;
+}
+
+Type substitute_type(const Type& type, const std::unordered_map<std::string, Type>& substitutions) {
+    if (type.kind == ValueType::generic_type) {
+        const auto replacement = substitutions.find(type.name);
+        if (replacement != substitutions.end()) {
+            return clone_type(replacement->second);
+        }
+    }
+
+    Type result = clone_type(type);
+    if (result.element != nullptr) {
+        result.element = std::make_shared<Type>(substitute_type(*result.element, substitutions));
+    }
+
+    return result;
+}
+
+TypeAnnotation clone_type_annotation(const TypeAnnotation& annotation) {
+    if (!annotation.has_type) {
+        return {};
+    }
+
+    return TypeAnnotation{true, clone_type(annotation.type)};
+}
+
+TypeAnnotation substitute_type_annotation(const TypeAnnotation& annotation,
+                                          const std::unordered_map<std::string, Type>& substitutions) {
+    if (!annotation.has_type) {
+        return {};
+    }
+
+    return TypeAnnotation{true, substitute_type(annotation.type, substitutions)};
+}
+
+std::unique_ptr<Expression> clone_expression(const Expression& expression);
+
+std::unique_ptr<Expression> clone_expression_pointer(const std::unique_ptr<Expression>& expression) {
+    if (expression == nullptr) {
+        return nullptr;
+    }
+
+    return clone_expression(*expression);
+}
+
+std::unique_ptr<Expression> clone_expression(const Expression& expression) {
+    auto result = std::make_unique<Expression>(Expression{expression.kind, expression.lexeme,
+                                                          clone_expression_pointer(expression.left),
+                                                          clone_expression_pointer(expression.right)});
+    result->location = expression.location;
+    result->type = clone_type_annotation(expression.type);
+    result->arguments.reserve(expression.arguments.size());
+    for (const std::unique_ptr<Expression>& argument : expression.arguments) {
+        result->arguments.push_back(clone_expression_pointer(argument));
+    }
+
+    return result;
+}
+
+Statement clone_statement(const Statement& statement);
+
+std::unique_ptr<Statement> clone_statement_pointer(const std::unique_ptr<Statement>& statement) {
+    if (statement == nullptr) {
+        return nullptr;
+    }
+
+    return std::make_unique<Statement>(clone_statement(*statement));
+}
+
+Statement clone_statement(const Statement& statement) {
+    Statement result{statement.kind, statement.name, clone_expression_pointer(statement.expression), {}, {}};
+    result.body.reserve(statement.body.size());
+    for (const Statement& child : statement.body) {
+        result.body.push_back(clone_statement(child));
+    }
+
+    result.else_body.reserve(statement.else_body.size());
+    for (const Statement& child : statement.else_body) {
+        result.else_body.push_back(clone_statement(child));
+    }
+
+    result.type = clone_type_annotation(statement.type);
+    result.parameters.reserve(statement.parameters.size());
+    for (const Parameter& parameter : statement.parameters) {
+        result.parameters.push_back(
+            Parameter{parameter.name, clone_type_annotation(parameter.type), parameter.location});
+    }
+
+    result.generic_parameters = statement.generic_parameters;
+    result.location = statement.location;
+    result.initializer = clone_statement_pointer(statement.initializer);
+    result.increment = clone_statement_pointer(statement.increment);
+    result.exported = statement.exported;
+    result.is_extern = statement.is_extern;
+    result.extern_symbol = statement.extern_symbol;
+    return result;
+}
+
+void substitute_expression(Expression& expression, const std::unordered_map<std::string, Type>& substitutions);
+
+void substitute_statement(Statement& statement, const std::unordered_map<std::string, Type>& substitutions) {
+    statement.type = substitute_type_annotation(statement.type, substitutions);
+    for (Parameter& parameter : statement.parameters) {
+        parameter.type = substitute_type_annotation(parameter.type, substitutions);
+    }
+
+    if (statement.expression != nullptr) {
+        substitute_expression(*statement.expression, substitutions);
+    }
+
+    for (Statement& child : statement.body) {
+        substitute_statement(child, substitutions);
+    }
+
+    for (Statement& child : statement.else_body) {
+        substitute_statement(child, substitutions);
+    }
+
+    if (statement.initializer != nullptr) {
+        substitute_statement(*statement.initializer, substitutions);
+    }
+
+    if (statement.increment != nullptr) {
+        substitute_statement(*statement.increment, substitutions);
+    }
+}
+
+void substitute_expression(Expression& expression, const std::unordered_map<std::string, Type>& substitutions) {
+    expression.type = substitute_type_annotation(expression.type, substitutions);
+
+    if (expression.left != nullptr) {
+        substitute_expression(*expression.left, substitutions);
+    }
+
+    if (expression.right != nullptr) {
+        substitute_expression(*expression.right, substitutions);
+    }
+
+    for (std::unique_ptr<Expression>& argument : expression.arguments) {
+        if (argument != nullptr) {
+            substitute_expression(*argument, substitutions);
+        }
+    }
+}
+
+std::vector<const Expression*> expression_refs(const std::vector<std::unique_ptr<Expression>>& arguments) {
+    std::vector<const Expression*> result;
+    result.reserve(arguments.size());
+    for (const std::unique_ptr<Expression>& argument : arguments) {
+        result.push_back(argument.get());
+    }
+
+    return result;
+}
+
 } // namespace
 
 Type make_type(ValueType type) {
@@ -116,17 +279,24 @@ std::string function_key(const std::string& name, const std::vector<Type>& param
 void TypeChecker::check(const Program& program) {
     functions_.clear();
     overloads_.clear();
+    generic_overloads_.clear();
     imports_.clear();
     global_constants_.clear();
     module_exports_.clear();
     known_modules_.clear();
     expression_types_.clear();
     resolved_calls_.clear();
+    instantiated_function_keys_.clear();
+    instantiated_functions_.clear();
     loop_depth_ = 0;
 
     for (const Statement& statement : program.statements) {
         if (statement.kind == StatementKind::function) {
-            collect_function(statement);
+            if (statement.generic_parameters.empty()) {
+                collect_function(statement);
+            } else {
+                collect_generic_function(statement);
+            }
         }
 
         if (statement.kind == StatementKind::const_statement) {
@@ -168,9 +338,13 @@ void TypeChecker::check(const Program& program) {
     }
 
     for (const Statement& statement : program.statements) {
-        if (statement.kind == StatementKind::function) {
+        if (statement.kind == StatementKind::function && statement.generic_parameters.empty()) {
             check_function(statement);
         }
+    }
+
+    for (std::size_t index = 0; index < instantiated_functions_.size(); ++index) {
+        check_function(instantiated_functions_[index]);
     }
 }
 
@@ -180,6 +354,10 @@ const std::unordered_map<const Expression*, Type>& TypeChecker::expression_types
 
 const std::unordered_map<const Expression*, std::string>& TypeChecker::resolved_calls() const {
     return resolved_calls_;
+}
+
+const std::deque<Statement>& TypeChecker::instantiated_functions() const {
+    return instantiated_functions_;
 }
 
 void TypeChecker::collect_function(const Statement& statement) {
@@ -207,6 +385,21 @@ void TypeChecker::collect_function(const Statement& statement) {
     collect_known_module(signature.name);
     overloads_[signature.name].push_back(signature.key);
     functions_.emplace(signature.key, std::move(signature));
+}
+
+void TypeChecker::collect_generic_function(const Statement& statement) {
+    FunctionSignature signature;
+    signature.name = statement.name;
+    signature.return_type = annotation_or_default(statement.type);
+    signature.location = statement.location;
+
+    for (const Parameter& parameter : statement.parameters) {
+        signature.parameters.push_back(annotation_or_default(parameter.type));
+    }
+
+    signature.key = function_key(signature.name, signature.parameters);
+    generic_overloads_[signature.name].push_back(&statement);
+    collect_known_module(signature.name);
 }
 
 void TypeChecker::check_function(const Statement& statement) {
@@ -337,6 +530,8 @@ void TypeChecker::check_statement(const Statement& statement) {
         return;
     case StatementKind::function:
         throw std::runtime_error(diagnostic(statement.location, "function declarations are only allowed at top level"));
+    case StatementKind::impl_statement:
+        throw std::runtime_error(diagnostic(statement.location, "impl blocks are only allowed at top level"));
     case StatementKind::return_statement:
         if (current_function_ == nullptr) {
             throw std::runtime_error(diagnostic(statement.location, "return statement outside function"));
@@ -510,7 +705,8 @@ Type TypeChecker::check_call_expression(const Expression& expression, const Type
 Type TypeChecker::check_function_call(const Expression& expression, const std::string& name,
                                       const std::vector<std::unique_ptr<Expression>>& arguments,
                                       SourceLocation location, const TypeAnnotation& expected) {
-    const FunctionSignature& function = resolve_overload(name, arguments, location, expected);
+    const std::vector<const Expression*> refs = expression_refs(arguments);
+    const FunctionSignature& function = resolve_overload(name, refs, location, expected);
     for (std::size_t index = 0; index < arguments.size(); ++index) {
         expect_type(function.parameters[index],
                     check_expression(*arguments[index], expected_type(function.parameters[index])),
@@ -533,14 +729,64 @@ Type TypeChecker::check_method_call_expression(const Expression& expression, con
     }
 
     const Type receiver = check_expression(*expression.left);
-    if (receiver.kind == ValueType::array_type) {
+    if (receiver.kind == ValueType::array_type &&
+        (expression.lexeme == "len" || expression.lexeme == "push" || expression.lexeme == "pop" ||
+         expression.lexeme == "clear" || expression.lexeme == "is_empty")) {
         return check_array_method_call(receiver, expression);
     }
 
-    if (receiver.kind == ValueType::text_type) {
+    if (receiver.kind == ValueType::text_type &&
+        (expression.lexeme == "len" || expression.lexeme == "is_empty" || expression.lexeme == "contains" ||
+         expression.lexeme == "starts_with")) {
         return check_text_method_call(receiver, expression);
     }
 
+    return check_extension_method_call(expression, expected);
+}
+
+Type TypeChecker::check_extension_method_call(const Expression& expression, const TypeAnnotation& expected) {
+    std::vector<const Expression*> arguments;
+    arguments.reserve(expression.arguments.size() + 1);
+    arguments.push_back(expression.left.get());
+    for (const std::unique_ptr<Expression>& argument : expression.arguments) {
+        arguments.push_back(argument.get());
+    }
+
+    const FunctionSignature* best_match =
+        try_resolve_overload(expression.lexeme, arguments, expression.location, expected);
+    for (const std::string& module : imports_) {
+        const auto exports = module_exports_.find(module);
+        if (exports == module_exports_.end() || !exports->second.contains(expression.lexeme)) {
+            continue;
+        }
+
+        const FunctionSignature* match =
+            try_resolve_overload(module + "." + expression.lexeme, arguments, expression.location, expected);
+        if (match == nullptr) {
+            continue;
+        }
+
+        if (best_match != nullptr && best_match->key != match->key) {
+            throw std::runtime_error(diagnostic(expression.location, "ambiguous method '" + expression.lexeme + "'"));
+        }
+
+        best_match = match;
+    }
+
+    if (best_match != nullptr) {
+        for (std::size_t index = 0; index < arguments.size(); ++index) {
+            expect_type(best_match->parameters[index],
+                        check_expression(*arguments[index], expected_type(best_match->parameters[index])),
+                        arguments[index]->location);
+        }
+
+        resolved_calls_[&expression] = best_match->key;
+        return best_match->return_type;
+    }
+
+    const Type receiver = expression_types_.contains(expression.left.get())
+                              ? expression_types_.at(expression.left.get())
+                              : check_expression(*expression.left);
     throw std::runtime_error(diagnostic(expression.location, "type '" + type_name(receiver) + "' has no method '" +
                                                                  expression.lexeme + "'"));
 }
@@ -705,67 +951,189 @@ Type TypeChecker::check_text_method_call(const Type& receiver, const Expression&
     throw std::runtime_error(diagnostic(expression.location, "text type has no method '" + expression.lexeme + "'"));
 }
 
-const TypeChecker::FunctionSignature&
-TypeChecker::resolve_overload(const std::string& name, const std::vector<std::unique_ptr<Expression>>& arguments,
-                              SourceLocation location, const TypeAnnotation& expected) {
-    const auto overload = overloads_.find(name);
-    if (overload == overloads_.end()) {
+const TypeChecker::FunctionSignature& TypeChecker::resolve_overload(const std::string& name,
+                                                                    const std::vector<const Expression*>& arguments,
+                                                                    SourceLocation location,
+                                                                    const TypeAnnotation& expected) {
+    const auto concrete_overload = overloads_.find(name);
+    const auto generic_overload = generic_overloads_.find(name);
+    if (concrete_overload == overloads_.end() && generic_overload == generic_overloads_.end()) {
         throw std::runtime_error(diagnostic(location, "undefined function '" + name + "'"));
     }
 
     std::vector<Type> raw_argument_types;
     raw_argument_types.reserve(arguments.size());
-    for (const std::unique_ptr<Expression>& argument : arguments) {
+    for (const Expression* argument : arguments) {
         raw_argument_types.push_back(check_expression(*argument));
     }
 
-    const FunctionSignature* best_match = nullptr;
+    struct Candidate {
+        const FunctionSignature* concrete = nullptr;
+        const Statement* generic = nullptr;
+        std::unordered_map<std::string, Type> substitutions;
+        std::string key;
+        int score = -1;
+    };
+
+    Candidate best_match;
     int best_score = -1;
     bool ambiguous = false;
 
-    for (const std::string& key : overload->second) {
-        const FunctionSignature& function = find_function_by_key(key, location);
-        if (function.parameters.size() != arguments.size()) {
-            continue;
+    auto consider = [&](Candidate candidate) {
+        if (candidate.score > best_score) {
+            best_score = candidate.score;
+            best_match = std::move(candidate);
+            ambiguous = false;
+            return;
         }
 
-        bool matches = true;
-        int score = 0;
-        for (std::size_t index = 0; index < arguments.size(); ++index) {
-            try {
-                const Type actual = check_expression(*arguments[index], expected_type(function.parameters[index]));
-                if (!same_type(actual, function.parameters[index])) {
+        if (candidate.score == best_score && candidate.key != best_match.key) {
+            ambiguous = true;
+        }
+    };
+
+    if (concrete_overload != overloads_.end()) {
+        for (const std::string& key : concrete_overload->second) {
+            const FunctionSignature& function = find_function_by_key(key, location);
+            if (function.parameters.size() != arguments.size()) {
+                continue;
+            }
+
+            bool matches = true;
+            int score = 1000;
+            for (std::size_t index = 0; index < arguments.size(); ++index) {
+                try {
+                    const Type actual = check_expression(*arguments[index], expected_type(function.parameters[index]));
+                    if (!same_type(actual, function.parameters[index])) {
+                        matches = false;
+                        break;
+                    }
+                } catch (const std::runtime_error&) {
                     matches = false;
                     break;
                 }
-            } catch (const std::runtime_error&) {
-                matches = false;
-                break;
+
+                if (same_type(raw_argument_types[index], function.parameters[index])) {
+                    score += 2;
+                }
             }
 
-            if (same_type(raw_argument_types[index], function.parameters[index])) {
-                score += 2;
+            if (!matches) {
+                continue;
             }
-        }
 
-        if (!matches) {
-            continue;
-        }
+            if (expected.has_type && same_type(expected.type, function.return_type)) {
+                score += 100;
+            }
 
-        if (expected.has_type && same_type(expected.type, function.return_type)) {
-            score += 100;
-        }
-
-        if (score > best_score) {
-            best_score = score;
-            best_match = &function;
-            ambiguous = false;
-        } else if (score == best_score) {
-            ambiguous = true;
+            consider(Candidate{&function, nullptr, {}, function.key, score});
         }
     }
 
-    if (best_match == nullptr) {
+    if (generic_overload != generic_overloads_.end()) {
+        for (const Statement* statement : generic_overload->second) {
+            if (statement->parameters.size() != arguments.size()) {
+                continue;
+            }
+
+            std::vector<Type> generic_parameters;
+            generic_parameters.reserve(statement->parameters.size());
+            for (const Parameter& parameter : statement->parameters) {
+                generic_parameters.push_back(annotation_or_default(parameter.type));
+            }
+
+            std::unordered_map<std::string, std::vector<std::pair<Type, bool>>> constraints;
+            if (expected.has_type && !collect_generic_constraints(annotation_or_default(statement->type), expected.type,
+                                                                  constraints, true)) {
+                continue;
+            }
+
+            bool constraints_match = true;
+            for (std::size_t index = 0; index < arguments.size(); ++index) {
+                if (!collect_generic_constraints(generic_parameters[index], raw_argument_types[index], constraints,
+                                                 !is_numeric_literal(*arguments[index]))) {
+                    constraints_match = false;
+                    break;
+                }
+            }
+
+            if (!constraints_match) {
+                continue;
+            }
+
+            std::unordered_map<std::string, Type> substitutions;
+            bool complete_substitution = true;
+            for (const GenericParameter& parameter : statement->generic_parameters) {
+                const auto existing_constraints = constraints.find(parameter.name);
+                if (existing_constraints == constraints.end() || existing_constraints->second.empty()) {
+                    complete_substitution = false;
+                    break;
+                }
+
+                const Type* chosen = nullptr;
+                for (const auto& [type, preferred] : existing_constraints->second) {
+                    if (preferred) {
+                        chosen = &type;
+                        break;
+                    }
+                }
+
+                if (chosen == nullptr) {
+                    chosen = &existing_constraints->second.front().first;
+                }
+
+                if (!type_satisfies_bound(*chosen, parameter.bound, parameter.location)) {
+                    constraints_match = false;
+                    break;
+                }
+
+                substitutions.emplace(parameter.name, clone_type(*chosen));
+            }
+
+            if (!complete_substitution || !constraints_match) {
+                continue;
+            }
+
+            std::vector<Type> concrete_parameters;
+            concrete_parameters.reserve(generic_parameters.size());
+            for (const Type& parameter : generic_parameters) {
+                concrete_parameters.push_back(substitute_type(parameter, substitutions));
+            }
+            const Type concrete_return = substitute_type(annotation_or_default(statement->type), substitutions);
+
+            bool matches = true;
+            int score = 0;
+            for (std::size_t index = 0; index < arguments.size(); ++index) {
+                try {
+                    const Type actual = check_expression(*arguments[index], expected_type(concrete_parameters[index]));
+                    if (!same_type(actual, concrete_parameters[index])) {
+                        matches = false;
+                        break;
+                    }
+                } catch (const std::runtime_error&) {
+                    matches = false;
+                    break;
+                }
+
+                if (same_type(raw_argument_types[index], concrete_parameters[index])) {
+                    score += 2;
+                }
+            }
+
+            if (!matches) {
+                continue;
+            }
+
+            if (expected.has_type && same_type(expected.type, concrete_return)) {
+                score += 100;
+            }
+
+            consider(Candidate{nullptr, statement, std::move(substitutions),
+                               function_key(statement->name, concrete_parameters), score});
+        }
+    }
+
+    if (best_match.concrete == nullptr && best_match.generic == nullptr) {
         std::string message = "no overload for function '" + name + "' with argument types (";
         for (std::size_t index = 0; index < raw_argument_types.size(); ++index) {
             if (index > 0) {
@@ -782,7 +1150,45 @@ TypeChecker::resolve_overload(const std::string& name, const std::vector<std::un
         throw std::runtime_error(diagnostic(location, "ambiguous overload for function '" + name + "'"));
     }
 
-    return *best_match;
+    if (best_match.concrete != nullptr) {
+        return *best_match.concrete;
+    }
+
+    return instantiate_generic_function(*best_match.generic, best_match.substitutions, location);
+}
+
+const TypeChecker::FunctionSignature* TypeChecker::try_resolve_overload(const std::string& name,
+                                                                        const std::vector<const Expression*>& arguments,
+                                                                        SourceLocation location,
+                                                                        const TypeAnnotation& expected) {
+    try {
+        return &resolve_overload(name, arguments, location, expected);
+    } catch (const std::runtime_error&) {
+        return nullptr;
+    }
+}
+
+const TypeChecker::FunctionSignature& TypeChecker::instantiate_generic_function(
+    const Statement& statement, const std::unordered_map<std::string, Type>& substitutions, SourceLocation location) {
+    Statement concrete = clone_statement(statement);
+    concrete.generic_parameters.clear();
+    substitute_statement(concrete, substitutions);
+
+    std::vector<Type> parameters;
+    parameters.reserve(concrete.parameters.size());
+    for (const Parameter& parameter : concrete.parameters) {
+        parameters.push_back(annotation_or_default(parameter.type));
+    }
+
+    const std::string key = function_key(concrete.name, parameters);
+    if (functions_.contains(key)) {
+        return find_function_by_key(key, location);
+    }
+
+    instantiated_functions_.push_back(std::move(concrete));
+    instantiated_function_keys_.insert(key);
+    collect_function(instantiated_functions_.back());
+    return find_function_by_key(key, location);
 }
 
 const TypeChecker::FunctionSignature& TypeChecker::find_function_by_key(const std::string& key,
@@ -793,6 +1199,49 @@ const TypeChecker::FunctionSignature& TypeChecker::find_function_by_key(const st
     }
 
     return function->second;
+}
+
+bool TypeChecker::is_numeric_literal(const Expression& expression) const {
+    return expression.kind == ExpressionKind::number || expression.kind == ExpressionKind::floating;
+}
+
+bool TypeChecker::type_satisfies_bound(const Type& type, const std::string& bound, SourceLocation location) const {
+    if (bound.empty()) {
+        return type.kind != ValueType::unit_type;
+    }
+
+    if (bound == "integer") {
+        return is_integer_type(type.kind);
+    }
+
+    if (bound == "numeric") {
+        return is_numeric_type(type);
+    }
+
+    if (bound == "real") {
+        return is_real_type(type.kind);
+    }
+
+    throw std::runtime_error(diagnostic(location, "unknown generic bound '" + bound + "'"));
+}
+
+bool TypeChecker::collect_generic_constraints(
+    const Type& pattern, const Type& actual,
+    std::unordered_map<std::string, std::vector<std::pair<Type, bool>>>& constraints, bool preferred) const {
+    if (pattern.kind == ValueType::generic_type) {
+        constraints[pattern.name].push_back(std::pair<Type, bool>{clone_type(actual), preferred});
+        return true;
+    }
+
+    if (pattern.kind == ValueType::array_type) {
+        if (actual.kind != ValueType::array_type || pattern.element == nullptr || actual.element == nullptr) {
+            return false;
+        }
+
+        return collect_generic_constraints(*pattern.element, *actual.element, constraints, preferred);
+    }
+
+    return same_type(pattern, actual);
 }
 
 Type TypeChecker::check_array_literal(const Expression& expression, const TypeAnnotation& expected) {
@@ -893,6 +1342,7 @@ bool TypeChecker::statement_returns(const Statement& statement) const {
     case StatementKind::while_statement:
     case StatementKind::for_statement:
     case StatementKind::function:
+    case StatementKind::impl_statement:
     case StatementKind::break_statement:
     case StatementKind::continue_statement:
     case StatementKind::expression_statement:

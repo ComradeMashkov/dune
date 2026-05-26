@@ -54,12 +54,16 @@ void LlvmIrGenerator::generate(const Program& program, std::ostream& output) {
 
     expression_types_ = checker.expression_types();
     resolved_calls_ = checker.resolved_calls();
+    const auto& instantiated_functions = checker.instantiated_functions();
     functions_.clear();
     global_constants_.clear();
     string_globals_.clear();
     loop_stack_.clear();
     collect_global_constants(program);
-    collect_functions(program);
+    collect_functions(program.statements);
+    for (const Statement& statement : instantiated_functions) {
+        collect_function(statement);
+    }
     register_count_ = 0;
     label_count_ = 0;
     string_literal_count_ = 0;
@@ -74,9 +78,12 @@ void LlvmIrGenerator::generate(const Program& program, std::ostream& output) {
     body << "}\n\n";
 
     for (const Statement& statement : program.statements) {
-        if (statement.kind == StatementKind::function) {
+        if (statement.kind == StatementKind::function && statement.generic_parameters.empty()) {
             emit_function(statement, body);
         }
+    }
+    for (const Statement& statement : instantiated_functions) {
+        emit_function(statement, body);
     }
 
     output << "@.dune_fmt_sint = private unnamed_addr constant [6 x i8] c\"%lld\\0A\\00\"\n";
@@ -108,9 +115,9 @@ void LlvmIrGenerator::generate(const Program& program, std::ostream& output) {
     output << body.str();
 }
 
-void LlvmIrGenerator::collect_functions(const Program& program) {
-    for (const Statement& statement : program.statements) {
-        if (statement.kind == StatementKind::function) {
+void LlvmIrGenerator::collect_functions(const std::vector<Statement>& statements) {
+    for (const Statement& statement : statements) {
+        if (statement.kind == StatementKind::function && statement.generic_parameters.empty()) {
             collect_function(statement);
         }
     }
@@ -362,6 +369,7 @@ bool LlvmIrGenerator::emit_statement(const Statement& statement, std::ostream& o
         output << "  br label %" << loop_stack_.back().continue_label << '\n';
         return true;
     case StatementKind::function:
+    case StatementKind::impl_statement:
         return false;
     case StatementKind::return_statement: {
         if (statement.expression == nullptr) {
@@ -614,31 +622,35 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_call_expression(const Expressi
 
 LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_method_call_expression(const Expression& expression,
                                                                          std::ostream& output) {
-    if (expression.left->kind == ExpressionKind::identifier) {
-        const auto resolved = resolved_calls_.find(&expression);
-        const auto function = resolved == resolved_calls_.end() ? functions_.end() : functions_.find(resolved->second);
-        if (function != functions_.end()) {
-            std::vector<TypedValue> arguments;
-            arguments.reserve(expression.arguments.size());
-            for (const std::unique_ptr<Expression>& argument : expression.arguments) {
-                arguments.push_back(emit_expression(*argument, output));
-            }
-
-            const std::string result = next_register();
-            output << "  " << result << " = call " << llvm_type(function->second.return_type) << ' '
-                   << (function->second.is_extern ? extern_function_name(function->second)
-                                                  : function_name(resolved->second))
-                   << '(';
-            for (std::size_t index = 0; index < arguments.size(); ++index) {
-                if (index > 0) {
-                    output << ", ";
-                }
-
-                output << llvm_type(arguments[index].type) << ' ' << arguments[index].name;
-            }
-            output << ")\n";
-            return TypedValue{result, function->second.return_type};
+    const auto resolved = resolved_calls_.find(&expression);
+    const auto function = resolved == resolved_calls_.end() ? functions_.end() : functions_.find(resolved->second);
+    if (function != functions_.end()) {
+        std::vector<TypedValue> arguments;
+        arguments.reserve(function->second.parameters.size());
+        if (function->second.parameters.size() == expression.arguments.size() + 1) {
+            arguments.push_back(emit_expression(*expression.left, output));
+        } else if (function->second.parameters.size() != expression.arguments.size()) {
+            throw std::runtime_error("method call argument count mismatch");
         }
+
+        for (const std::unique_ptr<Expression>& argument : expression.arguments) {
+            arguments.push_back(emit_expression(*argument, output));
+        }
+
+        const std::string result = next_register();
+        output << "  " << result << " = call " << llvm_type(function->second.return_type) << ' '
+               << (function->second.is_extern ? extern_function_name(function->second)
+                                              : function_name(resolved->second))
+               << '(';
+        for (std::size_t index = 0; index < arguments.size(); ++index) {
+            if (index > 0) {
+                output << ", ";
+            }
+
+            output << llvm_type(arguments[index].type) << ' ' << arguments[index].name;
+        }
+        output << ")\n";
+        return TypedValue{result, function->second.return_type};
     }
 
     const auto receiver = expression_types_.find(expression.left.get());

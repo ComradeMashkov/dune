@@ -97,6 +97,7 @@ enum class StatementKind {
     break_statement,
     continue_statement,
     function,
+    impl_statement,
     return_statement,
     expression_statement,
     import_statement,

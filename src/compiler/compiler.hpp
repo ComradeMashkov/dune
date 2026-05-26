@@ -15,6 +15,7 @@ public:
     Bytecode compile(const Program& program);
 
 private:
+    void collect_function(const Statement& statement);
     void collect_functions(const std::vector<Statement>& statements);
     void collect_global_constants(const std::vector<Statement>& statements);
     void compile_function(const Statement& statement);

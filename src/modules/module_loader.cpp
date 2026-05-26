@@ -7,7 +7,6 @@
 #include <iterator>
 #include <sstream>
 #include <stdexcept>
-#include <unordered_map>
 #include <utility>
 
 namespace dune {
@@ -53,37 +52,12 @@ Type clone_type(const Type& type) {
     return result;
 }
 
-Type substitute_type(const Type& type, const std::unordered_map<std::string, Type>& substitutions) {
-    if (type.kind == ValueType::generic_type) {
-        const auto replacement = substitutions.find(type.name);
-        if (replacement != substitutions.end()) {
-            return clone_type(replacement->second);
-        }
-    }
-
-    Type result = clone_type(type);
-    if (result.element != nullptr) {
-        result.element = std::make_shared<Type>(substitute_type(*result.element, substitutions));
-    }
-
-    return result;
-}
-
 TypeAnnotation clone_type_annotation(const TypeAnnotation& annotation) {
     if (!annotation.has_type) {
         return {};
     }
 
     return TypeAnnotation{true, clone_type(annotation.type)};
-}
-
-TypeAnnotation substitute_type_annotation(const TypeAnnotation& annotation,
-                                          const std::unordered_map<std::string, Type>& substitutions) {
-    if (!annotation.has_type) {
-        return {};
-    }
-
-    return TypeAnnotation{true, substitute_type(annotation.type, substitutions)};
 }
 
 std::unique_ptr<Expression> clone_expression(const Expression& expression);
@@ -149,140 +123,36 @@ Statement clone_statement(const Statement& statement) {
     return result;
 }
 
-void substitute_expression(Expression& expression, const std::unordered_map<std::string, Type>& substitutions);
-
-void substitute_statement(Statement& statement, const std::unordered_map<std::string, Type>& substitutions) {
-    statement.type = substitute_type_annotation(statement.type, substitutions);
-    for (Parameter& parameter : statement.parameters) {
-        parameter.type = substitute_type_annotation(parameter.type, substitutions);
-    }
-
-    if (statement.expression != nullptr) {
-        substitute_expression(*statement.expression, substitutions);
-    }
-
-    for (Statement& child : statement.body) {
-        substitute_statement(child, substitutions);
-    }
-
-    for (Statement& child : statement.else_body) {
-        substitute_statement(child, substitutions);
-    }
-
-    if (statement.initializer != nullptr) {
-        substitute_statement(*statement.initializer, substitutions);
-    }
-
-    if (statement.increment != nullptr) {
-        substitute_statement(*statement.increment, substitutions);
-    }
-}
-
-void substitute_expression(Expression& expression, const std::unordered_map<std::string, Type>& substitutions) {
-    expression.type = substitute_type_annotation(expression.type, substitutions);
-
-    if (expression.left != nullptr) {
-        substitute_expression(*expression.left, substitutions);
-    }
-
-    if (expression.right != nullptr) {
-        substitute_expression(*expression.right, substitutions);
-    }
-
-    for (std::unique_ptr<Expression>& argument : expression.arguments) {
-        if (argument != nullptr) {
-            substitute_expression(*argument, substitutions);
-        }
-    }
-}
-
-std::vector<Type> unbounded_generic_types() {
-    return {
-        Type{ValueType::int_type, nullptr},    Type{ValueType::bool_type, nullptr},
-        Type{ValueType::i8_type, nullptr},     Type{ValueType::i16_type, nullptr},
-        Type{ValueType::i32_type, nullptr},    Type{ValueType::i64_type, nullptr},
-        Type{ValueType::isize_type, nullptr},  Type{ValueType::u8_type, nullptr},
-        Type{ValueType::u16_type, nullptr},    Type{ValueType::u32_type, nullptr},
-        Type{ValueType::u64_type, nullptr},    Type{ValueType::usize_type, nullptr},
-        Type{ValueType::real32_type, nullptr}, Type{ValueType::real_type, nullptr},
-        Type{ValueType::glyph_type, nullptr},  Type{ValueType::text_type, nullptr},
-    };
-}
-
-std::vector<Type> integer_generic_types() {
-    return {
-        Type{ValueType::int_type, nullptr}, Type{ValueType::i8_type, nullptr},    Type{ValueType::i16_type, nullptr},
-        Type{ValueType::i32_type, nullptr}, Type{ValueType::i64_type, nullptr},   Type{ValueType::isize_type, nullptr},
-        Type{ValueType::u8_type, nullptr},  Type{ValueType::u16_type, nullptr},   Type{ValueType::u32_type, nullptr},
-        Type{ValueType::u64_type, nullptr}, Type{ValueType::usize_type, nullptr},
-    };
-}
-
-std::vector<Type> numeric_generic_types() {
-    std::vector<Type> types = integer_generic_types();
-    types.push_back(Type{ValueType::real32_type, nullptr});
-    types.push_back(Type{ValueType::real_type, nullptr});
-    return types;
-}
-
-std::vector<Type> real_generic_types() {
-    return {
-        Type{ValueType::real32_type, nullptr},
-        Type{ValueType::real_type, nullptr},
-    };
-}
-
-std::vector<Type> generic_concrete_types(const GenericParameter& parameter) {
-    if (parameter.bound.empty()) {
-        return unbounded_generic_types();
-    }
-
-    if (parameter.bound == "integer") {
-        return integer_generic_types();
-    }
-
-    if (parameter.bound == "numeric") {
-        return numeric_generic_types();
-    }
-
-    if (parameter.bound == "real") {
-        return real_generic_types();
-    }
-
-    throw std::runtime_error(diagnostic(parameter.location, "unknown generic bound '" + parameter.bound + "'"));
-}
-
-void expand_generic_statement(const Statement& statement, std::size_t index,
-                              std::unordered_map<std::string, Type>& substitutions, std::vector<Statement>& expanded) {
-    if (index == statement.generic_parameters.size()) {
-        Statement concrete = clone_statement(statement);
-        concrete.generic_parameters.clear();
-        substitute_statement(concrete, substitutions);
-        expanded.push_back(std::move(concrete));
-        return;
-    }
-
-    const GenericParameter& parameter = statement.generic_parameters[index];
-    for (const Type& type : generic_concrete_types(parameter)) {
-        substitutions[parameter.name] = clone_type(type);
-        expand_generic_statement(statement, index + 1, substitutions, expanded);
-    }
-    substitutions.erase(parameter.name);
-}
-
-void expand_generics(Program& program) {
-    std::vector<Statement> expanded;
+void desugar_impls(Program& program) {
+    std::vector<Statement> desugared;
     for (const Statement& statement : program.statements) {
-        if (statement.kind == StatementKind::function && !statement.generic_parameters.empty()) {
-            std::unordered_map<std::string, Type> substitutions;
-            expand_generic_statement(statement, 0, substitutions, expanded);
+        if (statement.kind != StatementKind::impl_statement) {
+            desugared.push_back(clone_statement(statement));
             continue;
         }
 
-        expanded.push_back(clone_statement(statement));
+        if (!statement.type.has_type) {
+            throw std::runtime_error(diagnostic(statement.location, "impl block needs a receiver type"));
+        }
+
+        for (const Statement& method : statement.body) {
+            if (method.kind != StatementKind::function) {
+                throw std::runtime_error(diagnostic(method.location, "impl block can only contain functions"));
+            }
+
+            Statement function = clone_statement(method);
+            std::vector<GenericParameter> generic_parameters = statement.generic_parameters;
+            generic_parameters.insert(generic_parameters.end(), function.generic_parameters.begin(),
+                                      function.generic_parameters.end());
+            function.generic_parameters = std::move(generic_parameters);
+            function.parameters.insert(function.parameters.begin(),
+                                       Parameter{"self", clone_type_annotation(statement.type), statement.location});
+            function.exported = statement.exported || function.exported;
+            desugared.push_back(std::move(function));
+        }
     }
 
-    program.statements = std::move(expanded);
+    program.statements = std::move(desugared);
 }
 
 } // namespace
@@ -293,6 +163,7 @@ ModuleLoader::ModuleLoader(std::vector<std::filesystem::path> search_paths) : se
 
 Program ModuleLoader::resolve(Program program, const std::filesystem::path& source_directory) {
     loaded_modules_.clear();
+    desugar_impls(program);
 
     std::vector<Statement> resolved_statements;
     for (const Statement& statement : program.statements) {
@@ -306,7 +177,6 @@ Program ModuleLoader::resolve(Program program, const std::filesystem::path& sour
     resolved_statements.insert(resolved_statements.end(), std::make_move_iterator(program.statements.begin()),
                                std::make_move_iterator(program.statements.end()));
     program.statements = std::move(resolved_statements);
-    expand_generics(program);
     return program;
 }
 
@@ -318,6 +188,7 @@ std::vector<Statement> ModuleLoader::load_module(const std::string& module_name,
 
     const std::filesystem::path module_path = find_module(module_name, importer_directory);
     Program module = parse_file(module_path);
+    desugar_impls(module);
 
     std::vector<Statement> statements;
     for (const Statement& statement : module.statements) {
@@ -332,7 +203,9 @@ std::vector<Statement> ModuleLoader::load_module(const std::string& module_name,
     for (Statement& statement : module.statements) {
         if (statement.kind != StatementKind::function && statement.kind != StatementKind::const_statement &&
             statement.kind != StatementKind::import_statement) {
-            throw std::runtime_error("module '" + module_name + "' can only contain imports, constants, and functions");
+            throw std::runtime_error("module '" + module_name +
+                                     "' can only contain imports, constants, functions, and "
+                                     "impl blocks");
         }
 
         statements.push_back(std::move(statement));

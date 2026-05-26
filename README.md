@@ -1,12 +1,30 @@
-# dune lang
+# Dune
 
-A small compiled programming language written in C++23.
+Dune is a programming language which aims to keep systems-style code small,
+readable, and predictable while still compiling through a real compiler
+pipeline. It has a lexer, parser, AST, static type checker, bytecode VM, and an
+LLVM-based native backend.
+
+The language is intentionally compact: explicit types when they matter,
+overloads and generics for reusable code, modules loaded from `.dn` files, and a
+standard library that is increasingly written in Dune itself. Runtime checks
+catch common mistakes such as invalid indexes and slices, while the type checker
+rejects mismatched assignments, calls, returns, and binary operations before
+execution.
+
+Good fits for Dune today:
+
+- experimenting with compiled language implementation
+- writing small typed programs with straightforward syntax
+- trying VM execution and native LLVM output from the same source
+- building standard library code in the language itself
 
 ## Example
 
 Example `hello.dn` source:
 
 ```dn
+// Dune supports single-line comments.
 let x = 40 + 2;
 print(x);
 ```
@@ -54,12 +72,15 @@ Arrays and modules:
 
 ```dn
 import math;
+import array;
 
 let values: [int] = [1, math.square(2), 5];
 values.push(math.square(values[2]));
 
 print(values.len());
+print(values[0]);
 print(values[3]);
+print(values.first());
 ```
 
 Modules are loaded from `.dn` files. The standard library currently includes
@@ -67,6 +88,11 @@ Modules are loaded from `.dn` files. The standard library currently includes
 text operations such as `len`, `push`, indexing, and slicing remain runtime
 primitives; higher-level helpers are ordinary Dune functions in the standard
 library.
+
+The standard library can expose receiver methods with `impl` blocks. For
+example, importing `array` makes both `array.first(values)` and `values.first()`
+available. Importing `text` similarly enables helpers such as
+`message.trim().ends_with("x")`.
 
 Module files can mark their public API with `export`. If a module contains any
 explicit exports, only exported functions and constants can be accessed through
@@ -156,24 +182,30 @@ The `math` module currently provides constants and generic numeric functions:
 
 The `array` module provides generic helpers for common element types:
 
-- `copy(values)`
-- `reverse(values)`
-- `contains(values, needle)`
-- `index_of(values, needle)`
-- `first(values)`
-- `last(values)`
-- `append(values, value)`
+- `copy(values)` or `values.copy()`
+- `reverse(values)` or `values.reverse()`
+- `contains(values, needle)` or `values.contains(needle)`
+- `index_of(values, needle)` or `values.index_of(needle)`
+- `first(values)` or `values.first()`
+- `last(values)` or `values.last()`
+- `append(values, value)` or `values.append(value)`
 - `range(start, end)`
 - `sum(values)`
 
 The `text` module provides text and glyph helpers:
 
-- `len(value)`, `is_empty(value)`
-- `contains(value, needle)`, `starts_with(value, prefix)`, `ends_with(value, suffix)`
-- `char_at(value, index)`, `slice(value, start, end)`, `prefix(value, end)`, `suffix(value, start)`
-- `index_of(value, glyph)`, `count(value, glyph)`
+- `len(value)` or `value.len()`, `is_empty(value)` or `value.is_empty()`
+- `contains(value, needle)` or `value.contains(needle)`
+- `starts_with(value, prefix)` or `value.starts_with(prefix)`
+- `ends_with(value, suffix)` or `value.ends_with(suffix)`
+- `char_at(value, index)` or `value.char_at(index)`
+- `slice(value, start, end)` or `value.slice(start, end)`
+- `prefix(value, end)` or `value.prefix(end)`, `suffix(value, start)` or `value.suffix(start)`
+- `index_of(value, glyph)` or `value.index_of(glyph)`, `count(value, glyph)` or `value.count(glyph)`
 - `is_space(glyph)`, `is_digit(glyph)`, `is_alpha(glyph)`
-- `trim_start(value)`, `trim_end(value)`, `trim(value)`
+- `trim_start(value)` or `value.trim_start()`
+- `trim_end(value)` or `value.trim_end()`
+- `trim(value)` or `value.trim()`
 
 Functions can be overloaded by parameter types:
 
@@ -191,8 +223,10 @@ fn show(value: bool) -> int {
 }
 ```
 
-Functions can also be generic. A generic parameter can be unbounded, or it can
-use one of the current built-in bounds: `integer`, `numeric`, or `real`.
+Functions can also be generic. Generic functions are instantiated from actual
+call sites instead of eagerly expanding every supported type. A generic
+parameter can be unbounded, or it can use one of the current built-in bounds:
+`integer`, `numeric`, or `real`.
 
 ```dn
 fn identity<T>(value: T) -> T {
@@ -201,6 +235,18 @@ fn identity<T>(value: T) -> T {
 
 fn square<T: numeric>(value: T) -> T {
   return value * value;
+}
+```
+
+Receiver methods can be written with `impl`. The receiver is available inside
+the method body as `self`; exported impl methods can also be called as module
+functions after import.
+
+```dn
+export impl<T> [T] {
+  fn first() -> T {
+    return self[0];
+  }
 }
 ```
 
@@ -219,14 +265,25 @@ Supported compound types:
 
 Indexing and slicing:
 
+- arrays are zero-based: `values[0]` is the first element
 - arrays: `values[index]`, `values[start:end]`, `values[:end]`, `values[start:]`
-- text: `message[index]` returns `glyph`; text slices return `text`
+- text is zero-based: `message[0]` returns the first `glyph`
+- text slices return `text`
 - native output checks array/text indexes, slices, and empty `pop()` calls at runtime
+
+Comments:
+
+- `//` starts a single-line comment
 
 Built-in receiver methods:
 
 - arrays: `len()`, `push(value)`, `pop()`, `clear()`, `is_empty()`
 - text: `len()`, `is_empty()`, `contains(needle)`, `starts_with(prefix)`
+
+Standard library receiver methods are enabled by importing their module:
+
+- `import array;` enables helpers such as `values.first()` and `values.reverse()`
+- `import text;` enables helpers such as `message.trim()` and `message.ends_with("x")`
 
 ## Run
 
@@ -274,6 +331,7 @@ The current release implements a small compiled language with:
 - arithmetic
 - variables
 - constants
+- single-line comments
 - unary operators
 - logical operators
 - modulo
@@ -281,6 +339,8 @@ The current release implements a small compiled language with:
 - typed functions
 - overloaded functions
 - generic functions with basic bounds
+- call-site generic instantiation
+- impl blocks
 - static scalar types
 - booleans
 - signed and unsigned integer widths
@@ -290,6 +350,7 @@ The current release implements a small compiled language with:
 - dynamic arrays
 - array methods
 - text methods
+- standard library extension methods
 - text indexing
 - slices
 - imports

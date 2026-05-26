@@ -159,8 +159,20 @@ char Lexer::peek() const {
 }
 
 void Lexer::skip_whitespace() {
-    while (!is_at_end() && std::isspace(static_cast<unsigned char>(peek()))) {
-        advance();
+    while (!is_at_end()) {
+        if (std::isspace(static_cast<unsigned char>(peek()))) {
+            advance();
+            continue;
+        }
+
+        if (peek() == '/' && current_ + 1 < source_.size() && source_[current_ + 1] == '/') {
+            while (!is_at_end() && peek() != '\n') {
+                advance();
+            }
+            continue;
+        }
+
+        break;
     }
 }
 
@@ -192,6 +204,10 @@ Token Lexer::identifier(std::size_t start, std::size_t line, std::size_t column)
 
     if (lexeme == "fn") {
         return Token{TokenType::fn_keyword, lexeme, line, column};
+    }
+
+    if (lexeme == "impl") {
+        return Token{TokenType::impl_keyword, lexeme, line, column};
     }
 
     if (lexeme == "import") {

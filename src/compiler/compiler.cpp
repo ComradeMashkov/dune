@@ -194,19 +194,26 @@ Bytecode Compiler::compile(const Program& program) {
     loop_stack_.clear();
     expression_types_ = type_checker.expression_types();
     resolved_calls_ = type_checker.resolved_calls();
+    const auto& instantiated_functions = type_checker.instantiated_functions();
     instructions_ = &bytecode_.instructions;
 
     collect_global_constants(program.statements);
     collect_functions(program.statements);
+    for (const Statement& statement : instantiated_functions) {
+        collect_function(statement);
+    }
     compile_statements(program.statements);
 
     emit(OpCode::halt);
     bytecode_.local_count = locals_.size();
 
     for (const Statement& statement : program.statements) {
-        if (statement.kind == StatementKind::function) {
+        if (statement.kind == StatementKind::function && statement.generic_parameters.empty()) {
             compile_function(statement);
         }
+    }
+    for (const Statement& statement : instantiated_functions) {
+        compile_function(statement);
     }
 
     instructions_ = nullptr;
@@ -215,22 +222,26 @@ Bytecode Compiler::compile(const Program& program) {
 
 void Compiler::collect_functions(const std::vector<Statement>& statements) {
     for (const Statement& statement : statements) {
-        if (statement.kind != StatementKind::function) {
-            continue;
-        }
-
-        const std::size_t index = bytecode_.functions.size();
-        std::vector<Type> parameters;
-        parameters.reserve(statement.parameters.size());
-        for (const Parameter& parameter : statement.parameters) {
-            parameters.push_back(parameter.type.has_type ? parameter.type.type : make_type(ValueType::int_type));
-        }
-
-        functions_.emplace(function_key(statement.name, parameters), index);
-        const std::string extern_symbol = statement.extern_symbol.empty() ? statement.name : statement.extern_symbol;
-        bytecode_.functions.push_back(
-            Bytecode::Function{statement.name, extern_symbol, statement.parameters.size(), 0, {}, statement.is_extern});
+        collect_function(statement);
     }
+}
+
+void Compiler::collect_function(const Statement& statement) {
+    if (statement.kind != StatementKind::function || !statement.generic_parameters.empty()) {
+        return;
+    }
+
+    const std::size_t index = bytecode_.functions.size();
+    std::vector<Type> parameters;
+    parameters.reserve(statement.parameters.size());
+    for (const Parameter& parameter : statement.parameters) {
+        parameters.push_back(parameter.type.has_type ? parameter.type.type : make_type(ValueType::int_type));
+    }
+
+    functions_.emplace(function_key(statement.name, parameters), index);
+    const std::string extern_symbol = statement.extern_symbol.empty() ? statement.name : statement.extern_symbol;
+    bytecode_.functions.push_back(
+        Bytecode::Function{statement.name, extern_symbol, statement.parameters.size(), 0, {}, statement.is_extern});
 }
 
 void Compiler::collect_global_constants(const std::vector<Statement>& statements) {
@@ -378,6 +389,7 @@ void Compiler::compile_statement(const Statement& statement) {
         loop_stack_.back().continues.push_back(emit(OpCode::jump));
         return;
     case StatementKind::function:
+    case StatementKind::impl_statement:
         return;
     case StatementKind::return_statement:
         if (statement.expression == nullptr) {
@@ -473,11 +485,19 @@ void Compiler::compile_expression(const Expression& expression) {
 
 void Compiler::compile_method_call_expression(const Expression& expression) {
     if (resolved_calls_.contains(&expression)) {
+        const std::size_t function_index = resolve_function(resolved_calls_.at(&expression));
+        const Bytecode::Function& function = bytecode_.functions.at(function_index);
+        if (function.arity == expression.arguments.size() + 1) {
+            compile_expression(*expression.left);
+        } else if (function.arity != expression.arguments.size()) {
+            throw std::runtime_error("method call argument count mismatch");
+        }
+
         for (const std::unique_ptr<Expression>& argument : expression.arguments) {
             compile_expression(*argument);
         }
 
-        emit(OpCode::call, resolve_function(resolved_calls_.at(&expression)));
+        emit(OpCode::call, function_index);
         return;
     }
 

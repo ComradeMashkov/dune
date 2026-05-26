@@ -156,28 +156,38 @@ int main() {
                        "d\nlanguage\ndune\nlanguage\n3\n2\n4\n5\n9\n",
                        "expected externs slices text indexing and for loop output") &&
              passed;
-    passed =
-        expect_eq(run_source("import array; import text; "
-                             "let values: [int] = [1, 2, 3]; let reversed: [int] = array.reverse(values); "
-                             "print(array.sum(reversed)); print(array.first(reversed)); "
-                             "print(array.last(reversed)); print(array.contains(values, 2)); "
-                             "print(array.index_of(values, 3)); "
-                             "let ranged: [int] = array.range(2, 5); print(array.sum(ranged)); "
-                             "let message: text = \" dune language \"; print(text.trim(message)); "
-                             "print(text.ends_with(text.trim(message), \"age\")); "
-                             "print(text.index_of(message, 'l')); print(text.count(message, 'a')); "
-                             "print(text.is_digit('7')); print(text.is_alpha('Z'));"),
-                  "6\n3\n1\n1\n2\n9\ndune language\n1\n6\n2\n1\n1\n", "expected array and text stdlib module output") &&
-        passed;
+    passed = expect_eq(run_source("import array; import text; "
+                                  "let values: [int] = [1, 2, 3]; let reversed: [int] = array.reverse(values); "
+                                  "print(array.sum(reversed)); print(array.first(reversed)); "
+                                  "print(array.last(reversed)); print(array.contains(values, 2)); "
+                                  "print(array.index_of(values, 3)); "
+                                  "print(values.first()); print(values.append(4).last()); "
+                                  "let ranged: [int] = array.range(2, 5); print(array.sum(ranged)); "
+                                  "let message: text = \" dune language \"; print(text.trim(message)); "
+                                  "print(text.ends_with(text.trim(message), \"age\")); "
+                                  "print(message.trim().ends_with(\"age\")); "
+                                  "print(text.index_of(message, 'l')); print(text.count(message, 'a')); "
+                                  "print(text.is_digit('7')); print(text.is_alpha('Z'));"),
+                       "6\n3\n1\n1\n2\n1\n4\n9\ndune language\n1\n1\n6\n2\n1\n1\n",
+                       "expected array and text stdlib module output") &&
+             passed;
     passed = expect_eq(run_source("import array; import math; "
                                   "fn identity<T>(value: T) -> T { return value; } "
                                   "fn twice<T: numeric>(value: T) -> T { return value + value; } "
                                   "let words: [text] = [\"dune\", \"lang\"]; "
                                   "let reversed: [text] = array.reverse(words); "
                                   "let rough: real32 = 1.5; "
-                                  "print(identity(42)); print(identity(\"ok\")); print(array.first(reversed)); "
+                                  "print(identity(42)); print(identity(\"ok\")); print(reversed.first()); "
                                   "print(math.square(12)); print(math.square(rough)); print(twice(9));"),
                        "42\nok\nlang\n144\n2.25\n18\n", "expected generic functions and generic stdlib output") &&
+             passed;
+    passed = expect_eq(run_source("// comments are ignored\n"
+                                  "import array; // stdlib extension methods\n"
+                                  "let values: [int] = [7, 8];\n"
+                                  "print(values[0]); // arrays are zero-based\n"
+                                  "print(values.first());\n"
+                                  "print(8 / 2);"),
+                       "7\n7\n4\n", "expected comments and zero-based array output") &&
              passed;
     passed = expect_throws("print(missing);", "expected undefined variable to throw") && passed;
     passed = expect_throws("missing = 1;", "expected undefined assignment to throw") && passed;

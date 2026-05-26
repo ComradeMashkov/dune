@@ -1,49 +1,52 @@
-export fn copy<T>(values: [T]) -> [T] {
-    let result: [T] = [];
-    for let index = 0; index < values.len(); index = index + 1 {
-        result.push(values[index]);
-    }
-
-    return result;
-}
-
-export fn reverse<T>(values: [T]) -> [T] {
-    let result: [T] = [];
-    let index = values.len();
-    while index > 0 {
-        index = index - 1;
-        result.push(values[index]);
-    }
-
-    return result;
-}
-
-export fn contains<T>(values: [T], needle: T) -> bool {
-    return index_of(values, needle) >= 0;
-}
-
-export fn index_of<T>(values: [T], needle: T) -> int {
-    for let index = 0; index < values.len(); index = index + 1 {
-        if values[index] == needle {
-            return index;
+export impl<T> [T] {
+    fn copy() -> [T] {
+        let result: [T] = [];
+        for let index = 0; index < self.len(); index = index + 1 {
+            result.push(self[index]);
         }
+
+        return result;
     }
 
-    return 0 - 1;
-}
+    fn reverse() -> [T] {
+        let result: [T] = [];
+        let index = self.len();
+        while index > 0 {
+            index = index - 1;
+            result.push(self[index]);
+        }
 
-export fn first<T>(values: [T]) -> T {
-    return values[0];
-}
+        return result;
+    }
 
-export fn last<T>(values: [T]) -> T {
-    return values[values.len() - 1];
-}
+    fn contains(needle: T) -> bool {
+        return index_of(self, needle) >= 0;
+    }
 
-export fn append<T>(values: [T], value: T) -> [T] {
-    let result: [T] = copy(values);
-    result.push(value);
-    return result;
+    fn index_of(needle: T) -> int {
+        for let index = 0; index < self.len(); index = index + 1 {
+            if self[index] == needle {
+                return index;
+            }
+        }
+
+        return 0 - 1;
+    }
+
+    fn first() -> T {
+        return self[0];
+    }
+
+    fn last() -> T {
+        return self[self.len() - 1];
+    }
+
+    fn append(value: T) -> [T] {
+        let result: [T] = copy(self);
+        result.push(value);
+        return result;
+    }
+
 }
 
 export fn range(start: int, end: int) -> [int] {

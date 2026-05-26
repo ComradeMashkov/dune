@@ -2,9 +2,11 @@
 
 #include "ast/ast.hpp"
 
+#include <deque>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace dune {
@@ -14,6 +16,7 @@ public:
     void check(const Program& program);
     const std::unordered_map<const Expression*, Type>& expression_types() const;
     const std::unordered_map<const Expression*, std::string>& resolved_calls() const;
+    const std::deque<Statement>& instantiated_functions() const;
 
 private:
     struct FunctionSignature {
@@ -25,6 +28,7 @@ private:
     };
 
     void collect_function(const Statement& statement);
+    void collect_generic_function(const Statement& statement);
     void check_function(const Statement& statement);
     void check_statement(const Statement& statement);
     void check_statements(const std::vector<Statement>& statements);
@@ -41,6 +45,7 @@ private:
     Type check_function_call(const Expression& expression, const std::string& name,
                              const std::vector<std::unique_ptr<Expression>>& arguments, SourceLocation location,
                              const TypeAnnotation& expected = {});
+    Type check_extension_method_call(const Expression& expression, const TypeAnnotation& expected);
     Type check_array_method_call(const Type& receiver, const Expression& expression);
     Type check_text_method_call(const Type& receiver, const Expression& expression);
 
@@ -56,6 +61,11 @@ private:
     bool is_numeric_type(const Type& type) const;
     bool is_cast_allowed(const Type& source, const Type& target) const;
     bool can_coerce_integer_literal(const Expression& expression, const Type& target) const;
+    bool is_numeric_literal(const Expression& expression) const;
+    bool type_satisfies_bound(const Type& type, const std::string& bound, SourceLocation location) const;
+    bool collect_generic_constraints(const Type& pattern, const Type& actual,
+                                     std::unordered_map<std::string, std::vector<std::pair<Type, bool>>>& constraints,
+                                     bool preferred) const;
     void check_integer_literal_range(const Expression& expression, const Type& target) const;
     unsigned long long max_integer_literal(ValueType target) const;
     Type coerce_numeric_literal(const Expression& expression, const Type& actual, const Type& target);
@@ -68,13 +78,21 @@ private:
     bool is_known_module(const std::string& module) const;
     std::string diagnostic(SourceLocation location, const std::string& message) const;
 
-    const FunctionSignature& resolve_overload(const std::string& name,
-                                              const std::vector<std::unique_ptr<Expression>>& arguments,
+    const FunctionSignature& resolve_overload(const std::string& name, const std::vector<const Expression*>& arguments,
                                               SourceLocation location, const TypeAnnotation& expected);
+    const FunctionSignature* try_resolve_overload(const std::string& name,
+                                                  const std::vector<const Expression*>& arguments,
+                                                  SourceLocation location, const TypeAnnotation& expected);
     const FunctionSignature& find_function_by_key(const std::string& key, SourceLocation location) const;
+    const FunctionSignature& instantiate_generic_function(const Statement& statement,
+                                                          const std::unordered_map<std::string, Type>& substitutions,
+                                                          SourceLocation location);
 
     std::unordered_map<std::string, FunctionSignature> functions_;
     std::unordered_map<std::string, std::vector<std::string>> overloads_;
+    std::unordered_map<std::string, std::vector<const Statement*>> generic_overloads_;
+    std::unordered_set<std::string> instantiated_function_keys_;
+    std::deque<Statement> instantiated_functions_;
     std::unordered_map<std::string, Type> variables_;
     std::unordered_map<std::string, Type> global_constants_;
     std::unordered_map<std::string, std::unordered_set<std::string>> module_exports_;

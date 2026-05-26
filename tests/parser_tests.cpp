@@ -402,6 +402,41 @@ bool parses_generic_functions() {
     return passed;
 }
 
+bool parses_impl_methods() {
+    const dune::Program program = parse_source("export impl<T> [T] { "
+                                               "fn first() -> T { return self[0]; } "
+                                               "fn append(value: T) -> [T] { return self; } "
+                                               "}");
+
+    if (!expect(program.statements.size() == 1, "expected one impl statement")) {
+        return false;
+    }
+
+    bool passed = true;
+    const dune::Statement& statement = program.statements[0];
+    passed = expect(statement.kind == dune::StatementKind::impl_statement, "expected impl statement") && passed;
+    passed = expect(statement.exported, "expected exported impl") && passed;
+    passed = expect(statement.generic_parameters.size() == 1, "expected one impl generic") && passed;
+    passed = expect(statement.generic_parameters[0].name == "T", "expected impl generic name") && passed;
+    passed = expect(statement.type.type.kind == dune::ValueType::array_type, "expected array receiver") && passed;
+    passed = expect(statement.type.type.element != nullptr, "expected receiver element") && passed;
+    passed = expect(statement.type.type.element->kind == dune::ValueType::generic_type, "expected generic element") &&
+             passed;
+    passed = expect(statement.body.size() == 2, "expected two methods") && passed;
+    passed = expect(statement.body[0].kind == dune::StatementKind::function, "expected first method") && passed;
+    passed = expect(statement.body[0].name == "first", "expected first method name") && passed;
+    passed = expect(statement.body[0].parameters.empty(), "expected receiver omitted from method params") && passed;
+    passed =
+        expect(statement.body[0].type.type.kind == dune::ValueType::generic_type, "expected generic return") && passed;
+    passed = expect(statement.body[0].body[0].expression->kind == dune::ExpressionKind::index,
+                    "expected zero-based index expression") &&
+             passed;
+    passed =
+        expect(statement.body[0].body[0].expression->right->lexeme == "0", "expected first index to be zero") && passed;
+
+    return passed;
+}
+
 } // namespace
 
 int main() {
@@ -417,6 +452,7 @@ int main() {
     passed = parses_casts_unary_logical_and_methods() && passed;
     passed = parses_stdlib_primitives() && passed;
     passed = parses_generic_functions() && passed;
+    passed = parses_impl_methods() && passed;
 
     return passed ? 0 : 1;
 }
