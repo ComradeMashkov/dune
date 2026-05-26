@@ -207,6 +207,17 @@ add_test(
 )
 
 add_test(
+    NAME cli_build_native_functions
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/functions.dn
+        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/functions_native
+        -D EXPECTED_OUTPUT=17
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
+)
+
+add_test(
     NAME cli_build_native_control_flow
     COMMAND
         ${CMAKE_COMMAND}
