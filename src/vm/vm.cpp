@@ -1,5 +1,7 @@
 #include "vm.hpp"
 
+#include <cmath>
+#include <cstddef>
 #include <iomanip>
 #include <memory>
 #include <ostream>
@@ -42,6 +44,13 @@ Value make_glyph(char value) {
     Value result;
     result.kind = ValueKind::glyph;
     result.glyph_value = value;
+    return result;
+}
+
+Value make_text(std::string value) {
+    Value result;
+    result.kind = ValueKind::text;
+    result.text_value = std::move(value);
     return result;
 }
 
@@ -311,6 +320,42 @@ std::vector<Value>& array_elements(const Value& value) {
     }
 
     return *value.array_value;
+}
+
+bool is_default_bound(const Value& value) {
+    return value.kind == ValueKind::signed_integer && value.signed_value == -1;
+}
+
+std::size_t slice_bound(const Value& value, std::size_t default_value, std::size_t length) {
+    if (is_default_bound(value)) {
+        return default_value;
+    }
+
+    const std::size_t bound = index_value(value);
+    if (bound > length) {
+        throw std::runtime_error("slice bound out of bounds");
+    }
+
+    return bound;
+}
+
+double numeric_argument(const Value& value) {
+    switch (value.kind) {
+    case ValueKind::signed_integer:
+        return static_cast<double>(value.signed_value);
+    case ValueKind::unsigned_integer:
+        return static_cast<double>(value.unsigned_value);
+    case ValueKind::real:
+        return value.real_value;
+    case ValueKind::boolean:
+    case ValueKind::glyph:
+    case ValueKind::text:
+    case ValueKind::unit:
+    case ValueKind::array:
+        break;
+    }
+
+    throw std::runtime_error("extern function expected numeric argument");
 }
 
 Value cast_signed(const Value& value) {
@@ -597,16 +642,64 @@ void VirtualMachine::run(std::ostream& output) {
         }
         case OpCode::load_index: {
             const Value index = pop();
-            const Value array = pop();
-            std::vector<Value>& elements = array_elements(array);
+            const Value indexed = pop();
             const std::size_t offset = index_value(index);
-            if (offset >= elements.size()) {
-                throw std::runtime_error("array index out of bounds");
+
+            if (indexed.kind == ValueKind::array) {
+                std::vector<Value>& elements = array_elements(indexed);
+                if (offset >= elements.size()) {
+                    throw std::runtime_error("array index out of bounds");
+                }
+
+                stack_.push_back(elements[offset]);
+                ++frame.ip;
+                break;
             }
 
-            stack_.push_back(elements[offset]);
-            ++frame.ip;
-            break;
+            if (indexed.kind == ValueKind::text) {
+                if (offset >= indexed.text_value.size()) {
+                    throw std::runtime_error("text index out of bounds");
+                }
+
+                stack_.push_back(make_glyph(indexed.text_value[offset]));
+                ++frame.ip;
+                break;
+            }
+
+            throw std::runtime_error("expected array or text value");
+        }
+        case OpCode::load_slice: {
+            const Value end_value = pop();
+            const Value start_value = pop();
+            const Value sliced = pop();
+
+            if (sliced.kind == ValueKind::array) {
+                std::vector<Value>& elements = array_elements(sliced);
+                const std::size_t start = slice_bound(start_value, 0, elements.size());
+                const std::size_t end = slice_bound(end_value, elements.size(), elements.size());
+                if (start > end) {
+                    throw std::runtime_error("slice start cannot be greater than slice end");
+                }
+
+                stack_.push_back(make_array(std::vector<Value>(elements.begin() + static_cast<std::ptrdiff_t>(start),
+                                                               elements.begin() + static_cast<std::ptrdiff_t>(end))));
+                ++frame.ip;
+                break;
+            }
+
+            if (sliced.kind == ValueKind::text) {
+                const std::size_t start = slice_bound(start_value, 0, sliced.text_value.size());
+                const std::size_t end = slice_bound(end_value, sliced.text_value.size(), sliced.text_value.size());
+                if (start > end) {
+                    throw std::runtime_error("slice start cannot be greater than slice end");
+                }
+
+                stack_.push_back(make_text(sliced.text_value.substr(start, end - start)));
+                ++frame.ip;
+                break;
+            }
+
+            throw std::runtime_error("expected array or text value");
         }
         case OpCode::array_len: {
             const Value array = pop();
@@ -705,12 +798,65 @@ void VirtualMachine::call_function(std::size_t function_index) {
         throw std::runtime_error("not enough arguments on stack for function call");
     }
 
+    if (function.is_extern) {
+        std::vector<Value> arguments(function.arity);
+        for (std::size_t index = function.arity; index > 0; --index) {
+            arguments[index - 1] = pop();
+        }
+
+        stack_.push_back(call_extern_function(function, std::move(arguments)));
+        return;
+    }
+
     std::vector<Value> locals(function.local_count);
     for (std::size_t index = function.arity; index > 0; --index) {
         locals[index - 1] = pop();
     }
 
     frames_.push_back(CallFrame{&function.instructions, 0, std::move(locals)});
+}
+
+Value VirtualMachine::call_extern_function(const Bytecode::Function& function, std::vector<Value> arguments) {
+    const std::string& symbol = function.extern_symbol.empty() ? function.name : function.extern_symbol;
+    if (arguments.size() == 1) {
+        const double value = numeric_argument(arguments[0]);
+        if (symbol == "sqrt" || symbol == "sqrtf") {
+            return make_real(std::sqrt(value));
+        }
+        if (symbol == "sin" || symbol == "sinf") {
+            return make_real(std::sin(value));
+        }
+        if (symbol == "cos" || symbol == "cosf") {
+            return make_real(std::cos(value));
+        }
+        if (symbol == "tan" || symbol == "tanf") {
+            return make_real(std::tan(value));
+        }
+        if (symbol == "exp" || symbol == "expf") {
+            return make_real(std::exp(value));
+        }
+        if (symbol == "log" || symbol == "logf") {
+            return make_real(std::log(value));
+        }
+        if (symbol == "round" || symbol == "roundf") {
+            return make_real(std::round(value));
+        }
+        if (symbol == "floor" || symbol == "floorf") {
+            return make_real(std::floor(value));
+        }
+        if (symbol == "ceil" || symbol == "ceilf") {
+            return make_real(std::ceil(value));
+        }
+        if (symbol == "fabs" || symbol == "fabsf") {
+            return make_real(std::fabs(value));
+        }
+    }
+
+    if (arguments.size() == 2 && (symbol == "pow" || symbol == "powf")) {
+        return make_real(std::pow(numeric_argument(arguments[0]), numeric_argument(arguments[1])));
+    }
+
+    throw std::runtime_error("unsupported extern function '" + symbol + "'");
 }
 
 Value VirtualMachine::pop() {

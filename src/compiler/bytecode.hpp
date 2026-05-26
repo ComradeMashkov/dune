@@ -59,6 +59,7 @@ enum class OpCode {
     pop,
     make_array,
     load_index,
+    load_slice,
     array_len,
     array_push,
     array_pop,
@@ -84,9 +85,11 @@ struct Bytecode {
 
     struct Function {
         std::string name;
+        std::string extern_symbol;
         std::size_t arity = 0;
         std::size_t local_count = 0;
         std::vector<Instruction> instructions;
+        bool is_extern = false;
     };
 
     std::vector<Function> functions;

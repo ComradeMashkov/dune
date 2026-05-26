@@ -144,12 +144,44 @@ int main() {
                        "-17\n-17\n2\n1\n0\n1\n8.5\n65\nB\n0\n0\n3\n2\n1\n13\n1\n1\n1\n",
                        "expected operators casts and methods output") &&
              passed;
+    passed = expect_eq(run_source("extern fn c_sqrt(value: real64) -> real64 = \"sqrt\"; "
+                                  "let message: text = \"dune language\"; print(message[0]); "
+                                  "print(message[5:13]); print(message[:4]); print(message[5:]); "
+                                  "let values: [int] = [1, 2, 3, 4, 5]; let middle: [int] = values[1:4]; "
+                                  "print(middle.len()); print(middle[0]); print(middle[2]); "
+                                  "let total = 0; "
+                                  "for let i = 0; i < 6; i = i + 1 { "
+                                  "if i == 1 { continue; } if i == 4 { break; } total = total + i; } "
+                                  "print(total); print(c_sqrt(81.0));"),
+                       "d\nlanguage\ndune\nlanguage\n3\n2\n4\n5\n9\n",
+                       "expected externs slices text indexing and for loop output") &&
+             passed;
+    passed =
+        expect_eq(run_source("import array; import text; "
+                             "let values: [int] = [1, 2, 3]; let reversed: [int] = array.reverse(values); "
+                             "print(array.sum(reversed)); print(array.first(reversed)); "
+                             "print(array.last(reversed)); print(array.contains(values, 2)); "
+                             "print(array.index_of(values, 3)); "
+                             "let ranged: [int] = array.range(2, 5); print(array.sum(ranged)); "
+                             "let message: text = \" dune language \"; print(text.trim(message)); "
+                             "print(text.ends_with(text.trim(message), \"age\")); "
+                             "print(text.index_of(message, 'l')); print(text.count(message, 'a')); "
+                             "print(text.is_digit('7')); print(text.is_alpha('Z'));"),
+                  "6\n3\n1\n1\n2\n9\ndune language\n1\n6\n2\n1\n1\n", "expected array and text stdlib module output") &&
+        passed;
     passed = expect_throws("print(missing);", "expected undefined variable to throw") && passed;
     passed = expect_throws("missing = 1;", "expected undefined assignment to throw") && passed;
     passed = expect_throws("print(1 / 0);", "expected division by zero to throw") && passed;
     passed = expect_error_contains("let values: [int] = [1]; print(values[2]);", "array index out of bounds",
                                    "expected array bounds error") &&
              passed;
+    passed = expect_error_contains("let message: text = \"ok\"; print(message[2]);", "text index out of bounds",
+                                   "expected text bounds error") &&
+             passed;
+    passed =
+        expect_error_contains("let values: [int] = [1, 2]; let bad: [int] = values[2:1];",
+                              "slice start cannot be greater than slice end", "expected invalid slice range error") &&
+        passed;
     passed = expect_error_contains("let x: int = true;", "expected type 'int' but got 'bool'",
                                    "expected static type error") &&
              passed;

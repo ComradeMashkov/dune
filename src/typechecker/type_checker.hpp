@@ -37,6 +37,7 @@ private:
     Type check_cast_expression(const Expression& expression);
     Type check_array_literal(const Expression& expression, const TypeAnnotation& expected);
     Type check_index_expression(const Expression& expression);
+    Type check_slice_expression(const Expression& expression);
     Type check_function_call(const Expression& expression, const std::string& name,
                              const std::vector<std::unique_ptr<Expression>>& arguments, SourceLocation location,
                              const TypeAnnotation& expected = {});
@@ -60,7 +61,9 @@ private:
     Type coerce_numeric_literal(const Expression& expression, const Type& actual, const Type& target);
     void expect_type(const Type& expected, const Type& actual, SourceLocation location) const;
     void expect_imported_module(const std::string& module, SourceLocation location) const;
+    void expect_exported_member(const std::string& module, const std::string& member, SourceLocation location) const;
     void collect_known_module(const std::string& name);
+    void collect_module_export(const Statement& statement);
     bool is_qualified_module_name(const std::string& name) const;
     bool is_known_module(const std::string& module) const;
     std::string diagnostic(SourceLocation location, const std::string& message) const;
@@ -74,12 +77,14 @@ private:
     std::unordered_map<std::string, std::vector<std::string>> overloads_;
     std::unordered_map<std::string, Type> variables_;
     std::unordered_map<std::string, Type> global_constants_;
+    std::unordered_map<std::string, std::unordered_set<std::string>> module_exports_;
     std::unordered_set<std::string> constants_;
     std::unordered_set<std::string> known_modules_;
     std::unordered_map<const Expression*, Type> expression_types_;
     std::unordered_map<const Expression*, std::string> resolved_calls_;
     std::unordered_set<std::string> imports_;
     const FunctionSignature* current_function_ = nullptr;
+    std::size_t loop_depth_ = 0;
 };
 
 std::string type_name(ValueType type);

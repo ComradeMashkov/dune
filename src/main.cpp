@@ -15,7 +15,7 @@
 
 namespace {
 
-constexpr const char* version = "0.8.0";
+constexpr const char* version = "0.9.0";
 
 #ifndef DUNE_CLANGXX_PATH
 #define DUNE_CLANGXX_PATH "clang++"
@@ -92,6 +92,9 @@ void compile_llvm_ir(const std::string& llvm_ir_path, const std::string& output_
     const char* clangxx = std::getenv("DUNE_CLANGXX");
     const std::string compiler = clangxx == nullptr ? DUNE_CLANGXX_PATH : clangxx;
     std::string command = shell_quote(compiler) + " " + shell_quote(llvm_ir_path) + " -o " + shell_quote(output_path);
+#if !defined(_WIN32)
+    command += " -lm";
+#endif
 #if defined(_WIN32)
     command = "\"" + command + "\"";
 #endif

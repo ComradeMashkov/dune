@@ -58,6 +58,7 @@ enum class ExpressionKind {
     boolean,
     array,
     index,
+    slice,
     member,
     unary,
     cast,
@@ -84,6 +85,9 @@ enum class StatementKind {
     block,
     if_statement,
     while_statement,
+    for_statement,
+    break_statement,
+    continue_statement,
     function,
     return_statement,
     expression_statement,
@@ -99,6 +103,11 @@ struct Statement {
     TypeAnnotation type;
     std::vector<Parameter> parameters;
     SourceLocation location;
+    std::unique_ptr<Statement> initializer;
+    std::unique_ptr<Statement> increment;
+    bool exported = false;
+    bool is_extern = false;
+    std::string extern_symbol;
 };
 
 struct Program {

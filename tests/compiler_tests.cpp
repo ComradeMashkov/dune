@@ -158,6 +158,40 @@ bool compiles_operators_casts_and_methods() {
     return passed;
 }
 
+bool compiles_stdlib_primitives() {
+    const dune::Bytecode bytecode = compile_source("extern fn c_sqrt(value: real64) -> real64 = \"sqrt\"; "
+                                                   "let message: text = \"dune\"; print(message[0]); "
+                                                   "print(message[1:3]); "
+                                                   "let values: [int] = [1, 2, 3]; let part: [int] = values[:2]; "
+                                                   "for let i = 0; i < 3; i = i + 1 { "
+                                                   "if i == 1 { continue; } break; } "
+                                                   "print(c_sqrt(81.0));");
+
+    bool saw_text_index = false;
+    bool saw_slice = false;
+    bool saw_backward_jump = false;
+    bool saw_extern_call = false;
+    for (std::size_t index = 0; index < bytecode.instructions.size(); ++index) {
+        const dune::Instruction& instruction = bytecode.instructions[index];
+        saw_text_index = saw_text_index || instruction.op == dune::OpCode::load_index;
+        saw_slice = saw_slice || instruction.op == dune::OpCode::load_slice;
+        saw_extern_call = saw_extern_call || instruction.op == dune::OpCode::call;
+        if (instruction.op == dune::OpCode::jump && instruction.operand < index) {
+            saw_backward_jump = true;
+        }
+    }
+
+    bool passed = true;
+    passed = expect(bytecode.functions.size() == 1, "expected one extern function") && passed;
+    passed = expect(bytecode.functions[0].is_extern, "expected extern function flag") && passed;
+    passed = expect(bytecode.functions[0].extern_symbol == "sqrt", "expected extern symbol") && passed;
+    passed = expect(saw_text_index, "expected text index instruction") && passed;
+    passed = expect(saw_slice, "expected slice instruction") && passed;
+    passed = expect(saw_backward_jump, "expected loop backward jump") && passed;
+    passed = expect(saw_extern_call, "expected extern call instruction") && passed;
+    return passed;
+}
+
 } // namespace
 
 int main() {
@@ -167,6 +201,7 @@ int main() {
     passed = compiles_arrays_and_module_calls() && passed;
     passed = compiles_module_constants() && passed;
     passed = compiles_operators_casts_and_methods() && passed;
+    passed = compiles_stdlib_primitives() && passed;
 
     return passed ? 0 : 1;
 }

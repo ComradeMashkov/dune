@@ -1,0 +1,266 @@
+export fn copy(values: [int]) -> [int] {
+    let result: [int] = [];
+    for let index = 0; index < values.len(); index = index + 1 {
+        result.push(values[index]);
+    }
+
+    return result;
+}
+
+export fn copy(values: [real64]) -> [real64] {
+    let result: [real64] = [];
+    for let index = 0; index < values.len(); index = index + 1 {
+        result.push(values[index]);
+    }
+
+    return result;
+}
+
+export fn copy(values: [text]) -> [text] {
+    let result: [text] = [];
+    for let index = 0; index < values.len(); index = index + 1 {
+        result.push(values[index]);
+    }
+
+    return result;
+}
+
+export fn copy(values: [bool]) -> [bool] {
+    let result: [bool] = [];
+    for let index = 0; index < values.len(); index = index + 1 {
+        result.push(values[index]);
+    }
+
+    return result;
+}
+
+export fn copy(values: [glyph]) -> [glyph] {
+    let result: [glyph] = [];
+    for let index = 0; index < values.len(); index = index + 1 {
+        result.push(values[index]);
+    }
+
+    return result;
+}
+
+export fn reverse(values: [int]) -> [int] {
+    let result: [int] = [];
+    let index = values.len();
+    while index > 0 {
+        index = index - 1;
+        result.push(values[index]);
+    }
+
+    return result;
+}
+
+export fn reverse(values: [real64]) -> [real64] {
+    let result: [real64] = [];
+    let index = values.len();
+    while index > 0 {
+        index = index - 1;
+        result.push(values[index]);
+    }
+
+    return result;
+}
+
+export fn reverse(values: [text]) -> [text] {
+    let result: [text] = [];
+    let index = values.len();
+    while index > 0 {
+        index = index - 1;
+        result.push(values[index]);
+    }
+
+    return result;
+}
+
+export fn reverse(values: [bool]) -> [bool] {
+    let result: [bool] = [];
+    let index = values.len();
+    while index > 0 {
+        index = index - 1;
+        result.push(values[index]);
+    }
+
+    return result;
+}
+
+export fn reverse(values: [glyph]) -> [glyph] {
+    let result: [glyph] = [];
+    let index = values.len();
+    while index > 0 {
+        index = index - 1;
+        result.push(values[index]);
+    }
+
+    return result;
+}
+
+export fn contains(values: [int], needle: int) -> bool {
+    return index_of(values, needle) >= 0;
+}
+
+export fn contains(values: [real64], needle: real64) -> bool {
+    return index_of(values, needle) >= 0;
+}
+
+export fn contains(values: [text], needle: text) -> bool {
+    return index_of(values, needle) >= 0;
+}
+
+export fn contains(values: [bool], needle: bool) -> bool {
+    return index_of(values, needle) >= 0;
+}
+
+export fn contains(values: [glyph], needle: glyph) -> bool {
+    return index_of(values, needle) >= 0;
+}
+
+export fn index_of(values: [int], needle: int) -> int {
+    for let index = 0; index < values.len(); index = index + 1 {
+        if values[index] == needle {
+            return index;
+        }
+    }
+
+    return 0 - 1;
+}
+
+export fn index_of(values: [real64], needle: real64) -> int {
+    for let index = 0; index < values.len(); index = index + 1 {
+        if values[index] == needle {
+            return index;
+        }
+    }
+
+    return 0 - 1;
+}
+
+export fn index_of(values: [text], needle: text) -> int {
+    for let index = 0; index < values.len(); index = index + 1 {
+        if values[index] == needle {
+            return index;
+        }
+    }
+
+    return 0 - 1;
+}
+
+export fn index_of(values: [bool], needle: bool) -> int {
+    for let index = 0; index < values.len(); index = index + 1 {
+        if values[index] == needle {
+            return index;
+        }
+    }
+
+    return 0 - 1;
+}
+
+export fn index_of(values: [glyph], needle: glyph) -> int {
+    for let index = 0; index < values.len(); index = index + 1 {
+        if values[index] == needle {
+            return index;
+        }
+    }
+
+    return 0 - 1;
+}
+
+export fn first(values: [int]) -> int {
+    return values[0];
+}
+
+export fn first(values: [real64]) -> real64 {
+    return values[0];
+}
+
+export fn first(values: [text]) -> text {
+    return values[0];
+}
+
+export fn first(values: [bool]) -> bool {
+    return values[0];
+}
+
+export fn first(values: [glyph]) -> glyph {
+    return values[0];
+}
+
+export fn last(values: [int]) -> int {
+    return values[values.len() - 1];
+}
+
+export fn last(values: [real64]) -> real64 {
+    return values[values.len() - 1];
+}
+
+export fn last(values: [text]) -> text {
+    return values[values.len() - 1];
+}
+
+export fn last(values: [bool]) -> bool {
+    return values[values.len() - 1];
+}
+
+export fn last(values: [glyph]) -> glyph {
+    return values[values.len() - 1];
+}
+
+export fn append(values: [int], value: int) -> [int] {
+    let result: [int] = copy(values);
+    result.push(value);
+    return result;
+}
+
+export fn append(values: [real64], value: real64) -> [real64] {
+    let result: [real64] = copy(values);
+    result.push(value);
+    return result;
+}
+
+export fn append(values: [text], value: text) -> [text] {
+    let result: [text] = copy(values);
+    result.push(value);
+    return result;
+}
+
+export fn append(values: [bool], value: bool) -> [bool] {
+    let result: [bool] = copy(values);
+    result.push(value);
+    return result;
+}
+
+export fn append(values: [glyph], value: glyph) -> [glyph] {
+    let result: [glyph] = copy(values);
+    result.push(value);
+    return result;
+}
+
+export fn range(start: int, end: int) -> [int] {
+    let result: [int] = [];
+    for let value = start; value < end; value = value + 1 {
+        result.push(value);
+    }
+
+    return result;
+}
+
+export fn sum(values: [int]) -> int {
+    let result = 0;
+    for let index = 0; index < values.len(); index = index + 1 {
+        result = result + values[index];
+    }
+
+    return result;
+}
+
+export fn sum(values: [real64]) -> real64 {
+    let result: real64 = 0.0;
+    for let index = 0; index < values.len(); index = index + 1 {
+        result = result + values[index];
+    }
+
+    return result;
+}

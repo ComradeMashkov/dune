@@ -321,6 +321,51 @@ bool parses_casts_unary_logical_and_methods() {
     return passed;
 }
 
+bool parses_stdlib_primitives() {
+    const dune::Program program = parse_source("import text; "
+                                               "export extern fn c_sqrt(value: real64) -> real64 = \"sqrt\"; "
+                                               "let message: text = \"dune\"; print(message[1:3]); print(message[:2]); "
+                                               "for let i = 0; i < 3; i = i + 1 { "
+                                               "if i == 1 { continue; } break; }");
+
+    if (!expect(program.statements.size() == 6, "expected import, extern, text, prints, and for statements")) {
+        return false;
+    }
+
+    bool passed = true;
+    passed =
+        expect(program.statements[0].kind == dune::StatementKind::import_statement, "expected text import") && passed;
+    passed = expect(program.statements[0].name == "text", "expected text module name") && passed;
+
+    const dune::Statement& external = program.statements[1];
+    passed = expect(external.kind == dune::StatementKind::function, "expected extern function") && passed;
+    passed = expect(external.is_extern, "expected extern flag") && passed;
+    passed = expect(external.exported, "expected export flag") && passed;
+    passed = expect(external.extern_symbol == "sqrt", "expected extern symbol") && passed;
+
+    const dune::Statement& first_print = program.statements[3];
+    passed = expect(first_print.expression->kind == dune::ExpressionKind::slice, "expected text slice") && passed;
+    passed = expect(first_print.expression->arguments[0] != nullptr, "expected explicit slice start") && passed;
+    passed = expect(first_print.expression->arguments[1] != nullptr, "expected explicit slice end") && passed;
+
+    const dune::Statement& second_print = program.statements[4];
+    passed = expect(second_print.expression->kind == dune::ExpressionKind::slice, "expected prefix slice") && passed;
+    passed = expect(second_print.expression->arguments[0] == nullptr, "expected omitted slice start") && passed;
+    passed = expect(second_print.expression->arguments[1] != nullptr, "expected prefix slice end") && passed;
+
+    const dune::Statement& loop = program.statements[5];
+    passed = expect(loop.kind == dune::StatementKind::for_statement, "expected for statement") && passed;
+    passed = expect(loop.initializer != nullptr, "expected for initializer") && passed;
+    passed = expect(loop.increment != nullptr, "expected for increment") && passed;
+    passed = expect(loop.body.size() == 2, "expected two for body statements") && passed;
+    passed = expect(loop.body[0].kind == dune::StatementKind::if_statement, "expected if in for body") && passed;
+    passed =
+        expect(loop.body[0].body[0].kind == dune::StatementKind::continue_statement, "expected continue") && passed;
+    passed = expect(loop.body[1].kind == dune::StatementKind::break_statement, "expected break") && passed;
+
+    return passed;
+}
+
 } // namespace
 
 int main() {
@@ -334,6 +379,7 @@ int main() {
     passed = parses_arrays_imports_and_module_calls() && passed;
     passed = parses_constants_and_module_members() && passed;
     passed = parses_casts_unary_logical_and_methods() && passed;
+    passed = parses_stdlib_primitives() && passed;
 
     return passed ? 0 : 1;
 }

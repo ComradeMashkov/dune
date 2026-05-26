@@ -26,12 +26,19 @@ private:
     const Token& peek() const;
     const Token& previous() const;
     const Token& consume(TokenType type, std::string_view message);
+    Token consume_identifier_like(std::string_view message);
+    bool match_identifier_like();
 
     Statement statement();
-    Statement assignment_statement();
+    Statement assignment_statement(bool require_semicolon = true);
     Statement block_statement();
+    Statement break_statement();
+    Statement continue_statement();
     Statement const_statement();
-    Statement function_statement();
+    Statement export_statement();
+    Statement extern_statement();
+    Statement for_statement();
+    Statement function_statement(bool is_extern = false);
     Statement import_statement();
     Statement if_statement();
     Statement let_statement();

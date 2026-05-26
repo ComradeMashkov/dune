@@ -63,8 +63,26 @@ print(values[3]);
 ```
 
 Modules are loaded from `.dn` files. The standard library currently includes
-`stdlib/math.dn`; array operations such as `len` and `push` are methods on array
-values.
+`stdlib/math.dn`, `stdlib/array.dn`, and `stdlib/text.dn`. Low-level array and
+text operations such as `len`, `push`, indexing, and slicing remain runtime
+primitives; higher-level helpers are ordinary Dune functions in the standard
+library.
+
+Module files can mark their public API with `export`. If a module contains any
+explicit exports, only exported functions and constants can be accessed through
+`module.name`; private helpers remain callable inside the module.
+
+```dn
+export const ANSWER: int = 42;
+
+fn hidden() -> int {
+  return 7;
+}
+
+export fn public() -> int {
+  return hidden();
+}
+```
 
 Operators and explicit casts:
 
@@ -91,6 +109,29 @@ print(message.contains("lang"));
 print(message.starts_with("dune"));
 ```
 
+Indexing, slices, loops, and extern functions:
+
+```dn
+extern fn c_sqrt(value: real64) -> real64 = "sqrt";
+
+let message: text = "dune language";
+print(message[0]);
+print(message[5:13]);
+
+let values: [int] = [1, 2, 3, 4];
+let middle: [int] = values[1:3];
+
+for let i = 0; i < middle.len(); i = i + 1 {
+  if i == 1 {
+    continue;
+  }
+
+  print(middle[i]);
+}
+
+print(c_sqrt(81.0));
+```
+
 The `math` module currently provides constants and overloaded numeric functions:
 
 - `PI`, `TAU`, `E`, `INVERSE_E`
@@ -112,6 +153,27 @@ The `math` module currently provides constants and overloaded numeric functions:
 - `floor(value)`
 - `ceil(value)`
 - `round(value)`
+
+The `array` module provides overloaded helpers for common element types:
+
+- `copy(values)`
+- `reverse(values)`
+- `contains(values, needle)`
+- `index_of(values, needle)`
+- `first(values)`
+- `last(values)`
+- `append(values, value)`
+- `range(start, end)`
+- `sum(values)`
+
+The `text` module provides text and glyph helpers:
+
+- `len(value)`, `is_empty(value)`
+- `contains(value, needle)`, `starts_with(value, prefix)`, `ends_with(value, suffix)`
+- `char_at(value, index)`, `slice(value, start, end)`, `prefix(value, end)`, `suffix(value, start)`
+- `index_of(value, glyph)`, `count(value, glyph)`
+- `is_space(glyph)`, `is_digit(glyph)`, `is_alpha(glyph)`
+- `trim_start(value)`, `trim_end(value)`, `trim(value)`
 
 Functions can be overloaded by parameter types:
 
@@ -141,6 +203,11 @@ Supported scalar types:
 Supported compound types:
 
 - `[T]` dynamic arrays, for example `[int]` or `[text]`
+
+Indexing and slicing:
+
+- arrays: `values[index]`, `values[start:end]`, `values[:end]`, `values[start:]`
+- text: `message[index]` returns `glyph`; text slices return `text`
 
 Built-in receiver methods:
 
@@ -208,13 +275,19 @@ The current release implements a small compiled language with:
 - dynamic arrays
 - array methods
 - text methods
+- text indexing
+- slices
 - imports
+- export visibility
+- extern functions
 - standard library modules
 - comparison operators
 - print
 - assignment
 - if/else
 - while
+- for
+- break/continue
 - bytecode
 - VM
 - LLVM native backend
