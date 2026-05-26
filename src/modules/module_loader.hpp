@@ -24,10 +24,16 @@ private:
     void qualify_module_program(Program& program, const std::string& module_name) const;
     void qualify_statement(Statement& statement, const std::string& module_name,
                            const std::unordered_set<std::string>& local_functions,
-                           const std::unordered_set<std::string>& local_constants) const;
+                           const std::unordered_set<std::string>& local_constants,
+                           const std::unordered_set<std::string>& local_structs) const;
     void qualify_expression(Expression& expression, const std::string& module_name,
                             const std::unordered_set<std::string>& local_functions,
-                            const std::unordered_set<std::string>& local_constants) const;
+                            const std::unordered_set<std::string>& local_constants,
+                            const std::unordered_set<std::string>& local_structs) const;
+    void qualify_type_annotation(TypeAnnotation& annotation, const std::string& module_name,
+                                 const std::unordered_set<std::string>& local_structs) const;
+    void qualify_type(Type& type, const std::string& module_name,
+                      const std::unordered_set<std::string>& local_structs) const;
 
     std::vector<std::filesystem::path> search_paths_;
     std::unordered_set<std::string> loaded_modules_;

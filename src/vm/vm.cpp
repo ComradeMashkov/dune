@@ -67,6 +67,13 @@ Value make_array(std::vector<Value> values) {
     return result;
 }
 
+Value make_record(std::vector<Value> values) {
+    Value result;
+    result.kind = ValueKind::record;
+    result.record_value = std::make_shared<std::vector<Value>>(std::move(values));
+    return result;
+}
+
 void expect_same_kind(const Value& left, const Value& right) {
     if (left.kind != right.kind) {
         throw std::runtime_error("runtime type mismatch");
@@ -87,6 +94,7 @@ Value add_values(const Value& left, const Value& right) {
     case ValueKind::text:
     case ValueKind::unit:
     case ValueKind::array:
+    case ValueKind::record:
         break;
     }
 
@@ -107,6 +115,7 @@ Value subtract_values(const Value& left, const Value& right) {
     case ValueKind::text:
     case ValueKind::unit:
     case ValueKind::array:
+    case ValueKind::record:
         break;
     }
 
@@ -127,6 +136,7 @@ Value multiply_values(const Value& left, const Value& right) {
     case ValueKind::text:
     case ValueKind::unit:
     case ValueKind::array:
+    case ValueKind::record:
         break;
     }
 
@@ -159,6 +169,7 @@ Value divide_values(const Value& left, const Value& right) {
     case ValueKind::text:
     case ValueKind::unit:
     case ValueKind::array:
+    case ValueKind::record:
         break;
     }
 
@@ -186,6 +197,7 @@ Value modulo_values(const Value& left, const Value& right) {
     case ValueKind::text:
     case ValueKind::unit:
     case ValueKind::array:
+    case ValueKind::record:
         break;
     }
 
@@ -205,6 +217,7 @@ Value negate_value(const Value& value) {
     case ValueKind::text:
     case ValueKind::unit:
     case ValueKind::array:
+    case ValueKind::record:
         break;
     }
 
@@ -237,6 +250,7 @@ bool values_equal(const Value& left, const Value& right) {
     case ValueKind::unit:
         return true;
     case ValueKind::array:
+    case ValueKind::record:
         break;
     }
 
@@ -257,6 +271,7 @@ int compare_values(const Value& left, const Value& right) {
     case ValueKind::text:
     case ValueKind::unit:
     case ValueKind::array:
+    case ValueKind::record:
         break;
     }
 
@@ -295,6 +310,8 @@ void print_value(const Value& value, std::ostream& output) {
         throw std::runtime_error("cannot print unit value");
     case ValueKind::array:
         throw std::runtime_error("cannot print array value");
+    case ValueKind::record:
+        throw std::runtime_error("cannot print record value");
     }
 }
 
@@ -320,6 +337,14 @@ std::vector<Value>& array_elements(const Value& value) {
     }
 
     return *value.array_value;
+}
+
+std::vector<Value>& record_fields(const Value& value) {
+    if (value.kind != ValueKind::record || value.record_value == nullptr) {
+        throw std::runtime_error("expected record value");
+    }
+
+    return *value.record_value;
 }
 
 bool is_default_bound(const Value& value) {
@@ -352,6 +377,7 @@ double numeric_argument(const Value& value) {
     case ValueKind::text:
     case ValueKind::unit:
     case ValueKind::array:
+    case ValueKind::record:
         break;
     }
 
@@ -373,6 +399,7 @@ Value cast_signed(const Value& value) {
     case ValueKind::text:
     case ValueKind::unit:
     case ValueKind::array:
+    case ValueKind::record:
         break;
     }
 
@@ -394,6 +421,7 @@ Value cast_unsigned(const Value& value) {
     case ValueKind::text:
     case ValueKind::unit:
     case ValueKind::array:
+    case ValueKind::record:
         break;
     }
 
@@ -415,6 +443,7 @@ Value cast_real(const Value& value) {
     case ValueKind::text:
     case ValueKind::unit:
     case ValueKind::array:
+    case ValueKind::record:
         break;
     }
 
@@ -436,6 +465,7 @@ Value cast_bool(const Value& value) {
     case ValueKind::text:
     case ValueKind::unit:
     case ValueKind::array:
+    case ValueKind::record:
         break;
     }
 
@@ -457,6 +487,7 @@ Value cast_glyph(const Value& value) {
     case ValueKind::text:
     case ValueKind::unit:
     case ValueKind::array:
+    case ValueKind::record:
         break;
     }
 
@@ -640,6 +671,20 @@ void VirtualMachine::run(std::ostream& output) {
             ++frame.ip;
             break;
         }
+        case OpCode::make_record: {
+            if (stack_.size() < instruction.operand) {
+                throw std::runtime_error("not enough values on stack for record literal");
+            }
+
+            std::vector<Value> fields(instruction.operand);
+            for (std::size_t index = instruction.operand; index > 0; --index) {
+                fields[index - 1] = pop();
+            }
+
+            stack_.push_back(make_record(std::move(fields)));
+            ++frame.ip;
+            break;
+        }
         case OpCode::load_index: {
             const Value index = pop();
             const Value indexed = pop();
@@ -667,6 +712,17 @@ void VirtualMachine::run(std::ostream& output) {
             }
 
             throw std::runtime_error("expected array or text value");
+        }
+        case OpCode::load_field: {
+            const Value record = pop();
+            std::vector<Value>& fields = record_fields(record);
+            if (instruction.operand >= fields.size()) {
+                throw std::runtime_error("record field out of bounds");
+            }
+
+            stack_.push_back(fields[instruction.operand]);
+            ++frame.ip;
+            break;
         }
         case OpCode::load_slice: {
             const Value end_value = pop();

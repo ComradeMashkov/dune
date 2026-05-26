@@ -2,10 +2,12 @@
 
 #include "typechecker/type_checker.hpp"
 
+#include <algorithm>
 #include <bit>
 #include <cctype>
 #include <cstdint>
 #include <iomanip>
+#include <memory>
 #include <sstream>
 #include <stdexcept>
 #include <utility>
@@ -46,6 +48,15 @@ std::string real_literal(const std::string& lexeme, const Type& type) {
     return output.str();
 }
 
+std::size_t align_to(std::size_t value, std::size_t alignment) {
+    if (alignment <= 1) {
+        return value;
+    }
+
+    const std::size_t remainder = value % alignment;
+    return remainder == 0 ? value : value + alignment - remainder;
+}
+
 } // namespace
 
 void LlvmIrGenerator::generate(const Program& program, std::ostream& output) {
@@ -56,9 +67,11 @@ void LlvmIrGenerator::generate(const Program& program, std::ostream& output) {
     resolved_calls_ = checker.resolved_calls();
     const auto& instantiated_functions = checker.instantiated_functions();
     functions_.clear();
+    structs_.clear();
     global_constants_.clear();
     string_globals_.clear();
     loop_stack_.clear();
+    collect_structs(checker.structs());
     collect_global_constants(program);
     collect_functions(program.statements);
     for (const Statement& statement : instantiated_functions) {
@@ -133,15 +146,37 @@ void LlvmIrGenerator::collect_global_constants(const Program& program) {
 
 void LlvmIrGenerator::collect_function(const Statement& statement) {
     FunctionSignature signature;
-    signature.return_type = statement.type.has_type ? statement.type.type : make_type(ValueType::int_type);
+    signature.return_type =
+        statement.type.has_type ? normalize_type(statement.type.type) : make_type(ValueType::int_type);
     signature.extern_symbol = statement.extern_symbol.empty() ? statement.name : statement.extern_symbol;
     signature.is_extern = statement.is_extern;
 
     for (const Parameter& parameter : statement.parameters) {
-        signature.parameters.push_back(parameter.type.has_type ? parameter.type.type : make_type(ValueType::int_type));
+        signature.parameters.push_back(parameter.type.has_type ? normalize_type(parameter.type.type)
+                                                               : make_type(ValueType::int_type));
     }
 
     functions_.emplace(function_key(statement.name, signature.parameters), std::move(signature));
+}
+
+void LlvmIrGenerator::collect_structs(const std::unordered_map<std::string, TypeChecker::StructDefinition>& structs) {
+    for (const auto& [name, definition] : structs) {
+        StructLayout layout;
+        for (const TypeChecker::StructField& field : definition.fields) {
+            const std::size_t field_size = llvm_size(field.type);
+            layout.size = align_to(layout.size, field_size);
+            layout.field_indices.emplace(field.name, layout.fields.size());
+            layout.field_offsets.emplace(field.name, layout.size);
+            layout.fields.push_back(Parameter{field.name, TypeAnnotation{true, field.type}, field.location});
+            layout.size += field_size;
+        }
+
+        if (layout.size == 0) {
+            layout.size = 1;
+        }
+
+        structs_.emplace(name, std::move(layout));
+    }
 }
 
 void LlvmIrGenerator::emit_function(const Statement& statement, std::ostream& output) {
@@ -152,7 +187,8 @@ void LlvmIrGenerator::emit_function(const Statement& statement, std::ostream& ou
     std::vector<Type> parameters;
     parameters.reserve(statement.parameters.size());
     for (const Parameter& parameter : statement.parameters) {
-        parameters.push_back(parameter.type.has_type ? parameter.type.type : make_type(ValueType::int_type));
+        parameters.push_back(parameter.type.has_type ? normalize_type(parameter.type.type)
+                                                     : make_type(ValueType::int_type));
     }
 
     const std::string key = function_key(statement.name, parameters);
@@ -370,6 +406,7 @@ bool LlvmIrGenerator::emit_statement(const Statement& statement, std::ostream& o
         return true;
     case StatementKind::function:
     case StatementKind::impl_statement:
+    case StatementKind::struct_statement:
         return false;
     case StatementKind::return_statement: {
         if (statement.expression == nullptr) {
@@ -425,25 +462,14 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_expression(const Expression& e
         return TypedValue{expression.lexeme == "true" ? "1" : "0", make_type(ValueType::bool_type)};
     case ExpressionKind::array:
         return emit_array_literal(expression, output);
+    case ExpressionKind::struct_literal:
+        return emit_struct_literal(expression, output);
     case ExpressionKind::index:
         return emit_index_expression(expression, output);
     case ExpressionKind::slice:
         return emit_slice_expression(expression, output);
     case ExpressionKind::member:
-        if (expression.left->kind == ExpressionKind::identifier) {
-            const std::string name = expression.left->lexeme + "." + expression.lexeme;
-            const auto local = locals_.find(name);
-            if (local == locals_.end()) {
-                throw std::runtime_error("undefined variable '" + name + "'");
-            }
-
-            const std::string value = next_register();
-            output << "  " << value << " = load " << llvm_type(local->second.type) << ", ptr " << local->second.pointer
-                   << '\n';
-            return TypedValue{value, local->second.type};
-        }
-
-        throw std::runtime_error("unknown member expression");
+        return emit_member_expression(expression, output);
     case ExpressionKind::unary:
         return emit_unary_expression(expression, output);
     case ExpressionKind::cast:
@@ -865,6 +891,72 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_array_literal(const Expression
     return TypedValue{handle, type->second};
 }
 
+LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_struct_literal(const Expression& expression, std::ostream& output) {
+    const auto layout = structs_.find(expression.lexeme);
+    if (layout == structs_.end()) {
+        throw std::runtime_error("unknown struct '" + expression.lexeme + "'");
+    }
+
+    const std::string handle = next_register();
+    output << "  " << handle << " = call ptr @malloc(i64 " << layout->second.size << ")\n";
+
+    for (const Parameter& field : layout->second.fields) {
+        const auto source = std::find(expression.field_names.begin(), expression.field_names.end(), field.name);
+        if (source == expression.field_names.end()) {
+            throw std::runtime_error("missing field '" + field.name + "'");
+        }
+
+        const std::size_t source_index = static_cast<std::size_t>(source - expression.field_names.begin());
+        const TypedValue value = emit_expression(*expression.arguments.at(source_index), output);
+        const std::size_t offset = layout->second.field_offsets.at(field.name);
+        const std::string slot = next_register();
+        output << "  " << slot << " = getelementptr i8, ptr " << handle << ", i64 " << offset << '\n';
+        output << "  store " << llvm_type(value.type) << ' ' << value.name << ", ptr " << slot << '\n';
+    }
+
+    return TypedValue{handle, make_struct_type(expression.lexeme)};
+}
+
+LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_member_expression(const Expression& expression,
+                                                                    std::ostream& output) {
+    const auto receiver_type = expression_types_.find(expression.left.get());
+    if (receiver_type != expression_types_.end() && receiver_type->second.kind == ValueType::struct_type) {
+        const auto layout = structs_.find(receiver_type->second.name);
+        if (layout == structs_.end()) {
+            throw std::runtime_error("unknown struct '" + receiver_type->second.name + "'");
+        }
+
+        const auto index = layout->second.field_indices.find(expression.lexeme);
+        if (index == layout->second.field_indices.end()) {
+            throw std::runtime_error("unknown field '" + expression.lexeme + "'");
+        }
+
+        const Parameter& field = layout->second.fields[index->second];
+        const TypedValue receiver = emit_expression(*expression.left, output);
+        const std::string slot = next_register();
+        const std::string value = next_register();
+        output << "  " << slot << " = getelementptr i8, ptr " << receiver.name << ", i64 "
+               << layout->second.field_offsets.at(expression.lexeme) << '\n';
+        output << "  " << value << " = load " << llvm_type(field.type.type) << ", ptr " << slot << '\n';
+        return TypedValue{value, field.type.type};
+    }
+
+    if (expression.left->kind == ExpressionKind::identifier) {
+        const std::string name = expression.left->lexeme + "." + expression.lexeme;
+        const auto local = locals_.find(name);
+        if (local == locals_.end()) {
+            throw std::runtime_error("undefined variable '" + name + "'");
+        }
+
+        const std::string value = next_register();
+        output << "  " << value << " = load " << llvm_type(local->second.type) << ", ptr " << local->second.pointer
+               << '\n';
+        return TypedValue{value, local->second.type};
+    }
+
+    throw std::runtime_error("unknown member expression");
+}
+
 LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_index_expression(const Expression& expression, std::ostream& output) {
     const TypedValue indexed = emit_expression(*expression.left, output);
     const TypedValue index = emit_expression(*expression.right, output);
@@ -1090,7 +1182,7 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::cast_value(const TypedValue& value,
     }
 
     if (target.kind == ValueType::text_type || target.kind == ValueType::unit_type ||
-        target.kind == ValueType::array_type) {
+        target.kind == ValueType::array_type || target.kind == ValueType::struct_type) {
         return TypedValue{value.name, target};
     }
 
@@ -1213,6 +1305,7 @@ std::string LlvmIrGenerator::llvm_type(const Type& type) const {
         return "double";
     case ValueType::text_type:
     case ValueType::array_type:
+    case ValueType::struct_type:
         return "ptr";
     case ValueType::unit_type:
         return "i8";
@@ -1249,6 +1342,7 @@ std::size_t LlvmIrGenerator::llvm_bit_width(const Type& type) const {
     case ValueType::unit_type:
     case ValueType::array_type:
     case ValueType::generic_type:
+    case ValueType::struct_type:
         break;
     }
 
@@ -1281,6 +1375,7 @@ std::string LlvmIrGenerator::printf_format_name(const Type& type) const {
     case ValueType::unit_type:
     case ValueType::array_type:
     case ValueType::generic_type:
+    case ValueType::struct_type:
         break;
     }
 
@@ -1297,6 +1392,22 @@ std::string LlvmIrGenerator::extern_function_name(const FunctionSignature& signa
     }
 
     return "@" + signature.extern_symbol;
+}
+
+Type LlvmIrGenerator::normalize_type(const Type& type) const {
+    if (type.kind == ValueType::array_type) {
+        Type result{ValueType::array_type, nullptr};
+        if (type.element != nullptr) {
+            result.element = std::make_shared<Type>(normalize_type(*type.element));
+        }
+        return result;
+    }
+
+    if (type.kind == ValueType::generic_type && structs_.contains(type.name)) {
+        return make_struct_type(type.name);
+    }
+
+    return type;
 }
 
 std::string LlvmIrGenerator::llvm_symbol(const std::string& value) const {
@@ -1338,6 +1449,7 @@ std::size_t LlvmIrGenerator::llvm_size(const Type& type) const {
     case ValueType::real_type:
     case ValueType::text_type:
     case ValueType::array_type:
+    case ValueType::struct_type:
         return 8;
     case ValueType::generic_type:
         break;
@@ -1351,7 +1463,8 @@ std::string LlvmIrGenerator::default_value(const Type& type) const {
         return "0.000000e+00";
     }
 
-    if (type.kind == ValueType::text_type || type.kind == ValueType::array_type) {
+    if (type.kind == ValueType::text_type || type.kind == ValueType::array_type ||
+        type.kind == ValueType::struct_type) {
         return "null";
     }
 

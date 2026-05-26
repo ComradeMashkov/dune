@@ -32,6 +32,7 @@ enum class ValueType {
     unit_type,
     array_type,
     generic_type,
+    struct_type,
 };
 
 struct Type {
@@ -65,6 +66,7 @@ enum class ExpressionKind {
     string,
     boolean,
     array,
+    struct_literal,
     index,
     slice,
     member,
@@ -81,6 +83,7 @@ struct Expression {
     std::unique_ptr<Expression> left;
     std::unique_ptr<Expression> right;
     std::vector<std::unique_ptr<Expression>> arguments;
+    std::vector<std::string> field_names;
     SourceLocation location;
     TypeAnnotation type;
 };
@@ -98,6 +101,7 @@ enum class StatementKind {
     continue_statement,
     function,
     impl_statement,
+    struct_statement,
     return_statement,
     expression_statement,
     import_statement,

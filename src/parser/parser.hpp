@@ -21,6 +21,7 @@ private:
     bool check(TokenType type) const;
     bool check_next(TokenType type) const;
     bool match(TokenType type);
+    bool looks_like_struct_literal() const;
 
     const Token& advance();
     const Token& peek() const;
@@ -45,6 +46,7 @@ private:
     Statement let_statement();
     Statement print_statement();
     Statement return_statement();
+    Statement struct_statement();
     Statement while_statement();
 
     std::vector<Statement> block();

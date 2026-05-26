@@ -1,0 +1,79 @@
+export struct ResultInt {
+    ok: bool,
+    value: int,
+    error: text,
+}
+
+export struct ResultText {
+    ok: bool,
+    value: text,
+    error: text,
+}
+
+export fn ok_int(value: int) -> ResultInt {
+    return ResultInt { ok: true, value: value, error: "" };
+}
+
+export fn err_int(error: text) -> ResultInt {
+    return ResultInt { ok: false, value: 0, error: error };
+}
+
+export fn ok_text(value: text) -> ResultText {
+    return ResultText { ok: true, value: value, error: "" };
+}
+
+export fn err_text(error: text) -> ResultText {
+    return ResultText { ok: false, value: "", error: error };
+}
+
+export impl ResultInt {
+    fn is_ok() -> bool {
+        return self.ok;
+    }
+
+    fn is_err() -> bool {
+        return !self.ok;
+    }
+
+    fn unwrap_or(default: int) -> int {
+        if self.ok {
+            return self.value;
+        }
+
+        return default;
+    }
+
+    fn error_or(default: text) -> text {
+        if self.ok {
+            return default;
+        }
+
+        return self.error;
+    }
+}
+
+export impl ResultText {
+    fn is_ok() -> bool {
+        return self.ok;
+    }
+
+    fn is_err() -> bool {
+        return !self.ok;
+    }
+
+    fn unwrap_or(default: text) -> text {
+        if self.ok {
+            return self.value;
+        }
+
+        return default;
+    }
+
+    fn error_or(default: text) -> text {
+        if self.ok {
+            return default;
+        }
+
+        return self.error;
+    }
+}

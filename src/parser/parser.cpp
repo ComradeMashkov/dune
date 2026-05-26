@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <utility>
 
 namespace dune {
@@ -72,6 +73,17 @@ std::unique_ptr<Expression> make_array(std::vector<std::unique_ptr<Expression>> 
     return expression;
 }
 
+std::unique_ptr<Expression> make_struct_literal(std::string name, std::vector<std::string> field_names,
+                                                std::vector<std::unique_ptr<Expression>> values,
+                                                SourceLocation location) {
+    auto expression =
+        std::make_unique<Expression>(Expression{ExpressionKind::struct_literal, std::move(name), nullptr, nullptr});
+    expression->field_names = std::move(field_names);
+    expression->arguments = std::move(values);
+    expression->location = location;
+    return expression;
+}
+
 std::unique_ptr<Expression> make_index(std::unique_ptr<Expression> array, std::unique_ptr<Expression> index,
                                        SourceLocation location) {
     Expression expression{ExpressionKind::index, "", std::move(array), std::move(index)};
@@ -100,6 +112,18 @@ Type make_generic_type(std::string name) {
     Type type{ValueType::generic_type, nullptr};
     type.name = std::move(name);
     return type;
+}
+
+std::string expression_to_type_name(const Expression& expression) {
+    if (expression.kind == ExpressionKind::identifier) {
+        return expression.lexeme;
+    }
+
+    if (expression.kind == ExpressionKind::member && expression.left != nullptr) {
+        return expression_to_type_name(*expression.left) + "." + expression.lexeme;
+    }
+
+    throw std::runtime_error("expected type name before struct literal");
 }
 
 std::string decode_string_literal(const std::string& lexeme) {
@@ -186,6 +210,20 @@ bool Parser::match(TokenType type) {
     return true;
 }
 
+bool Parser::looks_like_struct_literal() const {
+    if (!check(TokenType::left_brace) || current_ + 1 >= tokens_.size()) {
+        return false;
+    }
+
+    const TokenType first = tokens_[current_ + 1].type;
+    if (first == TokenType::right_brace) {
+        return true;
+    }
+
+    return first == TokenType::identifier && current_ + 2 < tokens_.size() &&
+           tokens_[current_ + 2].type == TokenType::colon;
+}
+
 const Token& Parser::advance() {
     if (!is_at_end()) {
         ++current_;
@@ -242,6 +280,10 @@ Statement Parser::statement() {
 
     if (match(TokenType::impl_keyword)) {
         return impl_statement();
+    }
+
+    if (match(TokenType::struct_keyword)) {
+        return struct_statement();
     }
 
     if (match(TokenType::import_keyword)) {
@@ -357,13 +399,19 @@ Statement Parser::export_statement() {
         return statement;
     }
 
+    if (match(TokenType::struct_keyword)) {
+        Statement statement = struct_statement();
+        statement.exported = true;
+        return statement;
+    }
+
     if (match(TokenType::const_keyword)) {
         Statement statement = const_statement();
         statement.exported = true;
         return statement;
     }
 
-    throw std::runtime_error("expected function, extern function, or constant after export");
+    throw std::runtime_error("expected function, extern function, struct, or constant after export");
 }
 
 Statement Parser::extern_statement() {
@@ -571,6 +619,36 @@ Statement Parser::return_statement() {
     return statement;
 }
 
+Statement Parser::struct_statement() {
+    const Token& keyword = previous();
+    const Token& name = consume(TokenType::identifier, "expected struct name after struct");
+    consume(TokenType::left_brace, "expected '{' before struct fields");
+
+    std::vector<Parameter> fields;
+    if (!check(TokenType::right_brace)) {
+        while (true) {
+            const Token& field = consume(TokenType::identifier, "expected struct field name");
+            consume(TokenType::colon, "expected ':' after struct field name");
+            fields.push_back(Parameter{field.lexeme, type_annotation(), location_from_token(field)});
+
+            if (!match(TokenType::comma)) {
+                break;
+            }
+
+            if (check(TokenType::right_brace)) {
+                break;
+            }
+        }
+    }
+
+    consume(TokenType::right_brace, "expected '}' after struct fields");
+
+    Statement statement{StatementKind::struct_statement, name.lexeme, nullptr, {}, {}};
+    statement.parameters = std::move(fields);
+    statement.location = location_from_token(keyword);
+    return statement;
+}
+
 Statement Parser::while_statement() {
     const Token& keyword = previous();
     std::unique_ptr<Expression> condition = expression();
@@ -741,7 +819,13 @@ TypeAnnotation Parser::type_annotation() {
     }
 
     if (match(TokenType::identifier)) {
-        return TypeAnnotation{true, make_generic_type(previous().lexeme)};
+        std::string name = previous().lexeme;
+        while (match(TokenType::dot)) {
+            const Token member = consume_identifier_like("expected type name after '.'");
+            name += "." + member.lexeme;
+        }
+
+        return TypeAnnotation{true, make_generic_type(std::move(name))};
     }
 
     throw std::runtime_error("expected type annotation");
@@ -870,6 +954,35 @@ std::unique_ptr<Expression> Parser::call() {
             } else {
                 expr = make_member(std::move(expr), member.lexeme, location);
             }
+            continue;
+        }
+
+        if (looks_like_struct_literal()) {
+            const SourceLocation location = expr->location;
+            const std::string name = expression_to_type_name(*expr);
+            consume(TokenType::left_brace, "expected '{' before struct literal fields");
+
+            std::vector<std::string> field_names;
+            std::vector<std::unique_ptr<Expression>> values;
+            if (!check(TokenType::right_brace)) {
+                while (true) {
+                    const Token field = consume(TokenType::identifier, "expected struct literal field name");
+                    consume(TokenType::colon, "expected ':' after struct literal field name");
+                    field_names.push_back(field.lexeme);
+                    values.push_back(expression());
+
+                    if (!match(TokenType::comma)) {
+                        break;
+                    }
+
+                    if (check(TokenType::right_brace)) {
+                        break;
+                    }
+                }
+            }
+
+            consume(TokenType::right_brace, "expected '}' after struct literal fields");
+            expr = make_struct_literal(name, std::move(field_names), std::move(values), location);
             continue;
         }
 

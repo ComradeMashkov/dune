@@ -13,6 +13,7 @@ enum class TokenType {
     extern_keyword,
     fn_keyword,
     impl_keyword,
+    struct_keyword,
     import_keyword,
     return_keyword,
     print,

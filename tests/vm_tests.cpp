@@ -189,6 +189,22 @@ int main() {
                                   "print(8 / 2);"),
                        "7\n7\n4\n", "expected comments and zero-based array output") &&
              passed;
+    passed = expect_eq(run_source("struct Point { x: int, y: int } "
+                                  "impl Point { fn sum() -> int { return self.x + self.y; } } "
+                                  "fn make(x: int, y: int) -> Point { return Point { x: x, y: y }; } "
+                                  "let p: Point = make(10, 20); print(p.x); print(p.y); print(p.sum());"),
+                       "10\n20\n30\n", "expected struct fields and methods output") &&
+             passed;
+    passed = expect_eq(run_source("import option; import result; import assert; import collections; "
+                                  "let maybe: option.OptionInt = option.some_int(42); "
+                                  "let missing: option.OptionInt = option.none_int(); "
+                                  "let failed: result.ResultInt = result.err_int(\"bad\"); "
+                                  "let repeated: [int] = collections.repeat_int(3, 4); "
+                                  "print(maybe.unwrap_or(0)); print(missing.unwrap_or(7)); "
+                                  "print(failed.error_or(\"none\")); print(repeated.len()); "
+                                  "print(assert.equals_int(repeated[0], 3));"),
+                       "42\n7\nbad\n4\n1\n", "expected struct stdlib module output") &&
+             passed;
     passed = expect_throws("print(missing);", "expected undefined variable to throw") && passed;
     passed = expect_throws("missing = 1;", "expected undefined assignment to throw") && passed;
     passed = expect_throws("print(1 / 0);", "expected division by zero to throw") && passed;
