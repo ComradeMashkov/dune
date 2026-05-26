@@ -88,8 +88,10 @@ std::string generate_llvm_ir(const dune::Program& program) {
 void compile_llvm_ir(const std::string& llvm_ir_path, const std::string& output_path) {
     const char* clangxx = std::getenv("DUNE_CLANGXX");
     const std::string compiler = clangxx == nullptr ? DUNE_CLANGXX_PATH : clangxx;
-    const std::string command =
-        shell_quote(compiler) + " " + shell_quote(llvm_ir_path) + " -o " + shell_quote(output_path);
+    std::string command = shell_quote(compiler) + " " + shell_quote(llvm_ir_path) + " -o " + shell_quote(output_path);
+#if defined(_WIN32)
+    command = "\"" + command + "\"";
+#endif
 
     if (std::system(command.c_str()) != 0) {
         throw std::runtime_error("LLVM backend failed");
