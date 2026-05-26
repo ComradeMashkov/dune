@@ -1,5 +1,6 @@
 #include "compiler/compiler.hpp"
 #include "lexer/lexer.hpp"
+#include "modules/module_loader.hpp"
 #include "parser/parser.hpp"
 #include "vm/vm.hpp"
 
@@ -13,8 +14,9 @@ namespace {
 std::string run_source(const std::string& source) {
     dune::Lexer lexer(source);
     dune::Parser parser(lexer.tokenize());
+    dune::ModuleLoader loader;
     dune::Compiler compiler;
-    dune::VirtualMachine vm(compiler.compile(parser.parse()));
+    dune::VirtualMachine vm(compiler.compile(loader.resolve(parser.parse())));
 
     std::ostringstream output;
     vm.run(output);
@@ -88,6 +90,11 @@ int main() {
                                   "print(choose(false, 1, 2));"),
                        "2\n", "expected function return through branches") &&
              passed;
+    passed = expect_eq(run_source("fn show(value: int) -> int { return value + 1; } "
+                                  "fn show(value: bool) -> int { if value { return 10; } else { return 20; } } "
+                                  "print(show(41)); print(show(false));"),
+                       "42\n20\n", "expected overloaded function dispatch") &&
+             passed;
     passed = expect_eq(run_source("let small: u8 = 250; let wide: uint64 = 10000000000; "
                                   "let total: uint64 = wide + 5; print(small); print(total);"),
                        "250\n10000000005\n", "expected unsigned output") &&
@@ -107,9 +114,29 @@ int main() {
                        "types\n127\n32767\n2147483647\n9000000000\n5\n6\n3.5\n2.25\nsame\n",
                        "expected standard type output") &&
              passed;
+    passed = expect_eq(run_source("import math; "
+                                  "let values: [int] = [1, math.square(2), 5]; "
+                                  "let base: u64 = 7; "
+                                  "values.push(math.square(values[2])); "
+                                  "print(values.len()); print(values[1]); print(values[3]); "
+                                  "print(math.square(base)); print(math.square(1.5)); "
+                                  "print(math.abs(0 - 8)); print(math.cube(3)); print(math.min(4, 9)); "
+                                  "print(math.max(4, 9)); print(math.clamp(12, 0, 10)); "
+                                  "let rough: real32 = 1.5; print(math.max(rough, 2.5)); "
+                                  "print(math.abs(0.0 - 2.5)); print(math.round(math.PI)); "
+                                  "print(math.floor(2.9)); print(math.ceil(2.1)); print(math.sqrt(9.0)); "
+                                  "print(math.pow(2.0, 3)); print(math.sin(0.0)); print(math.cos(0.0)); "
+                                  "print(math.tan(0.0)); print(math.exp(0.0)); print(math.ln(1.0)); "
+                                  "print(math.normalize_radians(math.TAU));"),
+                       "4\n4\n25\n49\n2.25\n8\n27\n4\n9\n10\n2.5\n2.5\n3\n2\n3\n3\n8\n0\n1\n0\n1\n0\n0\n",
+                       "expected arrays and module output") &&
+             passed;
     passed = expect_throws("print(missing);", "expected undefined variable to throw") && passed;
     passed = expect_throws("missing = 1;", "expected undefined assignment to throw") && passed;
     passed = expect_throws("print(1 / 0);", "expected division by zero to throw") && passed;
+    passed = expect_error_contains("let values: [int] = [1]; print(values[2]);", "array index out of bounds",
+                                   "expected array bounds error") &&
+             passed;
     passed = expect_error_contains("let x: int = true;", "expected type 'int' but got 'bool'",
                                    "expected static type error") &&
              passed;

@@ -50,6 +50,60 @@ print(count);
 print(precise);
 ```
 
+Arrays and modules:
+
+```dn
+import math;
+
+let values: [int] = [1, math.square(2), 5];
+values.push(math.square(values[2]));
+
+print(values.len());
+print(values[3]);
+```
+
+Modules are loaded from `.dn` files. The standard library currently includes
+`stdlib/math.dn`; array operations such as `len` and `push` are methods on array
+values.
+
+The `math` module currently provides constants and overloaded numeric functions:
+
+- `PI`, `TAU`, `E`, `INVERSE_E`
+- `PI32`, `TAU32`, `E32`, `INVERSE_E32`
+
+- `square(value)`
+- `cube(value)`
+- `abs(value)`
+- `min(left, right)`
+- `max(left, right)`
+- `clamp(value, lower, upper)`
+- `sqrt(value)`
+- `sin(value)`
+- `cos(value)`
+- `tan(value)`
+- `exp(value)`
+- `ln(value)`
+- `pow(base, exponent)`
+- `floor(value)`
+- `ceil(value)`
+- `round(value)`
+
+Functions can be overloaded by parameter types:
+
+```dn
+fn show(value: int) -> int {
+  return value + 1;
+}
+
+fn show(value: bool) -> int {
+  if value {
+    return 10;
+  } else {
+    return 20;
+  }
+}
+```
+
 Supported scalar types:
 
 - `int`, `bool`
@@ -58,6 +112,10 @@ Supported scalar types:
 - `uint8`, `uint16`, `uint32`, `uint64`
 - `real`, `real32`, `real64`
 - `glyph`, `text`, `unit`
+
+Supported compound types:
+
+- `[T]` dynamic arrays, for example `[int]` or `[text]`
 
 ## Run
 
@@ -104,13 +162,19 @@ The current release implements a small compiled language with:
 - AST
 - arithmetic
 - variables
+- constants
 - typed functions
+- overloaded functions
 - static scalar types
 - booleans
 - signed and unsigned integer widths
 - floating point values
 - glyph and text values
 - unit-returning functions
+- dynamic arrays
+- array methods
+- imports
+- standard library modules
 - comparison operators
 - print
 - assignment

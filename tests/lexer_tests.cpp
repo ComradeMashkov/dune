@@ -254,5 +254,69 @@ int main() {
                            }) &&
              passed;
 
+    passed = expect_tokens("import math; let values: [int] = [1, 2]; values.push(math.square(values[0])); "
+                           "print(values.len());",
+                           {
+                               {import_keyword, "import"},
+                               {identifier, "math"},
+                               {semicolon, ";"},
+                               {let, "let"},
+                               {identifier, "values"},
+                               {colon, ":"},
+                               {left_bracket, "["},
+                               {int_keyword, "int"},
+                               {right_bracket, "]"},
+                               {equal, "="},
+                               {left_bracket, "["},
+                               {number, "1"},
+                               {comma, ","},
+                               {number, "2"},
+                               {right_bracket, "]"},
+                               {semicolon, ";"},
+                               {identifier, "values"},
+                               {dot, "."},
+                               {identifier, "push"},
+                               {left_paren, "("},
+                               {identifier, "math"},
+                               {dot, "."},
+                               {identifier, "square"},
+                               {left_paren, "("},
+                               {identifier, "values"},
+                               {left_bracket, "["},
+                               {number, "0"},
+                               {right_bracket, "]"},
+                               {right_paren, ")"},
+                               {right_paren, ")"},
+                               {semicolon, ";"},
+                               {print, "print"},
+                               {left_paren, "("},
+                               {identifier, "values"},
+                               {dot, "."},
+                               {identifier, "len"},
+                               {left_paren, "("},
+                               {right_paren, ")"},
+                               {right_paren, ")"},
+                               {semicolon, ";"},
+                               {eof, ""},
+                           }) &&
+             passed;
+
+    passed = expect_tokens("const tau: real64 = math.PI * 2.0;",
+                           {
+                               {const_keyword, "const"},
+                               {identifier, "tau"},
+                               {colon, ":"},
+                               {real64_keyword, "real64"},
+                               {equal, "="},
+                               {identifier, "math"},
+                               {dot, "."},
+                               {identifier, "PI"},
+                               {star, "*"},
+                               {float_number, "2.0"},
+                               {semicolon, ";"},
+                               {eof, ""},
+                           }) &&
+             passed;
+
     return passed ? 0 : 1;
 }

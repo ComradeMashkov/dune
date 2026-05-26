@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(dune VERSION 0.6.0 LANGUAGES CXX)
+project(dune VERSION 0.7.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -86,6 +86,17 @@ target_link_libraries(dune_typechecker
         dune_parser
 )
 
+add_library(dune_modules
+    src/modules/module_loader.cpp
+)
+dune_add_lint_dependencies(dune_modules)
+target_compile_definitions(dune_modules PRIVATE DUNE_STDLIB_PATH="${CMAKE_CURRENT_SOURCE_DIR}/stdlib")
+
+target_link_libraries(dune_modules
+    PUBLIC
+        dune_parser
+)
+
 add_library(dune_compiler
     src/compiler/compiler.cpp
 )
@@ -117,7 +128,7 @@ target_link_libraries(dune_vm
 )
 
 add_executable(dune src/main.cpp)
-target_link_libraries(dune PRIVATE dune_codegen dune_vm)
+target_link_libraries(dune PRIVATE dune_codegen dune_modules dune_vm)
 target_compile_definitions(dune PRIVATE DUNE_CLANGXX_PATH="${DUNE_CLANGXX_EXE}")
 dune_add_lint_dependencies(dune)
 
@@ -130,21 +141,21 @@ target_link_libraries(parser_tests PRIVATE dune_parser)
 dune_add_lint_dependencies(parser_tests)
 
 add_executable(compiler_tests tests/compiler_tests.cpp)
-target_link_libraries(compiler_tests PRIVATE dune_compiler)
+target_link_libraries(compiler_tests PRIVATE dune_compiler dune_modules)
 dune_add_lint_dependencies(compiler_tests)
 
 add_executable(type_checker_tests tests/type_checker_tests.cpp)
-target_link_libraries(type_checker_tests PRIVATE dune_typechecker)
+target_link_libraries(type_checker_tests PRIVATE dune_modules dune_typechecker)
 dune_add_lint_dependencies(type_checker_tests)
 
 add_executable(vm_tests tests/vm_tests.cpp)
-target_link_libraries(vm_tests PRIVATE dune_vm)
+target_link_libraries(vm_tests PRIVATE dune_modules dune_vm)
 dune_add_lint_dependencies(vm_tests)
 
 enable_testing()
 
 add_test(NAME smoke COMMAND dune --version)
-set_tests_properties(smoke PROPERTIES PASS_REGULAR_EXPRESSION "dune 0.6.0")
+set_tests_properties(smoke PROPERTIES PASS_REGULAR_EXPRESSION "dune 0.7.0")
 
 add_test(NAME lexer_tests COMMAND lexer_tests)
 add_test(NAME parser_tests COMMAND parser_tests)
@@ -233,6 +244,16 @@ add_test(
 )
 
 add_test(
+    NAME cli_arrays_modules
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/arrays_modules.dn
+        -D EXPECTED_OUTPUT="4\n4\n25\n49\n2.25\n8\n27\n4\n9\n10\n2.5\n2.5\n3\n2\n3\n3\n8\n0\n1\n0\n1\n0\n0"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
     NAME cli_build_native_hello
     COMMAND
         ${CMAKE_COMMAND}
@@ -284,6 +305,17 @@ add_test(
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/standard_types.dn
         -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/standard_types_native
         -D EXPECTED_OUTPUT="types\n12\n32000\n41\n9000000000\n5\n6\n3.75\n2.25\nsame"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
+)
+
+add_test(
+    NAME cli_build_native_arrays_modules
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/arrays_modules.dn
+        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/arrays_modules_native
+        -D EXPECTED_OUTPUT="4\n4\n25\n49\n2.25\n8\n27\n4\n9\n10\n2.5\n2.5\n3\n2\n3\n3\n8\n0\n1\n0\n1\n0\n0"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
 )
 

@@ -140,40 +140,40 @@ std::string decode_text_literal(const std::string& lexeme) {
     return result;
 }
 
-Value make_number(const std::string& lexeme, ValueType type) {
-    if (is_real_type(type)) {
+Value make_number(const std::string& lexeme, const Type& type) {
+    if (is_real_type(type.kind)) {
         return make_real(std::stod(lexeme));
     }
 
-    if (is_unsigned_type(type)) {
+    if (is_unsigned_type(type.kind)) {
         return make_unsigned(std::stoull(lexeme));
     }
 
     return make_signed(std::stoll(lexeme));
 }
 
-Value default_value(ValueType type) {
-    if (is_unsigned_type(type)) {
+Value default_value(const Type& type) {
+    if (is_unsigned_type(type.kind)) {
         return make_unsigned(0);
     }
 
-    if (is_signed_type(type)) {
+    if (is_signed_type(type.kind)) {
         return make_signed(0);
     }
 
-    if (is_real_type(type)) {
+    if (is_real_type(type.kind)) {
         return make_real(0.0);
     }
 
-    if (type == ValueType::bool_type) {
+    if (type.kind == ValueType::bool_type) {
         return make_bool(false);
     }
 
-    if (type == ValueType::glyph_type) {
+    if (type.kind == ValueType::glyph_type) {
         return make_glyph('\0');
     }
 
-    if (type == ValueType::text_type) {
+    if (type.kind == ValueType::text_type) {
         return make_text("");
     }
 
@@ -190,9 +190,12 @@ Bytecode Compiler::compile(const Program& program) {
     locals_.clear();
     local_types_.clear();
     functions_.clear();
+    global_constants_.clear();
     expression_types_ = type_checker.expression_types();
+    resolved_calls_ = type_checker.resolved_calls();
     instructions_ = &bytecode_.instructions;
 
+    collect_global_constants(program.statements);
     collect_functions(program.statements);
     compile_statements(program.statements);
 
@@ -216,28 +219,57 @@ void Compiler::collect_functions(const std::vector<Statement>& statements) {
         }
 
         const std::size_t index = bytecode_.functions.size();
-        functions_.emplace(statement.name, index);
+        std::vector<Type> parameters;
+        parameters.reserve(statement.parameters.size());
+        for (const Parameter& parameter : statement.parameters) {
+            parameters.push_back(parameter.type.has_type ? parameter.type.type : make_type(ValueType::int_type));
+        }
+
+        functions_.emplace(function_key(statement.name, parameters), index);
         bytecode_.functions.push_back(Bytecode::Function{statement.name, statement.parameters.size(), 0, {}});
     }
 }
 
+void Compiler::collect_global_constants(const std::vector<Statement>& statements) {
+    for (const Statement& statement : statements) {
+        if (statement.kind == StatementKind::const_statement && statement.name.find('.') != std::string::npos) {
+            global_constants_.push_back(&statement);
+        }
+    }
+}
+
 void Compiler::compile_function(const Statement& statement) {
-    const std::size_t function_index = resolve_function(statement.name);
+    std::vector<Type> parameters;
+    parameters.reserve(statement.parameters.size());
+    for (const Parameter& parameter : statement.parameters) {
+        parameters.push_back(parameter.type.has_type ? parameter.type.type : make_type(ValueType::int_type));
+    }
+
+    const std::size_t function_index = resolve_function(function_key(statement.name, parameters));
     Bytecode::Function& function = bytecode_.functions.at(function_index);
 
     locals_.clear();
     local_types_.clear();
     instructions_ = &function.instructions;
     for (const Parameter& parameter : statement.parameters) {
-        declare_local(parameter.name, parameter.type.has_type ? parameter.type.type : ValueType::int_type);
+        declare_local(parameter.name, parameter.type.has_type ? parameter.type.type : make_type(ValueType::int_type));
     }
 
+    compile_global_constants();
     compile_statements(statement.body);
     emit(OpCode::push_constant,
-         add_constant(default_value(statement.type.has_type ? statement.type.type : ValueType::int_type)));
+         add_constant(default_value(statement.type.has_type ? statement.type.type : make_type(ValueType::int_type))));
     emit(OpCode::return_value);
 
     function.local_count = locals_.size();
+}
+
+void Compiler::compile_global_constants() {
+    for (const Statement* statement : global_constants_) {
+        compile_expression(*statement->expression);
+        const Type type = statement->type.has_type ? statement->type.type : expression_type(*statement->expression);
+        emit(OpCode::store_local, declare_local(statement->name, type));
+    }
 }
 
 void Compiler::compile_statements(const std::vector<Statement>& statements) {
@@ -248,9 +280,10 @@ void Compiler::compile_statements(const std::vector<Statement>& statements) {
 
 void Compiler::compile_statement(const Statement& statement) {
     switch (statement.kind) {
-    case StatementKind::let: {
+    case StatementKind::let:
+    case StatementKind::const_statement: {
         compile_expression(*statement.expression);
-        const ValueType type = statement.type.has_type ? statement.type.type : expression_type(*statement.expression);
+        const Type type = statement.type.has_type ? statement.type.type : expression_type(*statement.expression);
         emit(OpCode::store_local, declare_local(statement.name, type));
         return;
     }
@@ -305,6 +338,8 @@ void Compiler::compile_statement(const Statement& statement) {
         compile_expression(*statement.expression);
         emit(OpCode::pop);
         return;
+    case StatementKind::import_statement:
+        return;
     }
 }
 
@@ -328,13 +363,56 @@ void Compiler::compile_expression(const Expression& expression) {
     case ExpressionKind::boolean:
         emit(OpCode::push_constant, add_constant(make_bool(expression.lexeme == "true")));
         return;
+    case ExpressionKind::array:
+        for (const std::unique_ptr<Expression>& element : expression.arguments) {
+            compile_expression(*element);
+        }
+
+        emit(OpCode::make_array, expression.arguments.size());
+        return;
+    case ExpressionKind::index:
+        compile_expression(*expression.left);
+        compile_expression(*expression.right);
+        emit(OpCode::load_index);
+        return;
+    case ExpressionKind::member:
+        if (expression.left->kind == ExpressionKind::identifier) {
+            emit(OpCode::load_local, resolve_local(expression.left->lexeme + "." + expression.lexeme));
+            return;
+        }
+
+        throw std::runtime_error("unknown member '" + expression.lexeme + "'");
     case ExpressionKind::call:
         for (const std::unique_ptr<Expression>& argument : expression.arguments) {
             compile_expression(*argument);
         }
 
-        emit(OpCode::call, resolve_function(expression.lexeme));
+        emit(OpCode::call, resolve_function(resolved_calls_.at(&expression)));
         return;
+    case ExpressionKind::method_call:
+        if (resolved_calls_.contains(&expression)) {
+            for (const std::unique_ptr<Expression>& argument : expression.arguments) {
+                compile_expression(*argument);
+            }
+
+            emit(OpCode::call, resolve_function(resolved_calls_.at(&expression)));
+            return;
+        }
+
+        if (expression.lexeme == "len") {
+            compile_expression(*expression.left);
+            emit(OpCode::array_len);
+            return;
+        }
+
+        if (expression.lexeme == "push") {
+            compile_expression(*expression.left);
+            compile_expression(*expression.arguments.at(0));
+            emit(OpCode::array_push);
+            return;
+        }
+
+        throw std::runtime_error("unknown method '" + expression.lexeme + "'");
     case ExpressionKind::binary:
         compile_expression(*expression.left);
         compile_expression(*expression.right);
@@ -398,7 +476,7 @@ std::size_t Compiler::add_constant(Value value) {
     return bytecode_.constants.size() - 1;
 }
 
-std::size_t Compiler::declare_local(const std::string& name, ValueType type) {
+std::size_t Compiler::declare_local(const std::string& name, const Type& type) {
     const auto existing = locals_.find(name);
     if (existing != locals_.end()) {
         return existing->second;
@@ -419,7 +497,7 @@ std::size_t Compiler::resolve_local(const std::string& name) const {
     return existing->second;
 }
 
-ValueType Compiler::expression_type(const Expression& expression) const {
+const Type& Compiler::expression_type(const Expression& expression) const {
     const auto existing = expression_types_.find(&expression);
     if (existing == expression_types_.end()) {
         throw std::runtime_error("missing inferred expression type");

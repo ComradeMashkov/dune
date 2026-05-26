@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -15,6 +16,7 @@ enum class ValueKind {
     glyph,
     text,
     unit,
+    array,
 };
 
 struct Value {
@@ -25,6 +27,7 @@ struct Value {
     char glyph_value = '\0';
     bool bool_value = false;
     std::string text_value;
+    std::shared_ptr<std::vector<Value>> array_value;
 };
 
 enum class OpCode {
@@ -46,6 +49,10 @@ enum class OpCode {
     call,
     return_value,
     pop,
+    make_array,
+    load_index,
+    array_len,
+    array_push,
     print,
     halt,
 };
