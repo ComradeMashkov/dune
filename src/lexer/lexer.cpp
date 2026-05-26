@@ -29,6 +29,8 @@ Token Lexer::next_token() {
     }
 
     switch (current) {
+    case '\'':
+        return character(start, line, column);
     case '+':
         return make_token(TokenType::plus, start, line, column);
     case '-':
@@ -186,6 +188,46 @@ Token Lexer::identifier(std::size_t start, std::size_t line, std::size_t column)
         return Token{TokenType::bool_keyword, lexeme, line, column};
     }
 
+    if (lexeme == "u8") {
+        return Token{TokenType::u8_keyword, lexeme, line, column};
+    }
+
+    if (lexeme == "u16") {
+        return Token{TokenType::u16_keyword, lexeme, line, column};
+    }
+
+    if (lexeme == "u32") {
+        return Token{TokenType::u32_keyword, lexeme, line, column};
+    }
+
+    if (lexeme == "u64") {
+        return Token{TokenType::u64_keyword, lexeme, line, column};
+    }
+
+    if (lexeme == "uint8") {
+        return Token{TokenType::uint8_keyword, lexeme, line, column};
+    }
+
+    if (lexeme == "uint16") {
+        return Token{TokenType::uint16_keyword, lexeme, line, column};
+    }
+
+    if (lexeme == "uint32") {
+        return Token{TokenType::uint32_keyword, lexeme, line, column};
+    }
+
+    if (lexeme == "uint64") {
+        return Token{TokenType::uint64_keyword, lexeme, line, column};
+    }
+
+    if (lexeme == "real") {
+        return Token{TokenType::real_keyword, lexeme, line, column};
+    }
+
+    if (lexeme == "glyph") {
+        return Token{TokenType::glyph_keyword, lexeme, line, column};
+    }
+
     if (lexeme == "true") {
         return Token{TokenType::true_keyword, lexeme, line, column};
     }
@@ -202,7 +244,41 @@ Token Lexer::number(std::size_t start, std::size_t line, std::size_t column) {
         advance();
     }
 
+    if (peek() == '.') {
+        advance();
+        if (!std::isdigit(static_cast<unsigned char>(peek()))) {
+            throw std::runtime_error("expected digit after decimal point");
+        }
+
+        while (std::isdigit(static_cast<unsigned char>(peek()))) {
+            advance();
+        }
+
+        return make_token(TokenType::float_number, start, line, column);
+    }
+
     return make_token(TokenType::number, start, line, column);
+}
+
+Token Lexer::character(std::size_t start, std::size_t line, std::size_t column) {
+    if (is_at_end() || peek() == '\n') {
+        throw std::runtime_error("unterminated character literal");
+    }
+
+    if (peek() == '\\') {
+        advance();
+        if (is_at_end() || peek() == '\n') {
+            throw std::runtime_error("unterminated character literal");
+        }
+    }
+
+    advance();
+
+    if (!match('\'')) {
+        throw std::runtime_error("expected closing quote after character literal");
+    }
+
+    return make_token(TokenType::char_literal, start, line, column);
 }
 
 } // namespace dune

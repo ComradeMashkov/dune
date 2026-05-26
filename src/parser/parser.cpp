@@ -303,6 +303,30 @@ TypeAnnotation Parser::type_annotation() {
         return TypeAnnotation{true, ValueType::bool_type};
     }
 
+    if (match(TokenType::u8_keyword) || match(TokenType::uint8_keyword)) {
+        return TypeAnnotation{true, ValueType::u8_type};
+    }
+
+    if (match(TokenType::u16_keyword) || match(TokenType::uint16_keyword)) {
+        return TypeAnnotation{true, ValueType::u16_type};
+    }
+
+    if (match(TokenType::u32_keyword) || match(TokenType::uint32_keyword)) {
+        return TypeAnnotation{true, ValueType::u32_type};
+    }
+
+    if (match(TokenType::u64_keyword) || match(TokenType::uint64_keyword)) {
+        return TypeAnnotation{true, ValueType::u64_type};
+    }
+
+    if (match(TokenType::real_keyword)) {
+        return TypeAnnotation{true, ValueType::real_type};
+    }
+
+    if (match(TokenType::glyph_keyword)) {
+        return TypeAnnotation{true, ValueType::glyph_type};
+    }
+
     throw std::runtime_error("expected type annotation");
 }
 
@@ -379,6 +403,14 @@ std::unique_ptr<Expression> Parser::call() {
 std::unique_ptr<Expression> Parser::primary() {
     if (match(TokenType::number)) {
         return make_leaf(ExpressionKind::number, previous().lexeme, location_from_token(previous()));
+    }
+
+    if (match(TokenType::float_number)) {
+        return make_leaf(ExpressionKind::floating, previous().lexeme, location_from_token(previous()));
+    }
+
+    if (match(TokenType::char_literal)) {
+        return make_leaf(ExpressionKind::character, previous().lexeme, location_from_token(previous()));
     }
 
     if (match(TokenType::true_keyword) || match(TokenType::false_keyword)) {

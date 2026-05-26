@@ -15,6 +15,12 @@ struct SourceLocation {
 enum class ValueType {
     int_type,
     bool_type,
+    u8_type,
+    u16_type,
+    u32_type,
+    u64_type,
+    real_type,
+    glyph_type,
 };
 
 struct TypeAnnotation {
@@ -31,6 +37,8 @@ struct Parameter {
 enum class ExpressionKind {
     identifier,
     number,
+    floating,
+    character,
     boolean,
     binary,
     call,

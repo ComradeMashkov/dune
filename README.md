@@ -39,28 +39,28 @@ Boolean values are represented as `1` for `true` and `0` for `false` when printe
 
 ```bash
 cmake -S . -B build
-cmake --build build
+cmake --build build -j
 ./build/dune hello.dn
 ```
 
-Compile to a native output file through generated assembly:
+Compile to a native output file through generated LLVM IR:
 
 ```bash
 ./build/dune build hello.dn -o hello
 ./hello
 ```
 
-Emit only assembly:
+Emit only LLVM IR:
 
 ```bash
-./build/dune asm hello.dn -o hello.s
+./build/dune llvm hello.dn -o hello.ll
 ```
 
 ## Build And Test
 
 ```bash
 cmake -S . -B build
-cmake --build build
+cmake --build build -j
 ctest --test-dir build --output-on-failure
 ```
 
@@ -88,7 +88,7 @@ The `0.2.0` release implements a small calculator language with:
 - while
 - bytecode
 - VM
-- native assembly output
+- LLVM native backend
 - CLI
 - tests
 - CI

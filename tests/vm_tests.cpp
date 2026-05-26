@@ -88,6 +88,14 @@ int main() {
                                   "print(choose(false, 1, 2));"),
                        "2\n", "expected function return through branches") &&
              passed;
+    passed = expect_eq(run_source("let small: u8 = 250; let wide: uint64 = 10000000000; "
+                                  "let total: uint64 = wide + 5; print(small); print(total);"),
+                       "250\n10000000005\n", "expected unsigned output") &&
+             passed;
+    passed =
+        expect_eq(run_source("let ratio: real = 1 + 2.5; print(ratio / 2.0);"), "1.75\n", "expected real output") &&
+        passed;
+    passed = expect_eq(run_source("let mark: glyph = 'Z'; print(mark);"), "Z\n", "expected glyph output") && passed;
     passed = expect_throws("print(missing);", "expected undefined variable to throw") && passed;
     passed = expect_throws("missing = 1;", "expected undefined assignment to throw") && passed;
     passed = expect_throws("print(1 / 0);", "expected division by zero to throw") && passed;

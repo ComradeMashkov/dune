@@ -7,21 +7,49 @@ on:
 
 jobs:
   build-test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    defaults:
+      run:
+        shell: bash
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install lint tools
+      - name: Install LLVM tools on Ubuntu
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang-format clang-tidy
+          sudo apt-get install -y clang clang-format clang-tidy ninja-build
+
+      - name: Install LLVM tools on macOS
+        if: runner.os == 'macOS'
+        run: |
+          brew update
+          brew install llvm ninja
+          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+
+      - name: Install LLVM tools on Windows
+        if: runner.os == 'Windows'
+        run: |
+          choco install llvm -y
+          choco install ninja -y
+          echo "C:/Program Files/LLVM/bin" >> "$GITHUB_PATH"
+
+      - name: Load MSVC environment on Windows
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
 
       - name: Configure
-        run: cmake -S . -B build
+        run: cmake -S . -B build -G Ninja -D CMAKE_CXX_COMPILER=clang++
 
       - name: Build
-        run: cmake --build build
+        run: cmake --build build -j
 
       - name: Test
         run: ctest --test-dir build --output-on-failure

@@ -1,10 +1,28 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
 namespace dune {
+
+enum class ValueKind {
+    signed_integer,
+    unsigned_integer,
+    real,
+    boolean,
+    glyph,
+};
+
+struct Value {
+    ValueKind kind = ValueKind::signed_integer;
+    std::int64_t signed_value = 0;
+    std::uint64_t unsigned_value = 0;
+    double real_value = 0.0;
+    char glyph_value = '\0';
+    bool bool_value = false;
+};
 
 enum class OpCode {
     push_constant,
@@ -34,7 +52,7 @@ struct Instruction {
 };
 
 struct Bytecode {
-    std::vector<int> constants;
+    std::vector<Value> constants;
     std::vector<Instruction> instructions;
     std::size_t local_count = 0;
 
