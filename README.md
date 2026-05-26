@@ -84,10 +84,11 @@ print(values.first());
 ```
 
 Modules are loaded from `.dn` files. The standard library currently includes
-`stdlib/math.dn`, `stdlib/array.dn`, and `stdlib/text.dn`. Low-level array and
-text operations such as `len`, `push`, indexing, and slicing remain runtime
-primitives; higher-level helpers are ordinary Dune functions in the standard
-library.
+`stdlib/math.dn`, `stdlib/array.dn`, `stdlib/text.dn`, `stdlib/option.dn`,
+`stdlib/result.dn`, `stdlib/assert.dn`, and `stdlib/collections.dn`. Low-level
+array and text operations such as `len`, `push`, indexing, and slicing remain
+runtime primitives; higher-level helpers are ordinary Dune functions in the
+standard library.
 
 The standard library can expose receiver methods with `impl` blocks. For
 example, importing `array` makes both `array.first(values)` and `values.first()`
@@ -207,6 +208,24 @@ The `text` module provides text and glyph helpers:
 - `trim_end(value)` or `value.trim_end()`
 - `trim(value)` or `value.trim()`
 
+Structs group named fields and can have receiver methods:
+
+```dn
+struct Point {
+  x: real64,
+  y: real64,
+}
+
+impl Point {
+  fn sum() -> real64 {
+    return self.x + self.y;
+  }
+}
+
+let point: Point = Point { x: 1.5, y: 2.5 };
+print(point.sum());
+```
+
 Functions can be overloaded by parameter types:
 
 ```dn
@@ -226,7 +245,7 @@ fn show(value: bool) -> int {
 Functions can also be generic. Generic functions are instantiated from actual
 call sites instead of eagerly expanding every supported type. A generic
 parameter can be unbounded, or it can use one of the current built-in bounds:
-`integer`, `numeric`, or `real`.
+`integer`, `numeric`, `real`, `comparable`, or `ordered`.
 
 ```dn
 fn identity<T>(value: T) -> T {
@@ -262,6 +281,7 @@ Supported scalar types:
 Supported compound types:
 
 - `[T]` dynamic arrays, for example `[int]` or `[text]`
+- `struct` records with named fields, for example `Point { x: 1, y: 2 }`
 
 Indexing and slicing:
 
@@ -284,6 +304,9 @@ Standard library receiver methods are enabled by importing their module:
 
 - `import array;` enables helpers such as `values.first()` and `values.reverse()`
 - `import text;` enables helpers such as `message.trim()` and `message.ends_with("x")`
+- `import option;` exposes `OptionInt`, `OptionText`, `some_*`, `none_*`, and `unwrap_or()`
+- `import result;` exposes `ResultInt`, `ResultText`, `ok_*`, `err_*`, and `error_or()`
+- `import collections;` exposes small array builders such as `pair_int()` and `repeat_int()`
 
 ## Run
 
@@ -348,6 +371,7 @@ The current release implements a small compiled language with:
 - glyph and text values
 - unit-returning functions
 - dynamic arrays
+- structs with fields and methods
 - array methods
 - text methods
 - standard library extension methods
