@@ -19,6 +19,7 @@ public:
 private:
     bool is_at_end() const;
     bool check(TokenType type) const;
+    bool check_next(TokenType type) const;
     bool match(TokenType type);
 
     const Token& advance();
@@ -27,10 +28,18 @@ private:
     const Token& consume(TokenType type, std::string_view message);
 
     Statement statement();
+    Statement assignment_statement();
+    Statement block_statement();
+    Statement if_statement();
     Statement let_statement();
     Statement print_statement();
+    Statement while_statement();
+
+    std::vector<Statement> block();
 
     std::unique_ptr<Expression> expression();
+    std::unique_ptr<Expression> equality();
+    std::unique_ptr<Expression> comparison();
     std::unique_ptr<Expression> term();
     std::unique_ptr<Expression> factor();
     std::unique_ptr<Expression> primary();

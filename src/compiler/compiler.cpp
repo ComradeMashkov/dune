@@ -8,13 +8,17 @@ Bytecode Compiler::compile(const Program& program) {
     bytecode_ = Bytecode{};
     locals_.clear();
 
-    for (const Statement& statement : program.statements) {
-        compile_statement(statement);
-    }
+    compile_statements(program.statements);
 
     emit(OpCode::halt);
     bytecode_.local_count = locals_.size();
     return bytecode_;
+}
+
+void Compiler::compile_statements(const std::vector<Statement>& statements) {
+    for (const Statement& statement : statements) {
+        compile_statement(statement);
+    }
 }
 
 void Compiler::compile_statement(const Statement& statement) {
@@ -24,10 +28,42 @@ void Compiler::compile_statement(const Statement& statement) {
         emit(OpCode::store_local, declare_local(statement.name));
         return;
     }
+    case StatementKind::assign:
+        compile_expression(*statement.expression);
+        emit(OpCode::store_local, resolve_local(statement.name));
+        return;
     case StatementKind::print:
         compile_expression(*statement.expression);
         emit(OpCode::print);
         return;
+    case StatementKind::block:
+        compile_statements(statement.body);
+        return;
+    case StatementKind::if_statement: {
+        compile_expression(*statement.expression);
+        const std::size_t false_jump = emit(OpCode::jump_if_false);
+        compile_statements(statement.body);
+
+        if (statement.else_body.empty()) {
+            patch_operand(false_jump, bytecode_.instructions.size());
+            return;
+        }
+
+        const std::size_t end_jump = emit(OpCode::jump);
+        patch_operand(false_jump, bytecode_.instructions.size());
+        compile_statements(statement.else_body);
+        patch_operand(end_jump, bytecode_.instructions.size());
+        return;
+    }
+    case StatementKind::while_statement: {
+        const std::size_t loop_start = bytecode_.instructions.size();
+        compile_expression(*statement.expression);
+        const std::size_t exit_jump = emit(OpCode::jump_if_false);
+        compile_statements(statement.body);
+        emit(OpCode::jump, loop_start);
+        patch_operand(exit_jump, bytecode_.instructions.size());
+        return;
+    }
     }
 }
 
@@ -38,6 +74,9 @@ void Compiler::compile_expression(const Expression& expression) {
         return;
     case ExpressionKind::number:
         emit(OpCode::push_constant, add_constant(std::stoi(expression.lexeme)));
+        return;
+    case ExpressionKind::boolean:
+        emit(OpCode::push_constant, add_constant(expression.lexeme == "true" ? 1 : 0));
         return;
     case ExpressionKind::binary:
         compile_expression(*expression.left);
@@ -60,6 +99,36 @@ void Compiler::compile_expression(const Expression& expression) {
 
         if (expression.lexeme == "/") {
             emit(OpCode::divide);
+            return;
+        }
+
+        if (expression.lexeme == "==") {
+            emit(OpCode::equal);
+            return;
+        }
+
+        if (expression.lexeme == "!=") {
+            emit(OpCode::not_equal);
+            return;
+        }
+
+        if (expression.lexeme == ">") {
+            emit(OpCode::greater);
+            return;
+        }
+
+        if (expression.lexeme == ">=") {
+            emit(OpCode::greater_equal);
+            return;
+        }
+
+        if (expression.lexeme == "<") {
+            emit(OpCode::less);
+            return;
+        }
+
+        if (expression.lexeme == "<=") {
+            emit(OpCode::less_equal);
             return;
         }
 
@@ -92,8 +161,13 @@ std::size_t Compiler::resolve_local(const std::string& name) const {
     return existing->second;
 }
 
-void Compiler::emit(OpCode op, std::size_t operand) {
+std::size_t Compiler::emit(OpCode op, std::size_t operand) {
     bytecode_.instructions.push_back(Instruction{op, operand});
+    return bytecode_.instructions.size() - 1;
+}
+
+void Compiler::patch_operand(std::size_t instruction_index, std::size_t operand) {
+    bytecode_.instructions.at(instruction_index).operand = operand;
 }
 
 } // namespace dune

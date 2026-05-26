@@ -9,6 +9,7 @@ namespace dune {
 enum class ExpressionKind {
     identifier,
     number,
+    boolean,
     binary,
 };
 
@@ -21,13 +22,19 @@ struct Expression {
 
 enum class StatementKind {
     let,
+    assign,
     print,
+    block,
+    if_statement,
+    while_statement,
 };
 
 struct Statement {
     StatementKind kind;
     std::string name;
     std::unique_ptr<Expression> expression;
+    std::vector<Statement> body;
+    std::vector<Statement> else_body;
 };
 
 struct Program {

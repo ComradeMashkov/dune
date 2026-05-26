@@ -13,7 +13,7 @@
 
 namespace {
 
-constexpr const char* version = "0.1.0";
+constexpr const char* version = "0.2.0";
 
 std::string read_file(const std::string& path) {
     std::ifstream input(path);

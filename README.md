@@ -17,6 +17,24 @@ Expected output:
 42
 ```
 
+Control flow example:
+
+```dn
+let x = 3;
+
+while x > 0 {
+  x = x - 1;
+}
+
+if x == 0 {
+  print(42);
+} else {
+  print(0);
+}
+```
+
+Boolean values are represented as `1` for `true` and `0` for `false` when printed.
+
 ## Run
 
 ```bash
@@ -53,18 +71,24 @@ compiling targets. If those tools are not installed locally yet, configure with:
 cmake -S . -B build -D DUNE_ENABLE_LINT=OFF
 ```
 
-## v0.1
+## v0.2
 
-The `0.1.0` release implements a small calculator language with:
+The `0.2.0` release implements a small calculator language with:
 
 - lexer
 - parser
 - AST
 - arithmetic
 - variables
+- booleans
+- comparison operators
 - print
+- assignment
+- if/else
+- while
 - bytecode
 - VM
+- native assembly output
 - CLI
 - tests
 - CI

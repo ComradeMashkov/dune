@@ -1,6 +1,7 @@
 #include "assembly_generator.hpp"
 
 #include <stdexcept>
+#include <string_view>
 
 namespace dune {
 
@@ -20,24 +21,29 @@ std::size_t align_to(std::size_t value, std::size_t alignment) {
 void AssemblyGenerator::generate(const Program& program, std::ostream& output) {
     assign_slots(program);
     declared_.clear();
+    label_count_ = 0;
 
     emit_header(output);
-    for (const Statement& statement : program.statements) {
-        emit_statement(statement, output);
-    }
+    emit_statements(program.statements, output);
     emit_footer(output);
 }
 
 void AssemblyGenerator::assign_slots(const Program& program) {
     slots_.clear();
+    assign_slots(program.statements);
 
-    for (const Statement& statement : program.statements) {
+    stack_size_ = align_to(slots_.size() * 8, 16);
+}
+
+void AssemblyGenerator::assign_slots(const std::vector<Statement>& statements) {
+    for (const Statement& statement : statements) {
         if (statement.kind == StatementKind::let) {
             declare_slot(statement.name);
         }
-    }
 
-    stack_size_ = align_to(slots_.size() * 8, 16);
+        assign_slots(statement.body);
+        assign_slots(statement.else_body);
+    }
 }
 
 void AssemblyGenerator::emit_header(std::ostream& output) const {
@@ -89,6 +95,12 @@ void AssemblyGenerator::emit_footer(std::ostream& output) const {
 #endif
 }
 
+void AssemblyGenerator::emit_statements(const std::vector<Statement>& statements, std::ostream& output) {
+    for (const Statement& statement : statements) {
+        emit_statement(statement, output);
+    }
+}
+
 void AssemblyGenerator::emit_statement(const Statement& statement, std::ostream& output) {
     switch (statement.kind) {
     case StatementKind::let:
@@ -96,10 +108,46 @@ void AssemblyGenerator::emit_statement(const Statement& statement, std::ostream&
         declared_.insert(statement.name);
         emit_store(resolve_slot(statement.name), output);
         return;
+    case StatementKind::assign:
+        emit_expression(*statement.expression, output);
+        emit_store(resolve_slot(statement.name), output);
+        return;
     case StatementKind::print:
         emit_expression(*statement.expression, output);
         emit_print(output);
         return;
+    case StatementKind::block:
+        emit_statements(statement.body, output);
+        return;
+    case StatementKind::if_statement: {
+        const std::string else_label = next_label("else");
+        const std::string end_label = next_label("endif");
+        emit_expression(*statement.expression, output);
+        emit_branch_if_false(else_label, output);
+        emit_statements(statement.body, output);
+
+        if (statement.else_body.empty()) {
+            emit_label(else_label, output);
+            return;
+        }
+
+        emit_jump(end_label, output);
+        emit_label(else_label, output);
+        emit_statements(statement.else_body, output);
+        emit_label(end_label, output);
+        return;
+    }
+    case StatementKind::while_statement: {
+        const std::string loop_label = next_label("while");
+        const std::string end_label = next_label("endwhile");
+        emit_label(loop_label, output);
+        emit_expression(*statement.expression, output);
+        emit_branch_if_false(end_label, output);
+        emit_statements(statement.body, output);
+        emit_jump(loop_label, output);
+        emit_label(end_label, output);
+        return;
+    }
     }
 }
 
@@ -110,6 +158,9 @@ void AssemblyGenerator::emit_expression(const Expression& expression, std::ostre
         return;
     case ExpressionKind::number:
         emit_number(expression.lexeme, output);
+        return;
+    case ExpressionKind::boolean:
+        emit_number(expression.lexeme == "true" ? "1" : "0", output);
         return;
     case ExpressionKind::binary:
         emit_expression(*expression.left, output);
@@ -124,6 +175,33 @@ void AssemblyGenerator::emit_expression(const Expression& expression, std::ostre
         emit_binary(expression.lexeme, output);
         return;
     }
+}
+
+void AssemblyGenerator::emit_branch_if_false(const std::string& label, std::ostream& output) const {
+#if defined(__APPLE__) && defined(__aarch64__)
+    output << "    cbz x0, " << label << '\n';
+#elif defined(__linux__) && defined(__x86_64__)
+    output << "    test rax, rax\n";
+    output << "    jz " << label << '\n';
+#else
+    (void)label;
+    (void)output;
+#endif
+}
+
+void AssemblyGenerator::emit_jump(const std::string& label, std::ostream& output) const {
+#if defined(__APPLE__) && defined(__aarch64__)
+    output << "    b " << label << '\n';
+#elif defined(__linux__) && defined(__x86_64__)
+    output << "    jmp " << label << '\n';
+#else
+    (void)label;
+    (void)output;
+#endif
+}
+
+void AssemblyGenerator::emit_label(const std::string& label, std::ostream& output) const {
+    output << label << ":\n";
 }
 
 void AssemblyGenerator::emit_print(std::ostream& output) const {
@@ -200,6 +278,37 @@ void AssemblyGenerator::emit_binary(const std::string& op, std::ostream& output)
         output << "    sdiv x0, x1, x0\n";
         return;
     }
+
+    output << "    cmp x1, x0\n";
+    if (op == "==") {
+        output << "    cset w0, eq\n";
+        return;
+    }
+
+    if (op == "!=") {
+        output << "    cset w0, ne\n";
+        return;
+    }
+
+    if (op == ">") {
+        output << "    cset w0, gt\n";
+        return;
+    }
+
+    if (op == ">=") {
+        output << "    cset w0, ge\n";
+        return;
+    }
+
+    if (op == "<") {
+        output << "    cset w0, lt\n";
+        return;
+    }
+
+    if (op == "<=") {
+        output << "    cset w0, le\n";
+        return;
+    }
 #elif defined(__linux__) && defined(__x86_64__)
     output << "    pop rcx\n";
     if (op == "+") {
@@ -223,6 +332,43 @@ void AssemblyGenerator::emit_binary(const std::string& op, std::ostream& output)
         output << "    mov rax, rcx\n";
         output << "    cqo\n";
         output << "    idiv r8\n";
+        return;
+    }
+
+    output << "    cmp rcx, rax\n";
+    if (op == "==") {
+        output << "    sete al\n";
+        output << "    movzx rax, al\n";
+        return;
+    }
+
+    if (op == "!=") {
+        output << "    setne al\n";
+        output << "    movzx rax, al\n";
+        return;
+    }
+
+    if (op == ">") {
+        output << "    setg al\n";
+        output << "    movzx rax, al\n";
+        return;
+    }
+
+    if (op == ">=") {
+        output << "    setge al\n";
+        output << "    movzx rax, al\n";
+        return;
+    }
+
+    if (op == "<") {
+        output << "    setl al\n";
+        output << "    movzx rax, al\n";
+        return;
+    }
+
+    if (op == "<=") {
+        output << "    setle al\n";
+        output << "    movzx rax, al\n";
         return;
     }
 #else
@@ -258,6 +404,10 @@ std::size_t AssemblyGenerator::resolve_slot(const std::string& name) const {
 
 std::size_t AssemblyGenerator::slot_offset(std::size_t slot) const {
     return (slot + 1) * 8;
+}
+
+std::string AssemblyGenerator::next_label(std::string_view name) {
+    return ".L_dune_" + std::string(name) + "_" + std::to_string(label_count_++);
 }
 
 } // namespace dune
