@@ -257,6 +257,21 @@ fn square<T: numeric>(value: T) -> T {
 }
 ```
 
+Structs can be generic too. A struct literal uses the expected type from the
+left-hand side or function return type when filling in type arguments.
+
+```dn
+struct Box<T> {
+  value: T,
+}
+
+fn boxed<T>(value: T) -> Box<T> {
+  return Box { value: value };
+}
+
+let answer: Box<int> = boxed(42);
+```
+
 Receiver methods can be written with `impl`. The receiver is available inside
 the method body as `self`; exported impl methods can also be called as module
 functions after import.
@@ -267,6 +282,16 @@ export impl<T> [T] {
     return self[0];
   }
 }
+```
+
+`match` expressions compare a subject against literal patterns and require a
+`_` fallback arm.
+
+```dn
+let label = match answer.value {
+  42 => "answer",
+  _ => "other",
+};
 ```
 
 Supported scalar types:
@@ -282,6 +307,7 @@ Supported compound types:
 
 - `[T]` dynamic arrays, for example `[int]` or `[text]`
 - `struct` records with named fields, for example `Point { x: 1, y: 2 }`
+- generic structs, for example `Option<int>` or `Result<int, text>`
 
 Indexing and slicing:
 
@@ -304,8 +330,8 @@ Standard library receiver methods are enabled by importing their module:
 
 - `import array;` enables helpers such as `values.first()` and `values.reverse()`
 - `import text;` enables helpers such as `message.trim()` and `message.ends_with("x")`
-- `import option;` exposes `OptionInt`, `OptionText`, `some_*`, `none_*`, and `unwrap_or()`
-- `import result;` exposes `ResultInt`, `ResultText`, `ok_*`, `err_*`, and `error_or()`
+- `import option;` exposes `Option<T>`, `some(value)`, `none(default)`, and `unwrap_or()`
+- `import result;` exposes `Result<T, E>`, `ok(value, error_default)`, `err(value_default, error)`, and `error_or()`
 - `import collections;` exposes small array builders such as `pair_int()` and `repeat_int()`
 
 ## Run
@@ -363,6 +389,7 @@ The current release implements a small compiled language with:
 - overloaded functions
 - generic functions with basic bounds
 - call-site generic instantiation
+- generic structs
 - impl blocks
 - static scalar types
 - booleans
@@ -372,6 +399,7 @@ The current release implements a small compiled language with:
 - unit-returning functions
 - dynamic arrays
 - structs with fields and methods
+- match expressions
 - array methods
 - text methods
 - standard library extension methods
@@ -381,6 +409,7 @@ The current release implements a small compiled language with:
 - export visibility
 - extern functions
 - standard library modules
+- native heap cleanup on normal program exit
 - comparison operators
 - print
 - assignment

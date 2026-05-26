@@ -48,6 +48,10 @@ Token Lexer::next_token() {
     case '%':
         return make_token(TokenType::percent, start, line, column);
     case '=':
+        if (match('>')) {
+            return make_token(TokenType::fat_arrow, start, line, column);
+        }
+
         if (match('=')) {
             return make_token(TokenType::equal_equal, start, line, column);
         }
@@ -216,6 +220,10 @@ Token Lexer::identifier(std::size_t start, std::size_t line, std::size_t column)
 
     if (lexeme == "import") {
         return Token{TokenType::import_keyword, lexeme, line, column};
+    }
+
+    if (lexeme == "match") {
+        return Token{TokenType::match_keyword, lexeme, line, column};
     }
 
     if (lexeme == "return") {

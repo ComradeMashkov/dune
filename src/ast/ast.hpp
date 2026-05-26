@@ -39,6 +39,7 @@ struct Type {
     ValueType kind = ValueType::int_type;
     std::shared_ptr<Type> element;
     std::string name;
+    std::vector<Type> arguments;
 };
 
 struct TypeAnnotation {
@@ -73,6 +74,7 @@ enum class ExpressionKind {
     unary,
     cast,
     binary,
+    match_expression,
     call,
     method_call,
 };

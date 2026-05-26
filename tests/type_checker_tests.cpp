@@ -179,16 +179,23 @@ int main() {
                           "let p: Point = make(1.5, 2.5); let total: real64 = p.sum(); let x: real64 = p.x;",
                           "expected structs, fields, literals, and methods to validate") &&
              passed;
+    passed = expect_valid("struct Box<T> { value: T } "
+                          "impl<T> Box<T> { fn unwrap_or(default: T) -> T { return self.value; } } "
+                          "fn boxed<T>(value: T) -> Box<T> { return Box { value: value }; } "
+                          "let number: Box<int> = boxed(7); let label: Box<text> = boxed(\"ok\"); "
+                          "let chosen: text = match number.value { 7 => label.unwrap_or(\"bad\"), _ => \"other\", };",
+                          "expected generic structs and match expressions to validate") &&
+             passed;
     passed = expect_valid("fn same<T: comparable>(left: T, right: T) -> bool { return left == right; } "
                           "fn lower<T: ordered>(left: T, right: T) -> bool { return left < right; } "
                           "let text_ok: bool = same(\"dune\", \"dune\"); let int_ok: bool = lower(1, 2);",
                           "expected comparable and ordered bounds to validate") &&
              passed;
     passed = expect_valid("import option; import result; import assert; import collections; "
-                          "let maybe: option.OptionInt = option.some_int(42); "
-                          "let fallback: int = option.none_int().unwrap_or(7); "
-                          "let ok: result.ResultInt = result.ok_int(maybe.unwrap_or(0)); "
-                          "let failed: result.ResultInt = result.err_int(\"bad\"); "
+                          "let maybe: option.Option<int> = option.some(42); "
+                          "let fallback: int = option.none(0).unwrap_or(7); "
+                          "let ok: result.Result<int, text> = result.ok(maybe.unwrap_or(0), \"\"); "
+                          "let failed: result.Result<int, text> = result.err(0, \"bad\"); "
                           "let repeated: [int] = collections.repeat_int(3, 4); "
                           "let same: bool = assert.equals_int(repeated[0], ok.unwrap_or(0)); "
                           "let error: text = failed.error_or(\"none\");",
@@ -323,6 +330,16 @@ int main() {
     passed = expect_error_contains("fn invalid<T>(left: T, right: T) -> bool { return left == right; } "
                                    "let values: [int] = [1]; print(invalid(values, values));",
                                    "while instantiating invalid<T = [int]>", "expected generic instantiation trace") &&
+             passed;
+    passed = expect_error_contains("let value: int = match 1 { 1 => 10, };",
+                                   "match expression needs a '_' fallback case", "expected match fallback error") &&
+             passed;
+    passed = expect_error_contains("let value: int = match true { true => 1, _ => false, };",
+                                   "expected type 'int' but got 'bool'", "expected match result mismatch") &&
+             passed;
+    passed = expect_error_contains("struct Box<T> { value: T } let value = Box { value: 1 };",
+                                   "generic struct literal 'Box' needs an expected type",
+                                   "expected generic struct inference error") &&
              passed;
     passed = expect_error_contains("import math; print(math.UNKNOWN);", "module 'math' does not export 'UNKNOWN'",
                                    "expected missing module value") &&

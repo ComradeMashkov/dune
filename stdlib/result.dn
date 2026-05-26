@@ -1,32 +1,34 @@
-export struct ResultInt {
+export struct Result<T, E> {
     ok: bool,
-    value: int,
-    error: text,
+    value: T,
+    error: E,
 }
 
-export struct ResultText {
-    ok: bool,
-    value: text,
-    error: text,
+export fn ok<T, E>(value: T, error_default: E) -> Result<T, E> {
+    return Result { ok: true, value: value, error: error_default };
 }
 
-export fn ok_int(value: int) -> ResultInt {
-    return ResultInt { ok: true, value: value, error: "" };
+export fn err<T, E>(value_default: T, error: E) -> Result<T, E> {
+    return Result { ok: false, value: value_default, error: error };
 }
 
-export fn err_int(error: text) -> ResultInt {
-    return ResultInt { ok: false, value: 0, error: error };
+export fn ok_int(value: int) -> Result<int, text> {
+    return ok(value, "");
 }
 
-export fn ok_text(value: text) -> ResultText {
-    return ResultText { ok: true, value: value, error: "" };
+export fn err_int(error: text) -> Result<int, text> {
+    return err(0, error);
 }
 
-export fn err_text(error: text) -> ResultText {
-    return ResultText { ok: false, value: "", error: error };
+export fn ok_text(value: text) -> Result<text, text> {
+    return ok(value, "");
 }
 
-export impl ResultInt {
+export fn err_text(error: text) -> Result<text, text> {
+    return err("", error);
+}
+
+export impl<T, E> Result<T, E> {
     fn is_ok() -> bool {
         return self.ok;
     }
@@ -35,7 +37,7 @@ export impl ResultInt {
         return !self.ok;
     }
 
-    fn unwrap_or(default: int) -> int {
+    fn unwrap_or(default: T) -> T {
         if self.ok {
             return self.value;
         }
@@ -43,33 +45,7 @@ export impl ResultInt {
         return default;
     }
 
-    fn error_or(default: text) -> text {
-        if self.ok {
-            return default;
-        }
-
-        return self.error;
-    }
-}
-
-export impl ResultText {
-    fn is_ok() -> bool {
-        return self.ok;
-    }
-
-    fn is_err() -> bool {
-        return !self.ok;
-    }
-
-    fn unwrap_or(default: text) -> text {
-        if self.ok {
-            return self.value;
-        }
-
-        return default;
-    }
-
-    fn error_or(default: text) -> text {
+    fn error_or(default: E) -> E {
         if self.ok {
             return default;
         }

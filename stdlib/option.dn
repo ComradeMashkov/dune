@@ -1,30 +1,25 @@
-export struct OptionInt {
+export struct Option<T> {
     present: bool,
-    value: int,
+    value: T,
 }
 
-export struct OptionText {
-    present: bool,
-    value: text,
+export fn some<T>(value: T) -> Option<T> {
+    return Option { present: true, value: value };
 }
 
-export fn some_int(value: int) -> OptionInt {
-    return OptionInt { present: true, value: value };
+export fn none<T>(default: T) -> Option<T> {
+    return Option { present: false, value: default };
 }
 
-export fn none_int() -> OptionInt {
-    return OptionInt { present: false, value: 0 };
+export fn none_int() -> Option<int> {
+    return none(0);
 }
 
-export fn some_text(value: text) -> OptionText {
-    return OptionText { present: true, value: value };
+export fn none_text() -> Option<text> {
+    return none("");
 }
 
-export fn none_text() -> OptionText {
-    return OptionText { present: false, value: "" };
-}
-
-export impl OptionInt {
+export impl<T> Option<T> {
     fn is_some() -> bool {
         return self.present;
     }
@@ -33,25 +28,7 @@ export impl OptionInt {
         return !self.present;
     }
 
-    fn unwrap_or(default: int) -> int {
-        if self.present {
-            return self.value;
-        }
-
-        return default;
-    }
-}
-
-export impl OptionText {
-    fn is_some() -> bool {
-        return self.present;
-    }
-
-    fn is_none() -> bool {
-        return !self.present;
-    }
-
-    fn unwrap_or(default: text) -> text {
+    fn unwrap_or(default: T) -> T {
         if self.present {
             return self.value;
         }

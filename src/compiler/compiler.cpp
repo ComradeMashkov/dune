@@ -206,6 +206,7 @@ Bytecode Compiler::compile(const Program& program) {
     structs_.clear();
     global_constants_.clear();
     loop_stack_.clear();
+    temporary_count_ = 0;
     expression_types_ = type_checker.expression_types();
     resolved_calls_ = type_checker.resolved_calls();
     collect_structs(type_checker.structs());
@@ -297,6 +298,7 @@ void Compiler::compile_function(const Statement& statement) {
     locals_.clear();
     local_types_.clear();
     loop_stack_.clear();
+    temporary_count_ = 0;
     instructions_ = &function.instructions;
     for (const Parameter& parameter : statement.parameters) {
         declare_local(parameter.name,
@@ -512,6 +514,42 @@ void Compiler::compile_expression(const Expression& expression) {
     case ExpressionKind::binary:
         compile_binary_expression(expression);
         return;
+    case ExpressionKind::match_expression:
+        compile_match_expression(expression);
+        return;
+    }
+}
+
+void Compiler::compile_match_expression(const Expression& expression) {
+    const Type subject_type = expression_type(*expression.left);
+    compile_expression(*expression.left);
+    const std::size_t subject_slot =
+        declare_local("__match_subject_" + std::to_string(temporary_count_++), subject_type);
+    emit(OpCode::store_local, subject_slot);
+
+    std::vector<std::size_t> end_jumps;
+    for (std::size_t index = 0; index < expression.arguments.size(); index += 2) {
+        const Expression& pattern = *expression.arguments[index];
+        const Expression& result = *expression.arguments[index + 1];
+        const bool wildcard = pattern.kind == ExpressionKind::identifier && pattern.lexeme == "_";
+
+        std::size_t next_case = 0;
+        if (!wildcard) {
+            emit(OpCode::load_local, subject_slot);
+            compile_expression(pattern);
+            emit(OpCode::equal);
+            next_case = emit(OpCode::jump_if_false);
+        }
+
+        compile_expression(result);
+        end_jumps.push_back(emit(OpCode::jump));
+        if (!wildcard) {
+            patch_operand(next_case, instructions_->size());
+        }
+    }
+
+    for (const std::size_t jump : end_jumps) {
+        patch_operand(jump, instructions_->size());
     }
 }
 
@@ -822,11 +860,19 @@ Type Compiler::normalize_type(const Type& type) const {
         return result;
     }
 
-    if (type.kind == ValueType::generic_type && structs_.contains(type.name)) {
-        return make_struct_type(type.name);
+    std::vector<Type> arguments;
+    arguments.reserve(type.arguments.size());
+    for (const Type& argument : type.arguments) {
+        arguments.push_back(normalize_type(argument));
     }
 
-    return type;
+    if (type.kind == ValueType::generic_type && structs_.contains(type.name)) {
+        return make_struct_type(type.name, std::move(arguments));
+    }
+
+    Type result = type;
+    result.arguments = std::move(arguments);
+    return result;
 }
 
 std::size_t Compiler::resolve_function(const std::string& name) const {
