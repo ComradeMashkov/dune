@@ -1,12 +1,18 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(dune VERSION 0.4.0 LANGUAGES CXX)
+project(dune VERSION 0.5.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(DUNE_ENABLE_LINT "Run clang-format and clang-tidy checks before building targets" ON)
+
+find_program(DUNE_CLANGXX_EXE NAMES clang++ HINTS /opt/homebrew/opt/llvm/bin /usr/local/opt/llvm/bin)
+
+if(NOT DUNE_CLANGXX_EXE)
+    message(FATAL_ERROR "clang++ is required for the LLVM backend")
+endif()
 
 file(GLOB_RECURSE DUNE_CXX_FORMAT_FILES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
@@ -91,13 +97,13 @@ target_link_libraries(dune_compiler
 )
 
 add_library(dune_codegen
-    src/codegen/assembly_generator.cpp
+    src/codegen/llvm_ir_generator.cpp
 )
 dune_add_lint_dependencies(dune_codegen)
 
 target_link_libraries(dune_codegen
     PUBLIC
-        dune_parser
+        dune_typechecker
 )
 
 add_library(dune_vm
@@ -112,6 +118,7 @@ target_link_libraries(dune_vm
 
 add_executable(dune src/main.cpp)
 target_link_libraries(dune PRIVATE dune_codegen dune_vm)
+target_compile_definitions(dune PRIVATE DUNE_CLANGXX_PATH="${DUNE_CLANGXX_EXE}")
 dune_add_lint_dependencies(dune)
 
 add_executable(lexer_tests tests/lexer_tests.cpp)
@@ -137,7 +144,7 @@ dune_add_lint_dependencies(vm_tests)
 enable_testing()
 
 add_test(NAME smoke COMMAND dune --version)
-set_tests_properties(smoke PROPERTIES PASS_REGULAR_EXPRESSION "dune 0.4.0")
+set_tests_properties(smoke PROPERTIES PASS_REGULAR_EXPRESSION "dune 0.5.0")
 
 add_test(NAME lexer_tests COMMAND lexer_tests)
 add_test(NAME parser_tests COMMAND parser_tests)
@@ -206,6 +213,16 @@ add_test(
 )
 
 add_test(
+    NAME cli_rich_types
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/rich_types.dn
+        -D EXPECTED_OUTPUT="250\n10000000005\n3.75\nQ"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
     NAME cli_build_native_hello
     COMMAND
         ${CMAKE_COMMAND}
@@ -235,6 +252,17 @@ add_test(
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/many_args.dn
         -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/many_args_native
         -D EXPECTED_OUTPUT=45
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
+)
+
+add_test(
+    NAME cli_build_native_rich_types
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/rich_types.dn
+        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/rich_types_native
+        -D EXPECTED_OUTPUT="250\n10000000005\n3.75\nQ"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
 )
 

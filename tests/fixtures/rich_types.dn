@@ -1,0 +1,14 @@
+fn add_real(left: real, right: real) -> real {
+    return left + right;
+}
+
+let small: u8 = 250;
+let large: uint64 = 10000000000;
+let total: uint64 = large + 5;
+let ratio: real = add_real(1.25, 2.5);
+let mark: glyph = 'Q';
+
+print(small);
+print(total);
+print(ratio);
+print(mark);

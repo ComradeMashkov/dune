@@ -137,6 +137,29 @@ bool parses_functions_and_types() {
     return passed;
 }
 
+bool parses_extended_types() {
+    const dune::Program program =
+        parse_source("let byte: u8 = 255; let wide: uint64 = 500; let ratio: real = 1.5; let mark: glyph = 'z';");
+
+    if (!expect(program.statements.size() == 4, "expected four typed statements")) {
+        return false;
+    }
+
+    bool passed = true;
+    passed = expect(program.statements[0].type.type == dune::ValueType::u8_type, "expected u8 type") && passed;
+    passed = expect(program.statements[1].type.type == dune::ValueType::u64_type, "expected uint64 alias") && passed;
+    passed = expect(program.statements[2].type.type == dune::ValueType::real_type, "expected real type") && passed;
+    passed =
+        expect(program.statements[2].expression->kind == dune::ExpressionKind::floating, "expected floating literal") &&
+        passed;
+    passed = expect(program.statements[3].type.type == dune::ValueType::glyph_type, "expected glyph type") && passed;
+    passed =
+        expect(program.statements[3].expression->kind == dune::ExpressionKind::character, "expected glyph literal") &&
+        passed;
+
+    return passed;
+}
+
 } // namespace
 
 int main() {
@@ -145,6 +168,7 @@ int main() {
     passed = parses_operator_precedence() && passed;
     passed = parses_control_flow() && passed;
     passed = parses_functions_and_types() && passed;
+    passed = parses_extended_types() && passed;
 
     return passed ? 0 : 1;
 }

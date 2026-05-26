@@ -1,8 +1,17 @@
 #include "type_checker.hpp"
 
+#include <limits>
 #include <stdexcept>
 
 namespace dune {
+
+namespace {
+
+TypeAnnotation expected_type(ValueType type) {
+    return TypeAnnotation{true, type};
+}
+
+} // namespace
 
 std::string type_name(ValueType type) {
     switch (type) {
@@ -10,6 +19,18 @@ std::string type_name(ValueType type) {
         return "int";
     case ValueType::bool_type:
         return "bool";
+    case ValueType::u8_type:
+        return "u8";
+    case ValueType::u16_type:
+        return "u16";
+    case ValueType::u32_type:
+        return "u32";
+    case ValueType::u64_type:
+        return "u64";
+    case ValueType::real_type:
+        return "real";
+    case ValueType::glyph_type:
+        return "glyph";
     }
 
     return "unknown";
@@ -17,6 +38,7 @@ std::string type_name(ValueType type) {
 
 void TypeChecker::check(const Program& program) {
     functions_.clear();
+    expression_types_.clear();
 
     for (const Statement& statement : program.statements) {
         if (statement.kind == StatementKind::function) {
@@ -37,6 +59,10 @@ void TypeChecker::check(const Program& program) {
             check_function(statement);
         }
     }
+}
+
+const std::unordered_map<const Expression*, ValueType>& TypeChecker::expression_types() const {
+    return expression_types_;
 }
 
 void TypeChecker::collect_function(const Statement& statement) {
@@ -85,19 +111,21 @@ void TypeChecker::check_function(const Statement& statement) {
 void TypeChecker::check_statement(const Statement& statement) {
     switch (statement.kind) {
     case StatementKind::let: {
-        const ValueType actual = check_expression(*statement.expression);
-        ValueType expected = statement.type.has_type ? statement.type.type : actual;
-        const auto existing = variables_.find(statement.name);
-        if (existing != variables_.end()) {
-            if (statement.type.has_type) {
-                expect_type(existing->second, statement.type.type, statement.location);
-            }
-
-            expected = existing->second;
+        TypeAnnotation expected = statement.type;
+        ValueType actual = check_expression(*statement.expression, expected);
+        if (!expected.has_type) {
+            expected = expected_type(actual);
         }
 
-        expect_type(expected, actual, statement.expression->location);
-        variables_[statement.name] = expected;
+        const auto existing = variables_.find(statement.name);
+        if (existing != variables_.end()) {
+            expect_type(existing->second, expected.type, statement.location);
+            expected = expected_type(existing->second);
+            actual = check_expression(*statement.expression, expected);
+        }
+
+        expect_type(expected.type, actual, statement.expression->location);
+        variables_[statement.name] = expected.type;
         return;
     }
     case StatementKind::assign: {
@@ -106,7 +134,8 @@ void TypeChecker::check_statement(const Statement& statement) {
             throw std::runtime_error(diagnostic(statement.location, "undefined variable '" + statement.name + "'"));
         }
 
-        expect_type(variable->second, check_expression(*statement.expression), statement.expression->location);
+        expect_type(variable->second, check_expression(*statement.expression, expected_type(variable->second)),
+                    statement.expression->location);
         return;
     }
     case StatementKind::print:
@@ -131,7 +160,8 @@ void TypeChecker::check_statement(const Statement& statement) {
             throw std::runtime_error(diagnostic(statement.location, "return statement outside function"));
         }
 
-        expect_type(current_function_->return_type, check_expression(*statement.expression),
+        expect_type(current_function_->return_type,
+                    check_expression(*statement.expression, expected_type(current_function_->return_type)),
                     statement.expression->location);
         return;
     }
@@ -143,7 +173,9 @@ void TypeChecker::check_statements(const std::vector<Statement>& statements) {
     }
 }
 
-ValueType TypeChecker::check_expression(const Expression& expression) {
+ValueType TypeChecker::check_expression(const Expression& expression, const TypeAnnotation& expected) {
+    ValueType actual = ValueType::int_type;
+
     switch (expression.kind) {
     case ExpressionKind::identifier: {
         const auto variable = variables_.find(expression.lexeme);
@@ -151,35 +183,74 @@ ValueType TypeChecker::check_expression(const Expression& expression) {
             throw std::runtime_error(diagnostic(expression.location, "undefined variable '" + expression.lexeme + "'"));
         }
 
-        return variable->second;
+        actual = variable->second;
+        break;
     }
     case ExpressionKind::number:
-        return ValueType::int_type;
+        actual = expected.has_type && is_numeric_type(expected.type) ? expected.type : ValueType::int_type;
+        check_integer_literal_range(expression, actual);
+        break;
+    case ExpressionKind::floating:
+        actual = ValueType::real_type;
+        break;
+    case ExpressionKind::character:
+        actual = ValueType::glyph_type;
+        break;
     case ExpressionKind::boolean:
-        return ValueType::bool_type;
+        actual = ValueType::bool_type;
+        break;
     case ExpressionKind::binary:
-        return check_binary_expression(expression);
+        actual = check_binary_expression(expression, expected);
+        break;
     case ExpressionKind::call:
-        return check_call_expression(expression);
+        actual = check_call_expression(expression);
+        break;
     }
 
-    return ValueType::int_type;
+    if (expected.has_type && actual != expected.type) {
+        actual = coerce_numeric_literal(expression, actual, expected.type);
+    }
+
+    if (expected.has_type) {
+        expect_type(expected.type, actual, expression.location);
+    }
+
+    expression_types_[&expression] = actual;
+    return actual;
 }
 
-ValueType TypeChecker::check_binary_expression(const Expression& expression) {
-    const ValueType left = check_expression(*expression.left);
-    const ValueType right = check_expression(*expression.right);
+ValueType TypeChecker::check_binary_expression(const Expression& expression, const TypeAnnotation& expected) {
+    const bool is_arithmetic =
+        expression.lexeme == "+" || expression.lexeme == "-" || expression.lexeme == "*" || expression.lexeme == "/";
+    const TypeAnnotation operand_expected =
+        is_arithmetic && expected.has_type && is_numeric_type(expected.type) ? expected : TypeAnnotation{};
 
-    if (expression.lexeme == "+" || expression.lexeme == "-" || expression.lexeme == "*" || expression.lexeme == "/") {
-        expect_type(ValueType::int_type, left, expression.left->location);
-        expect_type(ValueType::int_type, right, expression.right->location);
-        return ValueType::int_type;
+    ValueType left = check_expression(*expression.left, operand_expected);
+    ValueType right = check_expression(*expression.right, operand_expected);
+
+    if (left != right) {
+        left = coerce_numeric_literal(*expression.left, left, right);
+        right = coerce_numeric_literal(*expression.right, right, left);
+    }
+
+    if (is_arithmetic) {
+        if (!is_numeric_type(left)) {
+            throw std::runtime_error(
+                diagnostic(expression.left->location, "expected numeric type but got '" + type_name(left) + "'"));
+        }
+
+        expect_type(left, right, expression.right->location);
+        return left;
     }
 
     if (expression.lexeme == ">" || expression.lexeme == ">=" || expression.lexeme == "<" ||
         expression.lexeme == "<=") {
-        expect_type(ValueType::int_type, left, expression.left->location);
-        expect_type(ValueType::int_type, right, expression.right->location);
+        if (!is_numeric_type(left)) {
+            throw std::runtime_error(
+                diagnostic(expression.left->location, "expected numeric type but got '" + type_name(left) + "'"));
+        }
+
+        expect_type(left, right, expression.right->location);
         return ValueType::bool_type;
     }
 
@@ -205,8 +276,8 @@ ValueType TypeChecker::check_call_expression(const Expression& expression) {
     }
 
     for (std::size_t index = 0; index < expression.arguments.size(); ++index) {
-        const ValueType actual = check_expression(*expression.arguments[index]);
         const ValueType expected = function->second.parameters[index];
+        const ValueType actual = check_expression(*expression.arguments[index], expected_type(expected));
         if (actual != expected) {
             throw std::runtime_error(diagnostic(expression.arguments[index]->location,
                                                 "argument " + std::to_string(index + 1) + " for function '" +
@@ -254,6 +325,55 @@ ValueType TypeChecker::annotation_or_default(const TypeAnnotation& annotation) c
     }
 
     return ValueType::int_type;
+}
+
+bool TypeChecker::is_integer_type(ValueType type) const {
+    return type == ValueType::int_type || is_unsigned_type(type);
+}
+
+bool TypeChecker::is_unsigned_type(ValueType type) const {
+    return type == ValueType::u8_type || type == ValueType::u16_type || type == ValueType::u32_type ||
+           type == ValueType::u64_type;
+}
+
+bool TypeChecker::is_numeric_type(ValueType type) const {
+    return is_integer_type(type) || type == ValueType::real_type;
+}
+
+bool TypeChecker::can_coerce_integer_literal(const Expression& expression, ValueType target) const {
+    return expression.kind == ExpressionKind::number && is_numeric_type(target);
+}
+
+void TypeChecker::check_integer_literal_range(const Expression& expression, ValueType target) const {
+    if (!is_unsigned_type(target)) {
+        return;
+    }
+
+    const unsigned long long value = std::stoull(expression.lexeme);
+    unsigned long long max = std::numeric_limits<unsigned long long>::max();
+    if (target == ValueType::u8_type) {
+        max = std::numeric_limits<unsigned char>::max();
+    } else if (target == ValueType::u16_type) {
+        max = std::numeric_limits<unsigned short>::max();
+    } else if (target == ValueType::u32_type) {
+        max = std::numeric_limits<unsigned int>::max();
+    }
+
+    if (value > max) {
+        throw std::runtime_error(
+            diagnostic(expression.location,
+                       "integer literal '" + expression.lexeme + "' does not fit in type '" + type_name(target) + "'"));
+    }
+}
+
+ValueType TypeChecker::coerce_numeric_literal(const Expression& expression, ValueType actual, ValueType target) {
+    if (actual != target && can_coerce_integer_literal(expression, target)) {
+        check_integer_literal_range(expression, target);
+        expression_types_[&expression] = target;
+        return target;
+    }
+
+    return actual;
 }
 
 void TypeChecker::expect_type(ValueType expected, ValueType actual, SourceLocation location) const {

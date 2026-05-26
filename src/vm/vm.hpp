@@ -17,14 +17,14 @@ private:
     struct CallFrame {
         const std::vector<Instruction>* instructions = nullptr;
         std::size_t ip = 0;
-        std::vector<int> locals;
+        std::vector<Value> locals;
     };
 
     void call_function(std::size_t function_index);
-    int pop();
+    Value pop();
 
     Bytecode bytecode_;
-    std::vector<int> stack_;
+    std::vector<Value> stack_;
     std::vector<CallFrame> frames_;
 };
 

@@ -1,8 +1,7 @@
-#include "codegen/assembly_generator.hpp"
+#include "codegen/llvm_ir_generator.hpp"
 #include "compiler/compiler.hpp"
 #include "lexer/lexer.hpp"
 #include "parser/parser.hpp"
-#include "typechecker/type_checker.hpp"
 #include "vm/vm.hpp"
 
 #include <cstdlib>
@@ -14,7 +13,11 @@
 
 namespace {
 
-constexpr const char* version = "0.4.0";
+constexpr const char* version = "0.5.0";
+
+#ifndef DUNE_CLANGXX_PATH
+#define DUNE_CLANGXX_PATH "clang++"
+#endif
 
 std::string read_file(const std::string& path) {
     std::ifstream input(path);
@@ -37,6 +40,19 @@ void write_file(const std::string& path, const std::string& content) {
 }
 
 std::string shell_quote(const std::string& value) {
+#if defined(_WIN32)
+    std::string quoted = "\"";
+    for (const char character : value) {
+        if (character == '"') {
+            quoted += "\\\"";
+        } else {
+            quoted += character;
+        }
+    }
+
+    quoted += "\"";
+    return quoted;
+#else
     std::string quoted = "'";
     for (const char character : value) {
         if (character == '\'') {
@@ -48,6 +64,7 @@ std::string shell_quote(const std::string& value) {
 
     quoted += "'";
     return quoted;
+#endif
 }
 
 dune::Program parse_source(const std::string& source) {
@@ -61,24 +78,23 @@ dune::Bytecode compile_bytecode(const dune::Program& program) {
     return compiler.compile(program);
 }
 
-std::string generate_assembly(const dune::Program& program) {
-    dune::TypeChecker type_checker;
-    type_checker.check(program);
-
-    dune::AssemblyGenerator generator;
+std::string generate_llvm_ir(const dune::Program& program) {
+    dune::LlvmIrGenerator generator;
     std::ostringstream output;
     generator.generate(program, output);
     return output.str();
 }
 
-void assemble_native(const std::string& assembly_path, const std::string& output_path) {
-    const char* cxx = std::getenv("CXX");
-    const std::string compiler = cxx == nullptr ? "c++" : cxx;
-    const std::string command =
-        shell_quote(compiler) + " " + shell_quote(assembly_path) + " -o " + shell_quote(output_path);
+void compile_llvm_ir(const std::string& llvm_ir_path, const std::string& output_path) {
+    const char* clangxx = std::getenv("DUNE_CLANGXX");
+    const std::string compiler = clangxx == nullptr ? DUNE_CLANGXX_PATH : clangxx;
+    std::string command = shell_quote(compiler) + " " + shell_quote(llvm_ir_path) + " -o " + shell_quote(output_path);
+#if defined(_WIN32)
+    command = "\"" + command + "\"";
+#endif
 
     if (std::system(command.c_str()) != 0) {
-        throw std::runtime_error("assembler/linker failed");
+        throw std::runtime_error("LLVM backend failed");
     }
 }
 
@@ -90,14 +106,14 @@ int run_source_file(const std::string& path) {
 }
 
 int build_native_file(const std::string& source_path, const std::string& output_path) {
-    const std::string assembly_path = output_path + ".s";
-    write_file(assembly_path, generate_assembly(parse_source(read_file(source_path))));
-    assemble_native(assembly_path, output_path);
+    const std::string llvm_ir_path = output_path + ".ll";
+    write_file(llvm_ir_path, generate_llvm_ir(parse_source(read_file(source_path))));
+    compile_llvm_ir(llvm_ir_path, output_path);
     return 0;
 }
 
-int emit_assembly_file(const std::string& source_path, const std::string& output_path) {
-    write_file(output_path, generate_assembly(parse_source(read_file(source_path))));
+int emit_llvm_file(const std::string& source_path, const std::string& output_path) {
+    write_file(output_path, generate_llvm_ir(parse_source(read_file(source_path))));
     return 0;
 }
 
@@ -105,7 +121,7 @@ void print_usage() {
     std::cerr << "usage:\n";
     std::cerr << "  dune <file.dn>\n";
     std::cerr << "  dune build <file.dn> -o <output>\n";
-    std::cerr << "  dune asm <file.dn> -o <file.s>\n";
+    std::cerr << "  dune llvm <file.dn> -o <file.ll>\n";
 }
 
 } // namespace
@@ -125,8 +141,8 @@ int main(int argc, char* argv[]) {
             return build_native_file(argv[2], argv[4]);
         }
 
-        if (argc == 5 && std::string(argv[1]) == "asm" && std::string(argv[3]) == "-o") {
-            return emit_assembly_file(argv[2], argv[4]);
+        if (argc == 5 && std::string(argv[1]) == "llvm" && std::string(argv[3]) == "-o") {
+            return emit_llvm_file(argv[2], argv[4]);
         }
 
         print_usage();

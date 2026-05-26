@@ -52,21 +52,30 @@ int main() {
                           "let total: int = add(10, 20); let ok: bool = total == 30; print(ok);",
                           "expected typed functions to validate") &&
              passed;
+    passed = expect_valid("fn widen(value: u64) -> u64 { return value + 1; } "
+                          "let amount: uint64 = widen(41); let ratio: real = 1 + 2.5; let mark: glyph = 'x';",
+                          "expected extended types to validate") &&
+             passed;
     passed = expect_error_contains("let x: int = true;", "expected type 'int' but got 'bool'",
                                    "expected let type mismatch") &&
              passed;
     passed = expect_error_contains("let x: bool = true; x = 1;", "expected type 'bool' but got 'int'",
                                    "expected assignment type mismatch") &&
              passed;
-    passed = expect_error_contains("print(true + 1);", "expected type 'int' but got 'bool'",
+    passed = expect_error_contains("print(true + 1);", "expected numeric type but got 'bool'",
                                    "expected invalid binary operation") &&
              passed;
     passed = expect_error_contains("fn bad() -> bool { return 1; }", "expected type 'bool' but got 'int'",
                                    "expected return type mismatch") &&
              passed;
     passed = expect_error_contains("fn is_ok(value: bool) -> bool { return value; } print(is_ok(1));",
-                                   "argument 1 for function 'is_ok': expected type 'bool' but got 'int'",
-                                   "expected call argument mismatch") &&
+                                   "expected type 'bool' but got 'int'", "expected call argument mismatch") &&
+             passed;
+    passed =
+        expect_error_contains("let too_big: u8 = 256;", "does not fit in type 'u8'", "expected unsigned range error") &&
+        passed;
+    passed = expect_error_contains("let mark: glyph = 65;", "expected type 'glyph' but got 'int'",
+                                   "expected glyph mismatch") &&
              passed;
 
     return passed ? 0 : 1;

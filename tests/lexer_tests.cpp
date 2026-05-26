@@ -137,5 +137,39 @@ int main() {
                            }) &&
              passed;
 
+    passed = expect_tokens("let a: u8 = 1; let b: uint64 = 2; let c: real = 1.5; let d: glyph = 'x';",
+                           {
+                               {let, "let"},
+                               {identifier, "a"},
+                               {colon, ":"},
+                               {u8_keyword, "u8"},
+                               {equal, "="},
+                               {number, "1"},
+                               {semicolon, ";"},
+                               {let, "let"},
+                               {identifier, "b"},
+                               {colon, ":"},
+                               {uint64_keyword, "uint64"},
+                               {equal, "="},
+                               {number, "2"},
+                               {semicolon, ";"},
+                               {let, "let"},
+                               {identifier, "c"},
+                               {colon, ":"},
+                               {real_keyword, "real"},
+                               {equal, "="},
+                               {float_number, "1.5"},
+                               {semicolon, ";"},
+                               {let, "let"},
+                               {identifier, "d"},
+                               {colon, ":"},
+                               {glyph_keyword, "glyph"},
+                               {equal, "="},
+                               {char_literal, "'x'"},
+                               {semicolon, ";"},
+                               {eof, ""},
+                           }) &&
+             passed;
+
     return passed ? 0 : 1;
 }
