@@ -3,6 +3,7 @@
 #include "parser/parser.hpp"
 #include "typechecker/type_checker.hpp"
 
+#include <filesystem>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -17,6 +18,14 @@ void check_source(const std::string& source) {
     checker.check(loader.resolve(parser.parse()));
 }
 
+void check_fixture_source(const std::string& source) {
+    dune::Lexer lexer(source);
+    dune::Parser parser(lexer.tokenize());
+    dune::ModuleLoader loader;
+    dune::TypeChecker checker;
+    checker.check(loader.resolve(parser.parse(), std::filesystem::current_path().parent_path() / "tests" / "fixtures"));
+}
+
 bool expect_valid(const std::string& source, const char* message) {
     try {
         check_source(source);
@@ -28,9 +37,37 @@ bool expect_valid(const std::string& source, const char* message) {
     return true;
 }
 
+bool expect_fixture_valid(const std::string& source, const char* message) {
+    try {
+        check_fixture_source(source);
+    } catch (const std::runtime_error& error) {
+        std::cerr << message << ": " << error.what() << '\n';
+        return false;
+    }
+
+    return true;
+}
+
 bool expect_error_contains(const std::string& source, const std::string& expected, const char* message) {
     try {
         check_source(source);
+    } catch (const std::runtime_error& error) {
+        const std::string actual = error.what();
+        if (actual.find(expected) == std::string::npos) {
+            std::cerr << message << ": expected error containing '" << expected << "', got '" << actual << "'\n";
+            return false;
+        }
+
+        return true;
+    }
+
+    std::cerr << message << ": expected type error\n";
+    return false;
+}
+
+bool expect_fixture_error_contains(const std::string& source, const std::string& expected, const char* message) {
+    try {
+        check_fixture_source(source);
     } catch (const std::runtime_error& error) {
         const std::string actual = error.what();
         if (actual.find(expected) == std::string::npos) {
@@ -101,6 +138,29 @@ int main() {
                           "let starts: bool = message.starts_with(\"dune\"); let blank: bool = \"\".is_empty();",
                           "expected array and text methods to validate") &&
              passed;
+    passed = expect_valid("extern fn c_sqrt(value: real64) -> real64 = \"sqrt\"; "
+                          "let root: real64 = c_sqrt(81.0); "
+                          "let message: text = \"dune language\"; let first: glyph = message[0]; "
+                          "let word: text = message[5:13]; let prefix: text = message[:4]; "
+                          "let suffix: text = message[5:]; let values: [int] = [1, 2, 3, 4]; "
+                          "let middle: [int] = values[1:3]; "
+                          "for let i = 0; i < 3; i = i + 1 { if i == 1 { continue; } break; }",
+                          "expected externs, slices, text indexing, and for loops to validate") &&
+             passed;
+    passed = expect_valid("import array; import text; "
+                          "let values: [int] = [1, 2, 3]; let reversed: [int] = array.reverse(values); "
+                          "let total: int = array.sum(reversed); let has: bool = array.contains(values, 2); "
+                          "let ranged: [int] = array.range(2, 5); "
+                          "let message: text = \" dune \"; let stripped: text = text.trim(message); "
+                          "let ends: bool = text.ends_with(stripped, \"ne\"); "
+                          "let where: int = text.index_of(stripped, 'n'); let count: int = text.count(stripped, 'd'); "
+                          "let digit: bool = text.is_digit('7'); let alpha: bool = text.is_alpha('x');",
+                          "expected array and text stdlib modules to validate") &&
+             passed;
+    passed = expect_fixture_valid("import feature_exports; let answer: int = feature_exports.ANSWER; "
+                                  "let value: int = feature_exports.public();",
+                                  "expected exported module members to validate") &&
+             passed;
     passed = expect_valid("let values: [int] = [];", "expected typed empty array to validate") && passed;
     passed = expect_error_contains("let x: int = true;", "expected type 'int' but got 'bool'",
                                    "expected let type mismatch") &&
@@ -168,6 +228,33 @@ int main() {
     passed = expect_error_contains("let message: text = \"ok\"; message.contains(1);",
                                    "expected type 'text' but got 'int'", "expected text method argument mismatch") &&
              passed;
+    passed =
+        expect_error_contains("break;", "break statement outside loop", "expected break outside loop error") && passed;
+    passed =
+        expect_error_contains("continue;", "continue statement outside loop", "expected continue outside loop error") &&
+        passed;
+    passed = expect_error_contains("let message: text = \"ok\"; print(message[true]);",
+                                   "expected integer index but got 'bool'", "expected text index type error") &&
+             passed;
+    passed =
+        expect_error_contains("let values: [int] = [1, 2]; let part: [int] = values[0:true];",
+                              "expected integer slice bound but got 'bool'", "expected array slice bound type error") &&
+        passed;
+    passed = expect_fixture_error_contains("import feature_exports; print(feature_exports.hidden());",
+                                           "module 'feature_exports' does not export 'hidden'",
+                                           "expected hidden module function error") &&
+             passed;
+    passed = expect_fixture_error_contains("import feature_exports; print(feature_exports.HIDDEN);",
+                                           "module 'feature_exports' does not export 'HIDDEN'",
+                                           "expected hidden module constant error") &&
+             passed;
+    passed = expect_error_contains("import array; print(array.contains([1, 2], true));",
+                                   "no overload for function 'array.contains' with argument types ([int], bool)",
+                                   "expected array stdlib mismatch") &&
+             passed;
+    passed = expect_error_contains("import text; print(text.nope(\"x\"));", "module 'text' does not export 'nope'",
+                                   "expected missing text module export") &&
+             passed;
     passed = expect_error_contains("import math; print(math.square(true));",
                                    "no overload for function 'math.square' with argument types (bool)",
                                    "expected math.square type mismatch") &&
@@ -176,7 +263,7 @@ int main() {
                                    "no overload for function 'math.clamp' with argument types (int, int)",
                                    "expected math.clamp arity mismatch") &&
              passed;
-    passed = expect_error_contains("import math; print(math.UNKNOWN);", "module 'math' has no value 'UNKNOWN'",
+    passed = expect_error_contains("import math; print(math.UNKNOWN);", "module 'math' does not export 'UNKNOWN'",
                                    "expected missing module value") &&
              passed;
     passed = expect_error_contains("fn choose(value: i64) -> i64 { return value; } "

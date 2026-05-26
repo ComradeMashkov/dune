@@ -9,6 +9,8 @@ namespace dune {
 enum class TokenType {
     let,
     const_keyword,
+    export_keyword,
+    extern_keyword,
     fn_keyword,
     import_keyword,
     return_keyword,
@@ -16,6 +18,9 @@ enum class TokenType {
     if_keyword,
     else_keyword,
     while_keyword,
+    for_keyword,
+    break_keyword,
+    continue_keyword,
     as_keyword,
     int_keyword,
     bool_keyword,

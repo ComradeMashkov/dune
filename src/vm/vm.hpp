@@ -21,6 +21,7 @@ private:
     };
 
     void call_function(std::size_t function_index);
+    Value call_extern_function(const Bytecode::Function& function, std::vector<Value> arguments);
     Value pop();
 
     Bytecode bytecode_;

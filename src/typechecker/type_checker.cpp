@@ -108,9 +108,11 @@ void TypeChecker::check(const Program& program) {
     overloads_.clear();
     imports_.clear();
     global_constants_.clear();
+    module_exports_.clear();
     known_modules_.clear();
     expression_types_.clear();
     resolved_calls_.clear();
+    loop_depth_ = 0;
 
     for (const Statement& statement : program.statements) {
         if (statement.kind == StatementKind::function) {
@@ -120,6 +122,8 @@ void TypeChecker::check(const Program& program) {
         if (statement.kind == StatementKind::const_statement) {
             collect_known_module(statement.name);
         }
+
+        collect_module_export(statement);
     }
 
     for (const Statement& statement : program.statements) {
@@ -135,6 +139,7 @@ void TypeChecker::check(const Program& program) {
     variables_.clear();
     constants_.clear();
     current_function_ = nullptr;
+    loop_depth_ = 0;
     for (const Statement& statement : program.statements) {
         if (statement.kind != StatementKind::function && statement.kind != StatementKind::import_statement) {
             check_statement(statement);
@@ -206,6 +211,10 @@ void TypeChecker::check_function(const Statement& statement) {
 
     variables_.clear();
     constants_.clear();
+    if (statement.is_extern) {
+        return;
+    }
+
     for (std::size_t index = 0; index < statement.parameters.size(); ++index) {
         const Parameter& parameter = statement.parameters[index];
         if (variables_.contains(parameter.name)) {
@@ -288,7 +297,33 @@ void TypeChecker::check_statement(const Statement& statement) {
     case StatementKind::while_statement:
         expect_type(make_type(ValueType::bool_type), check_expression(*statement.expression),
                     statement.expression->location);
+        ++loop_depth_;
         check_statements(statement.body);
+        --loop_depth_;
+        return;
+    case StatementKind::for_statement:
+        if (statement.initializer != nullptr) {
+            check_statement(*statement.initializer);
+        }
+
+        expect_type(make_type(ValueType::bool_type), check_expression(*statement.expression),
+                    statement.expression->location);
+        ++loop_depth_;
+        check_statements(statement.body);
+        --loop_depth_;
+        if (statement.increment != nullptr) {
+            check_statement(*statement.increment);
+        }
+        return;
+    case StatementKind::break_statement:
+        if (loop_depth_ == 0) {
+            throw std::runtime_error(diagnostic(statement.location, "break statement outside loop"));
+        }
+        return;
+    case StatementKind::continue_statement:
+        if (loop_depth_ == 0) {
+            throw std::runtime_error(diagnostic(statement.location, "continue statement outside loop"));
+        }
         return;
     case StatementKind::function:
         throw std::runtime_error(diagnostic(statement.location, "function declarations are only allowed at top level"));
@@ -361,6 +396,9 @@ Type TypeChecker::check_expression(const Expression& expression, const TypeAnnot
         break;
     case ExpressionKind::index:
         actual = check_index_expression(expression);
+        break;
+    case ExpressionKind::slice:
+        actual = check_slice_expression(expression);
         break;
     case ExpressionKind::member:
         actual = check_member_expression(expression);
@@ -478,6 +516,7 @@ Type TypeChecker::check_method_call_expression(const Expression& expression, con
         const std::string module_name = expression.left->lexeme;
         if (is_known_module(module_name)) {
             expect_imported_module(module_name, expression.location);
+            expect_exported_member(module_name, expression.lexeme, expression.location);
             return check_function_call(expression, module_name + "." + expression.lexeme, expression.arguments,
                                        expression.location, expected);
         }
@@ -535,6 +574,7 @@ Type TypeChecker::check_member_expression(const Expression& expression) {
         const std::string module_name = expression.left->lexeme;
         if (is_known_module(module_name)) {
             expect_imported_module(module_name, expression.location);
+            expect_exported_member(module_name, expression.lexeme, expression.location);
             const std::string qualified_name = module_name + "." + expression.lexeme;
             const auto variable = variables_.find(qualified_name);
             if (variable != variables_.end()) {
@@ -776,10 +816,10 @@ Type TypeChecker::check_array_literal(const Expression& expression, const TypeAn
 }
 
 Type TypeChecker::check_index_expression(const Expression& expression) {
-    const Type array = check_expression(*expression.left);
-    if (array.kind != ValueType::array_type || array.element == nullptr) {
+    const Type indexed = check_expression(*expression.left);
+    if (indexed.kind != ValueType::array_type && indexed.kind != ValueType::text_type) {
         throw std::runtime_error(
-            diagnostic(expression.left->location, "expected array type but got '" + type_name(array) + "'"));
+            diagnostic(expression.left->location, "expected array or text type but got '" + type_name(indexed) + "'"));
     }
 
     const Type index = check_expression(*expression.right);
@@ -788,7 +828,43 @@ Type TypeChecker::check_index_expression(const Expression& expression) {
             diagnostic(expression.right->location, "expected integer index but got '" + type_name(index) + "'"));
     }
 
-    return *array.element;
+    if (indexed.kind == ValueType::text_type) {
+        return make_type(ValueType::glyph_type);
+    }
+
+    if (indexed.element == nullptr) {
+        throw std::runtime_error(
+            diagnostic(expression.left->location, "expected array type but got '" + type_name(indexed) + "'"));
+    }
+
+    return *indexed.element;
+}
+
+Type TypeChecker::check_slice_expression(const Expression& expression) {
+    const Type sliced = check_expression(*expression.left);
+    if (sliced.kind != ValueType::array_type && sliced.kind != ValueType::text_type) {
+        throw std::runtime_error(
+            diagnostic(expression.left->location, "expected array or text type but got '" + type_name(sliced) + "'"));
+    }
+
+    for (const std::unique_ptr<Expression>& bound : expression.arguments) {
+        if (bound == nullptr) {
+            continue;
+        }
+
+        const Type index = check_expression(*bound);
+        if (!is_integer_type(index.kind)) {
+            throw std::runtime_error(
+                diagnostic(bound->location, "expected integer slice bound but got '" + type_name(index) + "'"));
+        }
+    }
+
+    if (sliced.kind == ValueType::array_type && sliced.element == nullptr) {
+        throw std::runtime_error(
+            diagnostic(expression.left->location, "expected array type but got '" + type_name(sliced) + "'"));
+    }
+
+    return sliced;
 }
 
 bool TypeChecker::statement_returns(const Statement& statement) const {
@@ -805,7 +881,10 @@ bool TypeChecker::statement_returns(const Statement& statement) const {
     case StatementKind::assign:
     case StatementKind::print:
     case StatementKind::while_statement:
+    case StatementKind::for_statement:
     case StatementKind::function:
+    case StatementKind::break_statement:
+    case StatementKind::continue_statement:
     case StatementKind::expression_statement:
     case StatementKind::import_statement:
         return false;
@@ -967,6 +1046,14 @@ void TypeChecker::expect_imported_module(const std::string& module, SourceLocati
     }
 }
 
+void TypeChecker::expect_exported_member(const std::string& module, const std::string& member,
+                                         SourceLocation location) const {
+    const auto exports = module_exports_.find(module);
+    if (exports == module_exports_.end() || !exports->second.contains(member)) {
+        throw std::runtime_error(diagnostic(location, "module '" + module + "' does not export '" + member + "'"));
+    }
+}
+
 void TypeChecker::collect_known_module(const std::string& name) {
     const std::size_t separator = name.find('.');
     if (separator == std::string::npos || separator == 0) {
@@ -974,6 +1061,20 @@ void TypeChecker::collect_known_module(const std::string& name) {
     }
 
     known_modules_.insert(name.substr(0, separator));
+}
+
+void TypeChecker::collect_module_export(const Statement& statement) {
+    if (!statement.exported ||
+        (statement.kind != StatementKind::function && statement.kind != StatementKind::const_statement)) {
+        return;
+    }
+
+    const std::size_t separator = statement.name.find('.');
+    if (separator == std::string::npos || separator == 0 || separator + 1 >= statement.name.size()) {
+        return;
+    }
+
+    module_exports_[statement.name.substr(0, separator)].insert(statement.name.substr(separator + 1));
 }
 
 bool TypeChecker::is_qualified_module_name(const std::string& name) const {

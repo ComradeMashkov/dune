@@ -182,6 +182,14 @@ Token Lexer::identifier(std::size_t start, std::size_t line, std::size_t column)
         return Token{TokenType::const_keyword, lexeme, line, column};
     }
 
+    if (lexeme == "export") {
+        return Token{TokenType::export_keyword, lexeme, line, column};
+    }
+
+    if (lexeme == "extern") {
+        return Token{TokenType::extern_keyword, lexeme, line, column};
+    }
+
     if (lexeme == "fn") {
         return Token{TokenType::fn_keyword, lexeme, line, column};
     }
@@ -208,6 +216,18 @@ Token Lexer::identifier(std::size_t start, std::size_t line, std::size_t column)
 
     if (lexeme == "while") {
         return Token{TokenType::while_keyword, lexeme, line, column};
+    }
+
+    if (lexeme == "for") {
+        return Token{TokenType::for_keyword, lexeme, line, column};
+    }
+
+    if (lexeme == "break") {
+        return Token{TokenType::break_keyword, lexeme, line, column};
+    }
+
+    if (lexeme == "continue") {
+        return Token{TokenType::continue_keyword, lexeme, line, column};
     }
 
     if (lexeme == "as") {

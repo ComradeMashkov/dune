@@ -129,6 +129,7 @@ Program ModuleLoader::parse_file(const std::filesystem::path& path) const {
 void ModuleLoader::qualify_module_program(Program& program, const std::string& module_name) const {
     std::unordered_set<std::string> local_functions;
     std::unordered_set<std::string> local_constants;
+    bool has_explicit_exports = false;
     for (const Statement& statement : program.statements) {
         if (statement.kind == StatementKind::function) {
             local_functions.insert(statement.name);
@@ -137,16 +138,30 @@ void ModuleLoader::qualify_module_program(Program& program, const std::string& m
         if (statement.kind == StatementKind::const_statement) {
             local_constants.insert(statement.name);
         }
+
+        if ((statement.kind == StatementKind::function || statement.kind == StatementKind::const_statement) &&
+            statement.exported) {
+            has_explicit_exports = true;
+        }
     }
 
     for (Statement& statement : program.statements) {
         if (statement.kind == StatementKind::const_statement) {
             qualify_statement(statement, module_name, local_functions, local_constants);
+            if (!has_explicit_exports) {
+                statement.exported = true;
+            }
             statement.name = module_name + "." + statement.name;
         }
 
         if (statement.kind == StatementKind::function) {
             qualify_statement(statement, module_name, local_functions, local_constants);
+            if (statement.is_extern && statement.extern_symbol.empty()) {
+                statement.extern_symbol = statement.name;
+            }
+            if (!has_explicit_exports) {
+                statement.exported = true;
+            }
             statement.name = module_name + "." + statement.name;
         }
     }
@@ -165,6 +180,14 @@ void ModuleLoader::qualify_statement(Statement& statement, const std::string& mo
 
     for (Statement& child : statement.else_body) {
         qualify_statement(child, module_name, local_functions, local_constants);
+    }
+
+    if (statement.initializer != nullptr) {
+        qualify_statement(*statement.initializer, module_name, local_functions, local_constants);
+    }
+
+    if (statement.increment != nullptr) {
+        qualify_statement(*statement.increment, module_name, local_functions, local_constants);
     }
 }
 
@@ -188,7 +211,9 @@ void ModuleLoader::qualify_expression(Expression& expression, const std::string&
     }
 
     for (std::unique_ptr<Expression>& argument : expression.arguments) {
-        qualify_expression(*argument, module_name, local_functions, local_constants);
+        if (argument != nullptr) {
+            qualify_expression(*argument, module_name, local_functions, local_constants);
+        }
     }
 }
 

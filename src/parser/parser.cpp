@@ -79,12 +79,62 @@ std::unique_ptr<Expression> make_index(std::unique_ptr<Expression> array, std::u
     return std::make_unique<Expression>(std::move(expression));
 }
 
+std::unique_ptr<Expression> make_slice(std::unique_ptr<Expression> value, std::unique_ptr<Expression> start,
+                                       std::unique_ptr<Expression> end, SourceLocation location) {
+    auto expression = std::make_unique<Expression>(Expression{ExpressionKind::slice, "", std::move(value), nullptr});
+    expression->arguments.push_back(std::move(start));
+    expression->arguments.push_back(std::move(end));
+    expression->location = location;
+    return expression;
+}
+
 Type make_type(ValueType type) {
     return Type{type, nullptr};
 }
 
 Type make_array_type(Type element) {
     return Type{ValueType::array_type, std::make_shared<Type>(std::move(element))};
+}
+
+std::string decode_string_literal(const std::string& lexeme) {
+    std::string result;
+    for (std::size_t index = 1; index + 1 < lexeme.size(); ++index) {
+        char current = lexeme[index];
+        if (current != '\\') {
+            result += current;
+            continue;
+        }
+
+        ++index;
+        if (index + 1 >= lexeme.size()) {
+            throw std::runtime_error("invalid string literal");
+        }
+
+        switch (lexeme[index]) {
+        case 'n':
+            result += '\n';
+            break;
+        case 'r':
+            result += '\r';
+            break;
+        case 't':
+            result += '\t';
+            break;
+        case '0':
+            result += '\0';
+            break;
+        case '"':
+            result += '"';
+            break;
+        case '\\':
+            result += '\\';
+            break;
+        default:
+            throw std::runtime_error("unknown string escape");
+        }
+    }
+
+    return result;
 }
 
 } // namespace
@@ -154,7 +204,32 @@ const Token& Parser::consume(TokenType type, std::string_view message) {
     throw std::runtime_error(std::string(message));
 }
 
+Token Parser::consume_identifier_like(std::string_view message) {
+    if (check(TokenType::identifier) || check(TokenType::text_keyword)) {
+        return advance();
+    }
+
+    throw std::runtime_error(std::string(message));
+}
+
+bool Parser::match_identifier_like() {
+    if (check(TokenType::identifier) || check(TokenType::text_keyword)) {
+        advance();
+        return true;
+    }
+
+    return false;
+}
+
 Statement Parser::statement() {
+    if (match(TokenType::export_keyword)) {
+        return export_statement();
+    }
+
+    if (match(TokenType::extern_keyword)) {
+        return extern_statement();
+    }
+
     if (match(TokenType::fn_keyword)) {
         return function_statement();
     }
@@ -187,6 +262,18 @@ Statement Parser::statement() {
         return while_statement();
     }
 
+    if (match(TokenType::for_keyword)) {
+        return for_statement();
+    }
+
+    if (match(TokenType::break_keyword)) {
+        return break_statement();
+    }
+
+    if (match(TokenType::continue_keyword)) {
+        return continue_statement();
+    }
+
     if (match(TokenType::left_brace)) {
         return block_statement();
     }
@@ -203,11 +290,13 @@ Statement Parser::statement() {
     return statement;
 }
 
-Statement Parser::assignment_statement() {
+Statement Parser::assignment_statement(bool require_semicolon) {
     const Token& name = consume(TokenType::identifier, "expected assignment target");
     consume(TokenType::equal, "expected '=' after assignment target");
     std::unique_ptr<Expression> value = expression();
-    consume(TokenType::semicolon, "expected ';' after assignment");
+    if (require_semicolon) {
+        consume(TokenType::semicolon, "expected ';' after assignment");
+    }
 
     Statement statement{StatementKind::assign, name.lexeme, std::move(value), {}, {}};
     statement.location = location_from_token(name);
@@ -221,7 +310,90 @@ Statement Parser::block_statement() {
     return statement;
 }
 
-Statement Parser::function_statement() {
+Statement Parser::break_statement() {
+    const Token& keyword = previous();
+    consume(TokenType::semicolon, "expected ';' after break");
+
+    Statement statement{StatementKind::break_statement, "", nullptr, {}, {}};
+    statement.location = location_from_token(keyword);
+    return statement;
+}
+
+Statement Parser::continue_statement() {
+    const Token& keyword = previous();
+    consume(TokenType::semicolon, "expected ';' after continue");
+
+    Statement statement{StatementKind::continue_statement, "", nullptr, {}, {}};
+    statement.location = location_from_token(keyword);
+    return statement;
+}
+
+Statement Parser::export_statement() {
+    if (match(TokenType::extern_keyword)) {
+        Statement statement = extern_statement();
+        statement.exported = true;
+        return statement;
+    }
+
+    if (match(TokenType::fn_keyword)) {
+        Statement statement = function_statement();
+        statement.exported = true;
+        return statement;
+    }
+
+    if (match(TokenType::const_keyword)) {
+        Statement statement = const_statement();
+        statement.exported = true;
+        return statement;
+    }
+
+    throw std::runtime_error("expected function, extern function, or constant after export");
+}
+
+Statement Parser::extern_statement() {
+    consume(TokenType::fn_keyword, "expected fn after extern");
+    return function_statement(true);
+}
+
+Statement Parser::for_statement() {
+    const Token& keyword = previous();
+    auto statement = Statement{StatementKind::for_statement, "", nullptr, {}, {}};
+    statement.location = location_from_token(keyword);
+
+    if (match(TokenType::semicolon)) {
+        statement.initializer = nullptr;
+    } else if (match(TokenType::let)) {
+        statement.initializer = std::make_unique<Statement>(let_statement());
+    } else if (check(TokenType::identifier) && check_next(TokenType::equal)) {
+        statement.initializer = std::make_unique<Statement>(assignment_statement());
+    } else {
+        throw std::runtime_error("expected for initializer");
+    }
+
+    if (check(TokenType::semicolon)) {
+        statement.expression = make_leaf(ExpressionKind::boolean, "true", location_from_token(peek()));
+    } else {
+        statement.expression = expression();
+    }
+    consume(TokenType::semicolon, "expected ';' after for condition");
+
+    if (!check(TokenType::left_brace)) {
+        if (check(TokenType::identifier) && check_next(TokenType::equal)) {
+            statement.increment = std::make_unique<Statement>(assignment_statement(false));
+        } else {
+            std::unique_ptr<Expression> value = expression();
+            Statement increment{StatementKind::expression_statement, "", std::move(value), {}, {}};
+            increment.location = increment.expression->location;
+            statement.increment = std::make_unique<Statement>(std::move(increment));
+        }
+    }
+
+    consume(TokenType::left_brace, "expected '{' before for body");
+    statement.body = block();
+    return statement;
+}
+
+Statement Parser::function_statement(bool is_extern) {
     const Token& keyword = previous();
     const Token& name = consume(TokenType::identifier, "expected function name after fn");
     consume(TokenType::left_paren, "expected '(' after function name");
@@ -231,6 +403,24 @@ Statement Parser::function_statement() {
     TypeAnnotation return_type;
     if (match(TokenType::arrow)) {
         return_type = type_annotation();
+    }
+
+    if (is_extern) {
+        std::string extern_symbol;
+        if (match(TokenType::equal)) {
+            const Token& symbol = consume(TokenType::string_literal, "expected extern symbol string after '='");
+            extern_symbol = decode_string_literal(symbol.lexeme);
+        }
+
+        consume(TokenType::semicolon, "expected ';' after extern function declaration");
+
+        Statement statement{StatementKind::function, name.lexeme, nullptr, {}, {}};
+        statement.type = return_type;
+        statement.parameters = std::move(parsed_parameters);
+        statement.location = location_from_token(keyword);
+        statement.is_extern = true;
+        statement.extern_symbol = std::move(extern_symbol);
+        return statement;
     }
 
     consume(TokenType::left_brace, "expected '{' before function body");
@@ -259,7 +449,7 @@ Statement Parser::const_statement() {
 
 Statement Parser::import_statement() {
     const Token& keyword = previous();
-    const Token& name = consume(TokenType::identifier, "expected module name after import");
+    const Token name = consume_identifier_like("expected module name after import");
     consume(TokenType::semicolon, "expected ';' after import");
 
     Statement statement{StatementKind::import_statement, name.lexeme, nullptr, {}, {}};
@@ -586,7 +776,7 @@ std::unique_ptr<Expression> Parser::call() {
 
         if (match(TokenType::dot)) {
             const SourceLocation location = expr->location;
-            const Token& member = consume(TokenType::identifier, "expected member name after '.'");
+            const Token member = consume_identifier_like("expected member name after '.'");
             if (match(TokenType::left_paren)) {
                 std::vector<std::unique_ptr<Expression>> parsed_arguments = arguments();
                 consume(TokenType::right_paren, "expected ')' after module function arguments");
@@ -599,9 +789,27 @@ std::unique_ptr<Expression> Parser::call() {
 
         if (match(TokenType::left_bracket)) {
             const SourceLocation location = expr->location;
-            std::unique_ptr<Expression> index = expression();
+            std::unique_ptr<Expression> start;
+            if (!check(TokenType::colon)) {
+                start = expression();
+            }
+
+            if (match(TokenType::colon)) {
+                std::unique_ptr<Expression> end;
+                if (!check(TokenType::right_bracket)) {
+                    end = expression();
+                }
+                consume(TokenType::right_bracket, "expected ']' after slice");
+                expr = make_slice(std::move(expr), std::move(start), std::move(end), location);
+                continue;
+            }
+
+            if (start == nullptr) {
+                throw std::runtime_error("expected index expression");
+            }
+
             consume(TokenType::right_bracket, "expected ']' after array index");
-            expr = make_index(std::move(expr), std::move(index), location);
+            expr = make_index(std::move(expr), std::move(start), location);
             continue;
         }
 
@@ -632,7 +840,7 @@ std::unique_ptr<Expression> Parser::primary() {
         return make_leaf(ExpressionKind::boolean, previous().lexeme, location_from_token(previous()));
     }
 
-    if (match(TokenType::identifier)) {
+    if (match_identifier_like()) {
         return make_leaf(ExpressionKind::identifier, previous().lexeme, location_from_token(previous()));
     }
 

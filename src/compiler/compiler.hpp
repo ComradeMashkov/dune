@@ -25,6 +25,7 @@ private:
     void compile_method_call_expression(const Expression& expression);
     void compile_binary_expression(const Expression& expression);
     void compile_cast_expression(const Expression& expression);
+    void compile_slice_expression(const Expression& expression);
 
     std::size_t add_constant(Value value);
     std::size_t declare_local(const std::string& name, const Type& type);
@@ -34,6 +35,11 @@ private:
     std::size_t emit(OpCode op, std::size_t operand = 0);
     void patch_operand(std::size_t instruction_index, std::size_t operand);
 
+    struct LoopJumps {
+        std::vector<std::size_t> breaks;
+        std::vector<std::size_t> continues;
+    };
+
     Bytecode bytecode_;
     std::unordered_map<std::string, std::size_t> locals_;
     std::unordered_map<std::string, Type> local_types_;
@@ -41,6 +47,7 @@ private:
     std::vector<const Statement*> global_constants_;
     std::unordered_map<const Expression*, Type> expression_types_;
     std::unordered_map<const Expression*, std::string> resolved_calls_;
+    std::vector<LoopJumps> loop_stack_;
     std::vector<Instruction>* instructions_ = nullptr;
 };
 

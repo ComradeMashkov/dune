@@ -191,6 +191,7 @@ Bytecode Compiler::compile(const Program& program) {
     local_types_.clear();
     functions_.clear();
     global_constants_.clear();
+    loop_stack_.clear();
     expression_types_ = type_checker.expression_types();
     resolved_calls_ = type_checker.resolved_calls();
     instructions_ = &bytecode_.instructions;
@@ -226,7 +227,9 @@ void Compiler::collect_functions(const std::vector<Statement>& statements) {
         }
 
         functions_.emplace(function_key(statement.name, parameters), index);
-        bytecode_.functions.push_back(Bytecode::Function{statement.name, statement.parameters.size(), 0, {}});
+        const std::string extern_symbol = statement.extern_symbol.empty() ? statement.name : statement.extern_symbol;
+        bytecode_.functions.push_back(
+            Bytecode::Function{statement.name, extern_symbol, statement.parameters.size(), 0, {}, statement.is_extern});
     }
 }
 
@@ -247,9 +250,13 @@ void Compiler::compile_function(const Statement& statement) {
 
     const std::size_t function_index = resolve_function(function_key(statement.name, parameters));
     Bytecode::Function& function = bytecode_.functions.at(function_index);
+    if (function.is_extern) {
+        return;
+    }
 
     locals_.clear();
     local_types_.clear();
+    loop_stack_.clear();
     instructions_ = &function.instructions;
     for (const Parameter& parameter : statement.parameters) {
         declare_local(parameter.name, parameter.type.has_type ? parameter.type.type : make_type(ValueType::int_type));
@@ -318,11 +325,58 @@ void Compiler::compile_statement(const Statement& statement) {
         const std::size_t loop_start = instructions_->size();
         compile_expression(*statement.expression);
         const std::size_t exit_jump = emit(OpCode::jump_if_false);
+        loop_stack_.push_back(LoopJumps{});
         compile_statements(statement.body);
+        LoopJumps jumps = std::move(loop_stack_.back());
+        loop_stack_.pop_back();
+        for (const std::size_t jump : jumps.continues) {
+            patch_operand(jump, loop_start);
+        }
         emit(OpCode::jump, loop_start);
         patch_operand(exit_jump, instructions_->size());
+        for (const std::size_t jump : jumps.breaks) {
+            patch_operand(jump, instructions_->size());
+        }
         return;
     }
+    case StatementKind::for_statement: {
+        if (statement.initializer != nullptr) {
+            compile_statement(*statement.initializer);
+        }
+
+        const std::size_t loop_start = instructions_->size();
+        compile_expression(*statement.expression);
+        const std::size_t exit_jump = emit(OpCode::jump_if_false);
+        loop_stack_.push_back(LoopJumps{});
+        compile_statements(statement.body);
+        LoopJumps jumps = std::move(loop_stack_.back());
+        loop_stack_.pop_back();
+        const std::size_t continue_target = instructions_->size();
+        for (const std::size_t jump : jumps.continues) {
+            patch_operand(jump, continue_target);
+        }
+        if (statement.increment != nullptr) {
+            compile_statement(*statement.increment);
+        }
+        emit(OpCode::jump, loop_start);
+        patch_operand(exit_jump, instructions_->size());
+        for (const std::size_t jump : jumps.breaks) {
+            patch_operand(jump, instructions_->size());
+        }
+        return;
+    }
+    case StatementKind::break_statement:
+        if (loop_stack_.empty()) {
+            throw std::runtime_error("break statement outside loop");
+        }
+        loop_stack_.back().breaks.push_back(emit(OpCode::jump));
+        return;
+    case StatementKind::continue_statement:
+        if (loop_stack_.empty()) {
+            throw std::runtime_error("continue statement outside loop");
+        }
+        loop_stack_.back().continues.push_back(emit(OpCode::jump));
+        return;
     case StatementKind::function:
         return;
     case StatementKind::return_statement:
@@ -374,6 +428,9 @@ void Compiler::compile_expression(const Expression& expression) {
         compile_expression(*expression.left);
         compile_expression(*expression.right);
         emit(OpCode::load_index);
+        return;
+    case ExpressionKind::slice:
+        compile_slice_expression(expression);
         return;
     case ExpressionKind::member:
         if (expression.left->kind == ExpressionKind::identifier) {
@@ -605,6 +662,23 @@ void Compiler::compile_cast_expression(const Expression& expression) {
         emit(OpCode::cast_glyph);
         return;
     }
+}
+
+void Compiler::compile_slice_expression(const Expression& expression) {
+    compile_expression(*expression.left);
+    if (!expression.arguments.empty() && expression.arguments[0] != nullptr) {
+        compile_expression(*expression.arguments[0]);
+    } else {
+        emit(OpCode::push_constant, add_constant(make_signed(-1)));
+    }
+
+    if (expression.arguments.size() > 1 && expression.arguments[1] != nullptr) {
+        compile_expression(*expression.arguments[1]);
+    } else {
+        emit(OpCode::push_constant, add_constant(make_signed(-1)));
+    }
+
+    emit(OpCode::load_slice);
 }
 
 std::size_t Compiler::add_constant(Value value) {
