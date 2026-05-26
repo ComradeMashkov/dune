@@ -46,7 +46,12 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Configure
-        run: cmake -S . -B build -G Ninja -D CMAKE_CXX_COMPILER=clang++
+        run: |
+          lint_flag="-D DUNE_ENABLE_LINT=ON"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            lint_flag="-D DUNE_ENABLE_LINT=OFF"
+          fi
+          cmake -S . -B build -G Ninja -D CMAKE_CXX_COMPILER=clang++ "$lint_flag"
 
       - name: Build
         run: cmake --build build -j
