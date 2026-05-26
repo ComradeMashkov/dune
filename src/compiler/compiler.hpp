@@ -22,6 +22,9 @@ private:
     void compile_statements(const std::vector<Statement>& statements);
     void compile_statement(const Statement& statement);
     void compile_expression(const Expression& expression);
+    void compile_method_call_expression(const Expression& expression);
+    void compile_binary_expression(const Expression& expression);
+    void compile_cast_expression(const Expression& expression);
 
     std::size_t add_constant(Value value);
     std::size_t declare_local(const std::string& name, const Type& type);

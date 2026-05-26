@@ -131,6 +131,19 @@ int main() {
                        "4\n4\n25\n49\n2.25\n8\n27\n4\n9\n10\n2.5\n2.5\n3\n2\n3\n3\n8\n0\n1\n0\n1\n0\n0\n",
                        "expected arrays and module output") &&
              passed;
+    passed = expect_eq(run_source("let value = 17; print(0 - value); print(-value); print(17 % 5); "
+                                  "print(!false); print(false && (1 / 0 == 0)); print(true || (1 / 0 == 0)); "
+                                  "let count: real64 = value as real64; print(count / 2.0); "
+                                  "let code: int = 'A' as int; let letter: glyph = 66 as glyph; "
+                                  "let flag: bool = 0 as bool; print(code); print(letter); print(flag); "
+                                  "let values: [int] = [1, 2]; print(values.is_empty()); values.push(3); "
+                                  "print(values.pop()); print(values.len()); values.clear(); print(values.is_empty()); "
+                                  "let message: text = \"dune language\"; print(message.len()); "
+                                  "print(message.contains(\"lang\")); print(message.starts_with(\"dune\")); "
+                                  "print(\"\".is_empty());"),
+                       "-17\n-17\n2\n1\n0\n1\n8.5\n65\nB\n0\n0\n3\n2\n1\n13\n1\n1\n1\n",
+                       "expected operators casts and methods output") &&
+             passed;
     passed = expect_throws("print(missing);", "expected undefined variable to throw") && passed;
     passed = expect_throws("missing = 1;", "expected undefined assignment to throw") && passed;
     passed = expect_throws("print(1 / 0);", "expected division by zero to throw") && passed;

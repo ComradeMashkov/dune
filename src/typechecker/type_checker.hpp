@@ -33,12 +33,15 @@ private:
     Type check_call_expression(const Expression& expression, const TypeAnnotation& expected);
     Type check_method_call_expression(const Expression& expression, const TypeAnnotation& expected);
     Type check_member_expression(const Expression& expression);
+    Type check_unary_expression(const Expression& expression);
+    Type check_cast_expression(const Expression& expression);
     Type check_array_literal(const Expression& expression, const TypeAnnotation& expected);
     Type check_index_expression(const Expression& expression);
     Type check_function_call(const Expression& expression, const std::string& name,
                              const std::vector<std::unique_ptr<Expression>>& arguments, SourceLocation location,
                              const TypeAnnotation& expected = {});
     Type check_array_method_call(const Type& receiver, const Expression& expression);
+    Type check_text_method_call(const Type& receiver, const Expression& expression);
 
     bool statement_returns(const Statement& statement) const;
     bool statements_return(const std::vector<Statement>& statements) const;
@@ -50,6 +53,7 @@ private:
     bool is_unsigned_type(ValueType type) const;
     bool is_real_type(ValueType type) const;
     bool is_numeric_type(const Type& type) const;
+    bool is_cast_allowed(const Type& source, const Type& target) const;
     bool can_coerce_integer_literal(const Expression& expression, const Type& target) const;
     void check_integer_literal_range(const Expression& expression, const Type& target) const;
     unsigned long long max_integer_literal(ValueType target) const;

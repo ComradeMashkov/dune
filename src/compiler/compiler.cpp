@@ -382,6 +382,22 @@ void Compiler::compile_expression(const Expression& expression) {
         }
 
         throw std::runtime_error("unknown member '" + expression.lexeme + "'");
+    case ExpressionKind::unary:
+        compile_expression(*expression.right);
+        if (expression.lexeme == "-") {
+            emit(OpCode::negate);
+            return;
+        }
+
+        if (expression.lexeme == "!") {
+            emit(OpCode::not_value);
+            return;
+        }
+
+        throw std::runtime_error("unknown unary operator '" + expression.lexeme + "'");
+    case ExpressionKind::cast:
+        compile_cast_expression(expression);
+        return;
     case ExpressionKind::call:
         for (const std::unique_ptr<Expression>& argument : expression.arguments) {
             compile_expression(*argument);
@@ -390,15 +406,26 @@ void Compiler::compile_expression(const Expression& expression) {
         emit(OpCode::call, resolve_function(resolved_calls_.at(&expression)));
         return;
     case ExpressionKind::method_call:
-        if (resolved_calls_.contains(&expression)) {
-            for (const std::unique_ptr<Expression>& argument : expression.arguments) {
-                compile_expression(*argument);
-            }
+        compile_method_call_expression(expression);
+        return;
+    case ExpressionKind::binary:
+        compile_binary_expression(expression);
+        return;
+    }
+}
 
-            emit(OpCode::call, resolve_function(resolved_calls_.at(&expression)));
-            return;
+void Compiler::compile_method_call_expression(const Expression& expression) {
+    if (resolved_calls_.contains(&expression)) {
+        for (const std::unique_ptr<Expression>& argument : expression.arguments) {
+            compile_expression(*argument);
         }
 
+        emit(OpCode::call, resolve_function(resolved_calls_.at(&expression)));
+        return;
+    }
+
+    const Type receiver = expression_type(*expression.left);
+    if (receiver.kind == ValueType::array_type) {
         if (expression.lexeme == "len") {
             compile_expression(*expression.left);
             emit(OpCode::array_len);
@@ -412,62 +439,171 @@ void Compiler::compile_expression(const Expression& expression) {
             return;
         }
 
-        throw std::runtime_error("unknown method '" + expression.lexeme + "'");
-    case ExpressionKind::binary:
+        if (expression.lexeme == "pop") {
+            compile_expression(*expression.left);
+            emit(OpCode::array_pop);
+            return;
+        }
+
+        if (expression.lexeme == "clear") {
+            compile_expression(*expression.left);
+            emit(OpCode::array_clear);
+            return;
+        }
+
+        if (expression.lexeme == "is_empty") {
+            compile_expression(*expression.left);
+            emit(OpCode::array_is_empty);
+            return;
+        }
+    }
+
+    if (receiver.kind == ValueType::text_type) {
+        if (expression.lexeme == "len") {
+            compile_expression(*expression.left);
+            emit(OpCode::text_len);
+            return;
+        }
+
+        if (expression.lexeme == "is_empty") {
+            compile_expression(*expression.left);
+            emit(OpCode::text_is_empty);
+            return;
+        }
+
+        if (expression.lexeme == "contains") {
+            compile_expression(*expression.left);
+            compile_expression(*expression.arguments.at(0));
+            emit(OpCode::text_contains);
+            return;
+        }
+
+        if (expression.lexeme == "starts_with") {
+            compile_expression(*expression.left);
+            compile_expression(*expression.arguments.at(0));
+            emit(OpCode::text_starts_with);
+            return;
+        }
+    }
+
+    throw std::runtime_error("unknown method '" + expression.lexeme + "'");
+}
+
+void Compiler::compile_binary_expression(const Expression& expression) {
+    if (expression.lexeme == "&&") {
         compile_expression(*expression.left);
+        const std::size_t false_jump = emit(OpCode::jump_if_false);
         compile_expression(*expression.right);
+        const std::size_t end_jump = emit(OpCode::jump);
+        patch_operand(false_jump, instructions_->size());
+        emit(OpCode::push_constant, add_constant(make_bool(false)));
+        patch_operand(end_jump, instructions_->size());
+        return;
+    }
 
-        if (expression.lexeme == "+") {
-            emit(OpCode::add);
-            return;
-        }
+    if (expression.lexeme == "||") {
+        compile_expression(*expression.left);
+        const std::size_t right_jump = emit(OpCode::jump_if_false);
+        emit(OpCode::push_constant, add_constant(make_bool(true)));
+        const std::size_t end_jump = emit(OpCode::jump);
+        patch_operand(right_jump, instructions_->size());
+        compile_expression(*expression.right);
+        patch_operand(end_jump, instructions_->size());
+        return;
+    }
 
-        if (expression.lexeme == "-") {
-            emit(OpCode::subtract);
-            return;
-        }
+    compile_expression(*expression.left);
+    compile_expression(*expression.right);
 
-        if (expression.lexeme == "*") {
-            emit(OpCode::multiply);
-            return;
-        }
+    if (expression.lexeme == "+") {
+        emit(OpCode::add);
+        return;
+    }
 
-        if (expression.lexeme == "/") {
-            emit(OpCode::divide);
-            return;
-        }
+    if (expression.lexeme == "-") {
+        emit(OpCode::subtract);
+        return;
+    }
 
-        if (expression.lexeme == "==") {
-            emit(OpCode::equal);
-            return;
-        }
+    if (expression.lexeme == "*") {
+        emit(OpCode::multiply);
+        return;
+    }
 
-        if (expression.lexeme == "!=") {
-            emit(OpCode::not_equal);
-            return;
-        }
+    if (expression.lexeme == "/") {
+        emit(OpCode::divide);
+        return;
+    }
 
-        if (expression.lexeme == ">") {
-            emit(OpCode::greater);
-            return;
-        }
+    if (expression.lexeme == "%") {
+        emit(OpCode::modulo);
+        return;
+    }
 
-        if (expression.lexeme == ">=") {
-            emit(OpCode::greater_equal);
-            return;
-        }
+    if (expression.lexeme == "==") {
+        emit(OpCode::equal);
+        return;
+    }
 
-        if (expression.lexeme == "<") {
-            emit(OpCode::less);
-            return;
-        }
+    if (expression.lexeme == "!=") {
+        emit(OpCode::not_equal);
+        return;
+    }
 
-        if (expression.lexeme == "<=") {
-            emit(OpCode::less_equal);
-            return;
-        }
+    if (expression.lexeme == ">") {
+        emit(OpCode::greater);
+        return;
+    }
 
-        throw std::runtime_error("unknown binary operator");
+    if (expression.lexeme == ">=") {
+        emit(OpCode::greater_equal);
+        return;
+    }
+
+    if (expression.lexeme == "<") {
+        emit(OpCode::less);
+        return;
+    }
+
+    if (expression.lexeme == "<=") {
+        emit(OpCode::less_equal);
+        return;
+    }
+
+    throw std::runtime_error("unknown binary operator");
+}
+
+void Compiler::compile_cast_expression(const Expression& expression) {
+    compile_expression(*expression.left);
+    const Type target = expression.type.type;
+    if (target.kind == ValueType::text_type || target.kind == ValueType::unit_type ||
+        target.kind == ValueType::array_type) {
+        return;
+    }
+
+    if (is_signed_type(target.kind)) {
+        emit(OpCode::cast_signed);
+        return;
+    }
+
+    if (is_unsigned_type(target.kind)) {
+        emit(OpCode::cast_unsigned);
+        return;
+    }
+
+    if (is_real_type(target.kind)) {
+        emit(OpCode::cast_real);
+        return;
+    }
+
+    if (target.kind == ValueType::bool_type) {
+        emit(OpCode::cast_bool);
+        return;
+    }
+
+    if (target.kind == ValueType::glyph_type) {
+        emit(OpCode::cast_glyph);
+        return;
     }
 }
 

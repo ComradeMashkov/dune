@@ -19,6 +19,15 @@ bool is_unsigned_type(ValueType type) {
            type == ValueType::u64_type || type == ValueType::usize_type;
 }
 
+bool is_signed_type(ValueType type) {
+    return type == ValueType::int_type || type == ValueType::i8_type || type == ValueType::i16_type ||
+           type == ValueType::i32_type || type == ValueType::i64_type || type == ValueType::isize_type;
+}
+
+bool is_integer_type(ValueType type) {
+    return is_signed_type(type) || is_unsigned_type(type);
+}
+
 bool is_real_type(ValueType type) {
     return type == ValueType::real32_type || type == ValueType::real_type;
 }
@@ -80,6 +89,9 @@ void LlvmIrGenerator::generate(const Program& program, std::ostream& output) {
 
     output << "declare i32 @printf(ptr, ...)\n";
     output << "declare i32 @strcmp(ptr, ptr)\n\n";
+    output << "declare i64 @strlen(ptr)\n";
+    output << "declare ptr @strstr(ptr, ptr)\n";
+    output << "declare i32 @strncmp(ptr, ptr, i64)\n\n";
     output << "declare ptr @malloc(i64)\n";
     output << "declare ptr @realloc(ptr, i64)\n\n";
     output << body.str();
@@ -329,6 +341,10 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_expression(const Expression& e
         }
 
         throw std::runtime_error("unknown member expression");
+    case ExpressionKind::unary:
+        return emit_unary_expression(expression, output);
+    case ExpressionKind::cast:
+        return emit_cast_expression(expression, output);
     case ExpressionKind::binary:
         return emit_binary_expression(expression, output);
     case ExpressionKind::call:
@@ -342,11 +358,16 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_expression(const Expression& e
 
 LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_binary_expression(const Expression& expression,
                                                                     std::ostream& output) {
+    if (expression.lexeme == "&&" || expression.lexeme == "||") {
+        return emit_logical_expression(expression, output);
+    }
+
     const TypedValue left = emit_expression(*expression.left, output);
     const TypedValue right = emit_expression(*expression.right, output);
     const std::string result = next_register();
 
-    if (expression.lexeme == "+" || expression.lexeme == "-" || expression.lexeme == "*" || expression.lexeme == "/") {
+    if (expression.lexeme == "+" || expression.lexeme == "-" || expression.lexeme == "*" || expression.lexeme == "/" ||
+        expression.lexeme == "%") {
         std::string op;
         if (is_real_type(left.type.kind)) {
             if (expression.lexeme == "+") {
@@ -355,11 +376,15 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_binary_expression(const Expres
                 op = "fsub";
             } else if (expression.lexeme == "*") {
                 op = "fmul";
-            } else {
+            } else if (expression.lexeme == "/") {
                 op = "fdiv";
+            } else {
+                throw std::runtime_error("unknown real binary operator");
             }
         } else if (expression.lexeme == "/") {
             op = is_unsigned_type(left.type.kind) ? "udiv" : "sdiv";
+        } else if (expression.lexeme == "%") {
+            op = is_unsigned_type(left.type.kind) ? "urem" : "srem";
         } else if (expression.lexeme == "+") {
             op = "add";
         } else if (expression.lexeme == "-") {
@@ -405,6 +430,64 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_binary_expression(const Expres
     output << "  " << result << " = " << (is_real_type(left.type.kind) ? "fcmp " : "icmp ") << op << ' '
            << llvm_type(left.type) << ' ' << left.name << ", " << right.name << '\n';
     return TypedValue{result, make_type(ValueType::bool_type)};
+}
+
+LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_logical_expression(const Expression& expression,
+                                                                     std::ostream& output) {
+    const TypedValue left = emit_expression(*expression.left, output);
+    const std::string result_pointer = next_register();
+    const std::string right_label = next_label("logical_right");
+    const std::string short_label = next_label("logical_short");
+    const std::string end_label = next_label("logical_end");
+
+    output << "  " << result_pointer << " = alloca i1\n";
+    if (expression.lexeme == "&&") {
+        output << "  br i1 " << left.name << ", label %" << right_label << ", label %" << short_label << '\n';
+        output << short_label << ":\n";
+        output << "  store i1 0, ptr " << result_pointer << '\n';
+    } else {
+        output << "  br i1 " << left.name << ", label %" << short_label << ", label %" << right_label << '\n';
+        output << short_label << ":\n";
+        output << "  store i1 1, ptr " << result_pointer << '\n';
+    }
+    output << "  br label %" << end_label << '\n';
+
+    output << right_label << ":\n";
+    const TypedValue right = emit_expression(*expression.right, output);
+    output << "  store i1 " << right.name << ", ptr " << result_pointer << '\n';
+    output << "  br label %" << end_label << '\n';
+
+    output << end_label << ":\n";
+    const std::string result = next_register();
+    output << "  " << result << " = load i1, ptr " << result_pointer << '\n';
+    return TypedValue{result, make_type(ValueType::bool_type)};
+}
+
+LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_unary_expression(const Expression& expression, std::ostream& output) {
+    const TypedValue right = emit_expression(*expression.right, output);
+    if (expression.lexeme == "!") {
+        const std::string result = next_register();
+        output << "  " << result << " = xor i1 " << right.name << ", 1\n";
+        return TypedValue{result, make_type(ValueType::bool_type)};
+    }
+
+    if (expression.lexeme == "-") {
+        const std::string result = next_register();
+        if (is_real_type(right.type.kind)) {
+            output << "  " << result << " = fsub " << llvm_type(right.type) << ' ' << default_value(right.type) << ", "
+                   << right.name << '\n';
+        } else {
+            output << "  " << result << " = sub " << llvm_type(right.type) << " 0, " << right.name << '\n';
+        }
+
+        return TypedValue{result, right.type};
+    }
+
+    throw std::runtime_error("unknown unary operator");
+}
+
+LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_cast_expression(const Expression& expression, std::ostream& output) {
+    return cast_value(emit_expression(*expression.left, output), expression.type.type, output);
 }
 
 LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_call_expression(const Expression& expression, std::ostream& output) {
@@ -461,7 +544,20 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_method_call_expression(const E
         }
     }
 
-    return emit_array_method_call_expression(expression, output);
+    const auto receiver = expression_types_.find(expression.left.get());
+    if (receiver == expression_types_.end()) {
+        throw std::runtime_error("missing receiver type");
+    }
+
+    if (receiver->second.kind == ValueType::array_type) {
+        return emit_array_method_call_expression(expression, output);
+    }
+
+    if (receiver->second.kind == ValueType::text_type) {
+        return emit_text_method_call_expression(expression, output);
+    }
+
+    throw std::runtime_error("unknown method '" + expression.lexeme + "'");
 }
 
 LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_array_method_call_expression(const Expression& expression,
@@ -529,7 +625,92 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_array_method_call_expression(c
         return TypedValue{"0", make_type(ValueType::unit_type)};
     }
 
+    if (expression.lexeme == "pop") {
+        const TypedValue array = emit_expression(*expression.left, output);
+        if (array.type.element == nullptr) {
+            throw std::runtime_error("array method 'pop' called with non-array type");
+        }
+
+        const Type& element_type = *array.type.element;
+        const std::size_t element_size = llvm_size(element_type);
+        const std::string length = next_register();
+        const std::string next_length = next_register();
+        const std::string data_pointer_pointer = next_register();
+        const std::string data = next_register();
+        const std::string offset = next_register();
+        const std::string slot = next_register();
+        const std::string value = next_register();
+        output << "  " << length << " = load i64, ptr " << array.name << '\n';
+        output << "  " << next_length << " = sub i64 " << length << ", 1\n";
+        output << "  store i64 " << next_length << ", ptr " << array.name << '\n';
+        output << "  " << data_pointer_pointer << " = getelementptr i8, ptr " << array.name << ", i64 16\n";
+        output << "  " << data << " = load ptr, ptr " << data_pointer_pointer << '\n';
+        output << "  " << offset << " = mul i64 " << next_length << ", " << element_size << '\n';
+        output << "  " << slot << " = getelementptr i8, ptr " << data << ", i64 " << offset << '\n';
+        output << "  " << value << " = load " << llvm_type(element_type) << ", ptr " << slot << '\n';
+        return TypedValue{value, element_type};
+    }
+
+    if (expression.lexeme == "clear") {
+        const TypedValue array = emit_expression(*expression.left, output);
+        output << "  store i64 0, ptr " << array.name << '\n';
+        return TypedValue{"0", make_type(ValueType::unit_type)};
+    }
+
+    if (expression.lexeme == "is_empty") {
+        const TypedValue array = emit_expression(*expression.left, output);
+        const std::string length = next_register();
+        const std::string result = next_register();
+        output << "  " << length << " = load i64, ptr " << array.name << '\n';
+        output << "  " << result << " = icmp eq i64 " << length << ", 0\n";
+        return TypedValue{result, make_type(ValueType::bool_type)};
+    }
+
     throw std::runtime_error("unknown method '" + expression.lexeme + "'");
+}
+
+LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_text_method_call_expression(const Expression& expression,
+                                                                              std::ostream& output) {
+    if (expression.lexeme == "len") {
+        const TypedValue text = emit_expression(*expression.left, output);
+        const std::string result = next_register();
+        output << "  " << result << " = call i64 @strlen(ptr " << text.name << ")\n";
+        return TypedValue{result, make_type(ValueType::int_type)};
+    }
+
+    if (expression.lexeme == "is_empty") {
+        const TypedValue text = emit_expression(*expression.left, output);
+        const std::string length = next_register();
+        const std::string result = next_register();
+        output << "  " << length << " = call i64 @strlen(ptr " << text.name << ")\n";
+        output << "  " << result << " = icmp eq i64 " << length << ", 0\n";
+        return TypedValue{result, make_type(ValueType::bool_type)};
+    }
+
+    if (expression.lexeme == "contains") {
+        const TypedValue text = emit_expression(*expression.left, output);
+        const TypedValue needle = emit_expression(*expression.arguments.at(0), output);
+        const std::string found = next_register();
+        const std::string result = next_register();
+        output << "  " << found << " = call ptr @strstr(ptr " << text.name << ", ptr " << needle.name << ")\n";
+        output << "  " << result << " = icmp ne ptr " << found << ", null\n";
+        return TypedValue{result, make_type(ValueType::bool_type)};
+    }
+
+    if (expression.lexeme == "starts_with") {
+        const TypedValue text = emit_expression(*expression.left, output);
+        const TypedValue prefix = emit_expression(*expression.arguments.at(0), output);
+        const std::string prefix_length = next_register();
+        const std::string comparison = next_register();
+        const std::string result = next_register();
+        output << "  " << prefix_length << " = call i64 @strlen(ptr " << prefix.name << ")\n";
+        output << "  " << comparison << " = call i32 @strncmp(ptr " << text.name << ", ptr " << prefix.name << ", i64 "
+               << prefix_length << ")\n";
+        output << "  " << result << " = icmp eq i32 " << comparison << ", 0\n";
+        return TypedValue{result, make_type(ValueType::bool_type)};
+    }
+
+    throw std::runtime_error("unknown text method '" + expression.lexeme + "'");
 }
 
 LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_array_literal(const Expression& expression, std::ostream& output) {
@@ -656,6 +837,83 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::cast_for_print(const TypedValue& va
     return value;
 }
 
+LlvmIrGenerator::TypedValue LlvmIrGenerator::cast_value(const TypedValue& value, const Type& target,
+                                                        std::ostream& output) {
+    if (value.type.kind == target.kind) {
+        return TypedValue{value.name, target};
+    }
+
+    if (target.kind == ValueType::text_type || target.kind == ValueType::unit_type ||
+        target.kind == ValueType::array_type) {
+        return TypedValue{value.name, target};
+    }
+
+    const std::string target_type = llvm_type(target);
+    const std::string result = next_register();
+
+    if (target.kind == ValueType::bool_type) {
+        if (is_real_type(value.type.kind)) {
+            output << "  " << result << " = fcmp one " << llvm_type(value.type) << ' ' << value.name << ", "
+                   << default_value(value.type) << '\n';
+        } else {
+            output << "  " << result << " = icmp ne " << llvm_type(value.type) << ' ' << value.name << ", 0\n";
+        }
+
+        return TypedValue{result, target};
+    }
+
+    if (value.type.kind == ValueType::bool_type) {
+        if (is_real_type(target.kind)) {
+            output << "  " << result << " = uitofp i1 " << value.name << " to " << target_type << '\n';
+        } else {
+            output << "  " << result << " = zext i1 " << value.name << " to " << target_type << '\n';
+        }
+
+        return TypedValue{result, target};
+    }
+
+    if (is_real_type(value.type.kind) && is_real_type(target.kind)) {
+        output << "  " << result << " = " << (llvm_bit_width(value.type) < llvm_bit_width(target) ? "fpext" : "fptrunc")
+               << ' ' << llvm_type(value.type) << ' ' << value.name << " to " << target_type << '\n';
+        return TypedValue{result, target};
+    }
+
+    if (is_real_type(value.type.kind) && (is_integer_type(target.kind) || target.kind == ValueType::glyph_type)) {
+        output << "  " << result << " = "
+               << (is_unsigned_type(target.kind) || target.kind == ValueType::glyph_type ? "fptoui" : "fptosi") << ' '
+               << llvm_type(value.type) << ' ' << value.name << " to " << target_type << '\n';
+        return TypedValue{result, target};
+    }
+
+    if ((is_integer_type(value.type.kind) || value.type.kind == ValueType::glyph_type) && is_real_type(target.kind)) {
+        output << "  " << result << " = "
+               << (is_unsigned_type(value.type.kind) || value.type.kind == ValueType::glyph_type ? "uitofp" : "sitofp")
+               << ' ' << llvm_type(value.type) << ' ' << value.name << " to " << target_type << '\n';
+        return TypedValue{result, target};
+    }
+
+    if (is_integer_type(value.type.kind) || value.type.kind == ValueType::glyph_type) {
+        const std::size_t source_bits = llvm_bit_width(value.type);
+        const std::size_t target_bits = llvm_bit_width(target);
+        if (source_bits == target_bits) {
+            return TypedValue{value.name, target};
+        }
+
+        if (source_bits < target_bits) {
+            output << "  " << result << " = "
+                   << (is_unsigned_type(value.type.kind) || value.type.kind == ValueType::glyph_type ? "zext" : "sext")
+                   << ' ' << llvm_type(value.type) << ' ' << value.name << " to " << target_type << '\n';
+        } else {
+            output << "  " << result << " = trunc " << llvm_type(value.type) << ' ' << value.name << " to "
+                   << target_type << '\n';
+        }
+
+        return TypedValue{result, target};
+    }
+
+    throw std::runtime_error("unsupported cast");
+}
+
 std::string LlvmIrGenerator::next_register() {
     return "%r" + std::to_string(register_count_++);
 }
@@ -697,6 +955,37 @@ std::string LlvmIrGenerator::llvm_type(const Type& type) const {
     }
 
     throw std::runtime_error("unknown type");
+}
+
+std::size_t LlvmIrGenerator::llvm_bit_width(const Type& type) const {
+    switch (type.kind) {
+    case ValueType::bool_type:
+        return 1;
+    case ValueType::i8_type:
+    case ValueType::u8_type:
+    case ValueType::glyph_type:
+        return 8;
+    case ValueType::i16_type:
+    case ValueType::u16_type:
+        return 16;
+    case ValueType::i32_type:
+    case ValueType::u32_type:
+    case ValueType::real32_type:
+        return 32;
+    case ValueType::int_type:
+    case ValueType::i64_type:
+    case ValueType::isize_type:
+    case ValueType::u64_type:
+    case ValueType::usize_type:
+    case ValueType::real_type:
+        return 64;
+    case ValueType::text_type:
+    case ValueType::unit_type:
+    case ValueType::array_type:
+        break;
+    }
+
+    throw std::runtime_error("unknown scalar type");
 }
 
 std::string LlvmIrGenerator::printf_format_name(const Type& type) const {

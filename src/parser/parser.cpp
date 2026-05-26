@@ -25,6 +25,20 @@ std::unique_ptr<Expression> make_binary(std::unique_ptr<Expression> left, std::s
     return std::make_unique<Expression>(std::move(expression));
 }
 
+std::unique_ptr<Expression> make_unary(std::string lexeme, std::unique_ptr<Expression> right, SourceLocation location) {
+    Expression expression{ExpressionKind::unary, std::move(lexeme), nullptr, std::move(right)};
+    expression.location = location;
+    return std::make_unique<Expression>(std::move(expression));
+}
+
+std::unique_ptr<Expression> make_cast(std::unique_ptr<Expression> value, TypeAnnotation target_type,
+                                      SourceLocation location) {
+    auto expression = std::make_unique<Expression>(Expression{ExpressionKind::cast, "", std::move(value), nullptr});
+    expression->type = std::move(target_type);
+    expression->location = location;
+    return expression;
+}
+
 std::unique_ptr<Expression> make_call(std::string name, std::vector<std::unique_ptr<Expression>> arguments,
                                       SourceLocation location) {
     auto expression = std::make_unique<Expression>(Expression{ExpressionKind::call, std::move(name), nullptr, nullptr});
@@ -458,7 +472,31 @@ TypeAnnotation Parser::type_annotation() {
 }
 
 std::unique_ptr<Expression> Parser::expression() {
-    return equality();
+    return logical_or();
+}
+
+std::unique_ptr<Expression> Parser::logical_or() {
+    std::unique_ptr<Expression> expr = logical_and();
+
+    while (match(TokenType::pipe_pipe)) {
+        const Token& op = previous();
+        std::unique_ptr<Expression> right = logical_and();
+        expr = make_binary(std::move(expr), op.lexeme, std::move(right), location_from_token(op));
+    }
+
+    return expr;
+}
+
+std::unique_ptr<Expression> Parser::logical_and() {
+    std::unique_ptr<Expression> expr = equality();
+
+    while (match(TokenType::amp_amp)) {
+        const Token& op = previous();
+        std::unique_ptr<Expression> right = equality();
+        expr = make_binary(std::move(expr), op.lexeme, std::move(right), location_from_token(op));
+    }
+
+    return expr;
 }
 
 std::unique_ptr<Expression> Parser::equality() {
@@ -499,15 +537,35 @@ std::unique_ptr<Expression> Parser::term() {
 }
 
 std::unique_ptr<Expression> Parser::factor() {
-    std::unique_ptr<Expression> expr = call();
+    std::unique_ptr<Expression> expr = cast();
 
-    while (match(TokenType::star) || match(TokenType::slash)) {
+    while (match(TokenType::star) || match(TokenType::slash) || match(TokenType::percent)) {
         const Token& op = previous();
-        std::unique_ptr<Expression> right = call();
+        std::unique_ptr<Expression> right = cast();
         expr = make_binary(std::move(expr), op.lexeme, std::move(right), location_from_token(op));
     }
 
     return expr;
+}
+
+std::unique_ptr<Expression> Parser::cast() {
+    std::unique_ptr<Expression> expr = unary();
+
+    while (match(TokenType::as_keyword)) {
+        const Token& op = previous();
+        expr = make_cast(std::move(expr), type_annotation(), location_from_token(op));
+    }
+
+    return expr;
+}
+
+std::unique_ptr<Expression> Parser::unary() {
+    if (match(TokenType::bang) || match(TokenType::minus)) {
+        const Token& op = previous();
+        return make_unary(op.lexeme, unary(), location_from_token(op));
+    }
+
+    return call();
 }
 
 std::unique_ptr<Expression> Parser::call() {

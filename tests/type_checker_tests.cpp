@@ -89,6 +89,18 @@ int main() {
     passed = expect_valid("let rough: real32 = 1.5; let ok: bool = rough < 2.5;",
                           "expected real32 literal comparison to validate") &&
              passed;
+    passed = expect_valid("let exact: real64 = 17 as real64; let code: int = 'A' as int; "
+                          "let letter: glyph = 66 as glyph; let flag: bool = 0 as bool; "
+                          "let ok: bool = !false && true || (17 % 5 == 2);",
+                          "expected casts and operators to validate") &&
+             passed;
+    passed = expect_valid("let values: [int] = [1, 2]; values.push(3); let last: int = values.pop(); "
+                          "let empty: bool = values.is_empty(); values.clear(); "
+                          "let message: text = \"dune language\"; let size: int = message.len(); "
+                          "let has: bool = message.contains(\"lang\"); "
+                          "let starts: bool = message.starts_with(\"dune\"); let blank: bool = \"\".is_empty();",
+                          "expected array and text methods to validate") &&
+             passed;
     passed = expect_valid("let values: [int] = [];", "expected typed empty array to validate") && passed;
     passed = expect_error_contains("let x: int = true;", "expected type 'int' but got 'bool'",
                                    "expected let type mismatch") &&
@@ -101,6 +113,14 @@ int main() {
              passed;
     passed = expect_error_contains("print(true + 1);", "expected numeric type but got 'bool'",
                                    "expected invalid binary operation") &&
+             passed;
+    passed = expect_error_contains("print(1.5 % 1.0);", "expected integer type but got 'real'",
+                                   "expected invalid modulo operation") &&
+             passed;
+    passed = expect_error_contains("print(!1);", "expected type 'bool' but got 'int'", "expected invalid unary not") &&
+             passed;
+    passed = expect_error_contains("let value: int = \"7\" as int;", "cannot cast from 'text' to 'int'",
+                                   "expected invalid cast") &&
              passed;
     passed = expect_error_contains("fn bad() -> bool { return 1; }", "expected type 'bool' but got 'int'",
                                    "expected return type mismatch") &&
@@ -141,6 +161,12 @@ int main() {
              passed;
     passed = expect_error_contains("let values: [int] = [1]; values.push(true);", "expected type 'int' but got 'bool'",
                                    "expected array push type mismatch") &&
+             passed;
+    passed = expect_error_contains("let values: [int] = [1]; values.contains(1);",
+                                   "array type has no method 'contains'", "expected unknown array method") &&
+             passed;
+    passed = expect_error_contains("let message: text = \"ok\"; message.contains(1);",
+                                   "expected type 'text' but got 'int'", "expected text method argument mismatch") &&
              passed;
     passed = expect_error_contains("import math; print(math.square(true));",
                                    "no overload for function 'math.square' with argument types (bool)",

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(dune VERSION 0.7.0 LANGUAGES CXX)
+project(dune VERSION 0.8.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -155,7 +155,7 @@ dune_add_lint_dependencies(vm_tests)
 enable_testing()
 
 add_test(NAME smoke COMMAND dune --version)
-set_tests_properties(smoke PROPERTIES PASS_REGULAR_EXPRESSION "dune 0.7.0")
+set_tests_properties(smoke PROPERTIES PASS_REGULAR_EXPRESSION "dune 0.8.0")
 
 add_test(NAME lexer_tests COMMAND lexer_tests)
 add_test(NAME parser_tests COMMAND parser_tests)
@@ -254,6 +254,16 @@ add_test(
 )
 
 add_test(
+    NAME cli_operators_methods
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/operators_methods.dn
+        -D EXPECTED_OUTPUT="-17\n-17\n2\n1\n0\n1\n8.5\n65\nB\n0\n0\n3\n2\n1\n13\n1\n1\n1"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
     NAME cli_build_native_hello
     COMMAND
         ${CMAKE_COMMAND}
@@ -316,6 +326,17 @@ add_test(
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/arrays_modules.dn
         -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/arrays_modules_native
         -D EXPECTED_OUTPUT="4\n4\n25\n49\n2.25\n8\n27\n4\n9\n10\n2.5\n2.5\n3\n2\n3\n3\n8\n0\n1\n0\n1\n0\n0"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
+)
+
+add_test(
+    NAME cli_build_native_operators_methods
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/operators_methods.dn
+        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/operators_methods_native
+        -D EXPECTED_OUTPUT="-17\n-17\n2\n1\n0\n1\n8.5\n65\nB\n0\n0\n3\n2\n1\n13\n1\n1\n1"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
 )
 

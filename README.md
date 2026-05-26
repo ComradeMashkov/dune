@@ -66,6 +66,31 @@ Modules are loaded from `.dn` files. The standard library currently includes
 `stdlib/math.dn`; array operations such as `len` and `push` are methods on array
 values.
 
+Operators and explicit casts:
+
+```dn
+let value = 17;
+let exact: real64 = value as real64;
+
+print(-value);
+print(value % 5);
+print(!false && true);
+```
+
+Array and text methods:
+
+```dn
+let values: [int] = [1, 2];
+values.push(3);
+print(values.pop());
+print(values.is_empty());
+
+let message: text = "dune language";
+print(message.len());
+print(message.contains("lang"));
+print(message.starts_with("dune"));
+```
+
 The `math` module currently provides constants and overloaded numeric functions:
 
 - `PI`, `TAU`, `E`, `INVERSE_E`
@@ -117,6 +142,11 @@ Supported compound types:
 
 - `[T]` dynamic arrays, for example `[int]` or `[text]`
 
+Built-in receiver methods:
+
+- arrays: `len()`, `push(value)`, `pop()`, `clear()`, `is_empty()`
+- text: `len()`, `is_empty()`, `contains(needle)`, `starts_with(prefix)`
+
 ## Run
 
 ```bash
@@ -163,6 +193,10 @@ The current release implements a small compiled language with:
 - arithmetic
 - variables
 - constants
+- unary operators
+- logical operators
+- modulo
+- explicit casts with `as`
 - typed functions
 - overloaded functions
 - static scalar types
@@ -173,6 +207,7 @@ The current release implements a small compiled language with:
 - unit-returning functions
 - dynamic arrays
 - array methods
+- text methods
 - imports
 - standard library modules
 - comparison operators

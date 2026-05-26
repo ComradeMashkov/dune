@@ -119,6 +119,45 @@ bool compiles_module_constants() {
     return passed;
 }
 
+bool compiles_operators_casts_and_methods() {
+    const dune::Bytecode bytecode = compile_source("let values: [int] = [1, 2]; values.push(3); "
+                                                   "print(values.pop()); values.clear(); print(values.is_empty()); "
+                                                   "let message: text = \"dune\"; print(message.len()); "
+                                                   "print(message.contains(\"un\")); "
+                                                   "let value: real64 = 17 as real64; "
+                                                   "print(!false && (17 % 5 == 2));");
+
+    bool saw_modulo = false;
+    bool saw_not = false;
+    bool saw_cast = false;
+    bool saw_array_pop = false;
+    bool saw_array_clear = false;
+    bool saw_array_is_empty = false;
+    bool saw_text_len = false;
+    bool saw_text_contains = false;
+    for (const dune::Instruction& instruction : bytecode.instructions) {
+        saw_modulo = saw_modulo || instruction.op == dune::OpCode::modulo;
+        saw_not = saw_not || instruction.op == dune::OpCode::not_value;
+        saw_cast = saw_cast || instruction.op == dune::OpCode::cast_real;
+        saw_array_pop = saw_array_pop || instruction.op == dune::OpCode::array_pop;
+        saw_array_clear = saw_array_clear || instruction.op == dune::OpCode::array_clear;
+        saw_array_is_empty = saw_array_is_empty || instruction.op == dune::OpCode::array_is_empty;
+        saw_text_len = saw_text_len || instruction.op == dune::OpCode::text_len;
+        saw_text_contains = saw_text_contains || instruction.op == dune::OpCode::text_contains;
+    }
+
+    bool passed = true;
+    passed = expect(saw_modulo, "expected modulo instruction") && passed;
+    passed = expect(saw_not, "expected logical not instruction") && passed;
+    passed = expect(saw_cast, "expected cast instruction") && passed;
+    passed = expect(saw_array_pop, "expected array_pop instruction") && passed;
+    passed = expect(saw_array_clear, "expected array_clear instruction") && passed;
+    passed = expect(saw_array_is_empty, "expected array_is_empty instruction") && passed;
+    passed = expect(saw_text_len, "expected text_len instruction") && passed;
+    passed = expect(saw_text_contains, "expected text_contains instruction") && passed;
+    return passed;
+}
+
 } // namespace
 
 int main() {
@@ -127,6 +166,7 @@ int main() {
     passed = compiles_unit_call_statement() && passed;
     passed = compiles_arrays_and_module_calls() && passed;
     passed = compiles_module_constants() && passed;
+    passed = compiles_operators_casts_and_methods() && passed;
 
     return passed ? 0 : 1;
 }

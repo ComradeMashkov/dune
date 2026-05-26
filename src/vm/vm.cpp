@@ -38,6 +38,13 @@ Value make_bool(bool value) {
     return result;
 }
 
+Value make_glyph(char value) {
+    Value result;
+    result.kind = ValueKind::glyph;
+    result.glyph_value = value;
+    return result;
+}
+
 Value make_unit() {
     Value result;
     result.kind = ValueKind::unit;
@@ -149,6 +156,60 @@ Value divide_values(const Value& left, const Value& right) {
     throw std::runtime_error("invalid division operands");
 }
 
+Value modulo_values(const Value& left, const Value& right) {
+    expect_same_kind(left, right);
+    switch (left.kind) {
+    case ValueKind::signed_integer:
+        if (right.signed_value == 0) {
+            throw std::runtime_error("division by zero");
+        }
+
+        return make_signed(left.signed_value % right.signed_value);
+    case ValueKind::unsigned_integer:
+        if (right.unsigned_value == 0) {
+            throw std::runtime_error("division by zero");
+        }
+
+        return make_unsigned(left.unsigned_value % right.unsigned_value);
+    case ValueKind::real:
+    case ValueKind::boolean:
+    case ValueKind::glyph:
+    case ValueKind::text:
+    case ValueKind::unit:
+    case ValueKind::array:
+        break;
+    }
+
+    throw std::runtime_error("invalid modulo operands");
+}
+
+Value negate_value(const Value& value) {
+    switch (value.kind) {
+    case ValueKind::signed_integer:
+        return make_signed(0 - value.signed_value);
+    case ValueKind::unsigned_integer:
+        return make_unsigned(0 - value.unsigned_value);
+    case ValueKind::real:
+        return make_real(0.0 - value.real_value);
+    case ValueKind::boolean:
+    case ValueKind::glyph:
+    case ValueKind::text:
+    case ValueKind::unit:
+    case ValueKind::array:
+        break;
+    }
+
+    throw std::runtime_error("invalid unary minus operand");
+}
+
+Value not_value(const Value& value) {
+    if (value.kind != ValueKind::boolean) {
+        throw std::runtime_error("invalid logical not operand");
+    }
+
+    return make_bool(!value.bool_value);
+}
+
 bool values_equal(const Value& left, const Value& right) {
     expect_same_kind(left, right);
     switch (left.kind) {
@@ -252,6 +313,111 @@ std::vector<Value>& array_elements(const Value& value) {
     return *value.array_value;
 }
 
+Value cast_signed(const Value& value) {
+    switch (value.kind) {
+    case ValueKind::signed_integer:
+        return value;
+    case ValueKind::unsigned_integer:
+        return make_signed(static_cast<std::int64_t>(value.unsigned_value));
+    case ValueKind::real:
+        return make_signed(static_cast<std::int64_t>(value.real_value));
+    case ValueKind::boolean:
+        return make_signed(value.bool_value ? 1 : 0);
+    case ValueKind::glyph:
+        return make_signed(static_cast<unsigned char>(value.glyph_value));
+    case ValueKind::text:
+    case ValueKind::unit:
+    case ValueKind::array:
+        break;
+    }
+
+    throw std::runtime_error("invalid signed cast operand");
+}
+
+Value cast_unsigned(const Value& value) {
+    switch (value.kind) {
+    case ValueKind::signed_integer:
+        return make_unsigned(static_cast<std::uint64_t>(value.signed_value));
+    case ValueKind::unsigned_integer:
+        return value;
+    case ValueKind::real:
+        return make_unsigned(static_cast<std::uint64_t>(value.real_value));
+    case ValueKind::boolean:
+        return make_unsigned(value.bool_value ? 1 : 0);
+    case ValueKind::glyph:
+        return make_unsigned(static_cast<unsigned char>(value.glyph_value));
+    case ValueKind::text:
+    case ValueKind::unit:
+    case ValueKind::array:
+        break;
+    }
+
+    throw std::runtime_error("invalid unsigned cast operand");
+}
+
+Value cast_real(const Value& value) {
+    switch (value.kind) {
+    case ValueKind::signed_integer:
+        return make_real(static_cast<double>(value.signed_value));
+    case ValueKind::unsigned_integer:
+        return make_real(static_cast<double>(value.unsigned_value));
+    case ValueKind::real:
+        return value;
+    case ValueKind::boolean:
+        return make_real(value.bool_value ? 1.0 : 0.0);
+    case ValueKind::glyph:
+        return make_real(static_cast<unsigned char>(value.glyph_value));
+    case ValueKind::text:
+    case ValueKind::unit:
+    case ValueKind::array:
+        break;
+    }
+
+    throw std::runtime_error("invalid real cast operand");
+}
+
+Value cast_bool(const Value& value) {
+    switch (value.kind) {
+    case ValueKind::signed_integer:
+        return make_bool(value.signed_value != 0);
+    case ValueKind::unsigned_integer:
+        return make_bool(value.unsigned_value != 0);
+    case ValueKind::real:
+        return make_bool(value.real_value != 0.0);
+    case ValueKind::boolean:
+        return value;
+    case ValueKind::glyph:
+        return make_bool(value.glyph_value != '\0');
+    case ValueKind::text:
+    case ValueKind::unit:
+    case ValueKind::array:
+        break;
+    }
+
+    throw std::runtime_error("invalid bool cast operand");
+}
+
+Value cast_glyph(const Value& value) {
+    switch (value.kind) {
+    case ValueKind::signed_integer:
+        return make_glyph(static_cast<char>(value.signed_value));
+    case ValueKind::unsigned_integer:
+        return make_glyph(static_cast<char>(value.unsigned_value));
+    case ValueKind::real:
+        return make_glyph(static_cast<char>(value.real_value));
+    case ValueKind::boolean:
+        return make_glyph(static_cast<char>(value.bool_value ? 1 : 0));
+    case ValueKind::glyph:
+        return value;
+    case ValueKind::text:
+    case ValueKind::unit:
+    case ValueKind::array:
+        break;
+    }
+
+    throw std::runtime_error("invalid glyph cast operand");
+}
+
 } // namespace
 
 VirtualMachine::VirtualMachine(Bytecode bytecode) : bytecode_(std::move(bytecode)) {}
@@ -310,6 +476,41 @@ void VirtualMachine::run(std::ostream& output) {
             ++frame.ip;
             break;
         }
+        case OpCode::modulo: {
+            const Value right = pop();
+            const Value left = pop();
+            stack_.push_back(modulo_values(left, right));
+            ++frame.ip;
+            break;
+        }
+        case OpCode::negate:
+            stack_.push_back(negate_value(pop()));
+            ++frame.ip;
+            break;
+        case OpCode::not_value:
+            stack_.push_back(not_value(pop()));
+            ++frame.ip;
+            break;
+        case OpCode::cast_signed:
+            stack_.push_back(cast_signed(pop()));
+            ++frame.ip;
+            break;
+        case OpCode::cast_unsigned:
+            stack_.push_back(cast_unsigned(pop()));
+            ++frame.ip;
+            break;
+        case OpCode::cast_real:
+            stack_.push_back(cast_real(pop()));
+            ++frame.ip;
+            break;
+        case OpCode::cast_bool:
+            stack_.push_back(cast_bool(pop()));
+            ++frame.ip;
+            break;
+        case OpCode::cast_glyph:
+            stack_.push_back(cast_glyph(pop()));
+            ++frame.ip;
+            break;
         case OpCode::equal: {
             const Value right = pop();
             const Value left = pop();
@@ -418,6 +619,73 @@ void VirtualMachine::run(std::ostream& output) {
             const Value array = pop();
             array_elements(array).push_back(value);
             stack_.push_back(make_unit());
+            ++frame.ip;
+            break;
+        }
+        case OpCode::array_pop: {
+            const Value array = pop();
+            std::vector<Value>& elements = array_elements(array);
+            if (elements.empty()) {
+                throw std::runtime_error("cannot pop from empty array");
+            }
+
+            stack_.push_back(elements.back());
+            elements.pop_back();
+            ++frame.ip;
+            break;
+        }
+        case OpCode::array_clear: {
+            const Value array = pop();
+            array_elements(array).clear();
+            stack_.push_back(make_unit());
+            ++frame.ip;
+            break;
+        }
+        case OpCode::array_is_empty: {
+            const Value array = pop();
+            stack_.push_back(make_bool(array_elements(array).empty()));
+            ++frame.ip;
+            break;
+        }
+        case OpCode::text_len: {
+            const Value text = pop();
+            if (text.kind != ValueKind::text) {
+                throw std::runtime_error("expected text value");
+            }
+
+            stack_.push_back(make_signed(static_cast<std::int64_t>(text.text_value.size())));
+            ++frame.ip;
+            break;
+        }
+        case OpCode::text_is_empty: {
+            const Value text = pop();
+            if (text.kind != ValueKind::text) {
+                throw std::runtime_error("expected text value");
+            }
+
+            stack_.push_back(make_bool(text.text_value.empty()));
+            ++frame.ip;
+            break;
+        }
+        case OpCode::text_contains: {
+            const Value needle = pop();
+            const Value text = pop();
+            if (text.kind != ValueKind::text || needle.kind != ValueKind::text) {
+                throw std::runtime_error("expected text value");
+            }
+
+            stack_.push_back(make_bool(text.text_value.find(needle.text_value) != std::string::npos));
+            ++frame.ip;
+            break;
+        }
+        case OpCode::text_starts_with: {
+            const Value prefix = pop();
+            const Value text = pop();
+            if (text.kind != ValueKind::text || prefix.kind != ValueKind::text) {
+                throw std::runtime_error("expected text value");
+            }
+
+            stack_.push_back(make_bool(text.text_value.starts_with(prefix.text_value)));
             ++frame.ip;
             break;
         }
