@@ -37,38 +37,36 @@ int main() {
 
     bool passed = true;
 
-    passed = expect_tokens(
-                 "let x = 40 + 2;\nprint(x);",
-                 {
-                     {let, "let"},
-                     {identifier, "x"},
-                     {equal, "="},
-                     {number, "40"},
-                     {plus, "+"},
-                     {number, "2"},
-                     {semicolon, ";"},
-                     {print, "print"},
-                     {left_paren, "("},
-                     {identifier, "x"},
-                     {right_paren, ")"},
-                     {semicolon, ";"},
-                     {eof, ""},
-                 })
-             && passed;
+    passed = expect_tokens("let x = 40 + 2;\nprint(x);",
+                           {
+                               {let, "let"},
+                               {identifier, "x"},
+                               {equal, "="},
+                               {number, "40"},
+                               {plus, "+"},
+                               {number, "2"},
+                               {semicolon, ";"},
+                               {print, "print"},
+                               {left_paren, "("},
+                               {identifier, "x"},
+                               {right_paren, ")"},
+                               {semicolon, ";"},
+                               {eof, ""},
+                           }) &&
+             passed;
 
-    passed = expect_tokens(
-                 "foo - 7 * bar / 3",
-                 {
-                     {identifier, "foo"},
-                     {minus, "-"},
-                     {number, "7"},
-                     {star, "*"},
-                     {identifier, "bar"},
-                     {slash, "/"},
-                     {number, "3"},
-                     {eof, ""},
-                 })
-             && passed;
+    passed = expect_tokens("foo - 7 * bar / 3",
+                           {
+                               {identifier, "foo"},
+                               {minus, "-"},
+                               {number, "7"},
+                               {star, "*"},
+                               {identifier, "bar"},
+                               {slash, "/"},
+                               {number, "3"},
+                               {eof, ""},
+                           }) &&
+             passed;
 
     return passed ? 0 : 1;
 }
