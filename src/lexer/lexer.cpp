@@ -73,6 +73,8 @@ Token Lexer::next_token() {
         return make_token(TokenType::colon, start, line, column);
     case ',':
         return make_token(TokenType::comma, start, line, column);
+    case '.':
+        return make_token(TokenType::dot, start, line, column);
     case ';':
         return make_token(TokenType::semicolon, start, line, column);
     case '(':
@@ -83,6 +85,10 @@ Token Lexer::next_token() {
         return make_token(TokenType::left_brace, start, line, column);
     case '}':
         return make_token(TokenType::right_brace, start, line, column);
+    case '[':
+        return make_token(TokenType::left_bracket, start, line, column);
+    case ']':
+        return make_token(TokenType::right_bracket, start, line, column);
     default:
         break;
     }
@@ -160,6 +166,10 @@ Token Lexer::identifier(std::size_t start, std::size_t line, std::size_t column)
 
     if (lexeme == "fn") {
         return Token{TokenType::fn_keyword, lexeme, line, column};
+    }
+
+    if (lexeme == "import") {
+        return Token{TokenType::import_keyword, lexeme, line, column};
     }
 
     if (lexeme == "return") {

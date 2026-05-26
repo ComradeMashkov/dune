@@ -31,6 +31,7 @@ private:
     Statement assignment_statement();
     Statement block_statement();
     Statement function_statement();
+    Statement import_statement();
     Statement if_statement();
     Statement let_statement();
     Statement print_statement();

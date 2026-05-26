@@ -1,0 +1,51 @@
+fn square(value: int) -> int {
+    return value * value;
+}
+
+fn square(value: i8) -> i8 {
+    return value * value;
+}
+
+fn square(value: i16) -> i16 {
+    return value * value;
+}
+
+fn square(value: i32) -> i32 {
+    return value * value;
+}
+
+fn square(value: i64) -> i64 {
+    return value * value;
+}
+
+fn square(value: isize) -> isize {
+    return value * value;
+}
+
+fn square(value: u8) -> u8 {
+    return value * value;
+}
+
+fn square(value: u16) -> u16 {
+    return value * value;
+}
+
+fn square(value: u32) -> u32 {
+    return value * value;
+}
+
+fn square(value: u64) -> u64 {
+    return value * value;
+}
+
+fn square(value: usize) -> usize {
+    return value * value;
+}
+
+fn square(value: real32) -> real32 {
+    return value * value;
+}
+
+fn square(value: real64) -> real64 {
+    return value * value;
+}

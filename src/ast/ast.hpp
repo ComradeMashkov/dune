@@ -30,11 +30,17 @@ enum class ValueType {
     glyph_type,
     text_type,
     unit_type,
+    array_type,
+};
+
+struct Type {
+    ValueType kind = ValueType::int_type;
+    std::shared_ptr<Type> element;
 };
 
 struct TypeAnnotation {
     bool has_type = false;
-    ValueType type = ValueType::int_type;
+    Type type;
 };
 
 struct Parameter {
@@ -50,8 +56,11 @@ enum class ExpressionKind {
     character,
     string,
     boolean,
+    array,
+    index,
     binary,
     call,
+    method_call,
 };
 
 struct Expression {
@@ -73,6 +82,7 @@ enum class StatementKind {
     function,
     return_statement,
     expression_statement,
+    import_statement,
 };
 
 struct Statement {

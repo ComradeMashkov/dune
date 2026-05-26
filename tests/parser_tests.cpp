@@ -119,9 +119,10 @@ bool parses_functions_and_types() {
     passed = expect(function.parameters.size() == 2, "expected two parameters") && passed;
     passed = expect(function.parameters[0].name == "a", "expected first parameter name") && passed;
     passed = expect(function.parameters[0].type.has_type, "expected first parameter type") && passed;
-    passed = expect(function.parameters[0].type.type == dune::ValueType::int_type, "expected int parameter") && passed;
+    passed =
+        expect(function.parameters[0].type.type.kind == dune::ValueType::int_type, "expected int parameter") && passed;
     passed = expect(function.type.has_type, "expected return type") && passed;
-    passed = expect(function.type.type == dune::ValueType::int_type, "expected int return type") && passed;
+    passed = expect(function.type.type.kind == dune::ValueType::int_type, "expected int return type") && passed;
     passed = expect(function.body.size() == 1, "expected one function body statement") && passed;
     passed =
         expect(function.body[0].kind == dune::StatementKind::return_statement, "expected return statement") && passed;
@@ -146,13 +147,15 @@ bool parses_extended_types() {
     }
 
     bool passed = true;
-    passed = expect(program.statements[0].type.type == dune::ValueType::u8_type, "expected u8 type") && passed;
-    passed = expect(program.statements[1].type.type == dune::ValueType::u64_type, "expected uint64 alias") && passed;
-    passed = expect(program.statements[2].type.type == dune::ValueType::real_type, "expected real type") && passed;
+    passed = expect(program.statements[0].type.type.kind == dune::ValueType::u8_type, "expected u8 type") && passed;
+    passed =
+        expect(program.statements[1].type.type.kind == dune::ValueType::u64_type, "expected uint64 alias") && passed;
+    passed = expect(program.statements[2].type.type.kind == dune::ValueType::real_type, "expected real type") && passed;
     passed =
         expect(program.statements[2].expression->kind == dune::ExpressionKind::floating, "expected floating literal") &&
         passed;
-    passed = expect(program.statements[3].type.type == dune::ValueType::glyph_type, "expected glyph type") && passed;
+    passed =
+        expect(program.statements[3].type.type.kind == dune::ValueType::glyph_type, "expected glyph type") && passed;
     passed =
         expect(program.statements[3].expression->kind == dune::ExpressionKind::character, "expected glyph literal") &&
         passed;
@@ -176,23 +179,74 @@ bool parses_standard_types_and_unit_calls() {
     const dune::Statement& log_function = program.statements[0];
     passed = expect(log_function.kind == dune::StatementKind::function, "expected log function") && passed;
     passed =
-        expect(log_function.parameters[0].type.type == dune::ValueType::text_type, "expected text parameter") && passed;
-    passed = expect(log_function.type.type == dune::ValueType::unit_type, "expected unit return type") && passed;
+        expect(log_function.parameters[0].type.type.kind == dune::ValueType::text_type, "expected text parameter") &&
+        passed;
+    passed = expect(log_function.type.type.kind == dune::ValueType::unit_type, "expected unit return type") && passed;
     passed =
         expect(log_function.body[1].expression == nullptr, "expected bare return statement in unit function") && passed;
 
-    passed = expect(program.statements[2].type.type == dune::ValueType::i8_type, "expected i8 type") && passed;
-    passed = expect(program.statements[3].type.type == dune::ValueType::i64_type, "expected i64 type") && passed;
-    passed = expect(program.statements[4].type.type == dune::ValueType::usize_type, "expected usize type") && passed;
-    passed = expect(program.statements[5].type.type == dune::ValueType::isize_type, "expected isize type") && passed;
-    passed = expect(program.statements[6].type.type == dune::ValueType::real32_type, "expected real32 type") && passed;
-    passed = expect(program.statements[7].type.type == dune::ValueType::real_type, "expected real64 alias") && passed;
+    passed = expect(program.statements[2].type.type.kind == dune::ValueType::i8_type, "expected i8 type") && passed;
+    passed = expect(program.statements[3].type.type.kind == dune::ValueType::i64_type, "expected i64 type") && passed;
+    passed =
+        expect(program.statements[4].type.type.kind == dune::ValueType::usize_type, "expected usize type") && passed;
+    passed =
+        expect(program.statements[5].type.type.kind == dune::ValueType::isize_type, "expected isize type") && passed;
+    passed =
+        expect(program.statements[6].type.type.kind == dune::ValueType::real32_type, "expected real32 type") && passed;
+    passed =
+        expect(program.statements[7].type.type.kind == dune::ValueType::real_type, "expected real64 alias") && passed;
     passed =
         expect(program.statements[8].kind == dune::StatementKind::expression_statement, "expected call statement") &&
         passed;
     passed = expect(program.statements[8].expression->arguments[0]->kind == dune::ExpressionKind::string,
                     "expected text literal argument") &&
              passed;
+
+    return passed;
+}
+
+bool parses_arrays_imports_and_module_calls() {
+    const dune::Program program = parse_source("import math; let values: [int] = [1, math.square(2)]; "
+                                               "values.push(9); print(values.len()); print(values[1]);");
+
+    if (!expect(program.statements.size() == 5, "expected import, array let, calls, and print statements")) {
+        return false;
+    }
+
+    bool passed = true;
+    passed = expect(program.statements[0].kind == dune::StatementKind::import_statement, "expected import statement") &&
+             passed;
+    passed = expect(program.statements[0].name == "math", "expected math import") && passed;
+    const dune::Statement& let_statement = program.statements[1];
+    passed = expect(let_statement.type.type.kind == dune::ValueType::array_type, "expected array annotation") && passed;
+    passed = expect(let_statement.type.type.element != nullptr, "expected array element type") && passed;
+    passed = expect(let_statement.type.type.element->kind == dune::ValueType::int_type, "expected int array") && passed;
+    passed = expect(let_statement.expression->kind == dune::ExpressionKind::array, "expected array literal") && passed;
+    passed = expect(let_statement.expression->arguments.size() == 2, "expected two array elements") && passed;
+    passed = expect(let_statement.expression->arguments[1]->kind == dune::ExpressionKind::method_call,
+                    "expected module method call syntax") &&
+             passed;
+    passed = expect(let_statement.expression->arguments[1]->lexeme == "square", "expected square member") && passed;
+
+    const dune::Statement& push_statement = program.statements[2];
+    passed = expect(push_statement.kind == dune::StatementKind::expression_statement, "expected push call statement") &&
+             passed;
+    passed =
+        expect(push_statement.expression->kind == dune::ExpressionKind::method_call, "expected array method call") &&
+        passed;
+    passed = expect(push_statement.expression->lexeme == "push", "expected push method") && passed;
+
+    const dune::Statement& len_statement = program.statements[3];
+    passed = expect(len_statement.expression->kind == dune::ExpressionKind::method_call, "expected len method call") &&
+             passed;
+    passed = expect(len_statement.expression->lexeme == "len", "expected len method") && passed;
+
+    const dune::Statement& print_statement = program.statements[4];
+    passed =
+        expect(print_statement.expression->kind == dune::ExpressionKind::index, "expected index expression") && passed;
+    passed =
+        expect(print_statement.expression->left->kind == dune::ExpressionKind::identifier, "expected indexed name") &&
+        passed;
 
     return passed;
 }
@@ -207,6 +261,7 @@ int main() {
     passed = parses_functions_and_types() && passed;
     passed = parses_extended_types() && passed;
     passed = parses_standard_types_and_unit_calls() && passed;
+    passed = parses_arrays_imports_and_module_calls() && passed;
 
     return passed ? 0 : 1;
 }

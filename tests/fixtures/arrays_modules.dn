@@ -1,0 +1,11 @@
+import math;
+
+let values: [int] = [1, math.square(2), 5];
+let base: u64 = 7;
+values.push(math.square(values[2]));
+
+print(values.len());
+print(values[1]);
+print(values[3]);
+print(math.square(base));
+print(math.square(1.5));

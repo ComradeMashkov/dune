@@ -1,4 +1,5 @@
 #include "lexer/lexer.hpp"
+#include "modules/module_loader.hpp"
 #include "parser/parser.hpp"
 #include "typechecker/type_checker.hpp"
 
@@ -11,8 +12,9 @@ namespace {
 void check_source(const std::string& source) {
     dune::Lexer lexer(source);
     dune::Parser parser(lexer.tokenize());
+    dune::ModuleLoader loader;
     dune::TypeChecker checker;
-    checker.check(parser.parse());
+    checker.check(loader.resolve(parser.parse()));
 }
 
 bool expect_valid(const std::string& source, const char* message) {
@@ -64,6 +66,14 @@ int main() {
                           "let same: bool = \"ok\" == \"ok\"; log(\"ok\"); noop();",
                           "expected standard scalar types to validate") &&
              passed;
+    passed = expect_valid("import math; "
+                          "fn second(values: [int]) -> int { return values[1]; } "
+                          "let values: [int] = [1, math.square(2)]; values.push(9); "
+                          "let count: int = values.len(); let value: int = second(values); "
+                          "let exact: real64 = math.square(1.5); let base: u64 = 7; let wide: u64 = math.square(base);",
+                          "expected arrays and modules to validate") &&
+             passed;
+    passed = expect_valid("let values: [int] = [];", "expected typed empty array to validate") && passed;
     passed = expect_error_contains("let x: int = true;", "expected type 'int' but got 'bool'",
                                    "expected let type mismatch") &&
              passed;
@@ -77,7 +87,8 @@ int main() {
                                    "expected return type mismatch") &&
              passed;
     passed = expect_error_contains("fn is_ok(value: bool) -> bool { return value; } print(is_ok(1));",
-                                   "expected type 'bool' but got 'int'", "expected call argument mismatch") &&
+                                   "no overload for function 'is_ok' with argument types (int)",
+                                   "expected call argument mismatch") &&
              passed;
     passed =
         expect_error_contains("let too_big: u8 = 256;", "does not fit in type 'u8'", "expected unsigned range error") &&
@@ -100,6 +111,31 @@ int main() {
     passed = expect_error_contains("fn noop() -> unit { } let value = noop();", "variables cannot have type 'unit'",
                                    "expected unit binding mismatch") &&
              passed;
+    passed = expect_error_contains("let values: [int] = [1, true];", "expected type 'int' but got 'bool'",
+                                   "expected mixed array mismatch") &&
+             passed;
+    passed = expect_error_contains("let values = [];", "empty array literal needs an array type",
+                                   "expected empty array annotation error") &&
+             passed;
+    passed = expect_error_contains("let values: [int] = [1]; print(math.square(values[0]));",
+                                   "undefined variable 'math'", "expected missing math import") &&
+             passed;
+    passed = expect_error_contains("let values: [int] = [1]; values.push(true);", "expected type 'int' but got 'bool'",
+                                   "expected array push type mismatch") &&
+             passed;
+    passed = expect_error_contains("import math; print(math.square(true));",
+                                   "no overload for function 'math.square' with argument types (bool)",
+                                   "expected math.square type mismatch") &&
+             passed;
+    passed = expect_error_contains("fn choose(value: i64) -> i64 { return value; } "
+                                   "fn choose(value: u64) -> u64 { return value; } print(choose(1));",
+                                   "ambiguous overload for function 'choose'", "expected ambiguous overload") &&
+             passed;
+    passed = expect_error_contains("fn same(value: int) -> int { return value; } "
+                                   "fn same(value: int) -> int { return value; }",
+                                   "duplicate overload for function 'same'", "expected duplicate overload") &&
+             passed;
+    passed = expect_error_contains("import time;", "unknown module 'time'", "expected unknown module error") && passed;
 
     return passed ? 0 : 1;
 }

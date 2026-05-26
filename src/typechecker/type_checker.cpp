@@ -3,16 +3,25 @@
 #include <cstdint>
 #include <limits>
 #include <stdexcept>
+#include <utility>
 
 namespace dune {
 
 namespace {
 
-TypeAnnotation expected_type(ValueType type) {
-    return TypeAnnotation{true, type};
+TypeAnnotation expected_type(Type type) {
+    return TypeAnnotation{true, std::move(type)};
 }
 
 } // namespace
+
+Type make_type(ValueType type) {
+    return Type{type, nullptr};
+}
+
+Type make_array_type(Type element) {
+    return Type{ValueType::array_type, std::make_shared<Type>(std::move(element))};
+}
 
 std::string type_name(ValueType type) {
     switch (type) {
@@ -50,14 +59,56 @@ std::string type_name(ValueType type) {
         return "text";
     case ValueType::unit_type:
         return "unit";
+    case ValueType::array_type:
+        return "array";
     }
 
     return "unknown";
 }
 
+std::string type_name(const Type& type) {
+    if (type.kind == ValueType::array_type) {
+        if (type.element == nullptr) {
+            return "[unknown]";
+        }
+
+        return "[" + type_name(*type.element) + "]";
+    }
+
+    return type_name(type.kind);
+}
+
+std::string type_key(const Type& type) {
+    if (type.kind == ValueType::array_type) {
+        if (type.element == nullptr) {
+            return "array_unknown";
+        }
+
+        return "array_" + type_key(*type.element);
+    }
+
+    return type_name(type.kind);
+}
+
+std::string function_key(const std::string& name, const std::vector<Type>& parameters) {
+    std::string key = name + "__";
+    for (std::size_t index = 0; index < parameters.size(); ++index) {
+        if (index > 0) {
+            key += "_";
+        }
+
+        key += type_key(parameters[index]);
+    }
+
+    return key;
+}
+
 void TypeChecker::check(const Program& program) {
     functions_.clear();
+    overloads_.clear();
+    imports_.clear();
     expression_types_.clear();
+    resolved_calls_.clear();
 
     for (const Statement& statement : program.statements) {
         if (statement.kind == StatementKind::function) {
@@ -65,10 +116,20 @@ void TypeChecker::check(const Program& program) {
         }
     }
 
+    for (const Statement& statement : program.statements) {
+        if (statement.kind == StatementKind::import_statement) {
+            if (!is_known_module(statement.name)) {
+                throw std::runtime_error(diagnostic(statement.location, "unknown module '" + statement.name + "'"));
+            }
+
+            imports_.insert(statement.name);
+        }
+    }
+
     variables_.clear();
     current_function_ = nullptr;
     for (const Statement& statement : program.statements) {
-        if (statement.kind != StatementKind::function) {
+        if (statement.kind != StatementKind::function && statement.kind != StatementKind::import_statement) {
             check_statement(statement);
         }
     }
@@ -80,23 +141,23 @@ void TypeChecker::check(const Program& program) {
     }
 }
 
-const std::unordered_map<const Expression*, ValueType>& TypeChecker::expression_types() const {
+const std::unordered_map<const Expression*, Type>& TypeChecker::expression_types() const {
     return expression_types_;
 }
 
-void TypeChecker::collect_function(const Statement& statement) {
-    if (functions_.contains(statement.name)) {
-        throw std::runtime_error(diagnostic(statement.location, "duplicate function '" + statement.name + "'"));
-    }
+const std::unordered_map<const Expression*, std::string>& TypeChecker::resolved_calls() const {
+    return resolved_calls_;
+}
 
+void TypeChecker::collect_function(const Statement& statement) {
     FunctionSignature signature;
     signature.name = statement.name;
     signature.return_type = annotation_or_default(statement.type);
     signature.location = statement.location;
 
     for (const Parameter& parameter : statement.parameters) {
-        const ValueType parameter_type = annotation_or_default(parameter.type);
-        if (parameter_type == ValueType::unit_type) {
+        const Type parameter_type = annotation_or_default(parameter.type);
+        if (parameter_type.kind == ValueType::unit_type) {
             throw std::runtime_error(
                 diagnostic(parameter.location, "parameter '" + parameter.name + "' cannot have type 'unit'"));
         }
@@ -104,14 +165,25 @@ void TypeChecker::collect_function(const Statement& statement) {
         signature.parameters.push_back(parameter_type);
     }
 
-    functions_.emplace(statement.name, std::move(signature));
+    signature.key = function_key(signature.name, signature.parameters);
+    if (functions_.contains(signature.key)) {
+        throw std::runtime_error(
+            diagnostic(statement.location, "duplicate overload for function '" + statement.name + "'"));
+    }
+
+    overloads_[signature.name].push_back(signature.key);
+    functions_.emplace(signature.key, std::move(signature));
 }
 
 void TypeChecker::check_function(const Statement& statement) {
-    auto function = functions_.find(statement.name);
-    if (function == functions_.end()) {
-        throw std::runtime_error(diagnostic(statement.location, "undefined function '" + statement.name + "'"));
+    std::vector<Type> parameters;
+    parameters.reserve(statement.parameters.size());
+    for (const Parameter& parameter : statement.parameters) {
+        parameters.push_back(annotation_or_default(parameter.type));
     }
+
+    const FunctionSignature& function =
+        find_function_by_key(function_key(statement.name, parameters), statement.location);
 
     variables_.clear();
     for (std::size_t index = 0; index < statement.parameters.size(); ++index) {
@@ -120,14 +192,14 @@ void TypeChecker::check_function(const Statement& statement) {
             throw std::runtime_error(diagnostic(parameter.location, "duplicate parameter '" + parameter.name + "'"));
         }
 
-        variables_.emplace(parameter.name, function->second.parameters[index]);
+        variables_.emplace(parameter.name, function.parameters[index]);
     }
 
-    current_function_ = &function->second;
+    current_function_ = &function;
     check_statements(statement.body);
-    if (function->second.return_type != ValueType::unit_type && !statements_return(statement.body)) {
+    if (function.return_type.kind != ValueType::unit_type && !statements_return(statement.body)) {
         throw std::runtime_error(diagnostic(statement.location, "function '" + statement.name + "' must return type '" +
-                                                                    type_name(function->second.return_type) + "'"));
+                                                                    type_name(function.return_type) + "'"));
     }
 
     current_function_ = nullptr;
@@ -137,7 +209,7 @@ void TypeChecker::check_statement(const Statement& statement) {
     switch (statement.kind) {
     case StatementKind::let: {
         TypeAnnotation expected = statement.type;
-        ValueType actual = check_expression(*statement.expression, expected);
+        Type actual = check_expression(*statement.expression, expected);
         if (!expected.has_type) {
             expected = expected_type(actual);
         }
@@ -150,7 +222,7 @@ void TypeChecker::check_statement(const Statement& statement) {
         }
 
         expect_type(expected.type, actual, statement.expression->location);
-        if (expected.type == ValueType::unit_type) {
+        if (expected.type.kind == ValueType::unit_type) {
             throw std::runtime_error(diagnostic(statement.location, "variables cannot have type 'unit'"));
         }
 
@@ -168,9 +240,10 @@ void TypeChecker::check_statement(const Statement& statement) {
         return;
     }
     case StatementKind::print: {
-        const ValueType type = check_expression(*statement.expression);
-        if (type == ValueType::unit_type) {
-            throw std::runtime_error(diagnostic(statement.expression->location, "cannot print type 'unit'"));
+        const Type type = check_expression(*statement.expression);
+        if (type.kind == ValueType::unit_type || type.kind == ValueType::array_type) {
+            throw std::runtime_error(
+                diagnostic(statement.expression->location, "cannot print type '" + type_name(type) + "'"));
         }
 
         return;
@@ -179,12 +252,14 @@ void TypeChecker::check_statement(const Statement& statement) {
         check_statements(statement.body);
         return;
     case StatementKind::if_statement:
-        expect_type(ValueType::bool_type, check_expression(*statement.expression), statement.expression->location);
+        expect_type(make_type(ValueType::bool_type), check_expression(*statement.expression),
+                    statement.expression->location);
         check_statements(statement.body);
         check_statements(statement.else_body);
         return;
     case StatementKind::while_statement:
-        expect_type(ValueType::bool_type, check_expression(*statement.expression), statement.expression->location);
+        expect_type(make_type(ValueType::bool_type), check_expression(*statement.expression),
+                    statement.expression->location);
         check_statements(statement.body);
         return;
     case StatementKind::function:
@@ -195,7 +270,7 @@ void TypeChecker::check_statement(const Statement& statement) {
         }
 
         if (statement.expression == nullptr) {
-            expect_type(current_function_->return_type, ValueType::unit_type, statement.location);
+            expect_type(current_function_->return_type, make_type(ValueType::unit_type), statement.location);
             return;
         }
 
@@ -206,6 +281,8 @@ void TypeChecker::check_statement(const Statement& statement) {
     case StatementKind::expression_statement:
         check_expression(*statement.expression);
         return;
+    case StatementKind::import_statement:
+        throw std::runtime_error(diagnostic(statement.location, "import statements are only allowed at top level"));
     }
 }
 
@@ -215,8 +292,8 @@ void TypeChecker::check_statements(const std::vector<Statement>& statements) {
     }
 }
 
-ValueType TypeChecker::check_expression(const Expression& expression, const TypeAnnotation& expected) {
-    ValueType actual = ValueType::int_type;
+Type TypeChecker::check_expression(const Expression& expression, const TypeAnnotation& expected) {
+    Type actual = make_type(ValueType::int_type);
 
     switch (expression.kind) {
     case ExpressionKind::identifier: {
@@ -229,30 +306,40 @@ ValueType TypeChecker::check_expression(const Expression& expression, const Type
         break;
     }
     case ExpressionKind::number:
-        actual = expected.has_type && is_numeric_type(expected.type) ? expected.type : ValueType::int_type;
+        actual = expected.has_type && is_numeric_type(expected.type) ? expected.type : make_type(ValueType::int_type);
         check_integer_literal_range(expression, actual);
         break;
     case ExpressionKind::floating:
-        actual = expected.has_type && is_real_type(expected.type) ? expected.type : ValueType::real_type;
+        actual =
+            expected.has_type && is_real_type(expected.type.kind) ? expected.type : make_type(ValueType::real_type);
         break;
     case ExpressionKind::character:
-        actual = ValueType::glyph_type;
+        actual = make_type(ValueType::glyph_type);
         break;
     case ExpressionKind::string:
-        actual = ValueType::text_type;
+        actual = make_type(ValueType::text_type);
         break;
     case ExpressionKind::boolean:
-        actual = ValueType::bool_type;
+        actual = make_type(ValueType::bool_type);
+        break;
+    case ExpressionKind::array:
+        actual = check_array_literal(expression, expected);
+        break;
+    case ExpressionKind::index:
+        actual = check_index_expression(expression);
         break;
     case ExpressionKind::binary:
         actual = check_binary_expression(expression, expected);
         break;
     case ExpressionKind::call:
-        actual = check_call_expression(expression);
+        actual = check_call_expression(expression, expected);
+        break;
+    case ExpressionKind::method_call:
+        actual = check_method_call_expression(expression, expected);
         break;
     }
 
-    if (expected.has_type && actual != expected.type) {
+    if (expected.has_type && !same_type(actual, expected.type)) {
         actual = coerce_numeric_literal(expression, actual, expected.type);
     }
 
@@ -264,16 +351,16 @@ ValueType TypeChecker::check_expression(const Expression& expression, const Type
     return actual;
 }
 
-ValueType TypeChecker::check_binary_expression(const Expression& expression, const TypeAnnotation& expected) {
+Type TypeChecker::check_binary_expression(const Expression& expression, const TypeAnnotation& expected) {
     const bool is_arithmetic =
         expression.lexeme == "+" || expression.lexeme == "-" || expression.lexeme == "*" || expression.lexeme == "/";
     const TypeAnnotation operand_expected =
         is_arithmetic && expected.has_type && is_numeric_type(expected.type) ? expected : TypeAnnotation{};
 
-    ValueType left = check_expression(*expression.left, operand_expected);
-    ValueType right = check_expression(*expression.right, operand_expected);
+    Type left = check_expression(*expression.left, operand_expected);
+    Type right = check_expression(*expression.right, operand_expected);
 
-    if (left != right) {
+    if (!same_type(left, right)) {
         left = coerce_numeric_literal(*expression.left, left, right);
         right = coerce_numeric_literal(*expression.right, right, left);
     }
@@ -296,46 +383,222 @@ ValueType TypeChecker::check_binary_expression(const Expression& expression, con
         }
 
         expect_type(left, right, expression.right->location);
-        return ValueType::bool_type;
+        return make_type(ValueType::bool_type);
     }
 
     if (expression.lexeme == "==" || expression.lexeme == "!=") {
-        if (left == ValueType::unit_type) {
-            throw std::runtime_error(diagnostic(expression.left->location, "cannot compare values of type 'unit'"));
+        if (left.kind == ValueType::unit_type || left.kind == ValueType::array_type) {
+            throw std::runtime_error(
+                diagnostic(expression.left->location, "cannot compare values of type '" + type_name(left) + "'"));
         }
 
         expect_type(left, right, expression.right->location);
-        return ValueType::bool_type;
+        return make_type(ValueType::bool_type);
     }
 
     throw std::runtime_error(diagnostic(expression.location, "unknown binary operator '" + expression.lexeme + "'"));
 }
 
-ValueType TypeChecker::check_call_expression(const Expression& expression) {
-    const auto function = functions_.find(expression.lexeme);
-    if (function == functions_.end()) {
-        throw std::runtime_error(diagnostic(expression.location, "undefined function '" + expression.lexeme + "'"));
+Type TypeChecker::check_call_expression(const Expression& expression, const TypeAnnotation& expected) {
+    return check_function_call(expression, expression.lexeme, expression.arguments, expression.location, expected);
+}
+
+Type TypeChecker::check_function_call(const Expression& expression, const std::string& name,
+                                      const std::vector<std::unique_ptr<Expression>>& arguments,
+                                      SourceLocation location, const TypeAnnotation& expected) {
+    const FunctionSignature& function = resolve_overload(name, arguments, location, expected);
+    for (std::size_t index = 0; index < arguments.size(); ++index) {
+        expect_type(function.parameters[index],
+                    check_expression(*arguments[index], expected_type(function.parameters[index])),
+                    arguments[index]->location);
     }
 
-    if (expression.arguments.size() != function->second.parameters.size()) {
-        throw std::runtime_error(
-            diagnostic(expression.location, "function '" + expression.lexeme + "' expects " +
-                                                std::to_string(function->second.parameters.size()) +
-                                                " arguments but got " + std::to_string(expression.arguments.size())));
-    }
+    resolved_calls_[&expression] = function.key;
+    return function.return_type;
+}
 
-    for (std::size_t index = 0; index < expression.arguments.size(); ++index) {
-        const ValueType expected = function->second.parameters[index];
-        const ValueType actual = check_expression(*expression.arguments[index], expected_type(expected));
-        if (actual != expected) {
-            throw std::runtime_error(diagnostic(expression.arguments[index]->location,
-                                                "argument " + std::to_string(index + 1) + " for function '" +
-                                                    expression.lexeme + "': expected type '" + type_name(expected) +
-                                                    "' but got '" + type_name(actual) + "'"));
+Type TypeChecker::check_method_call_expression(const Expression& expression, const TypeAnnotation& expected) {
+    if (expression.left != nullptr && expression.left->kind == ExpressionKind::identifier) {
+        const std::string module_name = expression.left->lexeme;
+        if (is_known_module(module_name)) {
+            expect_imported_module(module_name, expression.location);
+            return check_function_call(expression, module_name + "." + expression.lexeme, expression.arguments,
+                                       expression.location, expected);
         }
     }
 
-    return function->second.return_type;
+    const Type receiver = check_expression(*expression.left);
+    if (receiver.kind == ValueType::array_type) {
+        return check_array_method_call(receiver, expression);
+    }
+
+    throw std::runtime_error(diagnostic(expression.location, "type '" + type_name(receiver) + "' has no method '" +
+                                                                 expression.lexeme + "'"));
+}
+
+Type TypeChecker::check_array_method_call(const Type& receiver, const Expression& expression) {
+    if (expression.lexeme == "len") {
+        if (!expression.arguments.empty()) {
+            throw std::runtime_error(diagnostic(expression.location, "array method 'len' expects 0 arguments but got " +
+                                                                         std::to_string(expression.arguments.size())));
+        }
+
+        return make_type(ValueType::int_type);
+    }
+
+    if (expression.lexeme == "push") {
+        if (expression.arguments.size() != 1) {
+            throw std::runtime_error(diagnostic(expression.location, "array method 'push' expects 1 argument but got " +
+                                                                         std::to_string(expression.arguments.size())));
+        }
+
+        if (receiver.element == nullptr) {
+            throw std::runtime_error(
+                diagnostic(expression.location, "expected array type but got '" + type_name(receiver) + "'"));
+        }
+
+        expect_type(*receiver.element, check_expression(*expression.arguments[0], expected_type(*receiver.element)),
+                    expression.arguments[0]->location);
+        return make_type(ValueType::unit_type);
+    }
+
+    throw std::runtime_error(diagnostic(expression.location, "array type has no method '" + expression.lexeme + "'"));
+}
+
+const TypeChecker::FunctionSignature&
+TypeChecker::resolve_overload(const std::string& name, const std::vector<std::unique_ptr<Expression>>& arguments,
+                              SourceLocation location, const TypeAnnotation& expected) {
+    const auto overload = overloads_.find(name);
+    if (overload == overloads_.end()) {
+        throw std::runtime_error(diagnostic(location, "undefined function '" + name + "'"));
+    }
+
+    std::vector<Type> raw_argument_types;
+    raw_argument_types.reserve(arguments.size());
+    for (const std::unique_ptr<Expression>& argument : arguments) {
+        raw_argument_types.push_back(check_expression(*argument));
+    }
+
+    const FunctionSignature* best_match = nullptr;
+    int best_score = -1;
+    bool ambiguous = false;
+
+    for (const std::string& key : overload->second) {
+        const FunctionSignature& function = find_function_by_key(key, location);
+        if (function.parameters.size() != arguments.size()) {
+            continue;
+        }
+
+        bool matches = true;
+        int score = 0;
+        for (std::size_t index = 0; index < arguments.size(); ++index) {
+            try {
+                const Type actual = check_expression(*arguments[index], expected_type(function.parameters[index]));
+                if (!same_type(actual, function.parameters[index])) {
+                    matches = false;
+                    break;
+                }
+            } catch (const std::runtime_error&) {
+                matches = false;
+                break;
+            }
+
+            if (same_type(raw_argument_types[index], function.parameters[index])) {
+                score += 2;
+            }
+        }
+
+        if (!matches) {
+            continue;
+        }
+
+        if (expected.has_type && same_type(expected.type, function.return_type)) {
+            score += 4;
+        }
+
+        if (score > best_score) {
+            best_score = score;
+            best_match = &function;
+            ambiguous = false;
+        } else if (score == best_score) {
+            ambiguous = true;
+        }
+    }
+
+    if (best_match == nullptr) {
+        std::string message = "no overload for function '" + name + "' with argument types (";
+        for (std::size_t index = 0; index < raw_argument_types.size(); ++index) {
+            if (index > 0) {
+                message += ", ";
+            }
+
+            message += type_name(raw_argument_types[index]);
+        }
+        message += ")";
+        throw std::runtime_error(diagnostic(location, message));
+    }
+
+    if (ambiguous) {
+        throw std::runtime_error(diagnostic(location, "ambiguous overload for function '" + name + "'"));
+    }
+
+    return *best_match;
+}
+
+const TypeChecker::FunctionSignature& TypeChecker::find_function_by_key(const std::string& key,
+                                                                        SourceLocation location) const {
+    const auto function = functions_.find(key);
+    if (function == functions_.end()) {
+        throw std::runtime_error(diagnostic(location, "undefined function overload '" + key + "'"));
+    }
+
+    return function->second;
+}
+
+Type TypeChecker::check_array_literal(const Expression& expression, const TypeAnnotation& expected) {
+    if (expected.has_type && expected.type.kind != ValueType::array_type) {
+        expect_type(expected.type, make_array_type(make_type(ValueType::unit_type)), expression.location);
+    }
+
+    if (expression.arguments.empty()) {
+        if (!expected.has_type || expected.type.kind != ValueType::array_type) {
+            throw std::runtime_error(diagnostic(expression.location, "empty array literal needs an array type"));
+        }
+
+        return expected.type;
+    }
+
+    Type element_type;
+    std::size_t start = 0;
+    if (expected.has_type && expected.type.kind == ValueType::array_type && expected.type.element != nullptr) {
+        element_type = *expected.type.element;
+    } else {
+        element_type = check_expression(*expression.arguments[0]);
+        start = 1;
+    }
+
+    for (std::size_t index = start; index < expression.arguments.size(); ++index) {
+        expect_type(element_type, check_expression(*expression.arguments[index], expected_type(element_type)),
+                    expression.arguments[index]->location);
+    }
+
+    return make_array_type(element_type);
+}
+
+Type TypeChecker::check_index_expression(const Expression& expression) {
+    const Type array = check_expression(*expression.left);
+    if (array.kind != ValueType::array_type || array.element == nullptr) {
+        throw std::runtime_error(
+            diagnostic(expression.left->location, "expected array type but got '" + type_name(array) + "'"));
+    }
+
+    const Type index = check_expression(*expression.right);
+    if (!is_integer_type(index.kind)) {
+        throw std::runtime_error(
+            diagnostic(expression.right->location, "expected integer index but got '" + type_name(index) + "'"));
+    }
+
+    return *array.element;
 }
 
 bool TypeChecker::statement_returns(const Statement& statement) const {
@@ -353,6 +616,7 @@ bool TypeChecker::statement_returns(const Statement& statement) const {
     case StatementKind::while_statement:
     case StatementKind::function:
     case StatementKind::expression_statement:
+    case StatementKind::import_statement:
         return false;
     }
 
@@ -369,12 +633,28 @@ bool TypeChecker::statements_return(const std::vector<Statement>& statements) co
     return false;
 }
 
-ValueType TypeChecker::annotation_or_default(const TypeAnnotation& annotation) const {
+Type TypeChecker::annotation_or_default(const TypeAnnotation& annotation) const {
     if (annotation.has_type) {
         return annotation.type;
     }
 
-    return ValueType::int_type;
+    return make_type(ValueType::int_type);
+}
+
+bool TypeChecker::same_type(const Type& left, const Type& right) const {
+    if (left.kind != right.kind) {
+        return false;
+    }
+
+    if (left.kind != ValueType::array_type) {
+        return true;
+    }
+
+    if (left.element == nullptr || right.element == nullptr) {
+        return left.element == right.element;
+    }
+
+    return same_type(*left.element, *right.element);
 }
 
 bool TypeChecker::is_integer_type(ValueType type) const {
@@ -395,21 +675,21 @@ bool TypeChecker::is_real_type(ValueType type) const {
     return type == ValueType::real32_type || type == ValueType::real_type;
 }
 
-bool TypeChecker::is_numeric_type(ValueType type) const {
-    return is_integer_type(type) || is_real_type(type);
+bool TypeChecker::is_numeric_type(const Type& type) const {
+    return is_integer_type(type.kind) || is_real_type(type.kind);
 }
 
-bool TypeChecker::can_coerce_integer_literal(const Expression& expression, ValueType target) const {
+bool TypeChecker::can_coerce_integer_literal(const Expression& expression, const Type& target) const {
     return expression.kind == ExpressionKind::number && is_numeric_type(target);
 }
 
-void TypeChecker::check_integer_literal_range(const Expression& expression, ValueType target) const {
-    if (!is_integer_type(target)) {
+void TypeChecker::check_integer_literal_range(const Expression& expression, const Type& target) const {
+    if (!is_integer_type(target.kind)) {
         return;
     }
 
     const unsigned long long value = std::stoull(expression.lexeme);
-    const unsigned long long max = max_integer_literal(target);
+    const unsigned long long max = max_integer_literal(target.kind);
     if (value > max) {
         throw std::runtime_error(
             diagnostic(expression.location,
@@ -444,14 +724,15 @@ unsigned long long TypeChecker::max_integer_literal(ValueType target) const {
     case ValueType::glyph_type:
     case ValueType::text_type:
     case ValueType::unit_type:
+    case ValueType::array_type:
         break;
     }
 
     return 0;
 }
 
-ValueType TypeChecker::coerce_numeric_literal(const Expression& expression, ValueType actual, ValueType target) {
-    if (actual != target && can_coerce_integer_literal(expression, target)) {
+Type TypeChecker::coerce_numeric_literal(const Expression& expression, const Type& actual, const Type& target) {
+    if (!same_type(actual, target) && can_coerce_integer_literal(expression, target)) {
         check_integer_literal_range(expression, target);
         expression_types_[&expression] = target;
         return target;
@@ -460,11 +741,29 @@ ValueType TypeChecker::coerce_numeric_literal(const Expression& expression, Valu
     return actual;
 }
 
-void TypeChecker::expect_type(ValueType expected, ValueType actual, SourceLocation location) const {
-    if (expected != actual) {
+void TypeChecker::expect_type(const Type& expected, const Type& actual, SourceLocation location) const {
+    if (!same_type(expected, actual)) {
         throw std::runtime_error(
             diagnostic(location, "expected type '" + type_name(expected) + "' but got '" + type_name(actual) + "'"));
     }
+}
+
+void TypeChecker::expect_imported_module(const std::string& module, SourceLocation location) const {
+    if (!imports_.contains(module)) {
+        throw std::runtime_error(diagnostic(location, "module '" + module + "' must be imported before use"));
+    }
+}
+
+bool TypeChecker::is_known_module(const std::string& module) const {
+    const std::string prefix = module + ".";
+    for (const auto& [name, signature] : functions_) {
+        (void)signature;
+        if (name.starts_with(prefix)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 std::string TypeChecker::diagnostic(SourceLocation location, const std::string& message) const {

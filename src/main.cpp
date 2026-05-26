@@ -1,10 +1,12 @@
 #include "codegen/llvm_ir_generator.hpp"
 #include "compiler/compiler.hpp"
 #include "lexer/lexer.hpp"
+#include "modules/module_loader.hpp"
 #include "parser/parser.hpp"
 #include "vm/vm.hpp"
 
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -13,7 +15,7 @@
 
 namespace {
 
-constexpr const char* version = "0.6.0";
+constexpr const char* version = "0.7.0";
 
 #ifndef DUNE_CLANGXX_PATH
 #define DUNE_CLANGXX_PATH "clang++"
@@ -67,10 +69,11 @@ std::string shell_quote(const std::string& value) {
 #endif
 }
 
-dune::Program parse_source(const std::string& source) {
+dune::Program parse_source(const std::string& source, const std::filesystem::path& source_directory) {
     dune::Lexer lexer(source);
     dune::Parser parser(lexer.tokenize());
-    return parser.parse();
+    dune::ModuleLoader loader;
+    return loader.resolve(parser.parse(), source_directory);
 }
 
 dune::Bytecode compile_bytecode(const dune::Program& program) {
@@ -99,7 +102,7 @@ void compile_llvm_ir(const std::string& llvm_ir_path, const std::string& output_
 }
 
 int run_source_file(const std::string& path) {
-    dune::VirtualMachine vm(compile_bytecode(parse_source(read_file(path))));
+    dune::VirtualMachine vm(compile_bytecode(parse_source(read_file(path), std::filesystem::path(path).parent_path())));
     vm.run(std::cout);
 
     return 0;
@@ -107,13 +110,15 @@ int run_source_file(const std::string& path) {
 
 int build_native_file(const std::string& source_path, const std::string& output_path) {
     const std::string llvm_ir_path = output_path + ".ll";
-    write_file(llvm_ir_path, generate_llvm_ir(parse_source(read_file(source_path))));
+    write_file(llvm_ir_path, generate_llvm_ir(parse_source(read_file(source_path),
+                                                           std::filesystem::path(source_path).parent_path())));
     compile_llvm_ir(llvm_ir_path, output_path);
     return 0;
 }
 
 int emit_llvm_file(const std::string& source_path, const std::string& output_path) {
-    write_file(output_path, generate_llvm_ir(parse_source(read_file(source_path))));
+    write_file(output_path, generate_llvm_ir(parse_source(read_file(source_path),
+                                                          std::filesystem::path(source_path).parent_path())));
     return 0;
 }
 

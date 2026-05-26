@@ -1,6 +1,7 @@
 #include "vm.hpp"
 
 #include <iomanip>
+#include <memory>
 #include <ostream>
 #include <stdexcept>
 #include <utility>
@@ -37,6 +38,19 @@ Value make_bool(bool value) {
     return result;
 }
 
+Value make_unit() {
+    Value result;
+    result.kind = ValueKind::unit;
+    return result;
+}
+
+Value make_array(std::vector<Value> values) {
+    Value result;
+    result.kind = ValueKind::array;
+    result.array_value = std::make_shared<std::vector<Value>>(std::move(values));
+    return result;
+}
+
 void expect_same_kind(const Value& left, const Value& right) {
     if (left.kind != right.kind) {
         throw std::runtime_error("runtime type mismatch");
@@ -56,6 +70,7 @@ Value add_values(const Value& left, const Value& right) {
     case ValueKind::glyph:
     case ValueKind::text:
     case ValueKind::unit:
+    case ValueKind::array:
         break;
     }
 
@@ -75,6 +90,7 @@ Value subtract_values(const Value& left, const Value& right) {
     case ValueKind::glyph:
     case ValueKind::text:
     case ValueKind::unit:
+    case ValueKind::array:
         break;
     }
 
@@ -94,6 +110,7 @@ Value multiply_values(const Value& left, const Value& right) {
     case ValueKind::glyph:
     case ValueKind::text:
     case ValueKind::unit:
+    case ValueKind::array:
         break;
     }
 
@@ -125,6 +142,7 @@ Value divide_values(const Value& left, const Value& right) {
     case ValueKind::glyph:
     case ValueKind::text:
     case ValueKind::unit:
+    case ValueKind::array:
         break;
     }
 
@@ -148,6 +166,8 @@ bool values_equal(const Value& left, const Value& right) {
         return left.text_value == right.text_value;
     case ValueKind::unit:
         return true;
+    case ValueKind::array:
+        break;
     }
 
     return false;
@@ -166,6 +186,7 @@ int compare_values(const Value& left, const Value& right) {
     case ValueKind::glyph:
     case ValueKind::text:
     case ValueKind::unit:
+    case ValueKind::array:
         break;
     }
 
@@ -202,7 +223,33 @@ void print_value(const Value& value, std::ostream& output) {
         return;
     case ValueKind::unit:
         throw std::runtime_error("cannot print unit value");
+    case ValueKind::array:
+        throw std::runtime_error("cannot print array value");
     }
+}
+
+std::size_t index_value(const Value& value) {
+    if (value.kind == ValueKind::signed_integer) {
+        if (value.signed_value < 0) {
+            throw std::runtime_error("array index out of bounds");
+        }
+
+        return static_cast<std::size_t>(value.signed_value);
+    }
+
+    if (value.kind == ValueKind::unsigned_integer) {
+        return static_cast<std::size_t>(value.unsigned_value);
+    }
+
+    throw std::runtime_error("array index must be integer");
+}
+
+std::vector<Value>& array_elements(const Value& value) {
+    if (value.kind != ValueKind::array || value.array_value == nullptr) {
+        throw std::runtime_error("expected array value");
+    }
+
+    return *value.array_value;
 }
 
 } // namespace
@@ -333,6 +380,47 @@ void VirtualMachine::run(std::ostream& output) {
             pop();
             ++frame.ip;
             break;
+        case OpCode::make_array: {
+            if (stack_.size() < instruction.operand) {
+                throw std::runtime_error("not enough values on stack for array literal");
+            }
+
+            std::vector<Value> elements(instruction.operand);
+            for (std::size_t index = instruction.operand; index > 0; --index) {
+                elements[index - 1] = pop();
+            }
+
+            stack_.push_back(make_array(std::move(elements)));
+            ++frame.ip;
+            break;
+        }
+        case OpCode::load_index: {
+            const Value index = pop();
+            const Value array = pop();
+            std::vector<Value>& elements = array_elements(array);
+            const std::size_t offset = index_value(index);
+            if (offset >= elements.size()) {
+                throw std::runtime_error("array index out of bounds");
+            }
+
+            stack_.push_back(elements[offset]);
+            ++frame.ip;
+            break;
+        }
+        case OpCode::array_len: {
+            const Value array = pop();
+            stack_.push_back(make_signed(static_cast<std::int64_t>(array_elements(array).size())));
+            ++frame.ip;
+            break;
+        }
+        case OpCode::array_push: {
+            const Value value = pop();
+            const Value array = pop();
+            array_elements(array).push_back(value);
+            stack_.push_back(make_unit());
+            ++frame.ip;
+            break;
+        }
         case OpCode::print:
             print_value(pop(), output);
             ++frame.ip;

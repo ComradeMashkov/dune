@@ -9,6 +9,7 @@ namespace dune {
 enum class TokenType {
     let,
     fn_keyword,
+    import_keyword,
     return_keyword,
     print,
     if_keyword,
@@ -57,11 +58,14 @@ enum class TokenType {
     less_equal,
     colon,
     comma,
+    dot,
     semicolon,
     left_paren,
     right_paren,
     left_brace,
     right_brace,
+    left_bracket,
+    right_bracket,
     eof,
 };
 

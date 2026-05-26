@@ -16,18 +16,18 @@ public:
 
 private:
     struct FunctionSignature {
-        std::vector<ValueType> parameters;
-        ValueType return_type = ValueType::int_type;
+        std::vector<Type> parameters;
+        Type return_type;
     };
 
     struct Local {
         std::string pointer;
-        ValueType type = ValueType::int_type;
+        Type type;
     };
 
     struct TypedValue {
         std::string name;
-        ValueType type = ValueType::int_type;
+        Type type;
     };
 
     bool emit_statement(const Statement& statement, std::ostream& output);
@@ -35,6 +35,10 @@ private:
     TypedValue emit_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_binary_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_call_expression(const Expression& expression, std::ostream& output);
+    TypedValue emit_method_call_expression(const Expression& expression, std::ostream& output);
+    TypedValue emit_array_method_call_expression(const Expression& expression, std::ostream& output);
+    TypedValue emit_array_literal(const Expression& expression, std::ostream& output);
+    TypedValue emit_index_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_text_literal(const std::string& lexeme);
     void emit_function(const Statement& statement, std::ostream& output);
     void emit_print(const TypedValue& value, std::ostream& output);
@@ -43,20 +47,23 @@ private:
 
     std::string next_register();
     std::string next_label(std::string_view name);
-    std::string llvm_type(ValueType type) const;
-    std::string printf_format_name(ValueType type) const;
+    std::string llvm_type(const Type& type) const;
+    std::string printf_format_name(const Type& type) const;
+    std::size_t llvm_size(const Type& type) const;
     std::string function_name(const std::string& name) const;
-    std::string default_value(ValueType type) const;
+    std::string default_value(const Type& type) const;
     std::string decode_glyph_literal(const std::string& lexeme) const;
     std::string decode_text_literal(const std::string& lexeme) const;
     std::string llvm_text_literal(const std::string& value) const;
+    std::string llvm_symbol(const std::string& value) const;
     TypedValue cast_for_print(const TypedValue& value, std::ostream& output);
 
-    std::unordered_map<const Expression*, ValueType> expression_types_;
+    std::unordered_map<const Expression*, Type> expression_types_;
+    std::unordered_map<const Expression*, std::string> resolved_calls_;
     std::unordered_map<std::string, FunctionSignature> functions_;
     std::unordered_map<std::string, Local> locals_;
     std::vector<std::string> string_globals_;
-    ValueType current_return_type_ = ValueType::int_type;
+    Type current_return_type_;
     std::size_t register_count_ = 0;
     std::size_t label_count_ = 0;
     std::size_t string_literal_count_ = 0;

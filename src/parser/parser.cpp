@@ -33,6 +33,38 @@ std::unique_ptr<Expression> make_call(std::string name, std::vector<std::unique_
     return expression;
 }
 
+std::unique_ptr<Expression> make_method_call(std::unique_ptr<Expression> receiver, std::string name,
+                                             std::vector<std::unique_ptr<Expression>> arguments,
+                                             SourceLocation location) {
+    auto expression = std::make_unique<Expression>(
+        Expression{ExpressionKind::method_call, std::move(name), std::move(receiver), nullptr});
+    expression->arguments = std::move(arguments);
+    expression->location = location;
+    return expression;
+}
+
+std::unique_ptr<Expression> make_array(std::vector<std::unique_ptr<Expression>> elements, SourceLocation location) {
+    auto expression = std::make_unique<Expression>(Expression{ExpressionKind::array, "", nullptr, nullptr});
+    expression->arguments = std::move(elements);
+    expression->location = location;
+    return expression;
+}
+
+std::unique_ptr<Expression> make_index(std::unique_ptr<Expression> array, std::unique_ptr<Expression> index,
+                                       SourceLocation location) {
+    Expression expression{ExpressionKind::index, "", std::move(array), std::move(index)};
+    expression.location = location;
+    return std::make_unique<Expression>(std::move(expression));
+}
+
+Type make_type(ValueType type) {
+    return Type{type, nullptr};
+}
+
+Type make_array_type(Type element) {
+    return Type{ValueType::array_type, std::make_shared<Type>(std::move(element))};
+}
+
 } // namespace
 
 Parser::Parser(std::vector<Token> tokens) : tokens_(std::move(tokens)) {}
@@ -103,6 +135,10 @@ const Token& Parser::consume(TokenType type, std::string_view message) {
 Statement Parser::statement() {
     if (match(TokenType::fn_keyword)) {
         return function_statement();
+    }
+
+    if (match(TokenType::import_keyword)) {
+        return import_statement();
     }
 
     if (match(TokenType::let)) {
@@ -176,6 +212,16 @@ Statement Parser::function_statement() {
     Statement statement{StatementKind::function, name.lexeme, nullptr, block(), {}};
     statement.type = return_type;
     statement.parameters = std::move(parsed_parameters);
+    statement.location = location_from_token(keyword);
+    return statement;
+}
+
+Statement Parser::import_statement() {
+    const Token& keyword = previous();
+    const Token& name = consume(TokenType::identifier, "expected module name after import");
+    consume(TokenType::semicolon, "expected ';' after import");
+
+    Statement statement{StatementKind::import_statement, name.lexeme, nullptr, {}, {}};
     statement.location = location_from_token(keyword);
     return statement;
 }
@@ -304,75 +350,81 @@ TypeAnnotation Parser::optional_type_annotation() {
 
 TypeAnnotation Parser::type_annotation() {
     if (match(TokenType::int_keyword)) {
-        return TypeAnnotation{true, ValueType::int_type};
+        return TypeAnnotation{true, make_type(ValueType::int_type)};
     }
 
     if (match(TokenType::bool_keyword)) {
-        return TypeAnnotation{true, ValueType::bool_type};
+        return TypeAnnotation{true, make_type(ValueType::bool_type)};
     }
 
     if (match(TokenType::i8_keyword)) {
-        return TypeAnnotation{true, ValueType::i8_type};
+        return TypeAnnotation{true, make_type(ValueType::i8_type)};
     }
 
     if (match(TokenType::i16_keyword)) {
-        return TypeAnnotation{true, ValueType::i16_type};
+        return TypeAnnotation{true, make_type(ValueType::i16_type)};
     }
 
     if (match(TokenType::i32_keyword)) {
-        return TypeAnnotation{true, ValueType::i32_type};
+        return TypeAnnotation{true, make_type(ValueType::i32_type)};
     }
 
     if (match(TokenType::i64_keyword)) {
-        return TypeAnnotation{true, ValueType::i64_type};
+        return TypeAnnotation{true, make_type(ValueType::i64_type)};
     }
 
     if (match(TokenType::isize_keyword)) {
-        return TypeAnnotation{true, ValueType::isize_type};
+        return TypeAnnotation{true, make_type(ValueType::isize_type)};
     }
 
     if (match(TokenType::u8_keyword) || match(TokenType::uint8_keyword)) {
-        return TypeAnnotation{true, ValueType::u8_type};
+        return TypeAnnotation{true, make_type(ValueType::u8_type)};
     }
 
     if (match(TokenType::u16_keyword) || match(TokenType::uint16_keyword)) {
-        return TypeAnnotation{true, ValueType::u16_type};
+        return TypeAnnotation{true, make_type(ValueType::u16_type)};
     }
 
     if (match(TokenType::u32_keyword) || match(TokenType::uint32_keyword)) {
-        return TypeAnnotation{true, ValueType::u32_type};
+        return TypeAnnotation{true, make_type(ValueType::u32_type)};
     }
 
     if (match(TokenType::u64_keyword) || match(TokenType::uint64_keyword)) {
-        return TypeAnnotation{true, ValueType::u64_type};
+        return TypeAnnotation{true, make_type(ValueType::u64_type)};
     }
 
     if (match(TokenType::usize_keyword)) {
-        return TypeAnnotation{true, ValueType::usize_type};
+        return TypeAnnotation{true, make_type(ValueType::usize_type)};
     }
 
     if (match(TokenType::real32_keyword)) {
-        return TypeAnnotation{true, ValueType::real32_type};
+        return TypeAnnotation{true, make_type(ValueType::real32_type)};
     }
 
     if (match(TokenType::real64_keyword)) {
-        return TypeAnnotation{true, ValueType::real_type};
+        return TypeAnnotation{true, make_type(ValueType::real_type)};
     }
 
     if (match(TokenType::real_keyword)) {
-        return TypeAnnotation{true, ValueType::real_type};
+        return TypeAnnotation{true, make_type(ValueType::real_type)};
     }
 
     if (match(TokenType::glyph_keyword)) {
-        return TypeAnnotation{true, ValueType::glyph_type};
+        return TypeAnnotation{true, make_type(ValueType::glyph_type)};
     }
 
     if (match(TokenType::text_keyword)) {
-        return TypeAnnotation{true, ValueType::text_type};
+        return TypeAnnotation{true, make_type(ValueType::text_type)};
     }
 
     if (match(TokenType::unit_keyword)) {
-        return TypeAnnotation{true, ValueType::unit_type};
+        return TypeAnnotation{true, make_type(ValueType::unit_type)};
+    }
+
+    if (match(TokenType::left_bracket)) {
+        TypeAnnotation element = type_annotation();
+        consume(TokenType::right_bracket, "expected ']' after array element type");
+        return TypeAnnotation{true, make_array_type(std::move(element.type))};
     }
 
     throw std::runtime_error("expected type annotation");
@@ -434,15 +486,38 @@ std::unique_ptr<Expression> Parser::factor() {
 std::unique_ptr<Expression> Parser::call() {
     std::unique_ptr<Expression> expr = primary();
 
-    while (match(TokenType::left_paren)) {
-        const SourceLocation location = expr->location;
-        if (expr->kind != ExpressionKind::identifier) {
-            throw std::runtime_error("expected function name before arguments");
+    while (true) {
+        if (match(TokenType::left_paren)) {
+            const SourceLocation location = expr->location;
+            if (expr->kind != ExpressionKind::identifier) {
+                throw std::runtime_error("expected function name before arguments");
+            }
+
+            std::vector<std::unique_ptr<Expression>> parsed_arguments = arguments();
+            consume(TokenType::right_paren, "expected ')' after function arguments");
+            expr = make_call(expr->lexeme, std::move(parsed_arguments), location);
+            continue;
         }
 
-        std::vector<std::unique_ptr<Expression>> parsed_arguments = arguments();
-        consume(TokenType::right_paren, "expected ')' after function arguments");
-        expr = make_call(expr->lexeme, std::move(parsed_arguments), location);
+        if (match(TokenType::dot)) {
+            const SourceLocation location = expr->location;
+            const Token& member = consume(TokenType::identifier, "expected member name after '.'");
+            consume(TokenType::left_paren, "expected '(' after module function name");
+            std::vector<std::unique_ptr<Expression>> parsed_arguments = arguments();
+            consume(TokenType::right_paren, "expected ')' after module function arguments");
+            expr = make_method_call(std::move(expr), member.lexeme, std::move(parsed_arguments), location);
+            continue;
+        }
+
+        if (match(TokenType::left_bracket)) {
+            const SourceLocation location = expr->location;
+            std::unique_ptr<Expression> index = expression();
+            consume(TokenType::right_bracket, "expected ']' after array index");
+            expr = make_index(std::move(expr), std::move(index), location);
+            continue;
+        }
+
+        break;
     }
 
     return expr;
@@ -471,6 +546,22 @@ std::unique_ptr<Expression> Parser::primary() {
 
     if (match(TokenType::identifier)) {
         return make_leaf(ExpressionKind::identifier, previous().lexeme, location_from_token(previous()));
+    }
+
+    if (match(TokenType::left_bracket)) {
+        const SourceLocation location = location_from_token(previous());
+        std::vector<std::unique_ptr<Expression>> elements;
+        if (!check(TokenType::right_bracket)) {
+            while (true) {
+                elements.push_back(expression());
+                if (!match(TokenType::comma)) {
+                    break;
+                }
+            }
+        }
+
+        consume(TokenType::right_bracket, "expected ']' after array literal");
+        return make_array(std::move(elements), location);
     }
 
     if (match(TokenType::left_paren)) {
