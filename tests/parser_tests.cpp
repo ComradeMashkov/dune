@@ -104,6 +104,39 @@ bool parses_control_flow() {
     return passed;
 }
 
+bool parses_functions_and_types() {
+    const dune::Program program = parse_source("fn add(a: int, b: int) -> int { return a + b; } "
+                                               "let total: int = add(10, 20); print(total);");
+
+    if (!expect(program.statements.size() == 3, "expected function, let, and print statements")) {
+        return false;
+    }
+
+    bool passed = true;
+    const dune::Statement& function = program.statements[0];
+    passed = expect(function.kind == dune::StatementKind::function, "expected function declaration") && passed;
+    passed = expect(function.name == "add", "expected function name") && passed;
+    passed = expect(function.parameters.size() == 2, "expected two parameters") && passed;
+    passed = expect(function.parameters[0].name == "a", "expected first parameter name") && passed;
+    passed = expect(function.parameters[0].type.has_type, "expected first parameter type") && passed;
+    passed = expect(function.parameters[0].type.type == dune::ValueType::int_type, "expected int parameter") && passed;
+    passed = expect(function.type.has_type, "expected return type") && passed;
+    passed = expect(function.type.type == dune::ValueType::int_type, "expected int return type") && passed;
+    passed = expect(function.body.size() == 1, "expected one function body statement") && passed;
+    passed =
+        expect(function.body[0].kind == dune::StatementKind::return_statement, "expected return statement") && passed;
+    passed =
+        expect(function.body[0].expression->kind == dune::ExpressionKind::binary, "expected return binary") && passed;
+
+    const dune::Statement& let_statement = program.statements[1];
+    passed = expect(let_statement.type.has_type, "expected let type annotation") && passed;
+    passed = expect(let_statement.expression->kind == dune::ExpressionKind::call, "expected call expression") && passed;
+    passed = expect(let_statement.expression->lexeme == "add", "expected call target") && passed;
+    passed = expect(let_statement.expression->arguments.size() == 2, "expected two call arguments") && passed;
+
+    return passed;
+}
+
 } // namespace
 
 int main() {
@@ -111,6 +144,7 @@ int main() {
     passed = parses_let_and_print() && passed;
     passed = parses_operator_precedence() && passed;
     passed = parses_control_flow() && passed;
+    passed = parses_functions_and_types() && passed;
 
     return passed ? 0 : 1;
 }

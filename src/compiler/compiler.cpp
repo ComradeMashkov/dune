@@ -1,18 +1,63 @@
 #include "compiler.hpp"
 
+#include "typechecker/type_checker.hpp"
+
 #include <stdexcept>
 
 namespace dune {
 
 Bytecode Compiler::compile(const Program& program) {
+    TypeChecker type_checker;
+    type_checker.check(program);
+
     bytecode_ = Bytecode{};
     locals_.clear();
+    functions_.clear();
+    instructions_ = &bytecode_.instructions;
 
+    collect_functions(program.statements);
     compile_statements(program.statements);
 
     emit(OpCode::halt);
     bytecode_.local_count = locals_.size();
+
+    for (const Statement& statement : program.statements) {
+        if (statement.kind == StatementKind::function) {
+            compile_function(statement);
+        }
+    }
+
+    instructions_ = nullptr;
     return bytecode_;
+}
+
+void Compiler::collect_functions(const std::vector<Statement>& statements) {
+    for (const Statement& statement : statements) {
+        if (statement.kind != StatementKind::function) {
+            continue;
+        }
+
+        const std::size_t index = bytecode_.functions.size();
+        functions_.emplace(statement.name, index);
+        bytecode_.functions.push_back(Bytecode::Function{statement.name, statement.parameters.size(), 0, {}});
+    }
+}
+
+void Compiler::compile_function(const Statement& statement) {
+    const std::size_t function_index = resolve_function(statement.name);
+    Bytecode::Function& function = bytecode_.functions.at(function_index);
+
+    locals_.clear();
+    instructions_ = &function.instructions;
+    for (const Parameter& parameter : statement.parameters) {
+        declare_local(parameter.name);
+    }
+
+    compile_statements(statement.body);
+    emit(OpCode::push_constant, add_constant(0));
+    emit(OpCode::return_value);
+
+    function.local_count = locals_.size();
 }
 
 void Compiler::compile_statements(const std::vector<Statement>& statements) {
@@ -45,25 +90,31 @@ void Compiler::compile_statement(const Statement& statement) {
         compile_statements(statement.body);
 
         if (statement.else_body.empty()) {
-            patch_operand(false_jump, bytecode_.instructions.size());
+            patch_operand(false_jump, instructions_->size());
             return;
         }
 
         const std::size_t end_jump = emit(OpCode::jump);
-        patch_operand(false_jump, bytecode_.instructions.size());
+        patch_operand(false_jump, instructions_->size());
         compile_statements(statement.else_body);
-        patch_operand(end_jump, bytecode_.instructions.size());
+        patch_operand(end_jump, instructions_->size());
         return;
     }
     case StatementKind::while_statement: {
-        const std::size_t loop_start = bytecode_.instructions.size();
+        const std::size_t loop_start = instructions_->size();
         compile_expression(*statement.expression);
         const std::size_t exit_jump = emit(OpCode::jump_if_false);
         compile_statements(statement.body);
         emit(OpCode::jump, loop_start);
-        patch_operand(exit_jump, bytecode_.instructions.size());
+        patch_operand(exit_jump, instructions_->size());
         return;
     }
+    case StatementKind::function:
+        return;
+    case StatementKind::return_statement:
+        compile_expression(*statement.expression);
+        emit(OpCode::return_value);
+        return;
     }
 }
 
@@ -77,6 +128,13 @@ void Compiler::compile_expression(const Expression& expression) {
         return;
     case ExpressionKind::boolean:
         emit(OpCode::push_constant, add_constant(expression.lexeme == "true" ? 1 : 0));
+        return;
+    case ExpressionKind::call:
+        for (const std::unique_ptr<Expression>& argument : expression.arguments) {
+            compile_expression(*argument);
+        }
+
+        emit(OpCode::call, resolve_function(expression.lexeme));
         return;
     case ExpressionKind::binary:
         compile_expression(*expression.left);
@@ -161,13 +219,22 @@ std::size_t Compiler::resolve_local(const std::string& name) const {
     return existing->second;
 }
 
+std::size_t Compiler::resolve_function(const std::string& name) const {
+    const auto existing = functions_.find(name);
+    if (existing == functions_.end()) {
+        throw std::runtime_error("undefined function '" + name + "'");
+    }
+
+    return existing->second;
+}
+
 std::size_t Compiler::emit(OpCode op, std::size_t operand) {
-    bytecode_.instructions.push_back(Instruction{op, operand});
-    return bytecode_.instructions.size() - 1;
+    instructions_->push_back(Instruction{op, operand});
+    return instructions_->size() - 1;
 }
 
 void Compiler::patch_operand(std::size_t instruction_index, std::size_t operand) {
-    bytecode_.instructions.at(instruction_index).operand = operand;
+    instructions_->at(instruction_index).operand = operand;
 }
 
 } // namespace dune

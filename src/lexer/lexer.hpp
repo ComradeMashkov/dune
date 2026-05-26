@@ -8,16 +8,21 @@ namespace dune {
 
 enum class TokenType {
     let,
+    fn_keyword,
+    return_keyword,
     print,
     if_keyword,
     else_keyword,
     while_keyword,
+    int_keyword,
+    bool_keyword,
     true_keyword,
     false_keyword,
     identifier,
     number,
     plus,
     minus,
+    arrow,
     star,
     slash,
     equal,
@@ -27,6 +32,8 @@ enum class TokenType {
     greater_equal,
     less,
     less_equal,
+    colon,
+    comma,
     semicolon,
     left_paren,
     right_paren,
@@ -38,6 +45,8 @@ enum class TokenType {
 struct Token {
     TokenType type;
     std::string lexeme;
+    std::size_t line = 1;
+    std::size_t column = 1;
 };
 
 class Lexer {
@@ -54,12 +63,14 @@ private:
     char peek() const;
     void skip_whitespace();
 
-    Token make_token(TokenType type, std::size_t start) const;
-    Token identifier(std::size_t start);
-    Token number(std::size_t start);
+    Token make_token(TokenType type, std::size_t start, std::size_t line, std::size_t column) const;
+    Token identifier(std::size_t start, std::size_t line, std::size_t column);
+    Token number(std::size_t start, std::size_t line, std::size_t column);
 
     std::string source_;
     std::size_t current_ = 0;
+    std::size_t line_ = 1;
+    std::size_t column_ = 1;
 };
 
 } // namespace dune

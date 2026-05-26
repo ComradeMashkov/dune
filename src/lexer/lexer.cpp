@@ -12,63 +12,73 @@ Token Lexer::next_token() {
     skip_whitespace();
 
     if (is_at_end()) {
-        return Token{TokenType::eof, ""};
+        return Token{TokenType::eof, "", line_, column_};
     }
 
     const std::size_t start = current_;
+    const std::size_t line = line_;
+    const std::size_t column = column_;
     const char current = advance();
 
     if (std::isalpha(static_cast<unsigned char>(current)) || current == '_') {
-        return identifier(start);
+        return identifier(start, line, column);
     }
 
     if (std::isdigit(static_cast<unsigned char>(current))) {
-        return number(start);
+        return number(start, line, column);
     }
 
     switch (current) {
     case '+':
-        return make_token(TokenType::plus, start);
+        return make_token(TokenType::plus, start, line, column);
     case '-':
-        return make_token(TokenType::minus, start);
-    case '*':
-        return make_token(TokenType::star, start);
-    case '/':
-        return make_token(TokenType::slash, start);
-    case '=':
-        if (match('=')) {
-            return make_token(TokenType::equal_equal, start);
+        if (match('>')) {
+            return make_token(TokenType::arrow, start, line, column);
         }
 
-        return make_token(TokenType::equal, start);
+        return make_token(TokenType::minus, start, line, column);
+    case '*':
+        return make_token(TokenType::star, start, line, column);
+    case '/':
+        return make_token(TokenType::slash, start, line, column);
+    case '=':
+        if (match('=')) {
+            return make_token(TokenType::equal_equal, start, line, column);
+        }
+
+        return make_token(TokenType::equal, start, line, column);
     case '!':
         if (match('=')) {
-            return make_token(TokenType::bang_equal, start);
+            return make_token(TokenType::bang_equal, start, line, column);
         }
 
         break;
     case '>':
         if (match('=')) {
-            return make_token(TokenType::greater_equal, start);
+            return make_token(TokenType::greater_equal, start, line, column);
         }
 
-        return make_token(TokenType::greater, start);
+        return make_token(TokenType::greater, start, line, column);
     case '<':
         if (match('=')) {
-            return make_token(TokenType::less_equal, start);
+            return make_token(TokenType::less_equal, start, line, column);
         }
 
-        return make_token(TokenType::less, start);
+        return make_token(TokenType::less, start, line, column);
+    case ':':
+        return make_token(TokenType::colon, start, line, column);
+    case ',':
+        return make_token(TokenType::comma, start, line, column);
     case ';':
-        return make_token(TokenType::semicolon, start);
+        return make_token(TokenType::semicolon, start, line, column);
     case '(':
-        return make_token(TokenType::left_paren, start);
+        return make_token(TokenType::left_paren, start, line, column);
     case ')':
-        return make_token(TokenType::right_paren, start);
+        return make_token(TokenType::right_paren, start, line, column);
     case '{':
-        return make_token(TokenType::left_brace, start);
+        return make_token(TokenType::left_brace, start, line, column);
     case '}':
-        return make_token(TokenType::right_brace, start);
+        return make_token(TokenType::right_brace, start, line, column);
     default:
         break;
     }
@@ -96,7 +106,15 @@ bool Lexer::is_at_end() const {
 }
 
 char Lexer::advance() {
-    return source_[current_++];
+    const char current = source_[current_++];
+    if (current == '\n') {
+        ++line_;
+        column_ = 1;
+    } else {
+        ++column_;
+    }
+
+    return current;
 }
 
 bool Lexer::match(char expected) {
@@ -104,7 +122,7 @@ bool Lexer::match(char expected) {
         return false;
     }
 
-    ++current_;
+    advance();
     return true;
 }
 
@@ -122,53 +140,69 @@ void Lexer::skip_whitespace() {
     }
 }
 
-Token Lexer::make_token(TokenType type, std::size_t start) const {
-    return Token{type, source_.substr(start, current_ - start)};
+Token Lexer::make_token(TokenType type, std::size_t start, std::size_t line, std::size_t column) const {
+    return Token{type, source_.substr(start, current_ - start), line, column};
 }
 
-Token Lexer::identifier(std::size_t start) {
+Token Lexer::identifier(std::size_t start, std::size_t line, std::size_t column) {
     while (std::isalnum(static_cast<unsigned char>(peek())) || peek() == '_') {
         advance();
     }
 
     const std::string lexeme = source_.substr(start, current_ - start);
     if (lexeme == "let") {
-        return Token{TokenType::let, lexeme};
+        return Token{TokenType::let, lexeme, line, column};
+    }
+
+    if (lexeme == "fn") {
+        return Token{TokenType::fn_keyword, lexeme, line, column};
+    }
+
+    if (lexeme == "return") {
+        return Token{TokenType::return_keyword, lexeme, line, column};
     }
 
     if (lexeme == "print") {
-        return Token{TokenType::print, lexeme};
+        return Token{TokenType::print, lexeme, line, column};
     }
 
     if (lexeme == "if") {
-        return Token{TokenType::if_keyword, lexeme};
+        return Token{TokenType::if_keyword, lexeme, line, column};
     }
 
     if (lexeme == "else") {
-        return Token{TokenType::else_keyword, lexeme};
+        return Token{TokenType::else_keyword, lexeme, line, column};
     }
 
     if (lexeme == "while") {
-        return Token{TokenType::while_keyword, lexeme};
+        return Token{TokenType::while_keyword, lexeme, line, column};
+    }
+
+    if (lexeme == "int") {
+        return Token{TokenType::int_keyword, lexeme, line, column};
+    }
+
+    if (lexeme == "bool") {
+        return Token{TokenType::bool_keyword, lexeme, line, column};
     }
 
     if (lexeme == "true") {
-        return Token{TokenType::true_keyword, lexeme};
+        return Token{TokenType::true_keyword, lexeme, line, column};
     }
 
     if (lexeme == "false") {
-        return Token{TokenType::false_keyword, lexeme};
+        return Token{TokenType::false_keyword, lexeme, line, column};
     }
 
-    return Token{TokenType::identifier, lexeme};
+    return Token{TokenType::identifier, lexeme, line, column};
 }
 
-Token Lexer::number(std::size_t start) {
+Token Lexer::number(std::size_t start, std::size_t line, std::size_t column) {
     while (std::isdigit(static_cast<unsigned char>(peek()))) {
         advance();
     }
 
-    return make_token(TokenType::number, start);
+    return make_token(TokenType::number, start, line, column);
 }
 
 } // namespace dune

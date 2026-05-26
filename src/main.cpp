@@ -2,6 +2,7 @@
 #include "compiler/compiler.hpp"
 #include "lexer/lexer.hpp"
 #include "parser/parser.hpp"
+#include "typechecker/type_checker.hpp"
 #include "vm/vm.hpp"
 
 #include <cstdlib>
@@ -13,7 +14,7 @@
 
 namespace {
 
-constexpr const char* version = "0.2.0";
+constexpr const char* version = "0.4.0";
 
 std::string read_file(const std::string& path) {
     std::ifstream input(path);
@@ -61,6 +62,9 @@ dune::Bytecode compile_bytecode(const dune::Program& program) {
 }
 
 std::string generate_assembly(const dune::Program& program) {
+    dune::TypeChecker type_checker;
+    type_checker.check(program);
+
     dune::AssemblyGenerator generator;
     std::ostringstream output;
     generator.generate(program, output);
