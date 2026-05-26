@@ -76,6 +76,7 @@ std::unique_ptr<Expression> clone_expression(const Expression& expression) {
                                                           clone_expression_pointer(expression.right)});
     result->location = expression.location;
     result->type = clone_type_annotation(expression.type);
+    result->field_names = expression.field_names;
     result->arguments.reserve(expression.arguments.size());
     for (const std::unique_ptr<Expression>& argument : expression.arguments) {
         result->arguments.push_back(clone_expression_pointer(argument));
@@ -202,10 +203,10 @@ std::vector<Statement> ModuleLoader::load_module(const std::string& module_name,
     qualify_module_program(module, module_name);
     for (Statement& statement : module.statements) {
         if (statement.kind != StatementKind::function && statement.kind != StatementKind::const_statement &&
-            statement.kind != StatementKind::import_statement) {
+            statement.kind != StatementKind::struct_statement && statement.kind != StatementKind::import_statement) {
             throw std::runtime_error("module '" + module_name +
                                      "' can only contain imports, constants, functions, and "
-                                     "impl blocks");
+                                     "structs");
         }
 
         statements.push_back(std::move(statement));
@@ -250,17 +251,23 @@ Program ModuleLoader::parse_file(const std::filesystem::path& path) const {
 void ModuleLoader::qualify_module_program(Program& program, const std::string& module_name) const {
     std::unordered_set<std::string> local_functions;
     std::unordered_set<std::string> local_constants;
+    std::unordered_set<std::string> local_structs;
     bool has_explicit_exports = false;
     for (const Statement& statement : program.statements) {
         if (statement.kind == StatementKind::function) {
             local_functions.insert(statement.name);
         }
 
+        if (statement.kind == StatementKind::struct_statement) {
+            local_structs.insert(statement.name);
+        }
+
         if (statement.kind == StatementKind::const_statement) {
             local_constants.insert(statement.name);
         }
 
-        if ((statement.kind == StatementKind::function || statement.kind == StatementKind::const_statement) &&
+        if ((statement.kind == StatementKind::function || statement.kind == StatementKind::const_statement ||
+             statement.kind == StatementKind::struct_statement) &&
             statement.exported) {
             has_explicit_exports = true;
         }
@@ -268,7 +275,7 @@ void ModuleLoader::qualify_module_program(Program& program, const std::string& m
 
     for (Statement& statement : program.statements) {
         if (statement.kind == StatementKind::const_statement) {
-            qualify_statement(statement, module_name, local_functions, local_constants);
+            qualify_statement(statement, module_name, local_functions, local_constants, local_structs);
             if (!has_explicit_exports) {
                 statement.exported = true;
             }
@@ -276,7 +283,7 @@ void ModuleLoader::qualify_module_program(Program& program, const std::string& m
         }
 
         if (statement.kind == StatementKind::function) {
-            qualify_statement(statement, module_name, local_functions, local_constants);
+            qualify_statement(statement, module_name, local_functions, local_constants, local_structs);
             if (statement.is_extern && statement.extern_symbol.empty()) {
                 statement.extern_symbol = statement.name;
             }
@@ -285,36 +292,74 @@ void ModuleLoader::qualify_module_program(Program& program, const std::string& m
             }
             statement.name = module_name + "." + statement.name;
         }
+
+        if (statement.kind == StatementKind::struct_statement) {
+            qualify_statement(statement, module_name, local_functions, local_constants, local_structs);
+            if (!has_explicit_exports) {
+                statement.exported = true;
+            }
+            statement.name = module_name + "." + statement.name;
+        }
+    }
+}
+
+void ModuleLoader::qualify_type_annotation(TypeAnnotation& annotation, const std::string& module_name,
+                                           const std::unordered_set<std::string>& local_structs) const {
+    if (!annotation.has_type) {
+        return;
+    }
+
+    qualify_type(annotation.type, module_name, local_structs);
+}
+
+void ModuleLoader::qualify_type(Type& type, const std::string& module_name,
+                                const std::unordered_set<std::string>& local_structs) const {
+    if (type.kind == ValueType::array_type && type.element != nullptr) {
+        qualify_type(*type.element, module_name, local_structs);
+        return;
+    }
+
+    if (type.kind == ValueType::generic_type && local_structs.contains(type.name)) {
+        type.name = module_name + "." + type.name;
     }
 }
 
 void ModuleLoader::qualify_statement(Statement& statement, const std::string& module_name,
                                      const std::unordered_set<std::string>& local_functions,
-                                     const std::unordered_set<std::string>& local_constants) const {
+                                     const std::unordered_set<std::string>& local_constants,
+                                     const std::unordered_set<std::string>& local_structs) const {
+    qualify_type_annotation(statement.type, module_name, local_structs);
+    for (Parameter& parameter : statement.parameters) {
+        qualify_type_annotation(parameter.type, module_name, local_structs);
+    }
+
     if (statement.expression != nullptr) {
-        qualify_expression(*statement.expression, module_name, local_functions, local_constants);
+        qualify_expression(*statement.expression, module_name, local_functions, local_constants, local_structs);
     }
 
     for (Statement& child : statement.body) {
-        qualify_statement(child, module_name, local_functions, local_constants);
+        qualify_statement(child, module_name, local_functions, local_constants, local_structs);
     }
 
     for (Statement& child : statement.else_body) {
-        qualify_statement(child, module_name, local_functions, local_constants);
+        qualify_statement(child, module_name, local_functions, local_constants, local_structs);
     }
 
     if (statement.initializer != nullptr) {
-        qualify_statement(*statement.initializer, module_name, local_functions, local_constants);
+        qualify_statement(*statement.initializer, module_name, local_functions, local_constants, local_structs);
     }
 
     if (statement.increment != nullptr) {
-        qualify_statement(*statement.increment, module_name, local_functions, local_constants);
+        qualify_statement(*statement.increment, module_name, local_functions, local_constants, local_structs);
     }
 }
 
 void ModuleLoader::qualify_expression(Expression& expression, const std::string& module_name,
                                       const std::unordered_set<std::string>& local_functions,
-                                      const std::unordered_set<std::string>& local_constants) const {
+                                      const std::unordered_set<std::string>& local_constants,
+                                      const std::unordered_set<std::string>& local_structs) const {
+    qualify_type_annotation(expression.type, module_name, local_structs);
+
     if (expression.kind == ExpressionKind::call && local_functions.contains(expression.lexeme)) {
         expression.lexeme = module_name + "." + expression.lexeme;
     }
@@ -323,17 +368,21 @@ void ModuleLoader::qualify_expression(Expression& expression, const std::string&
         expression.lexeme = module_name + "." + expression.lexeme;
     }
 
+    if (expression.kind == ExpressionKind::struct_literal && local_structs.contains(expression.lexeme)) {
+        expression.lexeme = module_name + "." + expression.lexeme;
+    }
+
     if (expression.left != nullptr) {
-        qualify_expression(*expression.left, module_name, local_functions, local_constants);
+        qualify_expression(*expression.left, module_name, local_functions, local_constants, local_structs);
     }
 
     if (expression.right != nullptr) {
-        qualify_expression(*expression.right, module_name, local_functions, local_constants);
+        qualify_expression(*expression.right, module_name, local_functions, local_constants, local_structs);
     }
 
     for (std::unique_ptr<Expression>& argument : expression.arguments) {
         if (argument != nullptr) {
-            qualify_expression(*argument, module_name, local_functions, local_constants);
+            qualify_expression(*argument, module_name, local_functions, local_constants, local_structs);
         }
     }
 }

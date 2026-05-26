@@ -173,6 +173,27 @@ int main() {
     passed = expect_valid("fn only_bad<T>(value: T) -> T { return value + value; } print(only_bad(1));",
                           "expected generic functions to instantiate only used types") &&
              passed;
+    passed = expect_valid("struct Point { x: real64, y: real64 } "
+                          "impl Point { fn sum() -> real64 { return self.x + self.y; } } "
+                          "fn make(x: real64, y: real64) -> Point { return Point { x: x, y: y }; } "
+                          "let p: Point = make(1.5, 2.5); let total: real64 = p.sum(); let x: real64 = p.x;",
+                          "expected structs, fields, literals, and methods to validate") &&
+             passed;
+    passed = expect_valid("fn same<T: comparable>(left: T, right: T) -> bool { return left == right; } "
+                          "fn lower<T: ordered>(left: T, right: T) -> bool { return left < right; } "
+                          "let text_ok: bool = same(\"dune\", \"dune\"); let int_ok: bool = lower(1, 2);",
+                          "expected comparable and ordered bounds to validate") &&
+             passed;
+    passed = expect_valid("import option; import result; import assert; import collections; "
+                          "let maybe: option.OptionInt = option.some_int(42); "
+                          "let fallback: int = option.none_int().unwrap_or(7); "
+                          "let ok: result.ResultInt = result.ok_int(maybe.unwrap_or(0)); "
+                          "let failed: result.ResultInt = result.err_int(\"bad\"); "
+                          "let repeated: [int] = collections.repeat_int(3, 4); "
+                          "let same: bool = assert.equals_int(repeated[0], ok.unwrap_or(0)); "
+                          "let error: text = failed.error_or(\"none\");",
+                          "expected struct-based stdlib modules to validate") &&
+             passed;
     passed = expect_fixture_valid("import feature_exports; let answer: int = feature_exports.ANSWER; "
                                   "let value: int = feature_exports.public();",
                                   "expected exported module members to validate") &&
@@ -284,6 +305,24 @@ int main() {
              passed;
     passed = expect_error_contains("fn bad<T: nope>(value: T) -> T { return value; } print(bad(1));",
                                    "unknown generic bound 'nope'", "expected unknown generic bound error") &&
+             passed;
+    passed = expect_error_contains("struct Point { x: int, y: int } let p: Point = Point { x: 1 };",
+                                   "missing field 'y' for struct 'Point'", "expected missing struct field") &&
+             passed;
+    passed = expect_error_contains("struct Point { x: int } let p: Point = Point { x: true };",
+                                   "expected type 'int' but got 'bool'", "expected struct field type mismatch") &&
+             passed;
+    passed = expect_error_contains("struct Point { x: int } let p: Point = Point { x: 1 }; print(p.y);",
+                                   "struct 'Point' has no field 'y'", "expected missing struct member") &&
+             passed;
+    passed = expect_error_contains("fn same<T: comparable>(left: T, right: T) -> bool { return left == right; } "
+                                   "let values: [int] = [1]; print(same(values, values));",
+                                   "no overload for function 'same' with argument types ([int], [int])",
+                                   "expected comparable bound mismatch") &&
+             passed;
+    passed = expect_error_contains("fn invalid<T>(left: T, right: T) -> bool { return left == right; } "
+                                   "let values: [int] = [1]; print(invalid(values, values));",
+                                   "while instantiating invalid<T = [int]>", "expected generic instantiation trace") &&
              passed;
     passed = expect_error_contains("import math; print(math.UNKNOWN);", "module 'math' does not export 'UNKNOWN'",
                                    "expected missing module value") &&

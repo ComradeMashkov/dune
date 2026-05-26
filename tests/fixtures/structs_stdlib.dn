@@ -1,0 +1,36 @@
+import assert;
+import collections;
+import option;
+import result;
+
+struct Point {
+    x: int,
+    y: int,
+}
+
+impl Point {
+    fn sum() -> int {
+        return self.x + self.y;
+    }
+}
+
+let point: Point = Point { x: 10, y: 20 };
+print(point.x);
+print(point.sum());
+
+let maybe: option.OptionInt = option.some_int(42);
+let missing: option.OptionInt = option.none_int();
+print(maybe.unwrap_or(0));
+print(missing.unwrap_or(7));
+print(maybe.is_some());
+print(missing.is_none());
+
+let ok: result.ResultInt = result.ok_int(9);
+let err: result.ResultInt = result.err_int("bad");
+print(ok.unwrap_or(0));
+print(err.unwrap_or(5));
+print(err.error_or("none"));
+
+let repeated: [int] = collections.repeat_int(3, 4);
+print(repeated.len());
+print(assert.equals_int(repeated[0], 3));

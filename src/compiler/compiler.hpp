@@ -2,6 +2,7 @@
 
 #include "ast/ast.hpp"
 #include "compiler/bytecode.hpp"
+#include "typechecker/type_checker.hpp"
 
 #include <cstddef>
 #include <string>
@@ -17,6 +18,7 @@ public:
 private:
     void collect_function(const Statement& statement);
     void collect_functions(const std::vector<Statement>& statements);
+    void collect_structs(const std::unordered_map<std::string, TypeChecker::StructDefinition>& structs);
     void collect_global_constants(const std::vector<Statement>& statements);
     void compile_function(const Statement& statement);
     void compile_global_constants();
@@ -24,6 +26,8 @@ private:
     void compile_statement(const Statement& statement);
     void compile_expression(const Expression& expression);
     void compile_method_call_expression(const Expression& expression);
+    void compile_member_expression(const Expression& expression);
+    void compile_struct_literal(const Expression& expression);
     void compile_binary_expression(const Expression& expression);
     void compile_cast_expression(const Expression& expression);
     void compile_slice_expression(const Expression& expression);
@@ -33,6 +37,7 @@ private:
     std::size_t resolve_local(const std::string& name) const;
     const Type& expression_type(const Expression& expression) const;
     std::size_t resolve_function(const std::string& name) const;
+    Type normalize_type(const Type& type) const;
     std::size_t emit(OpCode op, std::size_t operand = 0);
     void patch_operand(std::size_t instruction_index, std::size_t operand);
 
@@ -41,10 +46,16 @@ private:
         std::vector<std::size_t> continues;
     };
 
+    struct StructLayout {
+        std::vector<Parameter> fields;
+        std::unordered_map<std::string, std::size_t> field_indices;
+    };
+
     Bytecode bytecode_;
     std::unordered_map<std::string, std::size_t> locals_;
     std::unordered_map<std::string, Type> local_types_;
     std::unordered_map<std::string, std::size_t> functions_;
+    std::unordered_map<std::string, StructLayout> structs_;
     std::vector<const Statement*> global_constants_;
     std::unordered_map<const Expression*, Type> expression_types_;
     std::unordered_map<const Expression*, std::string> resolved_calls_;

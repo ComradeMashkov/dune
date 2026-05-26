@@ -2,7 +2,9 @@
 
 #include "typechecker/type_checker.hpp"
 
+#include <algorithm>
 #include <cstdint>
+#include <memory>
 #include <stdexcept>
 #include <utility>
 
@@ -55,6 +57,13 @@ Value make_text(std::string value) {
 Value make_unit() {
     Value result;
     result.kind = ValueKind::unit;
+    return result;
+}
+
+Value make_record(std::vector<Value> values) {
+    Value result;
+    result.kind = ValueKind::record;
+    result.record_value = std::make_shared<std::vector<Value>>(std::move(values));
     return result;
 }
 
@@ -177,6 +186,10 @@ Value default_value(const Type& type) {
         return make_text("");
     }
 
+    if (type.kind == ValueType::struct_type) {
+        return make_record({});
+    }
+
     return make_unit();
 }
 
@@ -190,10 +203,12 @@ Bytecode Compiler::compile(const Program& program) {
     locals_.clear();
     local_types_.clear();
     functions_.clear();
+    structs_.clear();
     global_constants_.clear();
     loop_stack_.clear();
     expression_types_ = type_checker.expression_types();
     resolved_calls_ = type_checker.resolved_calls();
+    collect_structs(type_checker.structs());
     const auto& instantiated_functions = type_checker.instantiated_functions();
     instructions_ = &bytecode_.instructions;
 
@@ -235,13 +250,26 @@ void Compiler::collect_function(const Statement& statement) {
     std::vector<Type> parameters;
     parameters.reserve(statement.parameters.size());
     for (const Parameter& parameter : statement.parameters) {
-        parameters.push_back(parameter.type.has_type ? parameter.type.type : make_type(ValueType::int_type));
+        parameters.push_back(parameter.type.has_type ? normalize_type(parameter.type.type)
+                                                     : make_type(ValueType::int_type));
     }
 
     functions_.emplace(function_key(statement.name, parameters), index);
     const std::string extern_symbol = statement.extern_symbol.empty() ? statement.name : statement.extern_symbol;
     bytecode_.functions.push_back(
         Bytecode::Function{statement.name, extern_symbol, statement.parameters.size(), 0, {}, statement.is_extern});
+}
+
+void Compiler::collect_structs(const std::unordered_map<std::string, TypeChecker::StructDefinition>& structs) {
+    for (const auto& [name, definition] : structs) {
+        StructLayout layout;
+        for (const TypeChecker::StructField& field : definition.fields) {
+            layout.field_indices.emplace(field.name, layout.fields.size());
+            layout.fields.push_back(Parameter{field.name, TypeAnnotation{true, field.type}, field.location});
+        }
+
+        structs_.emplace(name, std::move(layout));
+    }
 }
 
 void Compiler::collect_global_constants(const std::vector<Statement>& statements) {
@@ -256,7 +284,8 @@ void Compiler::compile_function(const Statement& statement) {
     std::vector<Type> parameters;
     parameters.reserve(statement.parameters.size());
     for (const Parameter& parameter : statement.parameters) {
-        parameters.push_back(parameter.type.has_type ? parameter.type.type : make_type(ValueType::int_type));
+        parameters.push_back(parameter.type.has_type ? normalize_type(parameter.type.type)
+                                                     : make_type(ValueType::int_type));
     }
 
     const std::size_t function_index = resolve_function(function_key(statement.name, parameters));
@@ -270,13 +299,14 @@ void Compiler::compile_function(const Statement& statement) {
     loop_stack_.clear();
     instructions_ = &function.instructions;
     for (const Parameter& parameter : statement.parameters) {
-        declare_local(parameter.name, parameter.type.has_type ? parameter.type.type : make_type(ValueType::int_type));
+        declare_local(parameter.name,
+                      parameter.type.has_type ? normalize_type(parameter.type.type) : make_type(ValueType::int_type));
     }
 
     compile_global_constants();
     compile_statements(statement.body);
-    emit(OpCode::push_constant,
-         add_constant(default_value(statement.type.has_type ? statement.type.type : make_type(ValueType::int_type))));
+    emit(OpCode::push_constant, add_constant(default_value(statement.type.has_type ? normalize_type(statement.type.type)
+                                                                                   : make_type(ValueType::int_type))));
     emit(OpCode::return_value);
 
     function.local_count = locals_.size();
@@ -285,7 +315,8 @@ void Compiler::compile_function(const Statement& statement) {
 void Compiler::compile_global_constants() {
     for (const Statement* statement : global_constants_) {
         compile_expression(*statement->expression);
-        const Type type = statement->type.has_type ? statement->type.type : expression_type(*statement->expression);
+        const Type type =
+            statement->type.has_type ? normalize_type(statement->type.type) : expression_type(*statement->expression);
         emit(OpCode::store_local, declare_local(statement->name, type));
     }
 }
@@ -301,7 +332,8 @@ void Compiler::compile_statement(const Statement& statement) {
     case StatementKind::let:
     case StatementKind::const_statement: {
         compile_expression(*statement.expression);
-        const Type type = statement.type.has_type ? statement.type.type : expression_type(*statement.expression);
+        const Type type =
+            statement.type.has_type ? normalize_type(statement.type.type) : expression_type(*statement.expression);
         emit(OpCode::store_local, declare_local(statement.name, type));
         return;
     }
@@ -390,6 +422,7 @@ void Compiler::compile_statement(const Statement& statement) {
         return;
     case StatementKind::function:
     case StatementKind::impl_statement:
+    case StatementKind::struct_statement:
         return;
     case StatementKind::return_statement:
         if (statement.expression == nullptr) {
@@ -436,6 +469,9 @@ void Compiler::compile_expression(const Expression& expression) {
 
         emit(OpCode::make_array, expression.arguments.size());
         return;
+    case ExpressionKind::struct_literal:
+        compile_struct_literal(expression);
+        return;
     case ExpressionKind::index:
         compile_expression(*expression.left);
         compile_expression(*expression.right);
@@ -445,12 +481,8 @@ void Compiler::compile_expression(const Expression& expression) {
         compile_slice_expression(expression);
         return;
     case ExpressionKind::member:
-        if (expression.left->kind == ExpressionKind::identifier) {
-            emit(OpCode::load_local, resolve_local(expression.left->lexeme + "." + expression.lexeme));
-            return;
-        }
-
-        throw std::runtime_error("unknown member '" + expression.lexeme + "'");
+        compile_member_expression(expression);
+        return;
     case ExpressionKind::unary:
         compile_expression(*expression.right);
         if (expression.lexeme == "-") {
@@ -481,6 +513,51 @@ void Compiler::compile_expression(const Expression& expression) {
         compile_binary_expression(expression);
         return;
     }
+}
+
+void Compiler::compile_member_expression(const Expression& expression) {
+    const auto receiver_type = expression_types_.find(expression.left.get());
+    if (receiver_type != expression_types_.end() && receiver_type->second.kind == ValueType::struct_type) {
+        const auto layout = structs_.find(receiver_type->second.name);
+        if (layout == structs_.end()) {
+            throw std::runtime_error("unknown struct '" + receiver_type->second.name + "'");
+        }
+
+        const auto field = layout->second.field_indices.find(expression.lexeme);
+        if (field == layout->second.field_indices.end()) {
+            throw std::runtime_error("unknown field '" + expression.lexeme + "'");
+        }
+
+        compile_expression(*expression.left);
+        emit(OpCode::load_field, field->second);
+        return;
+    }
+
+    if (expression.left->kind == ExpressionKind::identifier) {
+        emit(OpCode::load_local, resolve_local(expression.left->lexeme + "." + expression.lexeme));
+        return;
+    }
+
+    throw std::runtime_error("unknown member '" + expression.lexeme + "'");
+}
+
+void Compiler::compile_struct_literal(const Expression& expression) {
+    const auto layout = structs_.find(expression.lexeme);
+    if (layout == structs_.end()) {
+        throw std::runtime_error("unknown struct '" + expression.lexeme + "'");
+    }
+
+    for (const Parameter& field : layout->second.fields) {
+        const auto source = std::find(expression.field_names.begin(), expression.field_names.end(), field.name);
+        if (source == expression.field_names.end()) {
+            throw std::runtime_error("missing field '" + field.name + "'");
+        }
+
+        const std::size_t index = static_cast<std::size_t>(source - expression.field_names.begin());
+        compile_expression(*expression.arguments.at(index));
+    }
+
+    emit(OpCode::make_record, layout->second.fields.size());
 }
 
 void Compiler::compile_method_call_expression(const Expression& expression) {
@@ -652,9 +729,9 @@ void Compiler::compile_binary_expression(const Expression& expression) {
 
 void Compiler::compile_cast_expression(const Expression& expression) {
     compile_expression(*expression.left);
-    const Type target = expression.type.type;
+    const Type target = normalize_type(expression.type.type);
     if (target.kind == ValueType::text_type || target.kind == ValueType::unit_type ||
-        target.kind == ValueType::array_type) {
+        target.kind == ValueType::array_type || target.kind == ValueType::struct_type) {
         return;
     }
 
@@ -734,6 +811,22 @@ const Type& Compiler::expression_type(const Expression& expression) const {
     }
 
     return existing->second;
+}
+
+Type Compiler::normalize_type(const Type& type) const {
+    if (type.kind == ValueType::array_type) {
+        Type result{ValueType::array_type, nullptr};
+        if (type.element != nullptr) {
+            result.element = std::make_shared<Type>(normalize_type(*type.element));
+        }
+        return result;
+    }
+
+    if (type.kind == ValueType::generic_type && structs_.contains(type.name)) {
+        return make_struct_type(type.name);
+    }
+
+    return type;
 }
 
 std::size_t Compiler::resolve_function(const std::string& name) const {

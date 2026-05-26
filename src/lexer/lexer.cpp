@@ -210,6 +210,10 @@ Token Lexer::identifier(std::size_t start, std::size_t line, std::size_t column)
         return Token{TokenType::impl_keyword, lexeme, line, column};
     }
 
+    if (lexeme == "struct") {
+        return Token{TokenType::struct_keyword, lexeme, line, column};
+    }
+
     if (lexeme == "import") {
         return Token{TokenType::import_keyword, lexeme, line, column};
     }

@@ -253,6 +253,34 @@ bool compiles_stdlib_extension_methods() {
     return passed;
 }
 
+bool compiles_struct_literals_fields_and_methods() {
+    const dune::Bytecode bytecode =
+        compile_source("struct Point { x: int, y: int } "
+                       "impl Point { fn sum() -> int { return self.x + self.y; } } "
+                       "let p: Point = Point { x: 10, y: 20 }; print(p.x); print(p.sum());");
+
+    bool saw_make_record = false;
+    bool saw_load_field = false;
+    bool saw_method = false;
+    for (const dune::Instruction& instruction : bytecode.instructions) {
+        saw_make_record = saw_make_record || instruction.op == dune::OpCode::make_record;
+        saw_load_field = saw_load_field || instruction.op == dune::OpCode::load_field;
+    }
+
+    for (const dune::Bytecode::Function& function : bytecode.functions) {
+        saw_method = saw_method || function.name == "sum";
+        for (const dune::Instruction& instruction : function.instructions) {
+            saw_load_field = saw_load_field || instruction.op == dune::OpCode::load_field;
+        }
+    }
+
+    bool passed = true;
+    passed = expect(saw_make_record, "expected make_record instruction") && passed;
+    passed = expect(saw_load_field, "expected load_field instruction") && passed;
+    passed = expect(saw_method, "expected struct method function") && passed;
+    return passed;
+}
+
 } // namespace
 
 int main() {
@@ -265,6 +293,7 @@ int main() {
     passed = compiles_stdlib_primitives() && passed;
     passed = compiles_generic_functions() && passed;
     passed = compiles_stdlib_extension_methods() && passed;
+    passed = compiles_struct_literals_fields_and_methods() && passed;
 
     return passed ? 0 : 1;
 }

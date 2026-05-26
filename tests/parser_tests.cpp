@@ -437,6 +437,45 @@ bool parses_impl_methods() {
     return passed;
 }
 
+bool parses_structs_and_struct_literals() {
+    const dune::Program program = parse_source("struct Point { x: real64, y: real64 } "
+                                               "impl Point { fn sum() -> real64 { return self.x + self.y; } } "
+                                               "let p: Point = Point { x: 1.5, y: 2.5 }; print(p.sum());");
+
+    if (!expect(program.statements.size() == 4, "expected struct, impl, let, and print")) {
+        return false;
+    }
+
+    bool passed = true;
+    const dune::Statement& structure = program.statements[0];
+    passed = expect(structure.kind == dune::StatementKind::struct_statement, "expected struct statement") && passed;
+    passed = expect(structure.name == "Point", "expected struct name") && passed;
+    passed = expect(structure.parameters.size() == 2, "expected two struct fields") && passed;
+    passed = expect(structure.parameters[0].name == "x", "expected first field name") && passed;
+    passed =
+        expect(structure.parameters[0].type.type.kind == dune::ValueType::real_type, "expected real64 field") && passed;
+
+    const dune::Statement& methods = program.statements[1];
+    passed = expect(methods.kind == dune::StatementKind::impl_statement, "expected impl statement") && passed;
+    passed = expect(methods.type.type.kind == dune::ValueType::generic_type, "expected named receiver type") && passed;
+    passed = expect(methods.type.type.name == "Point", "expected Point receiver") && passed;
+
+    const dune::Expression& literal = *program.statements[2].expression;
+    passed =
+        expect(literal.kind == dune::ExpressionKind::struct_literal, "expected struct literal expression") && passed;
+    passed = expect(literal.lexeme == "Point", "expected Point literal") && passed;
+    passed = expect(literal.field_names.size() == 2, "expected two literal field names") && passed;
+    passed = expect(literal.field_names[0] == "x", "expected first literal field name") && passed;
+    passed =
+        expect(literal.arguments[1]->kind == dune::ExpressionKind::floating, "expected floating field value") && passed;
+
+    const dune::Expression& call = *program.statements[3].expression;
+    passed = expect(call.kind == dune::ExpressionKind::method_call, "expected struct method call") && passed;
+    passed = expect(call.lexeme == "sum", "expected method name") && passed;
+
+    return passed;
+}
+
 } // namespace
 
 int main() {
@@ -453,6 +492,7 @@ int main() {
     passed = parses_stdlib_primitives() && passed;
     passed = parses_generic_functions() && passed;
     passed = parses_impl_methods() && passed;
+    passed = parses_structs_and_struct_literals() && passed;
 
     return passed ? 0 : 1;
 }

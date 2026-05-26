@@ -17,6 +17,7 @@ enum class ValueKind {
     text,
     unit,
     array,
+    record,
 };
 
 struct Value {
@@ -28,6 +29,7 @@ struct Value {
     bool bool_value = false;
     std::string text_value;
     std::shared_ptr<std::vector<Value>> array_value;
+    std::shared_ptr<std::vector<Value>> record_value;
 };
 
 enum class OpCode {
@@ -58,7 +60,9 @@ enum class OpCode {
     return_value,
     pop,
     make_array,
+    make_record,
     load_index,
+    load_field,
     load_slice,
     array_len,
     array_push,

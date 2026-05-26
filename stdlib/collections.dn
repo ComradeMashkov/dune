@@ -1,0 +1,24 @@
+export fn singleton_int(value: int) -> [int] {
+    return [value];
+}
+
+export fn pair_int(left: int, right: int) -> [int] {
+    return [left, right];
+}
+
+export fn singleton_text(value: text) -> [text] {
+    return [value];
+}
+
+export fn pair_text(left: text, right: text) -> [text] {
+    return [left, right];
+}
+
+export fn repeat_int(value: int, count: int) -> [int] {
+    let values: [int] = [];
+    for let index = 0; index < count; index = index + 1 {
+        values.push(value);
+    }
+
+    return values;
+}

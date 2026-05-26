@@ -451,5 +451,47 @@ int main() {
                            }) &&
              passed;
 
+    passed = expect_tokens("export struct Point { x: real64, y: real64 } "
+                           "let p: Point = Point { x: 1.0, y: 2.0 }; print(p.x);",
+                           {
+                               {export_keyword, "export"},
+                               {struct_keyword, "struct"},
+                               {identifier, "Point"},
+                               {left_brace, "{"},
+                               {identifier, "x"},
+                               {colon, ":"},
+                               {real64_keyword, "real64"},
+                               {comma, ","},
+                               {identifier, "y"},
+                               {colon, ":"},
+                               {real64_keyword, "real64"},
+                               {right_brace, "}"},
+                               {let, "let"},
+                               {identifier, "p"},
+                               {colon, ":"},
+                               {identifier, "Point"},
+                               {equal, "="},
+                               {identifier, "Point"},
+                               {left_brace, "{"},
+                               {identifier, "x"},
+                               {colon, ":"},
+                               {float_number, "1.0"},
+                               {comma, ","},
+                               {identifier, "y"},
+                               {colon, ":"},
+                               {float_number, "2.0"},
+                               {right_brace, "}"},
+                               {semicolon, ";"},
+                               {print, "print"},
+                               {left_paren, "("},
+                               {identifier, "p"},
+                               {dot, "."},
+                               {identifier, "x"},
+                               {right_paren, ")"},
+                               {semicolon, ";"},
+                               {eof, ""},
+                           }) &&
+             passed;
+
     return passed ? 0 : 1;
 }

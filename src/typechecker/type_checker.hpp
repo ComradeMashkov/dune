@@ -13,10 +13,24 @@ namespace dune {
 
 class TypeChecker {
 public:
+    struct StructField {
+        std::string name;
+        Type type;
+        SourceLocation location;
+    };
+
+    struct StructDefinition {
+        std::string name;
+        std::vector<StructField> fields;
+        std::unordered_map<std::string, std::size_t> field_indices;
+        SourceLocation location;
+    };
+
     void check(const Program& program);
     const std::unordered_map<const Expression*, Type>& expression_types() const;
     const std::unordered_map<const Expression*, std::string>& resolved_calls() const;
     const std::deque<Statement>& instantiated_functions() const;
+    const std::unordered_map<std::string, StructDefinition>& structs() const;
 
 private:
     struct FunctionSignature {
@@ -27,6 +41,8 @@ private:
         SourceLocation location;
     };
 
+    void declare_struct(const Statement& statement);
+    void define_struct(const Statement& statement);
     void collect_function(const Statement& statement);
     void collect_generic_function(const Statement& statement);
     void check_function(const Statement& statement);
@@ -40,6 +56,7 @@ private:
     Type check_unary_expression(const Expression& expression);
     Type check_cast_expression(const Expression& expression);
     Type check_array_literal(const Expression& expression, const TypeAnnotation& expected);
+    Type check_struct_literal(const Expression& expression, const TypeAnnotation& expected);
     Type check_index_expression(const Expression& expression);
     Type check_slice_expression(const Expression& expression);
     Type check_function_call(const Expression& expression, const std::string& name,
@@ -53,12 +70,17 @@ private:
     bool statements_return(const std::vector<Statement>& statements) const;
 
     Type annotation_or_default(const TypeAnnotation& annotation) const;
+    Type annotation_or_default(const TypeAnnotation& annotation,
+                               const std::unordered_set<std::string>& generic_parameters) const;
+    Type normalize_type(const Type& type, const std::unordered_set<std::string>& generic_parameters = {}) const;
     bool same_type(const Type& left, const Type& right) const;
     bool is_signed_type(ValueType type) const;
     bool is_integer_type(ValueType type) const;
     bool is_unsigned_type(ValueType type) const;
     bool is_real_type(ValueType type) const;
     bool is_numeric_type(const Type& type) const;
+    bool is_comparable_type(const Type& type) const;
+    bool is_ordered_type(const Type& type) const;
     bool is_cast_allowed(const Type& source, const Type& target) const;
     bool can_coerce_integer_literal(const Expression& expression, const Type& target) const;
     bool is_numeric_literal(const Expression& expression) const;
@@ -87,12 +109,16 @@ private:
     const FunctionSignature& instantiate_generic_function(const Statement& statement,
                                                           const std::unordered_map<std::string, Type>& substitutions,
                                                           SourceLocation location);
+    std::string instantiation_trace(const Statement& statement,
+                                    const std::unordered_map<std::string, Type>& substitutions) const;
 
+    std::unordered_map<std::string, StructDefinition> structs_;
     std::unordered_map<std::string, FunctionSignature> functions_;
     std::unordered_map<std::string, std::vector<std::string>> overloads_;
     std::unordered_map<std::string, std::vector<const Statement*>> generic_overloads_;
     std::unordered_set<std::string> instantiated_function_keys_;
     std::deque<Statement> instantiated_functions_;
+    std::unordered_map<std::string, std::string> instantiated_function_traces_;
     std::unordered_map<std::string, Type> variables_;
     std::unordered_map<std::string, Type> global_constants_;
     std::unordered_map<std::string, std::unordered_set<std::string>> module_exports_;
@@ -109,6 +135,7 @@ std::string type_name(ValueType type);
 std::string type_name(const Type& type);
 Type make_type(ValueType type);
 Type make_array_type(Type element);
+Type make_struct_type(std::string name);
 std::string type_key(const Type& type);
 std::string function_key(const std::string& name, const std::vector<Type>& parameters);
 

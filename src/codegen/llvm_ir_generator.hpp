@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ast/ast.hpp"
+#include "typechecker/type_checker.hpp"
 
 #include <cstddef>
 #include <ostream>
@@ -38,6 +39,13 @@ private:
         std::string continue_label;
     };
 
+    struct StructLayout {
+        std::vector<Parameter> fields;
+        std::unordered_map<std::string, std::size_t> field_indices;
+        std::unordered_map<std::string, std::size_t> field_offsets;
+        std::size_t size = 0;
+    };
+
     bool emit_statement(const Statement& statement, std::ostream& output);
     bool emit_statements(const std::vector<Statement>& statements, std::ostream& output);
     TypedValue emit_expression(const Expression& expression, std::ostream& output);
@@ -50,6 +58,8 @@ private:
     TypedValue emit_array_method_call_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_text_method_call_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_array_literal(const Expression& expression, std::ostream& output);
+    TypedValue emit_struct_literal(const Expression& expression, std::ostream& output);
+    TypedValue emit_member_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_index_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_slice_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_text_literal(const std::string& lexeme);
@@ -63,6 +73,7 @@ private:
                                  std::ostream& output);
     void collect_functions(const std::vector<Statement>& statements);
     void collect_function(const Statement& statement);
+    void collect_structs(const std::unordered_map<std::string, TypeChecker::StructDefinition>& structs);
     void collect_global_constants(const Program& program);
 
     std::string next_register();
@@ -74,6 +85,7 @@ private:
     std::string function_name(const std::string& name) const;
     std::string extern_function_name(const FunctionSignature& signature) const;
     std::string default_value(const Type& type) const;
+    Type normalize_type(const Type& type) const;
     std::string decode_glyph_literal(const std::string& lexeme) const;
     std::string decode_text_literal(const std::string& lexeme) const;
     std::string llvm_text_literal(const std::string& value) const;
@@ -85,6 +97,7 @@ private:
     std::unordered_map<const Expression*, Type> expression_types_;
     std::unordered_map<const Expression*, std::string> resolved_calls_;
     std::unordered_map<std::string, FunctionSignature> functions_;
+    std::unordered_map<std::string, StructLayout> structs_;
     std::unordered_map<std::string, Local> locals_;
     std::vector<const Statement*> global_constants_;
     std::vector<std::string> string_globals_;
