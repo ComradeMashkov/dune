@@ -47,11 +47,19 @@ int main() {
     bool passed = true;
 
     passed = expect_eq(run_source("print(40 + 2);"), "42\n", "expected arithmetic output") && passed;
+    passed = expect_eq(run_source("print(true); print(false); print(3 > 2); print(3 != 3);"), "1\n0\n1\n0\n",
+                       "expected boolean and comparison output") &&
+             passed;
     passed =
         expect_eq(run_source("let x = 10; let y = x * 3 - 4 / 2; print(y);"), "28\n", "expected variable output") &&
         passed;
     passed = expect_eq(run_source("let x = 1; let x = x + 2; print(x);"), "3\n", "expected reassignment") && passed;
+    passed = expect_eq(run_source("let x = 3; while x > 0 { x = x - 1; } "
+                                  "if x == 0 { print(42); } else { print(0); }"),
+                       "42\n", "expected control flow output") &&
+             passed;
     passed = expect_throws("print(missing);", "expected undefined variable to throw") && passed;
+    passed = expect_throws("missing = 1;", "expected undefined assignment to throw") && passed;
     passed = expect_throws("print(1 / 0);", "expected division by zero to throw") && passed;
 
     return passed ? 0 : 1;

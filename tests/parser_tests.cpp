@@ -73,12 +73,44 @@ bool parses_operator_precedence() {
     return passed;
 }
 
+bool parses_control_flow() {
+    const dune::Program program = parse_source("let x = 3; while x > 0 { x = x - 1; } "
+                                               "if x == 0 { print(true); } else { print(false); }");
+
+    if (!expect(program.statements.size() == 3, "expected three statements")) {
+        return false;
+    }
+
+    bool passed = true;
+    const dune::Statement& while_statement = program.statements[1];
+    passed = expect(while_statement.kind == dune::StatementKind::while_statement, "expected while statement") && passed;
+    passed =
+        expect(while_statement.expression->kind == dune::ExpressionKind::binary, "expected while condition") && passed;
+    passed = expect(while_statement.expression->lexeme == ">", "expected greater comparison") && passed;
+    passed = expect(while_statement.body.size() == 1, "expected one while body statement") && passed;
+    passed =
+        expect(while_statement.body[0].kind == dune::StatementKind::assign, "expected assignment in while") && passed;
+    passed = expect(while_statement.body[0].name == "x", "expected assignment target") && passed;
+
+    const dune::Statement& if_statement = program.statements[2];
+    passed = expect(if_statement.kind == dune::StatementKind::if_statement, "expected if statement") && passed;
+    passed = expect(if_statement.expression->lexeme == "==", "expected equality comparison") && passed;
+    passed = expect(if_statement.body.size() == 1, "expected one then statement") && passed;
+    passed = expect(if_statement.else_body.size() == 1, "expected one else statement") && passed;
+    passed =
+        expect(if_statement.body[0].expression->kind == dune::ExpressionKind::boolean, "expected boolean literal") &&
+        passed;
+
+    return passed;
+}
+
 } // namespace
 
 int main() {
     bool passed = true;
     passed = parses_let_and_print() && passed;
     passed = parses_operator_precedence() && passed;
+    passed = parses_control_flow() && passed;
 
     return passed ? 0 : 1;
 }

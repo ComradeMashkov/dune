@@ -36,16 +36,44 @@ Token Lexer::next_token() {
     case '/':
         return make_token(TokenType::slash, start);
     case '=':
+        if (match('=')) {
+            return make_token(TokenType::equal_equal, start);
+        }
+
         return make_token(TokenType::equal, start);
+    case '!':
+        if (match('=')) {
+            return make_token(TokenType::bang_equal, start);
+        }
+
+        break;
+    case '>':
+        if (match('=')) {
+            return make_token(TokenType::greater_equal, start);
+        }
+
+        return make_token(TokenType::greater, start);
+    case '<':
+        if (match('=')) {
+            return make_token(TokenType::less_equal, start);
+        }
+
+        return make_token(TokenType::less, start);
     case ';':
         return make_token(TokenType::semicolon, start);
     case '(':
         return make_token(TokenType::left_paren, start);
     case ')':
         return make_token(TokenType::right_paren, start);
+    case '{':
+        return make_token(TokenType::left_brace, start);
+    case '}':
+        return make_token(TokenType::right_brace, start);
     default:
-        throw std::runtime_error("unexpected character in source");
+        break;
     }
+
+    throw std::runtime_error("unexpected character in source");
 }
 
 std::vector<Token> Lexer::tokenize() {
@@ -69,6 +97,15 @@ bool Lexer::is_at_end() const {
 
 char Lexer::advance() {
     return source_[current_++];
+}
+
+bool Lexer::match(char expected) {
+    if (is_at_end() || source_[current_] != expected) {
+        return false;
+    }
+
+    ++current_;
+    return true;
 }
 
 char Lexer::peek() const {
@@ -101,6 +138,26 @@ Token Lexer::identifier(std::size_t start) {
 
     if (lexeme == "print") {
         return Token{TokenType::print, lexeme};
+    }
+
+    if (lexeme == "if") {
+        return Token{TokenType::if_keyword, lexeme};
+    }
+
+    if (lexeme == "else") {
+        return Token{TokenType::else_keyword, lexeme};
+    }
+
+    if (lexeme == "while") {
+        return Token{TokenType::while_keyword, lexeme};
+    }
+
+    if (lexeme == "true") {
+        return Token{TokenType::true_keyword, lexeme};
+    }
+
+    if (lexeme == "false") {
+        return Token{TokenType::false_keyword, lexeme};
     }
 
     return Token{TokenType::identifier, lexeme};

@@ -44,6 +44,14 @@ bool Parser::check(TokenType type) const {
     return peek().type == type;
 }
 
+bool Parser::check_next(TokenType type) const {
+    if (current_ + 1 >= tokens_.size()) {
+        return false;
+    }
+
+    return tokens_[current_ + 1].type == type;
+}
+
 bool Parser::match(TokenType type) {
     if (!check(type)) {
         return false;
@@ -86,7 +94,50 @@ Statement Parser::statement() {
         return print_statement();
     }
 
+    if (match(TokenType::if_keyword)) {
+        return if_statement();
+    }
+
+    if (match(TokenType::while_keyword)) {
+        return while_statement();
+    }
+
+    if (match(TokenType::left_brace)) {
+        return block_statement();
+    }
+
+    if (check(TokenType::identifier) && check_next(TokenType::equal)) {
+        return assignment_statement();
+    }
+
     throw std::runtime_error("expected statement");
+}
+
+Statement Parser::assignment_statement() {
+    const Token& name = consume(TokenType::identifier, "expected assignment target");
+    consume(TokenType::equal, "expected '=' after assignment target");
+    std::unique_ptr<Expression> value = expression();
+    consume(TokenType::semicolon, "expected ';' after assignment");
+
+    return Statement{StatementKind::assign, name.lexeme, std::move(value), {}, {}};
+}
+
+Statement Parser::block_statement() {
+    return Statement{StatementKind::block, "", nullptr, block(), {}};
+}
+
+Statement Parser::if_statement() {
+    std::unique_ptr<Expression> condition = expression();
+    consume(TokenType::left_brace, "expected '{' before if body");
+    std::vector<Statement> then_body = block();
+    std::vector<Statement> else_body;
+
+    if (match(TokenType::else_keyword)) {
+        consume(TokenType::left_brace, "expected '{' before else body");
+        else_body = block();
+    }
+
+    return Statement{StatementKind::if_statement, "", std::move(condition), std::move(then_body), std::move(else_body)};
 }
 
 Statement Parser::let_statement() {
@@ -95,7 +146,7 @@ Statement Parser::let_statement() {
     std::unique_ptr<Expression> value = expression();
     consume(TokenType::semicolon, "expected ';' after let statement");
 
-    return Statement{StatementKind::let, name.lexeme, std::move(value)};
+    return Statement{StatementKind::let, name.lexeme, std::move(value), {}, {}};
 }
 
 Statement Parser::print_statement() {
@@ -104,11 +155,53 @@ Statement Parser::print_statement() {
     consume(TokenType::right_paren, "expected ')' after print expression");
     consume(TokenType::semicolon, "expected ';' after print statement");
 
-    return Statement{StatementKind::print, "", std::move(value)};
+    return Statement{StatementKind::print, "", std::move(value), {}, {}};
+}
+
+Statement Parser::while_statement() {
+    std::unique_ptr<Expression> condition = expression();
+    consume(TokenType::left_brace, "expected '{' before while body");
+    return Statement{StatementKind::while_statement, "", std::move(condition), block(), {}};
+}
+
+std::vector<Statement> Parser::block() {
+    std::vector<Statement> statements;
+
+    while (!check(TokenType::right_brace) && !is_at_end()) {
+        statements.push_back(statement());
+    }
+
+    consume(TokenType::right_brace, "expected '}' after block");
+    return statements;
 }
 
 std::unique_ptr<Expression> Parser::expression() {
-    return term();
+    return equality();
+}
+
+std::unique_ptr<Expression> Parser::equality() {
+    std::unique_ptr<Expression> expr = comparison();
+
+    while (match(TokenType::equal_equal) || match(TokenType::bang_equal)) {
+        const Token& op = previous();
+        std::unique_ptr<Expression> right = comparison();
+        expr = make_binary(std::move(expr), op.lexeme, std::move(right));
+    }
+
+    return expr;
+}
+
+std::unique_ptr<Expression> Parser::comparison() {
+    std::unique_ptr<Expression> expr = term();
+
+    while (match(TokenType::greater) || match(TokenType::greater_equal) || match(TokenType::less) ||
+           match(TokenType::less_equal)) {
+        const Token& op = previous();
+        std::unique_ptr<Expression> right = term();
+        expr = make_binary(std::move(expr), op.lexeme, std::move(right));
+    }
+
+    return expr;
 }
 
 std::unique_ptr<Expression> Parser::term() {
@@ -138,6 +231,10 @@ std::unique_ptr<Expression> Parser::factor() {
 std::unique_ptr<Expression> Parser::primary() {
     if (match(TokenType::number)) {
         return make_leaf(ExpressionKind::number, previous().lexeme);
+    }
+
+    if (match(TokenType::true_keyword) || match(TokenType::false_keyword)) {
+        return make_leaf(ExpressionKind::boolean, previous().lexeme);
     }
 
     if (match(TokenType::identifier)) {

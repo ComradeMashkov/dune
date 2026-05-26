@@ -68,5 +68,41 @@ int main() {
                            }) &&
              passed;
 
+    passed = expect_tokens("if true { x = 3; } else { while x >= 0 { x = x - 1; } print(x == false); }",
+                           {
+                               {if_keyword, "if"},
+                               {true_keyword, "true"},
+                               {left_brace, "{"},
+                               {identifier, "x"},
+                               {equal, "="},
+                               {number, "3"},
+                               {semicolon, ";"},
+                               {right_brace, "}"},
+                               {else_keyword, "else"},
+                               {left_brace, "{"},
+                               {while_keyword, "while"},
+                               {identifier, "x"},
+                               {greater_equal, ">="},
+                               {number, "0"},
+                               {left_brace, "{"},
+                               {identifier, "x"},
+                               {equal, "="},
+                               {identifier, "x"},
+                               {minus, "-"},
+                               {number, "1"},
+                               {semicolon, ";"},
+                               {right_brace, "}"},
+                               {print, "print"},
+                               {left_paren, "("},
+                               {identifier, "x"},
+                               {equal_equal, "=="},
+                               {false_keyword, "false"},
+                               {right_paren, ")"},
+                               {semicolon, ";"},
+                               {right_brace, "}"},
+                               {eof, ""},
+                           }) &&
+             passed;
+
     return passed ? 0 : 1;
 }
