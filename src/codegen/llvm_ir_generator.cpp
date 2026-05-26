@@ -80,13 +80,16 @@ void LlvmIrGenerator::generate(const Program& program, std::ostream& output) {
     register_count_ = 0;
     label_count_ = 0;
     string_literal_count_ = 0;
+    temporary_count_ = 0;
 
     std::ostringstream body;
 
     locals_.clear();
+    temporary_count_ = 0;
     current_return_type_ = make_type(ValueType::int_type);
     body << "define i32 @main() {\n";
     emit_statements(program.statements, body);
+    body << "  call void @dune_free_all()\n";
     body << "  ret i32 0\n";
     body << "}\n\n";
 
@@ -111,6 +114,9 @@ void LlvmIrGenerator::generate(const Program& program, std::ostream& output) {
     output << "@.dune_panic_slice = private unnamed_addr constant [27 x i8] c\"slice bound out of bounds\\0A\\00\"\n";
     output << "@.dune_panic_array_pop = private unnamed_addr constant [29 x i8] c\"cannot pop from empty "
               "array\\0A\\00\"\n";
+    output << "@.dune_allocs = internal global ptr null\n";
+    output << "@.dune_alloc_count = internal global i64 0\n";
+    output << "@.dune_alloc_capacity = internal global i64 0\n";
     for (const std::string& global : string_globals_) {
         output << global;
     }
@@ -122,9 +128,11 @@ void LlvmIrGenerator::generate(const Program& program, std::ostream& output) {
     output << "declare i32 @strncmp(ptr, ptr, i64)\n\n";
     output << "declare ptr @malloc(i64)\n";
     output << "declare ptr @realloc(ptr, i64)\n\n";
+    output << "declare void @free(ptr)\n\n";
     output << "declare ptr @memcpy(ptr, ptr, i64)\n\n";
     output << "declare void @exit(i32)\n\n";
     emit_extern_declarations(output);
+    emit_memory_runtime(output);
     output << body.str();
 }
 
@@ -162,17 +170,10 @@ void LlvmIrGenerator::collect_function(const Statement& statement) {
 void LlvmIrGenerator::collect_structs(const std::unordered_map<std::string, TypeChecker::StructDefinition>& structs) {
     for (const auto& [name, definition] : structs) {
         StructLayout layout;
+        layout.generic_parameters = definition.generic_parameters;
         for (const TypeChecker::StructField& field : definition.fields) {
-            const std::size_t field_size = llvm_size(field.type);
-            layout.size = align_to(layout.size, field_size);
             layout.field_indices.emplace(field.name, layout.fields.size());
-            layout.field_offsets.emplace(field.name, layout.size);
             layout.fields.push_back(Parameter{field.name, TypeAnnotation{true, field.type}, field.location});
-            layout.size += field_size;
-        }
-
-        if (layout.size == 0) {
-            layout.size = 1;
         }
 
         structs_.emplace(name, std::move(layout));
@@ -259,6 +260,99 @@ void LlvmIrGenerator::emit_extern_declarations(std::ostream& output) {
     if (!declarations.empty()) {
         output << '\n';
     }
+}
+
+void LlvmIrGenerator::emit_memory_runtime(std::ostream& output) {
+    output << "define void @dune_track_alloc(ptr %value) {\n";
+    output << "entry:\n";
+    output << "  %is_null = icmp eq ptr %value, null\n";
+    output << "  br i1 %is_null, label %done, label %non_null\n";
+    output << "non_null:\n";
+    output << "  %count = load i64, ptr @.dune_alloc_count\n";
+    output << "  %capacity = load i64, ptr @.dune_alloc_capacity\n";
+    output << "  %full = icmp eq i64 %count, %capacity\n";
+    output << "  br i1 %full, label %grow, label %store\n";
+    output << "grow:\n";
+    output << "  %zero = icmp eq i64 %capacity, 0\n";
+    output << "  %doubled = mul i64 %capacity, 2\n";
+    output << "  %next_capacity = select i1 %zero, i64 16, i64 %doubled\n";
+    output << "  %bytes = mul i64 %next_capacity, 8\n";
+    output << "  %old_list = load ptr, ptr @.dune_allocs\n";
+    output << "  %next_list = call ptr @realloc(ptr %old_list, i64 %bytes)\n";
+    output << "  store ptr %next_list, ptr @.dune_allocs\n";
+    output << "  store i64 %next_capacity, ptr @.dune_alloc_capacity\n";
+    output << "  br label %store\n";
+    output << "store:\n";
+    output << "  %list = load ptr, ptr @.dune_allocs\n";
+    output << "  %slot = getelementptr ptr, ptr %list, i64 %count\n";
+    output << "  store ptr %value, ptr %slot\n";
+    output << "  %next_count = add i64 %count, 1\n";
+    output << "  store i64 %next_count, ptr @.dune_alloc_count\n";
+    output << "  br label %done\n";
+    output << "done:\n";
+    output << "  ret void\n";
+    output << "}\n\n";
+
+    output << "define ptr @dune_alloc(i64 %size) {\n";
+    output << "entry:\n";
+    output << "  %value = call ptr @malloc(i64 %size)\n";
+    output << "  call void @dune_track_alloc(ptr %value)\n";
+    output << "  ret ptr %value\n";
+    output << "}\n\n";
+
+    output << "define ptr @dune_realloc(ptr %old, i64 %size) {\n";
+    output << "entry:\n";
+    output << "  %value = call ptr @realloc(ptr %old, i64 %size)\n";
+    output << "  %count = load i64, ptr @.dune_alloc_count\n";
+    output << "  br label %loop\n";
+    output << "loop:\n";
+    output << "  %index = phi i64 [ 0, %entry ], [ %next, %advance ]\n";
+    output << "  %done_scan = icmp eq i64 %index, %count\n";
+    output << "  br i1 %done_scan, label %track, label %check\n";
+    output << "check:\n";
+    output << "  %list = load ptr, ptr @.dune_allocs\n";
+    output << "  %slot = getelementptr ptr, ptr %list, i64 %index\n";
+    output << "  %current = load ptr, ptr %slot\n";
+    output << "  %matched = icmp eq ptr %current, %old\n";
+    output << "  br i1 %matched, label %update, label %advance\n";
+    output << "update:\n";
+    output << "  store ptr %value, ptr %slot\n";
+    output << "  ret ptr %value\n";
+    output << "advance:\n";
+    output << "  %next = add i64 %index, 1\n";
+    output << "  br label %loop\n";
+    output << "track:\n";
+    output << "  call void @dune_track_alloc(ptr %value)\n";
+    output << "  ret ptr %value\n";
+    output << "}\n\n";
+
+    output << "define void @dune_free_all() {\n";
+    output << "entry:\n";
+    output << "  %count = load i64, ptr @.dune_alloc_count\n";
+    output << "  %list = load ptr, ptr @.dune_allocs\n";
+    output << "  br label %loop\n";
+    output << "loop:\n";
+    output << "  %index = phi i64 [ 0, %entry ], [ %next, %skip ]\n";
+    output << "  %done = icmp eq i64 %index, %count\n";
+    output << "  br i1 %done, label %after, label %body\n";
+    output << "body:\n";
+    output << "  %slot = getelementptr ptr, ptr %list, i64 %index\n";
+    output << "  %value = load ptr, ptr %slot\n";
+    output << "  %is_null = icmp eq ptr %value, null\n";
+    output << "  br i1 %is_null, label %skip, label %free_value\n";
+    output << "free_value:\n";
+    output << "  call void @free(ptr %value)\n";
+    output << "  br label %skip\n";
+    output << "skip:\n";
+    output << "  %next = add i64 %index, 1\n";
+    output << "  br label %loop\n";
+    output << "after:\n";
+    output << "  call void @free(ptr %list)\n";
+    output << "  store ptr null, ptr @.dune_allocs\n";
+    output << "  store i64 0, ptr @.dune_alloc_count\n";
+    output << "  store i64 0, ptr @.dune_alloc_capacity\n";
+    output << "  ret void\n";
+    output << "}\n\n";
 }
 
 void LlvmIrGenerator::emit_global_constants(std::ostream& output) {
@@ -476,6 +570,8 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_expression(const Expression& e
         return emit_cast_expression(expression, output);
     case ExpressionKind::binary:
         return emit_binary_expression(expression, output);
+    case ExpressionKind::match_expression:
+        return emit_match_expression(expression, output);
     case ExpressionKind::call:
         return emit_call_expression(expression, output);
     case ExpressionKind::method_call:
@@ -590,6 +686,63 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_logical_expression(const Expre
     const std::string result = next_register();
     output << "  " << result << " = load i1, ptr " << result_pointer << '\n';
     return TypedValue{result, make_type(ValueType::bool_type)};
+}
+
+LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_match_expression(const Expression& expression, std::ostream& output) {
+    const TypedValue subject = emit_expression(*expression.left, output);
+    const auto inferred = expression_types_.find(&expression);
+    if (inferred == expression_types_.end()) {
+        throw std::runtime_error("missing inferred match type");
+    }
+
+    const std::string subject_pointer = next_register();
+    const std::string result_pointer = next_register();
+    const std::string end_label = next_label("match_end");
+    output << "  " << subject_pointer << " = alloca " << llvm_type(subject.type) << '\n';
+    output << "  store " << llvm_type(subject.type) << ' ' << subject.name << ", ptr " << subject_pointer << '\n';
+    output << "  " << result_pointer << " = alloca " << llvm_type(inferred->second) << '\n';
+
+    for (std::size_t index = 0; index < expression.arguments.size(); index += 2) {
+        const Expression& pattern = *expression.arguments[index];
+        const Expression& result = *expression.arguments[index + 1];
+        const bool wildcard = pattern.kind == ExpressionKind::identifier && pattern.lexeme == "_";
+        const std::string next_label_name = next_label("match_next");
+        const std::string case_label = next_label("match_case");
+
+        if (!wildcard) {
+            const std::string subject_value = next_register();
+            const TypedValue pattern_value = emit_expression(pattern, output);
+            const std::string matched = next_register();
+            output << "  " << subject_value << " = load " << llvm_type(subject.type) << ", ptr " << subject_pointer
+                   << '\n';
+            if (subject.type.kind == ValueType::text_type) {
+                const std::string comparison = next_register();
+                output << "  " << comparison << " = call i32 @strcmp(ptr " << subject_value << ", ptr "
+                       << pattern_value.name << ")\n";
+                output << "  " << matched << " = icmp eq i32 " << comparison << ", 0\n";
+            } else if (is_real_type(subject.type.kind)) {
+                output << "  " << matched << " = fcmp oeq " << llvm_type(subject.type) << ' ' << subject_value << ", "
+                       << pattern_value.name << '\n';
+            } else {
+                output << "  " << matched << " = icmp eq " << llvm_type(subject.type) << ' ' << subject_value << ", "
+                       << pattern_value.name << '\n';
+            }
+            output << "  br i1 " << matched << ", label %" << case_label << ", label %" << next_label_name << '\n';
+            output << case_label << ":\n";
+        }
+
+        const TypedValue value = emit_expression(result, output);
+        output << "  store " << llvm_type(inferred->second) << ' ' << value.name << ", ptr " << result_pointer << '\n';
+        output << "  br label %" << end_label << '\n';
+        if (!wildcard) {
+            output << next_label_name << ":\n";
+        }
+    }
+
+    output << end_label << ":\n";
+    const std::string value = next_register();
+    output << "  " << value << " = load " << llvm_type(inferred->second) << ", ptr " << result_pointer << '\n';
+    return TypedValue{value, inferred->second};
 }
 
 LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_unary_expression(const Expression& expression, std::ostream& output) {
@@ -741,7 +894,7 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_array_method_call_expression(c
                << '\n';
         output << "  " << next_bytes << " = mul i64 " << next_capacity << ", " << element_size << '\n';
         output << "  " << old_data << " = load ptr, ptr " << data_pointer_pointer << '\n';
-        output << "  " << next_data << " = call ptr @realloc(ptr " << old_data << ", i64 " << next_bytes << ")\n";
+        output << "  " << next_data << " = call ptr @dune_realloc(ptr " << old_data << ", i64 " << next_bytes << ")\n";
         output << "  store ptr " << next_data << ", ptr " << data_pointer_pointer << '\n';
         output << "  store i64 " << next_capacity << ", ptr " << capacity_pointer << '\n';
         output << "  br label %" << store_label << '\n';
@@ -873,12 +1026,12 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_array_literal(const Expression
     const std::string capacity_pointer = next_register();
     const std::string data_pointer_pointer = next_register();
     const std::string data = next_register();
-    output << "  " << handle << " = call ptr @malloc(i64 24)\n";
+    output << "  " << handle << " = call ptr @dune_alloc(i64 24)\n";
     output << "  store i64 " << length << ", ptr " << handle << '\n';
     output << "  " << capacity_pointer << " = getelementptr i8, ptr " << handle << ", i64 8\n";
     output << "  store i64 " << capacity << ", ptr " << capacity_pointer << '\n';
     output << "  " << data_pointer_pointer << " = getelementptr i8, ptr " << handle << ", i64 16\n";
-    output << "  " << data << " = call ptr @malloc(i64 " << capacity * element_size << ")\n";
+    output << "  " << data << " = call ptr @dune_alloc(i64 " << capacity * element_size << ")\n";
     output << "  store ptr " << data << ", ptr " << data_pointer_pointer << '\n';
 
     for (std::size_t index = 0; index < expression.arguments.size(); ++index) {
@@ -892,15 +1045,16 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_array_literal(const Expression
 }
 
 LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_struct_literal(const Expression& expression, std::ostream& output) {
-    const auto layout = structs_.find(expression.lexeme);
-    if (layout == structs_.end()) {
-        throw std::runtime_error("unknown struct '" + expression.lexeme + "'");
+    const auto type = expression_types_.find(&expression);
+    if (type == expression_types_.end() || type->second.kind != ValueType::struct_type) {
+        throw std::runtime_error("missing inferred struct literal type");
     }
 
+    const StructLayout layout = concrete_struct_layout(type->second);
     const std::string handle = next_register();
-    output << "  " << handle << " = call ptr @malloc(i64 " << layout->second.size << ")\n";
+    output << "  " << handle << " = call ptr @dune_alloc(i64 " << layout.size << ")\n";
 
-    for (const Parameter& field : layout->second.fields) {
+    for (const Parameter& field : layout.fields) {
         const auto source = std::find(expression.field_names.begin(), expression.field_names.end(), field.name);
         if (source == expression.field_names.end()) {
             throw std::runtime_error("missing field '" + field.name + "'");
@@ -908,35 +1062,32 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_struct_literal(const Expressio
 
         const std::size_t source_index = static_cast<std::size_t>(source - expression.field_names.begin());
         const TypedValue value = emit_expression(*expression.arguments.at(source_index), output);
-        const std::size_t offset = layout->second.field_offsets.at(field.name);
+        const std::size_t offset = layout.field_offsets.at(field.name);
         const std::string slot = next_register();
         output << "  " << slot << " = getelementptr i8, ptr " << handle << ", i64 " << offset << '\n';
-        output << "  store " << llvm_type(value.type) << ' ' << value.name << ", ptr " << slot << '\n';
+        output << "  store " << llvm_type(field.type.type) << ' ' << value.name << ", ptr " << slot << '\n';
     }
 
-    return TypedValue{handle, make_struct_type(expression.lexeme)};
+    return TypedValue{handle, type->second};
 }
 
 LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_member_expression(const Expression& expression,
                                                                     std::ostream& output) {
     const auto receiver_type = expression_types_.find(expression.left.get());
     if (receiver_type != expression_types_.end() && receiver_type->second.kind == ValueType::struct_type) {
-        const auto layout = structs_.find(receiver_type->second.name);
-        if (layout == structs_.end()) {
-            throw std::runtime_error("unknown struct '" + receiver_type->second.name + "'");
-        }
+        const StructLayout layout = concrete_struct_layout(receiver_type->second);
 
-        const auto index = layout->second.field_indices.find(expression.lexeme);
-        if (index == layout->second.field_indices.end()) {
+        const auto index = layout.field_indices.find(expression.lexeme);
+        if (index == layout.field_indices.end()) {
             throw std::runtime_error("unknown field '" + expression.lexeme + "'");
         }
 
-        const Parameter& field = layout->second.fields[index->second];
+        const Parameter& field = layout.fields[index->second];
         const TypedValue receiver = emit_expression(*expression.left, output);
         const std::string slot = next_register();
         const std::string value = next_register();
         output << "  " << slot << " = getelementptr i8, ptr " << receiver.name << ", i64 "
-               << layout->second.field_offsets.at(expression.lexeme) << '\n';
+               << layout.field_offsets.at(expression.lexeme) << '\n';
         output << "  " << value << " = load " << llvm_type(field.type.type) << ", ptr " << slot << '\n';
         return TypedValue{value, field.type.type};
     }
@@ -1023,7 +1174,7 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_slice_expression(const Express
         const std::string terminator = next_register();
         output << "  " << slice_length << " = sub i64 " << end << ", " << start << '\n';
         output << "  " << bytes << " = add i64 " << slice_length << ", 1\n";
-        output << "  " << result << " = call ptr @malloc(i64 " << bytes << ")\n";
+        output << "  " << result << " = call ptr @dune_alloc(i64 " << bytes << ")\n";
         output << "  " << source << " = getelementptr i8, ptr " << sliced.name << ", i64 " << start << '\n';
         output << "  call ptr @memcpy(ptr " << result << ", ptr " << source << ", i64 " << slice_length << ")\n";
         output << "  " << terminator << " = getelementptr i8, ptr " << result << ", i64 " << slice_length << '\n';
@@ -1052,12 +1203,12 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_slice_expression(const Express
         const std::string data = next_register();
         output << "  " << slice_length << " = sub i64 " << end << ", " << start << '\n';
         output << "  " << byte_length << " = mul i64 " << slice_length << ", " << element_size << '\n';
-        output << "  " << handle << " = call ptr @malloc(i64 24)\n";
+        output << "  " << handle << " = call ptr @dune_alloc(i64 24)\n";
         output << "  store i64 " << slice_length << ", ptr " << handle << '\n';
         output << "  " << capacity_pointer << " = getelementptr i8, ptr " << handle << ", i64 8\n";
         output << "  store i64 " << slice_length << ", ptr " << capacity_pointer << '\n';
         output << "  " << data_pointer_pointer << " = getelementptr i8, ptr " << handle << ", i64 16\n";
-        output << "  " << data << " = call ptr @malloc(i64 " << byte_length << ")\n";
+        output << "  " << data << " = call ptr @dune_alloc(i64 " << byte_length << ")\n";
         output << "  store ptr " << data << ", ptr " << data_pointer_pointer << '\n';
         output << "  " << source_data_pointer_pointer << " = getelementptr i8, ptr " << sliced.name << ", i64 16\n";
         output << "  " << source_data << " = load ptr, ptr " << source_data_pointer_pointer << '\n';
@@ -1403,11 +1554,82 @@ Type LlvmIrGenerator::normalize_type(const Type& type) const {
         return result;
     }
 
-    if (type.kind == ValueType::generic_type && structs_.contains(type.name)) {
-        return make_struct_type(type.name);
+    std::vector<Type> arguments;
+    arguments.reserve(type.arguments.size());
+    for (const Type& argument : type.arguments) {
+        arguments.push_back(normalize_type(argument));
     }
 
-    return type;
+    if (type.kind == ValueType::generic_type && structs_.contains(type.name)) {
+        return make_struct_type(type.name, std::move(arguments));
+    }
+
+    Type result = type;
+    result.arguments = std::move(arguments);
+    return result;
+}
+
+Type LlvmIrGenerator::substitute_struct_type(const Type& type,
+                                             const std::unordered_map<std::string, Type>& substitutions) const {
+    if (type.kind == ValueType::generic_type) {
+        const auto replacement = substitutions.find(type.name);
+        if (replacement != substitutions.end()) {
+            return replacement->second;
+        }
+    }
+
+    if (type.kind == ValueType::array_type) {
+        Type result{ValueType::array_type, nullptr};
+        if (type.element != nullptr) {
+            result.element = std::make_shared<Type>(substitute_struct_type(*type.element, substitutions));
+        }
+        return result;
+    }
+
+    Type result = type;
+    result.arguments.clear();
+    result.arguments.reserve(type.arguments.size());
+    for (const Type& argument : type.arguments) {
+        result.arguments.push_back(substitute_struct_type(argument, substitutions));
+    }
+
+    return result;
+}
+
+LlvmIrGenerator::StructLayout LlvmIrGenerator::concrete_struct_layout(const Type& type) const {
+    const auto base = structs_.find(type.name);
+    if (base == structs_.end()) {
+        throw std::runtime_error("unknown struct '" + type.name + "'");
+    }
+
+    if (base->second.generic_parameters.size() != type.arguments.size()) {
+        throw std::runtime_error("struct '" + type.name + "' expects " +
+                                 std::to_string(base->second.generic_parameters.size()) + " type arguments but got " +
+                                 std::to_string(type.arguments.size()));
+    }
+
+    std::unordered_map<std::string, Type> substitutions;
+    for (std::size_t index = 0; index < base->second.generic_parameters.size(); ++index) {
+        substitutions.emplace(base->second.generic_parameters[index].name, type.arguments[index]);
+    }
+
+    StructLayout layout;
+    layout.generic_parameters = base->second.generic_parameters;
+    for (const Parameter& field : base->second.fields) {
+        const Type concrete_type = substitute_struct_type(field.type.type, substitutions);
+        const std::size_t field_size = llvm_size(concrete_type);
+        layout.size = align_to(layout.size, field_size);
+        layout.field_indices.emplace(field.name, layout.fields.size());
+        layout.field_offsets.emplace(field.name, layout.size);
+        layout.fields.push_back(Parameter{field.name, TypeAnnotation{true, concrete_type}, field.location});
+        layout.size += field_size;
+    }
+
+    if (layout.size == 0) {
+        layout.size = 1;
+    }
+
+    return layout;
 }
 
 std::string LlvmIrGenerator::llvm_symbol(const std::string& value) const {
