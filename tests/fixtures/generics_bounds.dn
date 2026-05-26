@@ -1,0 +1,21 @@
+import array;
+import math;
+
+fn identity<T>(value: T) -> T {
+    return value;
+}
+
+fn twice<T: numeric>(value: T) -> T {
+    return value + value;
+}
+
+let words: [text] = ["dune", "lang"];
+let reversed: [text] = array.reverse(words);
+let rough: real32 = 1.5;
+
+print(identity(42));
+print(identity("ok"));
+print(array.first(reversed));
+print(math.square(12));
+print(math.square(rough));
+print(twice(9));

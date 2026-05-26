@@ -84,6 +84,13 @@ void LlvmIrGenerator::generate(const Program& program, std::ostream& output) {
     output << "@.dune_fmt_real = private unnamed_addr constant [7 x i8] c\"%.15g\\0A\\00\"\n";
     output << "@.dune_fmt_glyph = private unnamed_addr constant [4 x i8] c\"%c\\0A\\00\"\n";
     output << "@.dune_fmt_text = private unnamed_addr constant [4 x i8] c\"%s\\0A\\00\"\n";
+    output << "@.dune_panic_array_index = private unnamed_addr constant [27 x i8] c\"array index out of "
+              "bounds\\0A\\00\"\n";
+    output
+        << "@.dune_panic_text_index = private unnamed_addr constant [26 x i8] c\"text index out of bounds\\0A\\00\"\n";
+    output << "@.dune_panic_slice = private unnamed_addr constant [27 x i8] c\"slice bound out of bounds\\0A\\00\"\n";
+    output << "@.dune_panic_array_pop = private unnamed_addr constant [29 x i8] c\"cannot pop from empty "
+              "array\\0A\\00\"\n";
     for (const std::string& global : string_globals_) {
         output << global;
     }
@@ -96,6 +103,7 @@ void LlvmIrGenerator::generate(const Program& program, std::ostream& output) {
     output << "declare ptr @malloc(i64)\n";
     output << "declare ptr @realloc(ptr, i64)\n\n";
     output << "declare ptr @memcpy(ptr, ptr, i64)\n\n";
+    output << "declare void @exit(i32)\n\n";
     emit_extern_declarations(output);
     output << body.str();
 }
@@ -723,6 +731,9 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_array_method_call_expression(c
         const Type& element_type = *array.type.element;
         const std::size_t element_size = llvm_size(element_type);
         const std::string length = next_register();
+        const std::string empty = next_register();
+        const std::string ok_label = next_label("array_pop_ok");
+        const std::string panic_label = next_label("array_pop_panic");
         const std::string next_length = next_register();
         const std::string data_pointer_pointer = next_register();
         const std::string data = next_register();
@@ -730,6 +741,13 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_array_method_call_expression(c
         const std::string slot = next_register();
         const std::string value = next_register();
         output << "  " << length << " = load i64, ptr " << array.name << '\n';
+        output << "  " << empty << " = icmp eq i64 " << length << ", 0\n";
+        output << "  br i1 " << empty << ", label %" << panic_label << ", label %" << ok_label << '\n';
+        output << panic_label << ":\n";
+        output << "  call i32 (ptr, ...) @printf(ptr @.dune_panic_array_pop)\n";
+        output << "  call void @exit(i32 1)\n";
+        output << "  unreachable\n";
+        output << ok_label << ":\n";
         output << "  " << next_length << " = sub i64 " << length << ", 1\n";
         output << "  store i64 " << next_length << ", ptr " << array.name << '\n';
         output << "  " << data_pointer_pointer << " = getelementptr i8, ptr " << array.name << ", i64 16\n";
@@ -841,8 +859,11 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_index_expression(const Express
     const std::string index_name = emit_index_as_i64(index, output);
 
     if (indexed.type.kind == ValueType::text_type) {
+        const std::string length = next_register();
         const std::string slot = next_register();
         const std::string value = next_register();
+        output << "  " << length << " = call i64 @strlen(ptr " << indexed.name << ")\n";
+        emit_bounds_check(index_name, length, "text", output);
         output << "  " << slot << " = getelementptr i8, ptr " << indexed.name << ", i64 " << index_name << '\n';
         output << "  " << value << " = load i8, ptr " << slot << '\n';
         return TypedValue{value, make_type(ValueType::glyph_type)};
@@ -855,11 +876,14 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_index_expression(const Express
     const Type& element_type = *indexed.type.element;
     const std::size_t element_size = llvm_size(element_type);
 
+    const std::string length = next_register();
     const std::string data_pointer_pointer = next_register();
     const std::string data = next_register();
     const std::string offset = next_register();
     const std::string slot = next_register();
     const std::string value = next_register();
+    output << "  " << length << " = load i64, ptr " << indexed.name << '\n';
+    emit_bounds_check(index_name, length, "array", output);
     output << "  " << data_pointer_pointer << " = getelementptr i8, ptr " << indexed.name << ", i64 16\n";
     output << "  " << data << " = load ptr, ptr " << data_pointer_pointer << '\n';
     output << "  " << offset << " = mul i64 " << index_name << ", " << element_size << '\n';
@@ -886,6 +910,7 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_slice_expression(const Express
         if (end.empty()) {
             end = length;
         }
+        emit_slice_bounds_check(start, end, length, output);
 
         const std::string slice_length = next_register();
         const std::string bytes = next_register();
@@ -907,6 +932,7 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_slice_expression(const Express
         if (end.empty()) {
             end = length;
         }
+        emit_slice_bounds_check(start, end, length, output);
 
         const Type& element_type = *sliced.type.element;
         const std::size_t element_size = llvm_size(element_type);
@@ -960,6 +986,53 @@ void LlvmIrGenerator::emit_print(const TypedValue& value, std::ostream& output) 
     output << "  " << format << " = getelementptr inbounds " << printf_format_name(value.type) << '\n';
     output << "  call i32 (ptr, ...) @printf(ptr " << format << ", " << llvm_type(printable.type) << ' '
            << printable.name << ")\n";
+}
+
+void LlvmIrGenerator::emit_bounds_check(const std::string& index, const std::string& length, std::string_view message,
+                                        std::ostream& output) {
+    const std::string negative = next_register();
+    const std::string too_high = next_register();
+    const std::string invalid = next_register();
+    const std::string ok_label = next_label("bounds_ok");
+    const std::string panic_label = next_label("bounds_panic");
+    const std::string global = message == "text" ? "@.dune_panic_text_index" : "@.dune_panic_array_index";
+
+    output << "  " << negative << " = icmp slt i64 " << index << ", 0\n";
+    output << "  " << too_high << " = icmp uge i64 " << index << ", " << length << '\n';
+    output << "  " << invalid << " = or i1 " << negative << ", " << too_high << '\n';
+    output << "  br i1 " << invalid << ", label %" << panic_label << ", label %" << ok_label << '\n';
+    output << panic_label << ":\n";
+    output << "  call i32 (ptr, ...) @printf(ptr " << global << ")\n";
+    output << "  call void @exit(i32 1)\n";
+    output << "  unreachable\n";
+    output << ok_label << ":\n";
+}
+
+void LlvmIrGenerator::emit_slice_bounds_check(const std::string& start, const std::string& end,
+                                              const std::string& length, std::ostream& output) {
+    const std::string start_negative = next_register();
+    const std::string end_negative = next_register();
+    const std::string start_after_end = next_register();
+    const std::string end_after_length = next_register();
+    const std::string any_negative = next_register();
+    const std::string bad_order_or_end = next_register();
+    const std::string invalid = next_register();
+    const std::string ok_label = next_label("slice_ok");
+    const std::string panic_label = next_label("slice_panic");
+
+    output << "  " << start_negative << " = icmp slt i64 " << start << ", 0\n";
+    output << "  " << end_negative << " = icmp slt i64 " << end << ", 0\n";
+    output << "  " << start_after_end << " = icmp ugt i64 " << start << ", " << end << '\n';
+    output << "  " << end_after_length << " = icmp ugt i64 " << end << ", " << length << '\n';
+    output << "  " << any_negative << " = or i1 " << start_negative << ", " << end_negative << '\n';
+    output << "  " << bad_order_or_end << " = or i1 " << start_after_end << ", " << end_after_length << '\n';
+    output << "  " << invalid << " = or i1 " << any_negative << ", " << bad_order_or_end << '\n';
+    output << "  br i1 " << invalid << ", label %" << panic_label << ", label %" << ok_label << '\n';
+    output << panic_label << ":\n";
+    output << "  call i32 (ptr, ...) @printf(ptr @.dune_panic_slice)\n";
+    output << "  call void @exit(i32 1)\n";
+    output << "  unreachable\n";
+    output << ok_label << ":\n";
 }
 
 LlvmIrGenerator::TypedValue LlvmIrGenerator::cast_for_print(const TypedValue& value, std::ostream& output) {
@@ -1131,6 +1204,8 @@ std::string LlvmIrGenerator::llvm_type(const Type& type) const {
         return "ptr";
     case ValueType::unit_type:
         return "i8";
+    case ValueType::generic_type:
+        break;
     }
 
     throw std::runtime_error("unknown type");
@@ -1161,6 +1236,7 @@ std::size_t LlvmIrGenerator::llvm_bit_width(const Type& type) const {
     case ValueType::text_type:
     case ValueType::unit_type:
     case ValueType::array_type:
+    case ValueType::generic_type:
         break;
     }
 
@@ -1192,6 +1268,7 @@ std::string LlvmIrGenerator::printf_format_name(const Type& type) const {
         return "[4 x i8], ptr @.dune_fmt_text, i64 0, i64 0";
     case ValueType::unit_type:
     case ValueType::array_type:
+    case ValueType::generic_type:
         break;
     }
 
@@ -1250,6 +1327,8 @@ std::size_t LlvmIrGenerator::llvm_size(const Type& type) const {
     case ValueType::text_type:
     case ValueType::array_type:
         return 8;
+    case ValueType::generic_type:
+        break;
     }
 
     throw std::runtime_error("unknown type");

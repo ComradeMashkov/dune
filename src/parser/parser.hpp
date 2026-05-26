@@ -48,6 +48,7 @@ private:
 
     std::vector<Statement> block();
     std::vector<Parameter> parameters();
+    std::vector<GenericParameter> generic_parameters();
     std::vector<std::unique_ptr<Expression>> arguments();
     TypeAnnotation optional_type_annotation();
     TypeAnnotation type_annotation();

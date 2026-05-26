@@ -61,6 +61,8 @@ std::string type_name(ValueType type) {
         return "unit";
     case ValueType::array_type:
         return "array";
+    case ValueType::generic_type:
+        return "generic";
     }
 
     return "unknown";
@@ -75,6 +77,10 @@ std::string type_name(const Type& type) {
         return "[" + type_name(*type.element) + "]";
     }
 
+    if (type.kind == ValueType::generic_type) {
+        return type.name;
+    }
+
     return type_name(type.kind);
 }
 
@@ -85,6 +91,10 @@ std::string type_key(const Type& type) {
         }
 
         return "array_" + type_key(*type.element);
+    }
+
+    if (type.kind == ValueType::generic_type) {
+        return "generic_" + type.name;
     }
 
     return type_name(type.kind);
@@ -916,6 +926,10 @@ bool TypeChecker::same_type(const Type& left, const Type& right) const {
         return false;
     }
 
+    if (left.kind == ValueType::generic_type) {
+        return left.name == right.name;
+    }
+
     if (left.kind != ValueType::array_type) {
         return true;
     }
@@ -1017,6 +1031,7 @@ unsigned long long TypeChecker::max_integer_literal(ValueType target) const {
     case ValueType::text_type:
     case ValueType::unit_type:
     case ValueType::array_type:
+    case ValueType::generic_type:
         break;
     }
 

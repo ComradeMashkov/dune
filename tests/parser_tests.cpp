@@ -366,6 +366,42 @@ bool parses_stdlib_primitives() {
     return passed;
 }
 
+bool parses_generic_functions() {
+    const dune::Program program = parse_source("fn choose<T, R: real, U: numeric>(left: T, middle: R, right: U) -> U { "
+                                               "return right; } print(choose(\"x\", 1.5, 7));");
+
+    if (!expect(program.statements.size() == 2, "expected generic function and print statements")) {
+        return false;
+    }
+
+    bool passed = true;
+    const dune::Statement& function = program.statements[0];
+    passed = expect(function.kind == dune::StatementKind::function, "expected generic function") && passed;
+    passed = expect(function.generic_parameters.size() == 3, "expected three generic parameters") && passed;
+    passed = expect(function.generic_parameters[0].name == "T", "expected first generic parameter") && passed;
+    passed = expect(function.generic_parameters[0].bound.empty(), "expected unbounded generic parameter") && passed;
+    passed = expect(function.generic_parameters[1].name == "R", "expected second generic parameter") && passed;
+    passed = expect(function.generic_parameters[1].bound == "real", "expected real generic bound") && passed;
+    passed = expect(function.generic_parameters[2].name == "U", "expected third generic parameter") && passed;
+    passed = expect(function.generic_parameters[2].bound == "numeric", "expected numeric generic bound") && passed;
+    passed = expect(function.parameters[0].type.type.kind == dune::ValueType::generic_type,
+                    "expected generic first parameter type") &&
+             passed;
+    passed = expect(function.parameters[0].type.type.name == "T", "expected first parameter generic name") && passed;
+    passed = expect(function.parameters[1].type.type.kind == dune::ValueType::generic_type,
+                    "expected generic second parameter type") &&
+             passed;
+    passed = expect(function.parameters[1].type.type.name == "R", "expected second parameter generic name") && passed;
+    passed = expect(function.parameters[2].type.type.kind == dune::ValueType::generic_type,
+                    "expected generic third parameter type") &&
+             passed;
+    passed = expect(function.parameters[2].type.type.name == "U", "expected third parameter generic name") && passed;
+    passed = expect(function.type.type.kind == dune::ValueType::generic_type, "expected generic return type") && passed;
+    passed = expect(function.type.type.name == "U", "expected return generic name") && passed;
+
+    return passed;
+}
+
 } // namespace
 
 int main() {
@@ -380,6 +416,7 @@ int main() {
     passed = parses_constants_and_module_members() && passed;
     passed = parses_casts_unary_logical_and_methods() && passed;
     passed = parses_stdlib_primitives() && passed;
+    passed = parses_generic_functions() && passed;
 
     return passed ? 0 : 1;
 }

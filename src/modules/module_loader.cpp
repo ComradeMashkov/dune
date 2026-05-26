@@ -7,6 +7,7 @@
 #include <iterator>
 #include <sstream>
 #include <stdexcept>
+#include <unordered_map>
 #include <utility>
 
 namespace dune {
@@ -38,6 +39,252 @@ bool is_relative_to_parent(const std::filesystem::path& path) {
     return false;
 }
 
+std::string diagnostic(SourceLocation location, const std::string& message) {
+    return "line " + std::to_string(location.line) + ", column " + std::to_string(location.column) + ": " + message;
+}
+
+Type clone_type(const Type& type) {
+    Type result{type.kind, nullptr};
+    result.name = type.name;
+    if (type.element != nullptr) {
+        result.element = std::make_shared<Type>(clone_type(*type.element));
+    }
+
+    return result;
+}
+
+Type substitute_type(const Type& type, const std::unordered_map<std::string, Type>& substitutions) {
+    if (type.kind == ValueType::generic_type) {
+        const auto replacement = substitutions.find(type.name);
+        if (replacement != substitutions.end()) {
+            return clone_type(replacement->second);
+        }
+    }
+
+    Type result = clone_type(type);
+    if (result.element != nullptr) {
+        result.element = std::make_shared<Type>(substitute_type(*result.element, substitutions));
+    }
+
+    return result;
+}
+
+TypeAnnotation clone_type_annotation(const TypeAnnotation& annotation) {
+    if (!annotation.has_type) {
+        return {};
+    }
+
+    return TypeAnnotation{true, clone_type(annotation.type)};
+}
+
+TypeAnnotation substitute_type_annotation(const TypeAnnotation& annotation,
+                                          const std::unordered_map<std::string, Type>& substitutions) {
+    if (!annotation.has_type) {
+        return {};
+    }
+
+    return TypeAnnotation{true, substitute_type(annotation.type, substitutions)};
+}
+
+std::unique_ptr<Expression> clone_expression(const Expression& expression);
+
+std::unique_ptr<Expression> clone_expression_pointer(const std::unique_ptr<Expression>& expression) {
+    if (expression == nullptr) {
+        return nullptr;
+    }
+
+    return clone_expression(*expression);
+}
+
+std::unique_ptr<Expression> clone_expression(const Expression& expression) {
+    auto result = std::make_unique<Expression>(Expression{expression.kind, expression.lexeme,
+                                                          clone_expression_pointer(expression.left),
+                                                          clone_expression_pointer(expression.right)});
+    result->location = expression.location;
+    result->type = clone_type_annotation(expression.type);
+    result->arguments.reserve(expression.arguments.size());
+    for (const std::unique_ptr<Expression>& argument : expression.arguments) {
+        result->arguments.push_back(clone_expression_pointer(argument));
+    }
+
+    return result;
+}
+
+Statement clone_statement(const Statement& statement);
+
+std::unique_ptr<Statement> clone_statement_pointer(const std::unique_ptr<Statement>& statement) {
+    if (statement == nullptr) {
+        return nullptr;
+    }
+
+    return std::make_unique<Statement>(clone_statement(*statement));
+}
+
+Statement clone_statement(const Statement& statement) {
+    Statement result{statement.kind, statement.name, clone_expression_pointer(statement.expression), {}, {}};
+    result.body.reserve(statement.body.size());
+    for (const Statement& child : statement.body) {
+        result.body.push_back(clone_statement(child));
+    }
+
+    result.else_body.reserve(statement.else_body.size());
+    for (const Statement& child : statement.else_body) {
+        result.else_body.push_back(clone_statement(child));
+    }
+
+    result.type = clone_type_annotation(statement.type);
+    result.parameters.reserve(statement.parameters.size());
+    for (const Parameter& parameter : statement.parameters) {
+        result.parameters.push_back(
+            Parameter{parameter.name, clone_type_annotation(parameter.type), parameter.location});
+    }
+
+    result.generic_parameters = statement.generic_parameters;
+    result.location = statement.location;
+    result.initializer = clone_statement_pointer(statement.initializer);
+    result.increment = clone_statement_pointer(statement.increment);
+    result.exported = statement.exported;
+    result.is_extern = statement.is_extern;
+    result.extern_symbol = statement.extern_symbol;
+    return result;
+}
+
+void substitute_expression(Expression& expression, const std::unordered_map<std::string, Type>& substitutions);
+
+void substitute_statement(Statement& statement, const std::unordered_map<std::string, Type>& substitutions) {
+    statement.type = substitute_type_annotation(statement.type, substitutions);
+    for (Parameter& parameter : statement.parameters) {
+        parameter.type = substitute_type_annotation(parameter.type, substitutions);
+    }
+
+    if (statement.expression != nullptr) {
+        substitute_expression(*statement.expression, substitutions);
+    }
+
+    for (Statement& child : statement.body) {
+        substitute_statement(child, substitutions);
+    }
+
+    for (Statement& child : statement.else_body) {
+        substitute_statement(child, substitutions);
+    }
+
+    if (statement.initializer != nullptr) {
+        substitute_statement(*statement.initializer, substitutions);
+    }
+
+    if (statement.increment != nullptr) {
+        substitute_statement(*statement.increment, substitutions);
+    }
+}
+
+void substitute_expression(Expression& expression, const std::unordered_map<std::string, Type>& substitutions) {
+    expression.type = substitute_type_annotation(expression.type, substitutions);
+
+    if (expression.left != nullptr) {
+        substitute_expression(*expression.left, substitutions);
+    }
+
+    if (expression.right != nullptr) {
+        substitute_expression(*expression.right, substitutions);
+    }
+
+    for (std::unique_ptr<Expression>& argument : expression.arguments) {
+        if (argument != nullptr) {
+            substitute_expression(*argument, substitutions);
+        }
+    }
+}
+
+std::vector<Type> unbounded_generic_types() {
+    return {
+        Type{ValueType::int_type, nullptr},    Type{ValueType::bool_type, nullptr},
+        Type{ValueType::i8_type, nullptr},     Type{ValueType::i16_type, nullptr},
+        Type{ValueType::i32_type, nullptr},    Type{ValueType::i64_type, nullptr},
+        Type{ValueType::isize_type, nullptr},  Type{ValueType::u8_type, nullptr},
+        Type{ValueType::u16_type, nullptr},    Type{ValueType::u32_type, nullptr},
+        Type{ValueType::u64_type, nullptr},    Type{ValueType::usize_type, nullptr},
+        Type{ValueType::real32_type, nullptr}, Type{ValueType::real_type, nullptr},
+        Type{ValueType::glyph_type, nullptr},  Type{ValueType::text_type, nullptr},
+    };
+}
+
+std::vector<Type> integer_generic_types() {
+    return {
+        Type{ValueType::int_type, nullptr}, Type{ValueType::i8_type, nullptr},    Type{ValueType::i16_type, nullptr},
+        Type{ValueType::i32_type, nullptr}, Type{ValueType::i64_type, nullptr},   Type{ValueType::isize_type, nullptr},
+        Type{ValueType::u8_type, nullptr},  Type{ValueType::u16_type, nullptr},   Type{ValueType::u32_type, nullptr},
+        Type{ValueType::u64_type, nullptr}, Type{ValueType::usize_type, nullptr},
+    };
+}
+
+std::vector<Type> numeric_generic_types() {
+    std::vector<Type> types = integer_generic_types();
+    types.push_back(Type{ValueType::real32_type, nullptr});
+    types.push_back(Type{ValueType::real_type, nullptr});
+    return types;
+}
+
+std::vector<Type> real_generic_types() {
+    return {
+        Type{ValueType::real32_type, nullptr},
+        Type{ValueType::real_type, nullptr},
+    };
+}
+
+std::vector<Type> generic_concrete_types(const GenericParameter& parameter) {
+    if (parameter.bound.empty()) {
+        return unbounded_generic_types();
+    }
+
+    if (parameter.bound == "integer") {
+        return integer_generic_types();
+    }
+
+    if (parameter.bound == "numeric") {
+        return numeric_generic_types();
+    }
+
+    if (parameter.bound == "real") {
+        return real_generic_types();
+    }
+
+    throw std::runtime_error(diagnostic(parameter.location, "unknown generic bound '" + parameter.bound + "'"));
+}
+
+void expand_generic_statement(const Statement& statement, std::size_t index,
+                              std::unordered_map<std::string, Type>& substitutions, std::vector<Statement>& expanded) {
+    if (index == statement.generic_parameters.size()) {
+        Statement concrete = clone_statement(statement);
+        concrete.generic_parameters.clear();
+        substitute_statement(concrete, substitutions);
+        expanded.push_back(std::move(concrete));
+        return;
+    }
+
+    const GenericParameter& parameter = statement.generic_parameters[index];
+    for (const Type& type : generic_concrete_types(parameter)) {
+        substitutions[parameter.name] = clone_type(type);
+        expand_generic_statement(statement, index + 1, substitutions, expanded);
+    }
+    substitutions.erase(parameter.name);
+}
+
+void expand_generics(Program& program) {
+    std::vector<Statement> expanded;
+    for (const Statement& statement : program.statements) {
+        if (statement.kind == StatementKind::function && !statement.generic_parameters.empty()) {
+            std::unordered_map<std::string, Type> substitutions;
+            expand_generic_statement(statement, 0, substitutions, expanded);
+            continue;
+        }
+
+        expanded.push_back(clone_statement(statement));
+    }
+
+    program.statements = std::move(expanded);
+}
+
 } // namespace
 
 ModuleLoader::ModuleLoader() : ModuleLoader({std::filesystem::path(DUNE_STDLIB_PATH)}) {}
@@ -59,6 +306,7 @@ Program ModuleLoader::resolve(Program program, const std::filesystem::path& sour
     resolved_statements.insert(resolved_statements.end(), std::make_move_iterator(program.statements.begin()),
                                std::make_move_iterator(program.statements.end()));
     program.statements = std::move(resolved_statements);
+    expand_generics(program);
     return program;
 }
 

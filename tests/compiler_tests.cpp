@@ -192,6 +192,37 @@ bool compiles_stdlib_primitives() {
     return passed;
 }
 
+bool compiles_generic_functions() {
+    const dune::Bytecode bytecode = compile_source("fn identity<T>(value: T) -> T { return value; } "
+                                                   "fn twice<T: numeric>(value: T) -> T { return value + value; } "
+                                                   "print(identity(42)); print(identity(\"ok\")); print(twice(9));");
+
+    int identity_count = 0;
+    int twice_count = 0;
+    for (const dune::Bytecode::Function& function : bytecode.functions) {
+        if (function.name == "identity" && function.arity == 1) {
+            ++identity_count;
+        }
+
+        if (function.name == "twice" && function.arity == 1) {
+            ++twice_count;
+        }
+    }
+
+    int call_count = 0;
+    for (const dune::Instruction& instruction : bytecode.instructions) {
+        if (instruction.op == dune::OpCode::call) {
+            ++call_count;
+        }
+    }
+
+    bool passed = true;
+    passed = expect(identity_count >= 2, "expected generated identity overloads") && passed;
+    passed = expect(twice_count >= 1, "expected generated bounded numeric overload") && passed;
+    passed = expect(call_count == 3, "expected three generic call instructions") && passed;
+    return passed;
+}
+
 } // namespace
 
 int main() {
@@ -202,6 +233,7 @@ int main() {
     passed = compiles_module_constants() && passed;
     passed = compiles_operators_casts_and_methods() && passed;
     passed = compiles_stdlib_primitives() && passed;
+    passed = compiles_generic_functions() && passed;
 
     return passed ? 0 : 1;
 }

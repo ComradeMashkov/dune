@@ -57,6 +57,10 @@ private:
     void emit_extern_declarations(std::ostream& output);
     void emit_global_constants(std::ostream& output);
     void emit_print(const TypedValue& value, std::ostream& output);
+    void emit_bounds_check(const std::string& index, const std::string& length, std::string_view message,
+                           std::ostream& output);
+    void emit_slice_bounds_check(const std::string& start, const std::string& end, const std::string& length,
+                                 std::ostream& output);
     void collect_functions(const Program& program);
     void collect_function(const Statement& statement);
     void collect_global_constants(const Program& program);
