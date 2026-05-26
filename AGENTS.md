@@ -84,6 +84,12 @@ Every PR should:
 - include a clear summary
 - avoid unrelated changes
 
+Commits should follow Conventional Commits, for example:
+
+- `feat: add parser expression support`
+- `fix: handle unexpected lexer input`
+- `docs: document build workflow`
+
 ---
 
 ## Current Priorities
