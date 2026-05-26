@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(dune VERSION 0.2.0 LANGUAGES CXX)
+project(dune VERSION 0.4.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -70,6 +70,16 @@ target_link_libraries(dune_parser
         dune_lexer
 )
 
+add_library(dune_typechecker
+    src/typechecker/type_checker.cpp
+)
+dune_add_lint_dependencies(dune_typechecker)
+
+target_link_libraries(dune_typechecker
+    PUBLIC
+        dune_parser
+)
+
 add_library(dune_compiler
     src/compiler/compiler.cpp
 )
@@ -77,7 +87,7 @@ dune_add_lint_dependencies(dune_compiler)
 
 target_link_libraries(dune_compiler
     PUBLIC
-        dune_parser
+        dune_typechecker
 )
 
 add_library(dune_codegen
@@ -112,6 +122,14 @@ add_executable(parser_tests tests/parser_tests.cpp)
 target_link_libraries(parser_tests PRIVATE dune_parser)
 dune_add_lint_dependencies(parser_tests)
 
+add_executable(compiler_tests tests/compiler_tests.cpp)
+target_link_libraries(compiler_tests PRIVATE dune_compiler)
+dune_add_lint_dependencies(compiler_tests)
+
+add_executable(type_checker_tests tests/type_checker_tests.cpp)
+target_link_libraries(type_checker_tests PRIVATE dune_typechecker)
+dune_add_lint_dependencies(type_checker_tests)
+
 add_executable(vm_tests tests/vm_tests.cpp)
 target_link_libraries(vm_tests PRIVATE dune_vm)
 dune_add_lint_dependencies(vm_tests)
@@ -119,10 +137,12 @@ dune_add_lint_dependencies(vm_tests)
 enable_testing()
 
 add_test(NAME smoke COMMAND dune --version)
-set_tests_properties(smoke PROPERTIES PASS_REGULAR_EXPRESSION "dune 0.2.0")
+set_tests_properties(smoke PROPERTIES PASS_REGULAR_EXPRESSION "dune 0.4.0")
 
 add_test(NAME lexer_tests COMMAND lexer_tests)
 add_test(NAME parser_tests COMMAND parser_tests)
+add_test(NAME compiler_tests COMMAND compiler_tests)
+add_test(NAME type_checker_tests COMMAND type_checker_tests)
 add_test(NAME vm_tests COMMAND vm_tests)
 
 add_test(
@@ -156,6 +176,36 @@ add_test(
 )
 
 add_test(
+    NAME cli_functions
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/functions.dn
+        -D EXPECTED_OUTPUT=17
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
+    NAME cli_static_types
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/static_types.dn
+        -D EXPECTED_OUTPUT=1
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
+    NAME cli_many_args
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/many_args.dn
+        -D EXPECTED_OUTPUT=45
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
     NAME cli_build_native_hello
     COMMAND
         ${CMAKE_COMMAND}
@@ -163,6 +213,28 @@ add_test(
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/hello.dn
         -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/hello_native
         -D EXPECTED_OUTPUT=42
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
+)
+
+add_test(
+    NAME cli_build_native_functions
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/functions.dn
+        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/functions_native
+        -D EXPECTED_OUTPUT=17
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
+)
+
+add_test(
+    NAME cli_build_native_many_args
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/many_args.dn
+        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/many_args_native
+        -D EXPECTED_OUTPUT=45
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
 )
 

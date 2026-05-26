@@ -41,6 +41,23 @@ bool expect_throws(const std::string& source, const char* message) {
     return false;
 }
 
+bool expect_error_contains(const std::string& source, const std::string& expected, const char* message) {
+    try {
+        run_source(source);
+    } catch (const std::runtime_error& error) {
+        const std::string actual = error.what();
+        if (actual.find(expected) == std::string::npos) {
+            std::cerr << message << ": expected error containing '" << expected << "', got '" << actual << "'\n";
+            return false;
+        }
+
+        return true;
+    }
+
+    std::cerr << message << '\n';
+    return false;
+}
+
 } // namespace
 
 int main() {
@@ -58,9 +75,25 @@ int main() {
                                   "if x == 0 { print(42); } else { print(0); }"),
                        "42\n", "expected control flow output") &&
              passed;
+    passed = expect_eq(run_source("fn add(a, b) { return a + b; } print(add(10, 20));"), "30\n",
+                       "expected function call output") &&
+             passed;
+    passed = expect_eq(run_source("fn add(a: int, b: int) -> int { return a + b; } "
+                                  "fn twice(value: int) -> int { return add(value, value); } "
+                                  "print(add(twice(5), add(3, 4)));"),
+                       "17\n", "expected nested function call output") &&
+             passed;
+    passed = expect_eq(run_source("fn choose(flag: bool, yes: int, no: int) -> int { "
+                                  "if flag { return yes; } else { return no; } } "
+                                  "print(choose(false, 1, 2));"),
+                       "2\n", "expected function return through branches") &&
+             passed;
     passed = expect_throws("print(missing);", "expected undefined variable to throw") && passed;
     passed = expect_throws("missing = 1;", "expected undefined assignment to throw") && passed;
     passed = expect_throws("print(1 / 0);", "expected division by zero to throw") && passed;
+    passed = expect_error_contains("let x: int = true;", "expected type 'int' but got 'bool'",
+                                   "expected static type error") &&
+             passed;
 
     return passed ? 0 : 1;
 }

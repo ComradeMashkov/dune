@@ -104,5 +104,38 @@ int main() {
                            }) &&
              passed;
 
+    passed = expect_tokens("fn add(a: int, b: int) -> int { return a + b; }\nlet ok: bool = true;",
+                           {
+                               {fn_keyword, "fn"},
+                               {identifier, "add"},
+                               {left_paren, "("},
+                               {identifier, "a"},
+                               {colon, ":"},
+                               {int_keyword, "int"},
+                               {comma, ","},
+                               {identifier, "b"},
+                               {colon, ":"},
+                               {int_keyword, "int"},
+                               {right_paren, ")"},
+                               {arrow, "->"},
+                               {int_keyword, "int"},
+                               {left_brace, "{"},
+                               {return_keyword, "return"},
+                               {identifier, "a"},
+                               {plus, "+"},
+                               {identifier, "b"},
+                               {semicolon, ";"},
+                               {right_brace, "}"},
+                               {let, "let"},
+                               {identifier, "ok"},
+                               {colon, ":"},
+                               {bool_keyword, "bool"},
+                               {equal, "="},
+                               {true_keyword, "true"},
+                               {semicolon, ";"},
+                               {eof, ""},
+                           }) &&
+             passed;
+
     return passed ? 0 : 1;
 }

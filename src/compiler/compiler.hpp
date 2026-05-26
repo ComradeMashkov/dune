@@ -15,6 +15,8 @@ public:
     Bytecode compile(const Program& program);
 
 private:
+    void collect_functions(const std::vector<Statement>& statements);
+    void compile_function(const Statement& statement);
     void compile_statements(const std::vector<Statement>& statements);
     void compile_statement(const Statement& statement);
     void compile_expression(const Expression& expression);
@@ -22,11 +24,14 @@ private:
     std::size_t add_constant(int value);
     std::size_t declare_local(const std::string& name);
     std::size_t resolve_local(const std::string& name) const;
+    std::size_t resolve_function(const std::string& name) const;
     std::size_t emit(OpCode op, std::size_t operand = 0);
     void patch_operand(std::size_t instruction_index, std::size_t operand);
 
     Bytecode bytecode_;
     std::unordered_map<std::string, std::size_t> locals_;
+    std::unordered_map<std::string, std::size_t> functions_;
+    std::vector<Instruction>* instructions_ = nullptr;
 };
 
 } // namespace dune
