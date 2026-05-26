@@ -318,5 +318,38 @@ int main() {
                            }) &&
              passed;
 
+    passed = expect_tokens("let ok: bool = !false && true || (17 % 5 == 2); let x: real64 = 17 as real64;",
+                           {
+                               {let, "let"},
+                               {identifier, "ok"},
+                               {colon, ":"},
+                               {bool_keyword, "bool"},
+                               {equal, "="},
+                               {bang, "!"},
+                               {false_keyword, "false"},
+                               {amp_amp, "&&"},
+                               {true_keyword, "true"},
+                               {pipe_pipe, "||"},
+                               {left_paren, "("},
+                               {number, "17"},
+                               {percent, "%"},
+                               {number, "5"},
+                               {equal_equal, "=="},
+                               {number, "2"},
+                               {right_paren, ")"},
+                               {semicolon, ";"},
+                               {let, "let"},
+                               {identifier, "x"},
+                               {colon, ":"},
+                               {real64_keyword, "real64"},
+                               {equal, "="},
+                               {number, "17"},
+                               {as_keyword, "as"},
+                               {real64_keyword, "real64"},
+                               {semicolon, ";"},
+                               {eof, ""},
+                           }) &&
+             passed;
+
     return passed ? 0 : 1;
 }

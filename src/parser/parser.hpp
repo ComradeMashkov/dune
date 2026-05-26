@@ -46,10 +46,14 @@ private:
     TypeAnnotation type_annotation();
 
     std::unique_ptr<Expression> expression();
+    std::unique_ptr<Expression> logical_or();
+    std::unique_ptr<Expression> logical_and();
     std::unique_ptr<Expression> equality();
     std::unique_ptr<Expression> comparison();
     std::unique_ptr<Expression> term();
     std::unique_ptr<Expression> factor();
+    std::unique_ptr<Expression> cast();
+    std::unique_ptr<Expression> unary();
     std::unique_ptr<Expression> call();
     std::unique_ptr<Expression> primary();
 

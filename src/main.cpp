@@ -15,7 +15,7 @@
 
 namespace {
 
-constexpr const char* version = "0.7.0";
+constexpr const char* version = "0.8.0";
 
 #ifndef DUNE_CLANGXX_PATH
 #define DUNE_CLANGXX_PATH "clang++"

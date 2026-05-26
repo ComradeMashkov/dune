@@ -282,6 +282,45 @@ bool parses_constants_and_module_members() {
     return passed;
 }
 
+bool parses_casts_unary_logical_and_methods() {
+    const dune::Program program = parse_source("let ok: bool = !false && true || (17 % 5 == 2); "
+                                               "let exact: real64 = 17 as real64; "
+                                               "let values: [int] = [1, 2]; values.pop(); "
+                                               "let message: text = \"dune\"; print(message.contains(\"du\"));");
+
+    if (!expect(program.statements.size() == 6, "expected operators and methods statements")) {
+        return false;
+    }
+
+    bool passed = true;
+    const dune::Expression& logical = *program.statements[0].expression;
+    passed = expect(logical.kind == dune::ExpressionKind::binary, "expected logical binary expression") && passed;
+    passed = expect(logical.lexeme == "||", "expected logical or at root") && passed;
+    passed = expect(logical.left->kind == dune::ExpressionKind::binary, "expected logical and on left side") && passed;
+    passed = expect(logical.left->lexeme == "&&", "expected logical and lexeme") && passed;
+    passed = expect(logical.left->left->kind == dune::ExpressionKind::unary, "expected unary not") && passed;
+    passed = expect(logical.right->kind == dune::ExpressionKind::binary, "expected equality on right side") && passed;
+    passed = expect(logical.right->left->kind == dune::ExpressionKind::binary, "expected modulo expression") && passed;
+    passed = expect(logical.right->left->lexeme == "%", "expected modulo lexeme") && passed;
+
+    const dune::Expression& cast = *program.statements[1].expression;
+    passed = expect(cast.kind == dune::ExpressionKind::cast, "expected cast expression") && passed;
+    passed = expect(cast.type.type.kind == dune::ValueType::real_type, "expected real64 cast target") && passed;
+
+    const dune::Statement& pop_statement = program.statements[3];
+    passed = expect(pop_statement.expression->kind == dune::ExpressionKind::method_call, "expected pop method call") &&
+             passed;
+    passed = expect(pop_statement.expression->lexeme == "pop", "expected pop method") && passed;
+
+    const dune::Statement& print_statement = program.statements[5];
+    passed =
+        expect(print_statement.expression->kind == dune::ExpressionKind::method_call, "expected text method call") &&
+        passed;
+    passed = expect(print_statement.expression->lexeme == "contains", "expected contains method") && passed;
+
+    return passed;
+}
+
 } // namespace
 
 int main() {
@@ -294,6 +333,7 @@ int main() {
     passed = parses_standard_types_and_unit_calls() && passed;
     passed = parses_arrays_imports_and_module_calls() && passed;
     passed = parses_constants_and_module_members() && passed;
+    passed = parses_casts_unary_logical_and_methods() && passed;
 
     return passed ? 0 : 1;
 }

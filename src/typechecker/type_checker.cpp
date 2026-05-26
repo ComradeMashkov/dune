@@ -365,6 +365,12 @@ Type TypeChecker::check_expression(const Expression& expression, const TypeAnnot
     case ExpressionKind::member:
         actual = check_member_expression(expression);
         break;
+    case ExpressionKind::unary:
+        actual = check_unary_expression(expression);
+        break;
+    case ExpressionKind::cast:
+        actual = check_cast_expression(expression);
+        break;
     case ExpressionKind::binary:
         actual = check_binary_expression(expression, expected);
         break;
@@ -389,8 +395,16 @@ Type TypeChecker::check_expression(const Expression& expression, const TypeAnnot
 }
 
 Type TypeChecker::check_binary_expression(const Expression& expression, const TypeAnnotation& expected) {
-    const bool is_arithmetic =
-        expression.lexeme == "+" || expression.lexeme == "-" || expression.lexeme == "*" || expression.lexeme == "/";
+    if (expression.lexeme == "&&" || expression.lexeme == "||") {
+        const Type left = check_expression(*expression.left);
+        const Type right = check_expression(*expression.right);
+        expect_type(make_type(ValueType::bool_type), left, expression.left->location);
+        expect_type(make_type(ValueType::bool_type), right, expression.right->location);
+        return make_type(ValueType::bool_type);
+    }
+
+    const bool is_arithmetic = expression.lexeme == "+" || expression.lexeme == "-" || expression.lexeme == "*" ||
+                               expression.lexeme == "/" || expression.lexeme == "%";
     const TypeAnnotation operand_expected =
         is_arithmetic && expected.has_type && is_numeric_type(expected.type) ? expected : TypeAnnotation{};
 
@@ -406,6 +420,11 @@ Type TypeChecker::check_binary_expression(const Expression& expression, const Ty
         if (!is_numeric_type(left)) {
             throw std::runtime_error(
                 diagnostic(expression.left->location, "expected numeric type but got '" + type_name(left) + "'"));
+        }
+
+        if (expression.lexeme == "%" && !is_integer_type(left.kind)) {
+            throw std::runtime_error(
+                diagnostic(expression.left->location, "expected integer type but got '" + type_name(left) + "'"));
         }
 
         expect_type(left, right, expression.right->location);
@@ -469,8 +488,46 @@ Type TypeChecker::check_method_call_expression(const Expression& expression, con
         return check_array_method_call(receiver, expression);
     }
 
+    if (receiver.kind == ValueType::text_type) {
+        return check_text_method_call(receiver, expression);
+    }
+
     throw std::runtime_error(diagnostic(expression.location, "type '" + type_name(receiver) + "' has no method '" +
                                                                  expression.lexeme + "'"));
+}
+
+Type TypeChecker::check_unary_expression(const Expression& expression) {
+    Type right = check_expression(*expression.right);
+    if (expression.lexeme == "-") {
+        if (!is_numeric_type(right)) {
+            throw std::runtime_error(
+                diagnostic(expression.right->location, "expected numeric type but got '" + type_name(right) + "'"));
+        }
+
+        return right;
+    }
+
+    if (expression.lexeme == "!") {
+        expect_type(make_type(ValueType::bool_type), right, expression.right->location);
+        return make_type(ValueType::bool_type);
+    }
+
+    throw std::runtime_error(diagnostic(expression.location, "unknown unary operator '" + expression.lexeme + "'"));
+}
+
+Type TypeChecker::check_cast_expression(const Expression& expression) {
+    if (!expression.type.has_type) {
+        throw std::runtime_error(diagnostic(expression.location, "expected cast target type"));
+    }
+
+    const Type source = check_expression(*expression.left);
+    const Type target = expression.type.type;
+    if (!is_cast_allowed(source, target)) {
+        throw std::runtime_error(diagnostic(expression.location, "cannot cast from '" + type_name(source) + "' to '" +
+                                                                     type_name(target) + "'"));
+    }
+
+    return target;
 }
 
 Type TypeChecker::check_member_expression(const Expression& expression) {
@@ -525,7 +582,77 @@ Type TypeChecker::check_array_method_call(const Type& receiver, const Expression
         return make_type(ValueType::unit_type);
     }
 
+    if (expression.lexeme == "pop") {
+        if (!expression.arguments.empty()) {
+            throw std::runtime_error(diagnostic(expression.location, "array method 'pop' expects 0 arguments but got " +
+                                                                         std::to_string(expression.arguments.size())));
+        }
+
+        if (receiver.element == nullptr) {
+            throw std::runtime_error(
+                diagnostic(expression.location, "expected array type but got '" + type_name(receiver) + "'"));
+        }
+
+        return *receiver.element;
+    }
+
+    if (expression.lexeme == "clear") {
+        if (!expression.arguments.empty()) {
+            throw std::runtime_error(
+                diagnostic(expression.location, "array method 'clear' expects 0 arguments but got " +
+                                                    std::to_string(expression.arguments.size())));
+        }
+
+        return make_type(ValueType::unit_type);
+    }
+
+    if (expression.lexeme == "is_empty") {
+        if (!expression.arguments.empty()) {
+            throw std::runtime_error(
+                diagnostic(expression.location, "array method 'is_empty' expects 0 arguments but got " +
+                                                    std::to_string(expression.arguments.size())));
+        }
+
+        return make_type(ValueType::bool_type);
+    }
+
     throw std::runtime_error(diagnostic(expression.location, "array type has no method '" + expression.lexeme + "'"));
+}
+
+Type TypeChecker::check_text_method_call(const Type& receiver, const Expression& expression) {
+    (void)receiver;
+    if (expression.lexeme == "len") {
+        if (!expression.arguments.empty()) {
+            throw std::runtime_error(diagnostic(expression.location, "text method 'len' expects 0 arguments but got " +
+                                                                         std::to_string(expression.arguments.size())));
+        }
+
+        return make_type(ValueType::int_type);
+    }
+
+    if (expression.lexeme == "is_empty") {
+        if (!expression.arguments.empty()) {
+            throw std::runtime_error(
+                diagnostic(expression.location, "text method 'is_empty' expects 0 arguments but got " +
+                                                    std::to_string(expression.arguments.size())));
+        }
+
+        return make_type(ValueType::bool_type);
+    }
+
+    if (expression.lexeme == "contains" || expression.lexeme == "starts_with") {
+        if (expression.arguments.size() != 1) {
+            throw std::runtime_error(diagnostic(expression.location, "text method '" + expression.lexeme +
+                                                                         "' expects 1 argument but got " +
+                                                                         std::to_string(expression.arguments.size())));
+        }
+
+        expect_type(make_type(ValueType::text_type), check_expression(*expression.arguments[0]),
+                    expression.arguments[0]->location);
+        return make_type(ValueType::bool_type);
+    }
+
+    throw std::runtime_error(diagnostic(expression.location, "text type has no method '" + expression.lexeme + "'"));
 }
 
 const TypeChecker::FunctionSignature&
@@ -741,6 +868,24 @@ bool TypeChecker::is_real_type(ValueType type) const {
 
 bool TypeChecker::is_numeric_type(const Type& type) const {
     return is_integer_type(type.kind) || is_real_type(type.kind);
+}
+
+bool TypeChecker::is_cast_allowed(const Type& source, const Type& target) const {
+    if (same_type(source, target)) {
+        return true;
+    }
+
+    if (source.kind == ValueType::array_type || target.kind == ValueType::array_type ||
+        source.kind == ValueType::unit_type || target.kind == ValueType::unit_type ||
+        source.kind == ValueType::text_type || target.kind == ValueType::text_type) {
+        return false;
+    }
+
+    const bool source_scalar =
+        is_numeric_type(source) || source.kind == ValueType::bool_type || source.kind == ValueType::glyph_type;
+    const bool target_scalar =
+        is_numeric_type(target) || target.kind == ValueType::bool_type || target.kind == ValueType::glyph_type;
+    return source_scalar && target_scalar;
 }
 
 bool TypeChecker::can_coerce_integer_literal(const Expression& expression, const Type& target) const {

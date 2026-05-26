@@ -34,9 +34,13 @@ private:
     bool emit_statements(const std::vector<Statement>& statements, std::ostream& output);
     TypedValue emit_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_binary_expression(const Expression& expression, std::ostream& output);
+    TypedValue emit_logical_expression(const Expression& expression, std::ostream& output);
+    TypedValue emit_unary_expression(const Expression& expression, std::ostream& output);
+    TypedValue emit_cast_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_call_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_method_call_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_array_method_call_expression(const Expression& expression, std::ostream& output);
+    TypedValue emit_text_method_call_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_array_literal(const Expression& expression, std::ostream& output);
     TypedValue emit_index_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_text_literal(const std::string& lexeme);
@@ -50,6 +54,7 @@ private:
     std::string next_register();
     std::string next_label(std::string_view name);
     std::string llvm_type(const Type& type) const;
+    std::size_t llvm_bit_width(const Type& type) const;
     std::string printf_format_name(const Type& type) const;
     std::size_t llvm_size(const Type& type) const;
     std::string function_name(const std::string& name) const;
@@ -59,6 +64,7 @@ private:
     std::string llvm_text_literal(const std::string& value) const;
     std::string llvm_symbol(const std::string& value) const;
     TypedValue cast_for_print(const TypedValue& value, std::ostream& output);
+    TypedValue cast_value(const TypedValue& value, const Type& target, std::ostream& output);
 
     std::unordered_map<const Expression*, Type> expression_types_;
     std::unordered_map<const Expression*, std::string> resolved_calls_;

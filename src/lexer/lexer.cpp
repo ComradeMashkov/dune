@@ -45,6 +45,8 @@ Token Lexer::next_token() {
         return make_token(TokenType::star, start, line, column);
     case '/':
         return make_token(TokenType::slash, start, line, column);
+    case '%':
+        return make_token(TokenType::percent, start, line, column);
     case '=':
         if (match('=')) {
             return make_token(TokenType::equal_equal, start, line, column);
@@ -54,6 +56,18 @@ Token Lexer::next_token() {
     case '!':
         if (match('=')) {
             return make_token(TokenType::bang_equal, start, line, column);
+        }
+
+        return make_token(TokenType::bang, start, line, column);
+    case '&':
+        if (match('&')) {
+            return make_token(TokenType::amp_amp, start, line, column);
+        }
+
+        break;
+    case '|':
+        if (match('|')) {
+            return make_token(TokenType::pipe_pipe, start, line, column);
         }
 
         break;
@@ -194,6 +208,10 @@ Token Lexer::identifier(std::size_t start, std::size_t line, std::size_t column)
 
     if (lexeme == "while") {
         return Token{TokenType::while_keyword, lexeme, line, column};
+    }
+
+    if (lexeme == "as") {
+        return Token{TokenType::as_keyword, lexeme, line, column};
     }
 
     if (lexeme == "int") {

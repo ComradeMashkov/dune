@@ -59,6 +59,8 @@ enum class ExpressionKind {
     array,
     index,
     member,
+    unary,
+    cast,
     binary,
     call,
     method_call,
@@ -71,6 +73,7 @@ struct Expression {
     std::unique_ptr<Expression> right;
     std::vector<std::unique_ptr<Expression>> arguments;
     SourceLocation location;
+    TypeAnnotation type;
 };
 
 enum class StatementKind {
