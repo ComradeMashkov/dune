@@ -17,7 +17,15 @@ Expected output:
 42
 ```
 
-## Build
+## Run
+
+```bash
+cmake -S . -B build
+cmake --build build
+./build/dune hello.dn
+```
+
+## Build And Test
 
 ```bash
 cmake -S . -B build
@@ -25,5 +33,18 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-The compiler CLI is not implemented yet. For now, the build command compiles
-the C++ project and the tests cover the lexer/parser behavior for `.dn` source.
+## v0.1
+
+The `0.1.0` release implements a small calculator language with:
+
+- lexer
+- parser
+- AST
+- arithmetic
+- variables
+- print
+- bytecode
+- VM
+- CLI
+- tests
+- CI
