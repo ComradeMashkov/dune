@@ -196,6 +196,16 @@ add_test(
 )
 
 add_test(
+    NAME cli_many_args
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/many_args.dn
+        -D EXPECTED_OUTPUT=45
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
     NAME cli_build_native_hello
     COMMAND
         ${CMAKE_COMMAND}
@@ -214,6 +224,17 @@ add_test(
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/functions.dn
         -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/functions_native
         -D EXPECTED_OUTPUT=17
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
+)
+
+add_test(
+    NAME cli_build_native_many_args
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/many_args.dn
+        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/many_args_native
+        -D EXPECTED_OUTPUT=45
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
 )
 

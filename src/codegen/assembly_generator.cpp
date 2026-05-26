@@ -1,5 +1,6 @@
 #include "assembly_generator.hpp"
 
+#include <algorithm>
 #include <stdexcept>
 #include <string_view>
 
@@ -142,10 +143,6 @@ void AssemblyGenerator::emit_function(const Statement& statement, std::ostream& 
 }
 
 void AssemblyGenerator::emit_function_header(const Statement& statement, std::ostream& output) const {
-    if (statement.parameters.size() > 8) {
-        throw std::runtime_error("native assembly output supports at most 8 function parameters");
-    }
-
     output << function_label(statement.name) << ":\n";
 #if defined(__APPLE__) && defined(__aarch64__)
     output << "    stp x29, x30, [sp, #-16]!\n";
@@ -154,10 +151,6 @@ void AssemblyGenerator::emit_function_header(const Statement& statement, std::os
         output << "    sub sp, sp, #" << current_frame_->stack_size << '\n';
     }
 #elif defined(__linux__) && defined(__x86_64__)
-    if (statement.parameters.size() > 6) {
-        throw std::runtime_error("native assembly output supports at most 6 parameters on x86_64");
-    }
-
     output << "    push rbp\n";
     output << "    mov rbp, rsp\n";
     if (current_frame_->stack_size > 0) {
@@ -482,19 +475,79 @@ void AssemblyGenerator::emit_binary(const std::string& op, std::ostream& output)
 }
 
 void AssemblyGenerator::emit_call(const Expression& expression, std::ostream& output) {
+    const std::size_t argument_count = expression.arguments.size();
     for (const std::unique_ptr<Expression>& argument : expression.arguments) {
         emit_expression(*argument, output);
         emit_push_result(output);
     }
 
-    for (std::size_t index = expression.arguments.size(); index > 0; --index) {
-        emit_pop_argument(index - 1, expression.arguments.size(), output);
+#if defined(__APPLE__) && defined(__aarch64__)
+    if (argument_count > 0) {
+        output << "    mov x9, sp\n";
     }
 
-#if defined(__APPLE__) && defined(__aarch64__)
+    const std::size_t register_arguments = std::min<std::size_t>(argument_count, 8);
+    for (std::size_t index = 0; index < register_arguments; ++index) {
+        const std::size_t offset = 16 * (argument_count - index - 1);
+        output << "    ldr x" << index << ", [x9, #" << offset << "]\n";
+    }
+
+    const std::size_t stack_arguments = argument_count > 8 ? argument_count - 8 : 0;
+    const std::size_t stack_argument_bytes = align_to(stack_arguments * 8, 16);
+    if (stack_argument_bytes > 0) {
+        output << "    sub sp, sp, #" << stack_argument_bytes << '\n';
+    }
+
+    for (std::size_t index = 8; index < argument_count; ++index) {
+        const std::size_t source_offset = 16 * (argument_count - index - 1);
+        const std::size_t target_offset = 8 * (index - 8);
+        output << "    ldr x10, [x9, #" << source_offset << "]\n";
+        output << "    str x10, [sp, #" << target_offset << "]\n";
+    }
+
     output << "    bl " << function_label(expression.lexeme) << '\n';
+    if (stack_argument_bytes > 0) {
+        output << "    add sp, sp, #" << stack_argument_bytes << '\n';
+    }
+
+    if (argument_count > 0) {
+        output << "    add sp, sp, #" << argument_count * 16 << '\n';
+    }
 #elif defined(__linux__) && defined(__x86_64__)
+    if (argument_count > 0) {
+        output << "    mov r10, rsp\n";
+    }
+
+    static constexpr const char* registers[] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
+    const std::size_t register_arguments = std::min<std::size_t>(argument_count, 6);
+    for (std::size_t index = 0; index < register_arguments; ++index) {
+        const std::size_t offset = 16 * (argument_count - index - 1);
+        output << "    mov " << registers[index] << ", QWORD PTR [r10 + " << offset << "]\n";
+    }
+
+    const std::size_t stack_arguments = argument_count > 6 ? argument_count - 6 : 0;
+    const std::size_t stack_padding = stack_arguments % 2 == 0 ? 0 : 8;
+    if (stack_padding > 0) {
+        output << "    sub rsp, " << stack_padding << '\n';
+    }
+
+    for (std::size_t index = argument_count; index > 6; --index) {
+        const std::size_t argument_index = index - 1;
+        const std::size_t offset = 16 * (argument_count - argument_index - 1);
+        output << "    mov rax, QWORD PTR [r10 + " << offset << "]\n";
+        output << "    sub rsp, 8\n";
+        output << "    mov QWORD PTR [rsp], rax\n";
+    }
+
     output << "    call " << function_label(expression.lexeme) << '\n';
+    const std::size_t stack_cleanup = stack_arguments * 8 + stack_padding;
+    if (stack_cleanup > 0) {
+        output << "    add rsp, " << stack_cleanup << '\n';
+    }
+
+    if (argument_count > 0) {
+        output << "    add rsp, " << argument_count * 16 << '\n';
+    }
 #else
     (void)output;
     throw std::runtime_error("native assembly output is not supported on this platform");
@@ -512,35 +565,24 @@ void AssemblyGenerator::emit_push_result(std::ostream& output) const {
 #endif
 }
 
-void AssemblyGenerator::emit_pop_argument(std::size_t argument_index, std::size_t argument_count,
-                                          std::ostream& output) const {
-#if defined(__APPLE__) && defined(__aarch64__)
-    if (argument_count > 8) {
-        throw std::runtime_error("native assembly output supports at most 8 function arguments");
-    }
-
-    output << "    ldr x" << argument_index << ", [sp], #16\n";
-#elif defined(__linux__) && defined(__x86_64__)
-    if (argument_count > 6) {
-        throw std::runtime_error("native assembly output supports at most 6 arguments on x86_64");
-    }
-
-    static constexpr const char* registers[] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
-    output << "    mov " << registers[argument_index] << ", QWORD PTR [rsp]\n";
-    output << "    add rsp, 16\n";
-#else
-    (void)argument_index;
-    (void)argument_count;
-    (void)output;
-#endif
-}
-
 void AssemblyGenerator::emit_store_argument(std::size_t slot, std::size_t argument_index, std::ostream& output) const {
 #if defined(__APPLE__) && defined(__aarch64__)
-    output << "    str x" << argument_index << ", [x29, #-" << slot_offset(slot) << "]\n";
+    if (argument_index < 8) {
+        output << "    str x" << argument_index << ", [x29, #-" << slot_offset(slot) << "]\n";
+        return;
+    }
+
+    output << "    ldr x9, [x29, #" << 16 + (argument_index - 8) * 8 << "]\n";
+    output << "    str x9, [x29, #-" << slot_offset(slot) << "]\n";
 #elif defined(__linux__) && defined(__x86_64__)
     static constexpr const char* registers[] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
-    output << "    mov QWORD PTR [rbp - " << slot_offset(slot) << "], " << registers[argument_index] << '\n';
+    if (argument_index < 6) {
+        output << "    mov QWORD PTR [rbp - " << slot_offset(slot) << "], " << registers[argument_index] << '\n';
+        return;
+    }
+
+    output << "    mov rax, QWORD PTR [rbp + " << 16 + (argument_index - 6) * 8 << "]\n";
+    output << "    mov QWORD PTR [rbp - " << slot_offset(slot) << "], rax\n";
 #else
     (void)slot;
     (void)argument_index;

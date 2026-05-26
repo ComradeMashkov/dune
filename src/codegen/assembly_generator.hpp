@@ -43,7 +43,6 @@ private:
     void emit_binary(const std::string& op, std::ostream& output) const;
     void emit_call(const Expression& expression, std::ostream& output);
     void emit_push_result(std::ostream& output) const;
-    void emit_pop_argument(std::size_t argument_index, std::size_t argument_count, std::ostream& output) const;
     void emit_store_argument(std::size_t slot, std::size_t argument_index, std::ostream& output) const;
 
     std::size_t declare_slot(const std::string& name);
