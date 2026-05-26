@@ -52,11 +52,33 @@ bool compiles_function_table_and_call() {
     return passed;
 }
 
+bool compiles_unit_call_statement() {
+    const dune::Bytecode bytecode = compile_source("fn log(message: text) -> unit { print(message); } log(\"ok\");");
+
+    bool saw_call = false;
+    bool saw_pop = false;
+    for (const dune::Instruction& instruction : bytecode.instructions) {
+        if (instruction.op == dune::OpCode::call) {
+            saw_call = true;
+        }
+
+        if (instruction.op == dune::OpCode::pop) {
+            saw_pop = true;
+        }
+    }
+
+    bool passed = true;
+    passed = expect(saw_call, "expected unit call instruction") && passed;
+    passed = expect(saw_pop, "expected call statement result pop") && passed;
+    return passed;
+}
+
 } // namespace
 
 int main() {
     bool passed = true;
     passed = compiles_function_table_and_call() && passed;
+    passed = compiles_unit_call_statement() && passed;
 
     return passed ? 0 : 1;
 }

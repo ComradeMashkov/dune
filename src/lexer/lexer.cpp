@@ -29,6 +29,8 @@ Token Lexer::next_token() {
     }
 
     switch (current) {
+    case '"':
+        return string(start, line, column);
     case '\'':
         return character(start, line, column);
     case '+':
@@ -188,6 +190,26 @@ Token Lexer::identifier(std::size_t start, std::size_t line, std::size_t column)
         return Token{TokenType::bool_keyword, lexeme, line, column};
     }
 
+    if (lexeme == "i8") {
+        return Token{TokenType::i8_keyword, lexeme, line, column};
+    }
+
+    if (lexeme == "i16") {
+        return Token{TokenType::i16_keyword, lexeme, line, column};
+    }
+
+    if (lexeme == "i32") {
+        return Token{TokenType::i32_keyword, lexeme, line, column};
+    }
+
+    if (lexeme == "i64") {
+        return Token{TokenType::i64_keyword, lexeme, line, column};
+    }
+
+    if (lexeme == "isize") {
+        return Token{TokenType::isize_keyword, lexeme, line, column};
+    }
+
     if (lexeme == "u8") {
         return Token{TokenType::u8_keyword, lexeme, line, column};
     }
@@ -202,6 +224,10 @@ Token Lexer::identifier(std::size_t start, std::size_t line, std::size_t column)
 
     if (lexeme == "u64") {
         return Token{TokenType::u64_keyword, lexeme, line, column};
+    }
+
+    if (lexeme == "usize") {
+        return Token{TokenType::usize_keyword, lexeme, line, column};
     }
 
     if (lexeme == "uint8") {
@@ -220,12 +246,28 @@ Token Lexer::identifier(std::size_t start, std::size_t line, std::size_t column)
         return Token{TokenType::uint64_keyword, lexeme, line, column};
     }
 
+    if (lexeme == "real32") {
+        return Token{TokenType::real32_keyword, lexeme, line, column};
+    }
+
+    if (lexeme == "real64") {
+        return Token{TokenType::real64_keyword, lexeme, line, column};
+    }
+
     if (lexeme == "real") {
         return Token{TokenType::real_keyword, lexeme, line, column};
     }
 
     if (lexeme == "glyph") {
         return Token{TokenType::glyph_keyword, lexeme, line, column};
+    }
+
+    if (lexeme == "text") {
+        return Token{TokenType::text_keyword, lexeme, line, column};
+    }
+
+    if (lexeme == "unit") {
+        return Token{TokenType::unit_keyword, lexeme, line, column};
     }
 
     if (lexeme == "true") {
@@ -279,6 +321,29 @@ Token Lexer::character(std::size_t start, std::size_t line, std::size_t column) 
     }
 
     return make_token(TokenType::char_literal, start, line, column);
+}
+
+Token Lexer::string(std::size_t start, std::size_t line, std::size_t column) {
+    while (!is_at_end() && peek() != '"') {
+        if (peek() == '\n') {
+            throw std::runtime_error("unterminated string literal");
+        }
+
+        if (peek() == '\\') {
+            advance();
+            if (is_at_end() || peek() == '\n') {
+                throw std::runtime_error("unterminated string literal");
+            }
+        }
+
+        advance();
+    }
+
+    if (!match('"')) {
+        throw std::runtime_error("unterminated string literal");
+    }
+
+    return make_token(TokenType::string_literal, start, line, column);
 }
 
 } // namespace dune

@@ -54,6 +54,8 @@ Value add_values(const Value& left, const Value& right) {
         return make_real(left.real_value + right.real_value);
     case ValueKind::boolean:
     case ValueKind::glyph:
+    case ValueKind::text:
+    case ValueKind::unit:
         break;
     }
 
@@ -71,6 +73,8 @@ Value subtract_values(const Value& left, const Value& right) {
         return make_real(left.real_value - right.real_value);
     case ValueKind::boolean:
     case ValueKind::glyph:
+    case ValueKind::text:
+    case ValueKind::unit:
         break;
     }
 
@@ -88,6 +92,8 @@ Value multiply_values(const Value& left, const Value& right) {
         return make_real(left.real_value * right.real_value);
     case ValueKind::boolean:
     case ValueKind::glyph:
+    case ValueKind::text:
+    case ValueKind::unit:
         break;
     }
 
@@ -117,6 +123,8 @@ Value divide_values(const Value& left, const Value& right) {
         return make_real(left.real_value / right.real_value);
     case ValueKind::boolean:
     case ValueKind::glyph:
+    case ValueKind::text:
+    case ValueKind::unit:
         break;
     }
 
@@ -136,6 +144,10 @@ bool values_equal(const Value& left, const Value& right) {
         return left.bool_value == right.bool_value;
     case ValueKind::glyph:
         return left.glyph_value == right.glyph_value;
+    case ValueKind::text:
+        return left.text_value == right.text_value;
+    case ValueKind::unit:
+        return true;
     }
 
     return false;
@@ -152,6 +164,8 @@ int compare_values(const Value& left, const Value& right) {
         return (left.real_value > right.real_value) - (left.real_value < right.real_value);
     case ValueKind::boolean:
     case ValueKind::glyph:
+    case ValueKind::text:
+    case ValueKind::unit:
         break;
     }
 
@@ -183,6 +197,11 @@ void print_value(const Value& value, std::ostream& output) {
     case ValueKind::glyph:
         output << value.glyph_value << '\n';
         return;
+    case ValueKind::text:
+        output << value.text_value << '\n';
+        return;
+    case ValueKind::unit:
+        throw std::runtime_error("cannot print unit value");
     }
 }
 
@@ -310,6 +329,10 @@ void VirtualMachine::run(std::ostream& output) {
             stack_.push_back(result);
             break;
         }
+        case OpCode::pop:
+            pop();
+            ++frame.ip;
+            break;
         case OpCode::print:
             print_value(pop(), output);
             ++frame.ip;

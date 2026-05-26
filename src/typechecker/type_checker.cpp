@@ -1,5 +1,6 @@
 #include "type_checker.hpp"
 
+#include <cstdint>
 #include <limits>
 #include <stdexcept>
 
@@ -19,6 +20,16 @@ std::string type_name(ValueType type) {
         return "int";
     case ValueType::bool_type:
         return "bool";
+    case ValueType::i8_type:
+        return "i8";
+    case ValueType::i16_type:
+        return "i16";
+    case ValueType::i32_type:
+        return "i32";
+    case ValueType::i64_type:
+        return "i64";
+    case ValueType::isize_type:
+        return "isize";
     case ValueType::u8_type:
         return "u8";
     case ValueType::u16_type:
@@ -27,10 +38,18 @@ std::string type_name(ValueType type) {
         return "u32";
     case ValueType::u64_type:
         return "u64";
+    case ValueType::usize_type:
+        return "usize";
+    case ValueType::real32_type:
+        return "real32";
     case ValueType::real_type:
         return "real";
     case ValueType::glyph_type:
         return "glyph";
+    case ValueType::text_type:
+        return "text";
+    case ValueType::unit_type:
+        return "unit";
     }
 
     return "unknown";
@@ -76,7 +95,13 @@ void TypeChecker::collect_function(const Statement& statement) {
     signature.location = statement.location;
 
     for (const Parameter& parameter : statement.parameters) {
-        signature.parameters.push_back(annotation_or_default(parameter.type));
+        const ValueType parameter_type = annotation_or_default(parameter.type);
+        if (parameter_type == ValueType::unit_type) {
+            throw std::runtime_error(
+                diagnostic(parameter.location, "parameter '" + parameter.name + "' cannot have type 'unit'"));
+        }
+
+        signature.parameters.push_back(parameter_type);
     }
 
     functions_.emplace(statement.name, std::move(signature));
@@ -100,7 +125,7 @@ void TypeChecker::check_function(const Statement& statement) {
 
     current_function_ = &function->second;
     check_statements(statement.body);
-    if (!statements_return(statement.body)) {
+    if (function->second.return_type != ValueType::unit_type && !statements_return(statement.body)) {
         throw std::runtime_error(diagnostic(statement.location, "function '" + statement.name + "' must return type '" +
                                                                     type_name(function->second.return_type) + "'"));
     }
@@ -125,6 +150,10 @@ void TypeChecker::check_statement(const Statement& statement) {
         }
 
         expect_type(expected.type, actual, statement.expression->location);
+        if (expected.type == ValueType::unit_type) {
+            throw std::runtime_error(diagnostic(statement.location, "variables cannot have type 'unit'"));
+        }
+
         variables_[statement.name] = expected.type;
         return;
     }
@@ -138,9 +167,14 @@ void TypeChecker::check_statement(const Statement& statement) {
                     statement.expression->location);
         return;
     }
-    case StatementKind::print:
-        check_expression(*statement.expression);
+    case StatementKind::print: {
+        const ValueType type = check_expression(*statement.expression);
+        if (type == ValueType::unit_type) {
+            throw std::runtime_error(diagnostic(statement.expression->location, "cannot print type 'unit'"));
+        }
+
         return;
+    }
     case StatementKind::block:
         check_statements(statement.body);
         return;
@@ -160,9 +194,17 @@ void TypeChecker::check_statement(const Statement& statement) {
             throw std::runtime_error(diagnostic(statement.location, "return statement outside function"));
         }
 
+        if (statement.expression == nullptr) {
+            expect_type(current_function_->return_type, ValueType::unit_type, statement.location);
+            return;
+        }
+
         expect_type(current_function_->return_type,
                     check_expression(*statement.expression, expected_type(current_function_->return_type)),
                     statement.expression->location);
+        return;
+    case StatementKind::expression_statement:
+        check_expression(*statement.expression);
         return;
     }
 }
@@ -191,10 +233,13 @@ ValueType TypeChecker::check_expression(const Expression& expression, const Type
         check_integer_literal_range(expression, actual);
         break;
     case ExpressionKind::floating:
-        actual = ValueType::real_type;
+        actual = expected.has_type && is_real_type(expected.type) ? expected.type : ValueType::real_type;
         break;
     case ExpressionKind::character:
         actual = ValueType::glyph_type;
+        break;
+    case ExpressionKind::string:
+        actual = ValueType::text_type;
         break;
     case ExpressionKind::boolean:
         actual = ValueType::bool_type;
@@ -255,6 +300,10 @@ ValueType TypeChecker::check_binary_expression(const Expression& expression, con
     }
 
     if (expression.lexeme == "==" || expression.lexeme == "!=") {
+        if (left == ValueType::unit_type) {
+            throw std::runtime_error(diagnostic(expression.left->location, "cannot compare values of type 'unit'"));
+        }
+
         expect_type(left, right, expression.right->location);
         return ValueType::bool_type;
     }
@@ -303,6 +352,7 @@ bool TypeChecker::statement_returns(const Statement& statement) const {
     case StatementKind::print:
     case StatementKind::while_statement:
     case StatementKind::function:
+    case StatementKind::expression_statement:
         return false;
     }
 
@@ -328,16 +378,25 @@ ValueType TypeChecker::annotation_or_default(const TypeAnnotation& annotation) c
 }
 
 bool TypeChecker::is_integer_type(ValueType type) const {
-    return type == ValueType::int_type || is_unsigned_type(type);
+    return is_signed_type(type) || is_unsigned_type(type);
+}
+
+bool TypeChecker::is_signed_type(ValueType type) const {
+    return type == ValueType::int_type || type == ValueType::i8_type || type == ValueType::i16_type ||
+           type == ValueType::i32_type || type == ValueType::i64_type || type == ValueType::isize_type;
 }
 
 bool TypeChecker::is_unsigned_type(ValueType type) const {
     return type == ValueType::u8_type || type == ValueType::u16_type || type == ValueType::u32_type ||
-           type == ValueType::u64_type;
+           type == ValueType::u64_type || type == ValueType::usize_type;
+}
+
+bool TypeChecker::is_real_type(ValueType type) const {
+    return type == ValueType::real32_type || type == ValueType::real_type;
 }
 
 bool TypeChecker::is_numeric_type(ValueType type) const {
-    return is_integer_type(type) || type == ValueType::real_type;
+    return is_integer_type(type) || is_real_type(type);
 }
 
 bool TypeChecker::can_coerce_integer_literal(const Expression& expression, ValueType target) const {
@@ -345,25 +404,50 @@ bool TypeChecker::can_coerce_integer_literal(const Expression& expression, Value
 }
 
 void TypeChecker::check_integer_literal_range(const Expression& expression, ValueType target) const {
-    if (!is_unsigned_type(target)) {
+    if (!is_integer_type(target)) {
         return;
     }
 
     const unsigned long long value = std::stoull(expression.lexeme);
-    unsigned long long max = std::numeric_limits<unsigned long long>::max();
-    if (target == ValueType::u8_type) {
-        max = std::numeric_limits<unsigned char>::max();
-    } else if (target == ValueType::u16_type) {
-        max = std::numeric_limits<unsigned short>::max();
-    } else if (target == ValueType::u32_type) {
-        max = std::numeric_limits<unsigned int>::max();
-    }
-
+    const unsigned long long max = max_integer_literal(target);
     if (value > max) {
         throw std::runtime_error(
             diagnostic(expression.location,
                        "integer literal '" + expression.lexeme + "' does not fit in type '" + type_name(target) + "'"));
     }
+}
+
+unsigned long long TypeChecker::max_integer_literal(ValueType target) const {
+    switch (target) {
+    case ValueType::i8_type:
+        return static_cast<unsigned long long>(std::numeric_limits<std::int8_t>::max());
+    case ValueType::i16_type:
+        return static_cast<unsigned long long>(std::numeric_limits<std::int16_t>::max());
+    case ValueType::i32_type:
+        return static_cast<unsigned long long>(std::numeric_limits<std::int32_t>::max());
+    case ValueType::int_type:
+    case ValueType::i64_type:
+    case ValueType::isize_type:
+        return static_cast<unsigned long long>(std::numeric_limits<std::int64_t>::max());
+    case ValueType::u8_type:
+        return static_cast<unsigned long long>(std::numeric_limits<std::uint8_t>::max());
+    case ValueType::u16_type:
+        return static_cast<unsigned long long>(std::numeric_limits<std::uint16_t>::max());
+    case ValueType::u32_type:
+        return static_cast<unsigned long long>(std::numeric_limits<std::uint32_t>::max());
+    case ValueType::u64_type:
+    case ValueType::usize_type:
+        return std::numeric_limits<unsigned long long>::max();
+    case ValueType::bool_type:
+    case ValueType::real32_type:
+    case ValueType::real_type:
+    case ValueType::glyph_type:
+    case ValueType::text_type:
+    case ValueType::unit_type:
+        break;
+    }
+
+    return 0;
 }
 
 ValueType TypeChecker::coerce_numeric_literal(const Expression& expression, ValueType actual, ValueType target) {

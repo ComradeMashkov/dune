@@ -33,11 +33,14 @@ private:
     bool statements_return(const std::vector<Statement>& statements) const;
 
     ValueType annotation_or_default(const TypeAnnotation& annotation) const;
+    bool is_signed_type(ValueType type) const;
     bool is_integer_type(ValueType type) const;
     bool is_unsigned_type(ValueType type) const;
+    bool is_real_type(ValueType type) const;
     bool is_numeric_type(ValueType type) const;
     bool can_coerce_integer_literal(const Expression& expression, ValueType target) const;
     void check_integer_literal_range(const Expression& expression, ValueType target) const;
+    unsigned long long max_integer_literal(ValueType target) const;
     ValueType coerce_numeric_literal(const Expression& expression, ValueType actual, ValueType target);
     void expect_type(ValueType expected, ValueType actual, SourceLocation location) const;
     std::string diagnostic(SourceLocation location, const std::string& message) const;

@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <stdexcept>
+#include <utility>
 
 namespace dune {
 
@@ -44,9 +45,31 @@ Value make_glyph(char value) {
     return result;
 }
 
+Value make_text(std::string value) {
+    Value result;
+    result.kind = ValueKind::text;
+    result.text_value = std::move(value);
+    return result;
+}
+
+Value make_unit() {
+    Value result;
+    result.kind = ValueKind::unit;
+    return result;
+}
+
+bool is_signed_type(ValueType type) {
+    return type == ValueType::int_type || type == ValueType::i8_type || type == ValueType::i16_type ||
+           type == ValueType::i32_type || type == ValueType::i64_type || type == ValueType::isize_type;
+}
+
 bool is_unsigned_type(ValueType type) {
     return type == ValueType::u8_type || type == ValueType::u16_type || type == ValueType::u32_type ||
-           type == ValueType::u64_type;
+           type == ValueType::u64_type || type == ValueType::usize_type;
+}
+
+bool is_real_type(ValueType type) {
+    return type == ValueType::real32_type || type == ValueType::real_type;
 }
 
 char decode_glyph_literal(const std::string& lexeme) {
@@ -76,8 +99,49 @@ char decode_glyph_literal(const std::string& lexeme) {
     }
 }
 
+std::string decode_text_literal(const std::string& lexeme) {
+    std::string result;
+    for (std::size_t index = 1; index + 1 < lexeme.size(); ++index) {
+        char current = lexeme[index];
+        if (current != '\\') {
+            result += current;
+            continue;
+        }
+
+        ++index;
+        if (index + 1 >= lexeme.size()) {
+            throw std::runtime_error("invalid text literal");
+        }
+
+        switch (lexeme[index]) {
+        case 'n':
+            result += '\n';
+            break;
+        case 'r':
+            result += '\r';
+            break;
+        case 't':
+            result += '\t';
+            break;
+        case '0':
+            result += '\0';
+            break;
+        case '"':
+            result += '"';
+            break;
+        case '\\':
+            result += '\\';
+            break;
+        default:
+            throw std::runtime_error("unknown text escape");
+        }
+    }
+
+    return result;
+}
+
 Value make_number(const std::string& lexeme, ValueType type) {
-    if (type == ValueType::real_type) {
+    if (is_real_type(type)) {
         return make_real(std::stod(lexeme));
     }
 
@@ -86,6 +150,34 @@ Value make_number(const std::string& lexeme, ValueType type) {
     }
 
     return make_signed(std::stoll(lexeme));
+}
+
+Value default_value(ValueType type) {
+    if (is_unsigned_type(type)) {
+        return make_unsigned(0);
+    }
+
+    if (is_signed_type(type)) {
+        return make_signed(0);
+    }
+
+    if (is_real_type(type)) {
+        return make_real(0.0);
+    }
+
+    if (type == ValueType::bool_type) {
+        return make_bool(false);
+    }
+
+    if (type == ValueType::glyph_type) {
+        return make_glyph('\0');
+    }
+
+    if (type == ValueType::text_type) {
+        return make_text("");
+    }
+
+    return make_unit();
 }
 
 } // namespace
@@ -141,7 +233,8 @@ void Compiler::compile_function(const Statement& statement) {
     }
 
     compile_statements(statement.body);
-    emit(OpCode::push_constant, add_constant(make_signed(0)));
+    emit(OpCode::push_constant,
+         add_constant(default_value(statement.type.has_type ? statement.type.type : ValueType::int_type)));
     emit(OpCode::return_value);
 
     function.local_count = locals_.size();
@@ -200,8 +293,17 @@ void Compiler::compile_statement(const Statement& statement) {
     case StatementKind::function:
         return;
     case StatementKind::return_statement:
-        compile_expression(*statement.expression);
+        if (statement.expression == nullptr) {
+            emit(OpCode::push_constant, add_constant(make_unit()));
+        } else {
+            compile_expression(*statement.expression);
+        }
+
         emit(OpCode::return_value);
+        return;
+    case StatementKind::expression_statement:
+        compile_expression(*statement.expression);
+        emit(OpCode::pop);
         return;
     }
 }
@@ -219,6 +321,9 @@ void Compiler::compile_expression(const Expression& expression) {
         return;
     case ExpressionKind::character:
         emit(OpCode::push_constant, add_constant(make_glyph(decode_glyph_literal(expression.lexeme))));
+        return;
+    case ExpressionKind::string:
+        emit(OpCode::push_constant, add_constant(make_text(decode_text_literal(expression.lexeme))));
         return;
     case ExpressionKind::boolean:
         emit(OpCode::push_constant, add_constant(make_bool(expression.lexeme == "true")));
@@ -289,7 +394,7 @@ void Compiler::compile_expression(const Expression& expression) {
 }
 
 std::size_t Compiler::add_constant(Value value) {
-    bytecode_.constants.push_back(value);
+    bytecode_.constants.push_back(std::move(value));
     return bytecode_.constants.size() - 1;
 }
 

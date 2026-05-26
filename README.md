@@ -35,6 +35,30 @@ if x == 0 {
 
 Boolean values are represented as `1` for `true` and `0` for `false` when printed.
 
+Typed functions and scalar values:
+
+```dn
+fn log(message: text) -> unit {
+  print(message);
+}
+
+let count: usize = 5;
+let precise: real64 = 2.25;
+
+log("ready");
+print(count);
+print(precise);
+```
+
+Supported scalar types:
+
+- `int`, `bool`
+- `i8`, `i16`, `i32`, `i64`, `isize`
+- `u8`, `u16`, `u32`, `u64`, `usize`
+- `uint8`, `uint16`, `uint32`, `uint64`
+- `real`, `real32`, `real64`
+- `glyph`, `text`, `unit`
+
 ## Run
 
 ```bash
@@ -71,16 +95,22 @@ compiling targets. If those tools are not installed locally yet, configure with:
 cmake -S . -B build -D DUNE_ENABLE_LINT=OFF
 ```
 
-## v0.2
+## Current Features
 
-The `0.2.0` release implements a small calculator language with:
+The current release implements a small compiled language with:
 
 - lexer
 - parser
 - AST
 - arithmetic
 - variables
+- typed functions
+- static scalar types
 - booleans
+- signed and unsigned integer widths
+- floating point values
+- glyph and text values
+- unit-returning functions
 - comparison operators
 - print
 - assignment

@@ -2,6 +2,7 @@
 
 #include "typechecker/type_checker.hpp"
 
+#include <cctype>
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
@@ -13,11 +14,11 @@ namespace {
 
 bool is_unsigned_type(ValueType type) {
     return type == ValueType::u8_type || type == ValueType::u16_type || type == ValueType::u32_type ||
-           type == ValueType::u64_type;
+           type == ValueType::u64_type || type == ValueType::usize_type;
 }
 
 bool is_real_type(ValueType type) {
-    return type == ValueType::real_type;
+    return type == ValueType::real32_type || type == ValueType::real_type;
 }
 
 std::string real_literal(const std::string& lexeme) {
@@ -34,28 +35,39 @@ void LlvmIrGenerator::generate(const Program& program, std::ostream& output) {
 
     expression_types_ = checker.expression_types();
     functions_.clear();
+    string_globals_.clear();
     collect_functions(program);
     register_count_ = 0;
     label_count_ = 0;
+    string_literal_count_ = 0;
+
+    std::ostringstream body;
+
+    locals_.clear();
+    current_return_type_ = ValueType::int_type;
+    body << "define i32 @main() {\n";
+    emit_statements(program.statements, body);
+    body << "  ret i32 0\n";
+    body << "}\n\n";
+
+    for (const Statement& statement : program.statements) {
+        if (statement.kind == StatementKind::function) {
+            emit_function(statement, body);
+        }
+    }
 
     output << "@.dune_fmt_sint = private unnamed_addr constant [6 x i8] c\"%lld\\0A\\00\"\n";
     output << "@.dune_fmt_uint = private unnamed_addr constant [6 x i8] c\"%llu\\0A\\00\"\n";
     output << "@.dune_fmt_real = private unnamed_addr constant [7 x i8] c\"%.15g\\0A\\00\"\n";
     output << "@.dune_fmt_glyph = private unnamed_addr constant [4 x i8] c\"%c\\0A\\00\"\n";
-    output << "declare i32 @printf(ptr, ...)\n\n";
-
-    locals_.clear();
-    current_return_type_ = ValueType::int_type;
-    output << "define i32 @main() {\n";
-    emit_statements(program.statements, output);
-    output << "  ret i32 0\n";
-    output << "}\n\n";
-
-    for (const Statement& statement : program.statements) {
-        if (statement.kind == StatementKind::function) {
-            emit_function(statement, output);
-        }
+    output << "@.dune_fmt_text = private unnamed_addr constant [4 x i8] c\"%s\\0A\\00\"\n";
+    for (const std::string& global : string_globals_) {
+        output << global;
     }
+
+    output << "declare i32 @printf(ptr, ...)\n";
+    output << "declare i32 @strcmp(ptr, ptr)\n\n";
+    output << body.str();
 }
 
 void LlvmIrGenerator::collect_functions(const Program& program) {
@@ -199,10 +211,18 @@ bool LlvmIrGenerator::emit_statement(const Statement& statement, std::ostream& o
     case StatementKind::function:
         return false;
     case StatementKind::return_statement: {
+        if (statement.expression == nullptr) {
+            output << "  ret " << llvm_type(current_return_type_) << ' ' << default_value(current_return_type_) << '\n';
+            return true;
+        }
+
         const TypedValue value = emit_expression(*statement.expression, output);
         output << "  ret " << llvm_type(current_return_type_) << ' ' << value.name << '\n';
         return true;
     }
+    case StatementKind::expression_statement:
+        emit_expression(*statement.expression, output);
+        return false;
     }
 
     return false;
@@ -227,15 +247,17 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_expression(const Expression& e
         return TypedValue{value, local->second.type};
     }
     case ExpressionKind::number:
-        if (type->second == ValueType::real_type) {
+        if (is_real_type(type->second)) {
             return TypedValue{real_literal(expression.lexeme), type->second};
         }
 
         return TypedValue{expression.lexeme, type->second};
     case ExpressionKind::floating:
-        return TypedValue{real_literal(expression.lexeme), ValueType::real_type};
+        return TypedValue{real_literal(expression.lexeme), type->second};
     case ExpressionKind::character:
         return TypedValue{decode_glyph_literal(expression.lexeme), ValueType::glyph_type};
+    case ExpressionKind::string:
+        return emit_text_literal(expression.lexeme);
     case ExpressionKind::boolean:
         return TypedValue{expression.lexeme == "true" ? "1" : "0", ValueType::bool_type};
     case ExpressionKind::binary:
@@ -278,6 +300,18 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_binary_expression(const Expres
         output << "  " << result << " = " << op << ' ' << llvm_type(left.type) << ' ' << left.name << ", " << right.name
                << '\n';
         return TypedValue{result, left.type};
+    }
+
+    if (left.type == ValueType::text_type) {
+        if (expression.lexeme != "==" && expression.lexeme != "!=") {
+            throw std::runtime_error("unknown text binary operator");
+        }
+
+        const std::string comparison = next_register();
+        output << "  " << comparison << " = call i32 @strcmp(ptr " << left.name << ", ptr " << right.name << ")\n";
+        output << "  " << result << " = icmp " << (expression.lexeme == "==" ? "eq" : "ne") << " i32 " << comparison
+               << ", 0\n";
+        return TypedValue{result, ValueType::bool_type};
     }
 
     std::string op;
@@ -328,6 +362,20 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_call_expression(const Expressi
     return TypedValue{result, function->second.return_type};
 }
 
+LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_text_literal(const std::string& lexeme) {
+    const std::string value = decode_text_literal(lexeme);
+    const std::string name = "@.dune_text_" + std::to_string(string_literal_count_++);
+    const std::size_t size = value.size() + 1;
+
+    std::ostringstream global;
+    global << name << " = private unnamed_addr constant [" << size << " x i8] c\"" << llvm_text_literal(value)
+           << "\\00\"\n";
+    string_globals_.push_back(global.str());
+
+    return TypedValue{"getelementptr inbounds ([" + std::to_string(size) + " x i8], ptr " + name + ", i64 0, i64 0)",
+                      ValueType::text_type};
+}
+
 void LlvmIrGenerator::emit_print(const TypedValue& value, std::ostream& output) {
     const TypedValue printable = cast_for_print(value, output);
     const std::string format = next_register();
@@ -347,6 +395,18 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::cast_for_print(const TypedValue& va
         const std::string result = next_register();
         output << "  " << result << " = zext " << llvm_type(value.type) << ' ' << value.name << " to i64\n";
         return TypedValue{result, ValueType::u64_type};
+    }
+
+    if (value.type == ValueType::i8_type || value.type == ValueType::i16_type || value.type == ValueType::i32_type) {
+        const std::string result = next_register();
+        output << "  " << result << " = sext " << llvm_type(value.type) << ' ' << value.name << " to i64\n";
+        return TypedValue{result, ValueType::int_type};
+    }
+
+    if (value.type == ValueType::real32_type) {
+        const std::string result = next_register();
+        output << "  " << result << " = fpext float " << value.name << " to double\n";
+        return TypedValue{result, ValueType::real_type};
     }
 
     if (value.type == ValueType::glyph_type) {
@@ -369,20 +429,31 @@ std::string LlvmIrGenerator::next_label(std::string_view name) {
 std::string LlvmIrGenerator::llvm_type(ValueType type) const {
     switch (type) {
     case ValueType::int_type:
+    case ValueType::i64_type:
+    case ValueType::isize_type:
         return "i64";
     case ValueType::bool_type:
         return "i1";
+    case ValueType::i8_type:
     case ValueType::u8_type:
+    case ValueType::glyph_type:
         return "i8";
+    case ValueType::i16_type:
     case ValueType::u16_type:
         return "i16";
+    case ValueType::i32_type:
     case ValueType::u32_type:
         return "i32";
     case ValueType::u64_type:
+    case ValueType::usize_type:
         return "i64";
+    case ValueType::real32_type:
+        return "float";
     case ValueType::real_type:
         return "double";
-    case ValueType::glyph_type:
+    case ValueType::text_type:
+        return "ptr";
+    case ValueType::unit_type:
         return "i8";
     }
 
@@ -392,17 +463,28 @@ std::string LlvmIrGenerator::llvm_type(ValueType type) const {
 std::string LlvmIrGenerator::printf_format_name(ValueType type) const {
     switch (type) {
     case ValueType::int_type:
+    case ValueType::i8_type:
+    case ValueType::i16_type:
+    case ValueType::i32_type:
+    case ValueType::i64_type:
+    case ValueType::isize_type:
     case ValueType::bool_type:
         return "[6 x i8], ptr @.dune_fmt_sint, i64 0, i64 0";
-    case ValueType::u8_type:
     case ValueType::u16_type:
+    case ValueType::u8_type:
     case ValueType::u32_type:
     case ValueType::u64_type:
+    case ValueType::usize_type:
         return "[6 x i8], ptr @.dune_fmt_uint, i64 0, i64 0";
+    case ValueType::real32_type:
     case ValueType::real_type:
         return "[7 x i8], ptr @.dune_fmt_real, i64 0, i64 0";
     case ValueType::glyph_type:
         return "[4 x i8], ptr @.dune_fmt_glyph, i64 0, i64 0";
+    case ValueType::text_type:
+        return "[4 x i8], ptr @.dune_fmt_text, i64 0, i64 0";
+    case ValueType::unit_type:
+        break;
     }
 
     throw std::runtime_error("unknown type");
@@ -413,8 +495,12 @@ std::string LlvmIrGenerator::function_name(const std::string& name) const {
 }
 
 std::string LlvmIrGenerator::default_value(ValueType type) const {
-    if (type == ValueType::real_type) {
+    if (is_real_type(type)) {
         return "0.000000e+00";
+    }
+
+    if (type == ValueType::text_type) {
+        return "null";
     }
 
     return "0";
@@ -452,6 +538,62 @@ std::string LlvmIrGenerator::decode_glyph_literal(const std::string& lexeme) con
     }
 
     return std::to_string(static_cast<unsigned char>(value));
+}
+
+std::string LlvmIrGenerator::decode_text_literal(const std::string& lexeme) const {
+    std::string result;
+    for (std::size_t index = 1; index + 1 < lexeme.size(); ++index) {
+        char current = lexeme[index];
+        if (current != '\\') {
+            result += current;
+            continue;
+        }
+
+        ++index;
+        if (index + 1 >= lexeme.size()) {
+            throw std::runtime_error("invalid text literal");
+        }
+
+        switch (lexeme[index]) {
+        case 'n':
+            result += '\n';
+            break;
+        case 'r':
+            result += '\r';
+            break;
+        case 't':
+            result += '\t';
+            break;
+        case '0':
+            result += '\0';
+            break;
+        case '"':
+            result += '"';
+            break;
+        case '\\':
+            result += '\\';
+            break;
+        default:
+            throw std::runtime_error("unknown text escape");
+        }
+    }
+
+    return result;
+}
+
+std::string LlvmIrGenerator::llvm_text_literal(const std::string& value) const {
+    std::ostringstream output;
+    for (const unsigned char character : value) {
+        if (std::isprint(character) && character != '"' && character != '\\') {
+            output << static_cast<char>(character);
+            continue;
+        }
+
+        output << '\\' << std::uppercase << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(character)
+               << std::nouppercase << std::dec;
+    }
+
+    return output.str();
 }
 
 } // namespace dune

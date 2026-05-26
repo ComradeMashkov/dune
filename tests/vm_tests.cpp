@@ -96,6 +96,17 @@ int main() {
         expect_eq(run_source("let ratio: real = 1 + 2.5; print(ratio / 2.0);"), "1.75\n", "expected real output") &&
         passed;
     passed = expect_eq(run_source("let mark: glyph = 'Z'; print(mark);"), "Z\n", "expected glyph output") && passed;
+    passed = expect_eq(run_source("fn log(message: text) -> unit { print(message); return; } "
+                                  "fn noop() -> unit { } "
+                                  "let tiny: i8 = 127; let small: i16 = 32767; let mid: i32 = 2147483647; "
+                                  "let wide: i64 = 9000000000; let index: usize = 5; let offset: isize = 6; "
+                                  "let rough: real32 = 1 + 2.5; let exact: real64 = 2.25; "
+                                  "log(\"types\"); noop(); print(tiny); print(small); print(mid); "
+                                  "print(wide); print(index); print(offset); print(rough); print(exact); "
+                                  "if \"same\" == \"same\" { print(\"same\"); } else { print(\"bad\"); }"),
+                       "types\n127\n32767\n2147483647\n9000000000\n5\n6\n3.5\n2.25\nsame\n",
+                       "expected standard type output") &&
+             passed;
     passed = expect_throws("print(missing);", "expected undefined variable to throw") && passed;
     passed = expect_throws("missing = 1;", "expected undefined assignment to throw") && passed;
     passed = expect_throws("print(1 / 0);", "expected division by zero to throw") && passed;

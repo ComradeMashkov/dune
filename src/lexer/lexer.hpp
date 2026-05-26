@@ -16,22 +16,33 @@ enum class TokenType {
     while_keyword,
     int_keyword,
     bool_keyword,
+    i8_keyword,
+    i16_keyword,
+    i32_keyword,
+    i64_keyword,
+    isize_keyword,
     u8_keyword,
     u16_keyword,
     u32_keyword,
     u64_keyword,
+    usize_keyword,
     uint8_keyword,
     uint16_keyword,
     uint32_keyword,
     uint64_keyword,
+    real32_keyword,
+    real64_keyword,
     real_keyword,
     glyph_keyword,
+    text_keyword,
+    unit_keyword,
     true_keyword,
     false_keyword,
     identifier,
     number,
     float_number,
     char_literal,
+    string_literal,
     plus,
     minus,
     arrow,
@@ -79,6 +90,7 @@ private:
     Token identifier(std::size_t start, std::size_t line, std::size_t column);
     Token number(std::size_t start, std::size_t line, std::size_t column);
     Token character(std::size_t start, std::size_t line, std::size_t column);
+    Token string(std::size_t start, std::size_t line, std::size_t column);
 
     std::string source_;
     std::size_t current_ = 0;
