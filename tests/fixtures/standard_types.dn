@@ -1,0 +1,38 @@
+fn say(message: text) -> unit {
+    print(message);
+    return;
+}
+
+fn noop() -> unit {
+}
+
+fn next(value: i32) -> i32 {
+    return value + 1;
+}
+
+let tiny: i8 = 12;
+let small: i16 = 32000;
+let mid: i32 = next(40);
+let wide: i64 = 9000000000;
+let count: usize = 5;
+let offset: isize = 6;
+let sample: real32 = 1.5;
+let sample_sum: real32 = sample + 2.25;
+let precise: real64 = 2.25;
+let status: text = "same";
+
+say("types");
+noop();
+print(tiny);
+print(small);
+print(mid);
+print(wide);
+print(count);
+print(offset);
+print(sample_sum);
+print(precise);
+if status == "same" {
+    print(status);
+} else {
+    print("bad");
+}

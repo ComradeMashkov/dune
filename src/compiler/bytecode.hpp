@@ -13,6 +13,8 @@ enum class ValueKind {
     real,
     boolean,
     glyph,
+    text,
+    unit,
 };
 
 struct Value {
@@ -22,6 +24,7 @@ struct Value {
     double real_value = 0.0;
     char glyph_value = '\0';
     bool bool_value = false;
+    std::string text_value;
 };
 
 enum class OpCode {
@@ -42,6 +45,7 @@ enum class OpCode {
     jump,
     call,
     return_value,
+    pop,
     print,
     halt,
 };

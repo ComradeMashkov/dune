@@ -133,7 +133,12 @@ Statement Parser::statement() {
         return assignment_statement();
     }
 
-    throw std::runtime_error("expected statement");
+    std::unique_ptr<Expression> value = expression();
+    consume(TokenType::semicolon, "expected ';' after expression statement");
+
+    Statement statement{StatementKind::expression_statement, "", std::move(value), {}, {}};
+    statement.location = statement.expression->location;
+    return statement;
 }
 
 Statement Parser::assignment_statement() {
@@ -221,7 +226,10 @@ Statement Parser::print_statement() {
 
 Statement Parser::return_statement() {
     const Token& keyword = previous();
-    std::unique_ptr<Expression> value = expression();
+    std::unique_ptr<Expression> value;
+    if (!check(TokenType::semicolon)) {
+        value = expression();
+    }
     consume(TokenType::semicolon, "expected ';' after return value");
 
     Statement statement{StatementKind::return_statement, "", std::move(value), {}, {}};
@@ -303,6 +311,26 @@ TypeAnnotation Parser::type_annotation() {
         return TypeAnnotation{true, ValueType::bool_type};
     }
 
+    if (match(TokenType::i8_keyword)) {
+        return TypeAnnotation{true, ValueType::i8_type};
+    }
+
+    if (match(TokenType::i16_keyword)) {
+        return TypeAnnotation{true, ValueType::i16_type};
+    }
+
+    if (match(TokenType::i32_keyword)) {
+        return TypeAnnotation{true, ValueType::i32_type};
+    }
+
+    if (match(TokenType::i64_keyword)) {
+        return TypeAnnotation{true, ValueType::i64_type};
+    }
+
+    if (match(TokenType::isize_keyword)) {
+        return TypeAnnotation{true, ValueType::isize_type};
+    }
+
     if (match(TokenType::u8_keyword) || match(TokenType::uint8_keyword)) {
         return TypeAnnotation{true, ValueType::u8_type};
     }
@@ -319,12 +347,32 @@ TypeAnnotation Parser::type_annotation() {
         return TypeAnnotation{true, ValueType::u64_type};
     }
 
+    if (match(TokenType::usize_keyword)) {
+        return TypeAnnotation{true, ValueType::usize_type};
+    }
+
+    if (match(TokenType::real32_keyword)) {
+        return TypeAnnotation{true, ValueType::real32_type};
+    }
+
+    if (match(TokenType::real64_keyword)) {
+        return TypeAnnotation{true, ValueType::real_type};
+    }
+
     if (match(TokenType::real_keyword)) {
         return TypeAnnotation{true, ValueType::real_type};
     }
 
     if (match(TokenType::glyph_keyword)) {
         return TypeAnnotation{true, ValueType::glyph_type};
+    }
+
+    if (match(TokenType::text_keyword)) {
+        return TypeAnnotation{true, ValueType::text_type};
+    }
+
+    if (match(TokenType::unit_keyword)) {
+        return TypeAnnotation{true, ValueType::unit_type};
     }
 
     throw std::runtime_error("expected type annotation");
@@ -411,6 +459,10 @@ std::unique_ptr<Expression> Parser::primary() {
 
     if (match(TokenType::char_literal)) {
         return make_leaf(ExpressionKind::character, previous().lexeme, location_from_token(previous()));
+    }
+
+    if (match(TokenType::string_literal)) {
+        return make_leaf(ExpressionKind::string, previous().lexeme, location_from_token(previous()));
     }
 
     if (match(TokenType::true_keyword) || match(TokenType::false_keyword)) {

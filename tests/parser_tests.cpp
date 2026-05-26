@@ -160,6 +160,43 @@ bool parses_extended_types() {
     return passed;
 }
 
+bool parses_standard_types_and_unit_calls() {
+    const dune::Program program = parse_source("fn log(message: text) -> unit { print(message); return; } "
+                                               "fn noop() -> unit { } "
+                                               "let tiny: i8 = 1; let wide: i64 = 2; "
+                                               "let index: usize = 3; let offset: isize = 4; "
+                                               "let rough: real32 = 1.5; let exact: real64 = 2.5; "
+                                               "log(\"ok\"); noop();");
+
+    if (!expect(program.statements.size() == 10, "expected ten statements")) {
+        return false;
+    }
+
+    bool passed = true;
+    const dune::Statement& log_function = program.statements[0];
+    passed = expect(log_function.kind == dune::StatementKind::function, "expected log function") && passed;
+    passed =
+        expect(log_function.parameters[0].type.type == dune::ValueType::text_type, "expected text parameter") && passed;
+    passed = expect(log_function.type.type == dune::ValueType::unit_type, "expected unit return type") && passed;
+    passed =
+        expect(log_function.body[1].expression == nullptr, "expected bare return statement in unit function") && passed;
+
+    passed = expect(program.statements[2].type.type == dune::ValueType::i8_type, "expected i8 type") && passed;
+    passed = expect(program.statements[3].type.type == dune::ValueType::i64_type, "expected i64 type") && passed;
+    passed = expect(program.statements[4].type.type == dune::ValueType::usize_type, "expected usize type") && passed;
+    passed = expect(program.statements[5].type.type == dune::ValueType::isize_type, "expected isize type") && passed;
+    passed = expect(program.statements[6].type.type == dune::ValueType::real32_type, "expected real32 type") && passed;
+    passed = expect(program.statements[7].type.type == dune::ValueType::real_type, "expected real64 alias") && passed;
+    passed =
+        expect(program.statements[8].kind == dune::StatementKind::expression_statement, "expected call statement") &&
+        passed;
+    passed = expect(program.statements[8].expression->arguments[0]->kind == dune::ExpressionKind::string,
+                    "expected text literal argument") &&
+             passed;
+
+    return passed;
+}
+
 } // namespace
 
 int main() {
@@ -169,6 +206,7 @@ int main() {
     passed = parses_control_flow() && passed;
     passed = parses_functions_and_types() && passed;
     passed = parses_extended_types() && passed;
+    passed = parses_standard_types_and_unit_calls() && passed;
 
     return passed ? 0 : 1;
 }

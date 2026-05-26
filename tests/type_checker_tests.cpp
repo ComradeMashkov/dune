@@ -56,6 +56,14 @@ int main() {
                           "let amount: uint64 = widen(41); let ratio: real = 1 + 2.5; let mark: glyph = 'x';",
                           "expected extended types to validate") &&
              passed;
+    passed = expect_valid("fn log(message: text) -> unit { print(message); return; } "
+                          "fn noop() -> unit { } "
+                          "let tiny: i8 = 127; let small: i16 = 32767; let mid: i32 = 2147483647; "
+                          "let wide: i64 = 9000000000; let index: usize = 5; let offset: isize = 6; "
+                          "let rough: real32 = 1 + 2.5; let exact: real64 = 2.5; "
+                          "let same: bool = \"ok\" == \"ok\"; log(\"ok\"); noop();",
+                          "expected standard scalar types to validate") &&
+             passed;
     passed = expect_error_contains("let x: int = true;", "expected type 'int' but got 'bool'",
                                    "expected let type mismatch") &&
              passed;
@@ -74,8 +82,23 @@ int main() {
     passed =
         expect_error_contains("let too_big: u8 = 256;", "does not fit in type 'u8'", "expected unsigned range error") &&
         passed;
+    passed =
+        expect_error_contains("let too_big: i8 = 128;", "does not fit in type 'i8'", "expected signed range error") &&
+        passed;
     passed = expect_error_contains("let mark: glyph = 65;", "expected type 'glyph' but got 'int'",
                                    "expected glyph mismatch") &&
+             passed;
+    passed = expect_error_contains("let message: text = 65;", "expected type 'text' but got 'int'",
+                                   "expected text mismatch") &&
+             passed;
+    passed = expect_error_contains("fn bad() -> unit { return 1; }", "expected type 'unit' but got 'int'",
+                                   "expected unit return mismatch") &&
+             passed;
+    passed = expect_error_contains("fn bad() -> int { return; }", "expected type 'int' but got 'unit'",
+                                   "expected missing return value mismatch") &&
+             passed;
+    passed = expect_error_contains("fn noop() -> unit { } let value = noop();", "variables cannot have type 'unit'",
+                                   "expected unit binding mismatch") &&
              passed;
 
     return passed ? 0 : 1;
