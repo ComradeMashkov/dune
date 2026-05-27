@@ -6,11 +6,11 @@ pipeline. It has a lexer, parser, AST, static type checker, bytecode VM, and an
 LLVM-based native backend.
 
 The language is intentionally compact: explicit types when they matter,
-overloads and generics for reusable code, modules loaded from `.dn` files, and a
-standard library that is increasingly written in Dune itself. Runtime checks
-catch common mistakes such as invalid indexes and slices, while the type checker
-rejects mismatched assignments, calls, returns, and binary operations before
-execution.
+overloads, generics, choices with `when` expressions, modules loaded from `.dn`
+files, and a standard library that is increasingly written in Dune itself.
+Runtime checks catch common mistakes such as invalid indexes and slices, while
+the type checker rejects mismatched assignments, calls, returns, and binary
+operations before execution.
 
 Good fits for Dune today:
 
@@ -25,7 +25,7 @@ Example `hello.dn` source:
 
 ```dn
 // Dune supports single-line comments.
-let x = 40 + 2;
+x = 40 + 2;
 print(x);
 ```
 
@@ -38,7 +38,7 @@ Expected output:
 Control flow example:
 
 ```dn
-let x = 3;
+x = 3;
 
 while x > 0 {
   x = x - 1;
@@ -56,12 +56,12 @@ Boolean values are represented as `1` for `true` and `0` for `false` when printe
 Typed functions and scalar values:
 
 ```dn
-fn log(message: text) -> unit {
+log(message: text): unit {
   print(message);
 }
 
-let count: usize = 5;
-let precise: real64 = 2.25;
+count: usize = 5;
+precise: real64 = 2.25;
 
 log("ready");
 print(count);
@@ -74,7 +74,7 @@ Arrays and modules:
 import math;
 import array;
 
-let values: [int] = [1, math.square(2), 5];
+values: [int] = [1, math.square(2), 5];
 values.push(math.square(values[2]));
 
 print(values.len());
@@ -84,13 +84,13 @@ print(values.first());
 ```
 
 Modules are loaded from `.dn` files. The standard library currently includes
-`stdlib/math.dn`, `stdlib/array.dn`, `stdlib/text.dn`, `stdlib/option.dn`,
-`stdlib/result.dn`, `stdlib/assert.dn`, and `stdlib/collections.dn`. Low-level
+`stdlib/math.dn`, `stdlib/array.dn`, `stdlib/text.dn`, `stdlib/maybe.dn`,
+`stdlib/outcome.dn`, `stdlib/assert.dn`, and `stdlib/collections.dn`. Low-level
 array and text operations such as `len`, `push`, indexing, and slicing remain
 runtime primitives; higher-level helpers are ordinary Dune functions in the
 standard library.
 
-The standard library can expose receiver methods with `impl` blocks. For
+The standard library can expose receiver methods with `method` declarations. For
 example, importing `array` makes both `array.first(values)` and `values.first()`
 available. Importing `text` similarly enables helpers such as
 `message.trim().ends_with("x")`.
@@ -102,11 +102,11 @@ explicit exports, only exported functions and constants can be accessed through
 ```dn
 export const ANSWER: int = 42;
 
-fn hidden() -> int {
+hidden(): int {
   return 7;
 }
 
-export fn public() -> int {
+export public(): int {
   return hidden();
 }
 ```
@@ -114,8 +114,8 @@ export fn public() -> int {
 Operators and explicit casts:
 
 ```dn
-let value = 17;
-let exact: real64 = value as real64;
+value = 17;
+exact: real64 = value to real64;
 
 print(-value);
 print(value % 5);
@@ -125,30 +125,30 @@ print(!false && true);
 Array and text methods:
 
 ```dn
-let values: [int] = [1, 2];
+values: [int] = [1, 2];
 values.push(3);
 print(values.pop());
 print(values.is_empty());
 
-let message: text = "dune language";
+message: text = "dune language";
 print(message.len());
 print(message.contains("lang"));
 print(message.starts_with("dune"));
 ```
 
-Indexing, slices, loops, and extern functions:
+Indexing, slices, loops, and foreign functions:
 
 ```dn
-extern fn c_sqrt(value: real64) -> real64 = "sqrt";
+foreign c_sqrt(value: real64): real64 = "sqrt";
 
-let message: text = "dune language";
+message: text = "dune language";
 print(message[0]);
 print(message[5:13]);
 
-let values: [int] = [1, 2, 3, 4];
-let middle: [int] = values[1:3];
+values: [int] = [1, 2, 3, 4];
+middle: [int] = values[1:3];
 
-for let i = 0; i < middle.len(); i = i + 1 {
+for i = 0; i < middle.len(); i = i + 1 {
   if i == 1 {
     continue;
   }
@@ -208,32 +208,30 @@ The `text` module provides text and glyph helpers:
 - `trim_end(value)` or `value.trim_end()`
 - `trim(value)` or `value.trim()`
 
-Structs group named fields and can have receiver methods:
+Records group named fields and can have receiver methods:
 
 ```dn
-struct Point {
+record Point {
   x: real64,
   y: real64,
-}
 
-impl Point {
-  fn sum() -> real64 {
-    return self.x + self.y;
+  sum(): real64 {
+    return this.x + this.y;
   }
 }
 
-let point: Point = Point { x: 1.5, y: 2.5 };
+point: Point = Point { x: 1.5, y: 2.5 };
 print(point.sum());
 ```
 
 Functions can be overloaded by parameter types:
 
 ```dn
-fn show(value: int) -> int {
+show(value: int): int {
   return value + 1;
 }
 
-fn show(value: bool) -> int {
+show(value: bool): int {
   if value {
     return 10;
   } else {
@@ -248,49 +246,72 @@ parameter can be unbounded, or it can use one of the current built-in bounds:
 `integer`, `numeric`, `real`, `comparable`, or `ordered`.
 
 ```dn
-fn identity<T>(value: T) -> T {
+identity<T>(value: T): T {
   return value;
 }
 
-fn square<T: numeric>(value: T) -> T {
+square<T is numeric>(value: T): T {
   return value * value;
 }
 ```
 
-Structs can be generic too. A struct literal uses the expected type from the
+Records can be generic too. A record literal uses the expected type from the
 left-hand side or function return type when filling in type arguments.
 
 ```dn
-struct Box<T> {
+record Box<T> {
   value: T,
 }
 
-fn boxed<T>(value: T) -> Box<T> {
+boxed<T>(value: T): Box<T> {
   return Box { value: value };
 }
 
-let answer: Box<int> = boxed(42);
+answer: Box<int> = boxed(42);
 ```
 
-Receiver methods can be written with `impl`. The receiver is available inside
-the method body as `self`; exported impl methods can also be called as module
+Choices model values that can be one of several variants. Variants can either be
+empty or carry one payload value, and generic choice payloads are substituted from
+the expected choice type.
+
+```dn
+choice Maybe<T> {
+  Present(T),
+  Absent,
+}
+
+value: Maybe<int> = Present(42);
+
+answer = when value {
+  is Present(x) { x }
+  is Absent { 0 }
+};
+```
+
+Receiver methods can be written with `method`. The receiver is available inside
+the method body as `this`; exported methods can also be called as module
 functions after import.
 
 ```dn
-export impl<T> [T] {
-  fn first() -> T {
-    return self[0];
-  }
+export method<T> [T].first(): T {
+  return this[0];
 }
 ```
 
-`match` expressions compare a subject against literal patterns and require a
-`_` fallback arm.
+`when` expressions compare a subject against literal patterns or choice variant
+patterns. Literal matches require a `_` fallback arm. Choice matches must cover
+every variant, or include `_` as a fallback. A payload variant pattern binds the
+payload only inside that arm.
 
 ```dn
-let label = match answer.value {
-  42 => "answer",
-  _ => "other",
+label = when answer.value {
+  is 42 { "answer" }
+  is _ { "other" }
+};
+
+unwrapped = when value {
+  is Present(x) { x }
+  is Absent { 0 }
 };
 ```
 
@@ -306,8 +327,10 @@ Supported scalar types:
 Supported compound types:
 
 - `[T]` dynamic arrays, for example `[int]` or `[text]`
-- `struct` records with named fields, for example `Point { x: 1, y: 2 }`
-- generic structs, for example `Option<int>` or `Result<int, text>`
+- `record` records with named fields, for example `Point { x: 1, y: 2 }`
+- generic records, for example `Box<int>`
+- generic choices, for example `Maybe<int>` or `Outcome<int, text>`
+- choice variants, for example `Present(42)` or `Absent`
 
 Indexing and slicing:
 
@@ -330,8 +353,8 @@ Standard library receiver methods are enabled by importing their module:
 
 - `import array;` enables helpers such as `values.first()` and `values.reverse()`
 - `import text;` enables helpers such as `message.trim()` and `message.ends_with("x")`
-- `import option;` exposes `Option<T>`, `some(value)`, `none(default)`, and `unwrap_or()`
-- `import result;` exposes `Result<T, E>`, `ok(value, error_default)`, `err(value_default, error)`, and `error_or()`
+- `import maybe;` exposes choice `Maybe<T>`, `present(value)`, `absent(default)`, and `value_or()`
+- `import outcome;` exposes choice `Outcome<T, E>`, `done(value, error_default)`, `failed(value_default, error)`, and `failure_or()`
 - `import collections;` exposes small array builders such as `pair_int()` and `repeat_int()`
 
 ## Run
@@ -355,6 +378,18 @@ Emit only LLVM IR:
 ./build/dune llvm hello.dn -o hello.ll
 ```
 
+Check a file without running it:
+
+```bash
+./build/dune check hello.dn
+```
+
+Start the editor language server:
+
+```bash
+./build/dune lsp
+```
+
 ## Build And Test
 
 ```bash
@@ -370,6 +405,26 @@ compiling targets. If those tools are not installed locally yet, configure with:
 cmake -S . -B build -D DUNE_ENABLE_LINT=OFF
 ```
 
+## Zed
+
+Dune has a Zed extension in `editors/zed`. It provides Tree-sitter syntax
+highlighting for `.dn` files and compiler diagnostics through `dune lsp`.
+
+To try it locally:
+
+1. Build Dune:
+
+```bash
+cmake -S . -B build
+cmake --build build -j
+```
+
+2. In Zed, use `Extensions: Install Dev Extension` and select `editors/zed`.
+
+The extension uses `dune` from `PATH` when available. Otherwise it falls back to
+`build/dune` inside the opened worktree and sets `DUNE_STDLIB_PATH` to the
+worktree `stdlib` directory, so diagnostics can resolve standard modules.
+
 ## Current Features
 
 The current release implements a small compiled language with:
@@ -378,19 +433,20 @@ The current release implements a small compiled language with:
 - parser
 - AST
 - arithmetic
-- variables
+- inferred bindings through first assignment with `=`
 - constants
 - single-line comments
 - unary operators
 - logical operators
 - modulo
-- explicit casts with `as`
+- explicit casts with `to`
 - typed functions
 - overloaded functions
 - generic functions with basic bounds
 - call-site generic instantiation
-- generic structs
-- impl blocks
+- generic records
+- choices
+- receiver methods
 - static scalar types
 - booleans
 - signed and unsigned integer widths
@@ -398,18 +454,21 @@ The current release implements a small compiled language with:
 - glyph and text values
 - unit-returning functions
 - dynamic arrays
-- structs with fields and methods
-- match expressions
+- records with fields and methods
+- `when` expressions with literal and choice variant patterns
 - array methods
 - text methods
-- standard library extension methods
+- standard library receiver methods
 - text indexing
 - slices
 - imports
 - export visibility
-- extern functions
+- foreign functions
 - standard library modules
-- native heap cleanup on normal program exit
+- `dune check`
+- `dune lsp`
+- Zed syntax highlighting
+- native heap cleanup on normal program exit and runtime panic paths
 - comparison operators
 - print
 - assignment

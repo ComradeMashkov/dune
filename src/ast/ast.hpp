@@ -10,6 +10,7 @@ namespace dune {
 struct SourceLocation {
     std::size_t line = 1;
     std::size_t column = 1;
+    std::size_t length = 1;
 };
 
 enum class ValueType {
@@ -33,6 +34,7 @@ enum class ValueType {
     array_type,
     generic_type,
     struct_type,
+    enum_type,
 };
 
 struct Type {
@@ -74,7 +76,7 @@ enum class ExpressionKind {
     unary,
     cast,
     binary,
-    match_expression,
+    when_expression,
     call,
     method_call,
 };
@@ -91,7 +93,7 @@ struct Expression {
 };
 
 enum class StatementKind {
-    let,
+    binding,
     const_statement,
     assign,
     print,
@@ -102,8 +104,9 @@ enum class StatementKind {
     break_statement,
     continue_statement,
     function,
-    impl_statement,
+    method_block,
     struct_statement,
+    enum_statement,
     return_statement,
     expression_statement,
     import_statement,

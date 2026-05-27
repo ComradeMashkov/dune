@@ -20,8 +20,11 @@ private:
     bool is_at_end() const;
     bool check(TokenType type) const;
     bool check_next(TokenType type) const;
+    bool check_identifier_like() const;
     bool match(TokenType type);
     bool looks_like_struct_literal() const;
+    bool looks_like_binding_declaration() const;
+    bool looks_like_function_declaration(bool is_extern = false) const;
 
     const Token& advance();
     const Token& peek() const;
@@ -40,10 +43,13 @@ private:
     Statement extern_statement();
     Statement for_statement();
     Statement function_statement(bool is_extern = false);
-    Statement impl_statement();
+    Statement finish_function_statement(const Token& name, std::vector<GenericParameter> leading_generics = {},
+                                        bool is_extern = false);
     Statement import_statement();
+    Statement enum_statement();
     Statement if_statement();
-    Statement let_statement();
+    Statement binding_statement();
+    Statement method_statement();
     Statement print_statement();
     Statement return_statement();
     Statement struct_statement();
@@ -66,7 +72,7 @@ private:
     std::unique_ptr<Expression> cast();
     std::unique_ptr<Expression> unary();
     std::unique_ptr<Expression> call();
-    std::unique_ptr<Expression> match_expression();
+    std::unique_ptr<Expression> when_expression();
     std::unique_ptr<Expression> primary();
 
     std::vector<Token> tokens_;

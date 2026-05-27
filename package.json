@@ -1,0 +1,23 @@
+{
+  "name": "tree-sitter-dune",
+  "version": "0.2.0",
+  "description": "Tree-sitter grammar for the Dune programming language",
+  "main": "bindings/node",
+  "keywords": [
+    "tree-sitter",
+    "parser",
+    "dune"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "tree-sitter-cli": "^0.26.9"
+  },
+  "tree-sitter": [
+    {
+      "scope": "source.dune",
+      "file-types": [
+        "dn"
+      ]
+    }
+  ]
+}

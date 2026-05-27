@@ -1,75 +1,72 @@
-export impl<T> [T] {
-    fn copy() -> [T] {
-        let result: [T] = [];
-        for let index = 0; index < self.len(); index = index + 1 {
-            result.push(self[index]);
-        }
-
-        return result;
+export method<T> [T].copy(): [T] {
+    result: [T] = [];
+    for index = 0; index < this.len(); index = index + 1 {
+        result.push(this[index]);
     }
 
-    fn reverse() -> [T] {
-        let result: [T] = [];
-        let index = self.len();
-        while index > 0 {
-            index = index - 1;
-            result.push(self[index]);
-        }
-
-        return result;
-    }
-
-    fn contains(needle: T) -> bool {
-        return index_of(self, needle) >= 0;
-    }
-
-    fn index_of(needle: T) -> int {
-        for let index = 0; index < self.len(); index = index + 1 {
-            if self[index] == needle {
-                return index;
-            }
-        }
-
-        return 0 - 1;
-    }
-
-    fn first() -> T {
-        return self[0];
-    }
-
-    fn last() -> T {
-        return self[self.len() - 1];
-    }
-
-    fn append(value: T) -> [T] {
-        let result: [T] = copy(self);
-        result.push(value);
-        return result;
-    }
-
+    return result;
 }
 
-export fn range(start: int, end: int) -> [int] {
-    let result: [int] = [];
-    for let value = start; value < end; value = value + 1 {
+export method<T> [T].reverse(): [T] {
+    result: [T] = [];
+    index = this.len();
+    while index > 0 {
+        index = index - 1;
+        result.push(this[index]);
+    }
+
+    return result;
+}
+
+export method<T> [T].contains(needle: T): bool {
+    return index_of(this, needle) >= 0;
+}
+
+export method<T> [T].index_of(needle: T): int {
+    for index = 0; index < this.len(); index = index + 1 {
+        if this[index] == needle {
+            return index;
+        }
+    }
+
+    return 0 - 1;
+}
+
+export method<T> [T].first(): T {
+    return this[0];
+}
+
+export method<T> [T].last(): T {
+    return this[this.len() - 1];
+}
+
+export method<T> [T].append(value: T): [T] {
+    result: [T] = copy(this);
+    result.push(value);
+    return result;
+}
+
+export range(start: int, end: int): [int] {
+    result: [int] = [];
+    for value = start; value < end; value = value + 1 {
         result.push(value);
     }
 
     return result;
 }
 
-export fn sum(values: [int]) -> int {
-    let result = 0;
-    for let index = 0; index < values.len(); index = index + 1 {
+export sum(values: [int]): int {
+    result = 0;
+    for index = 0; index < values.len(); index = index + 1 {
         result = result + values[index];
     }
 
     return result;
 }
 
-export fn sum(values: [real64]) -> real64 {
-    let result: real64 = 0.0;
-    for let index = 0; index < values.len(); index = index + 1 {
+export sum(values: [real64]): real64 {
+    result: real64 = 0.0;
+    for index = 0; index < values.len(); index = index + 1 {
         result = result + values[index];
     }
 

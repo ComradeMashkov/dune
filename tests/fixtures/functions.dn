@@ -1,8 +1,8 @@
-fn add(a: int, b: int) -> int {
+add(a: int, b: int): int {
     return a + b;
 }
 
-fn twice(value: int) -> int {
+twice(value: int): int {
     return add(value, value);
 }
 

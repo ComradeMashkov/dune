@@ -1,9 +1,9 @@
-fn is_equal(left: int, right: int) -> bool {
+is_equal(left: int, right: int): bool {
     return left == right;
 }
 
-let x: int = 10;
-let y: int = 20;
-let ok: bool = is_equal(x + y, 30);
+x: int = 10;
+y: int = 20;
+done: bool = is_equal(x + y, 30);
 
-print(ok);
+print(done);

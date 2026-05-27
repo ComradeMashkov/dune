@@ -65,13 +65,16 @@ void LlvmIrGenerator::generate(const Program& program, std::ostream& output) {
 
     expression_types_ = checker.expression_types();
     resolved_calls_ = checker.resolved_calls();
+    resolved_variants_ = checker.resolved_variants();
     const auto& instantiated_functions = checker.instantiated_functions();
     functions_.clear();
     structs_.clear();
+    enums_.clear();
     global_constants_.clear();
     string_globals_.clear();
     loop_stack_.clear();
     collect_structs(checker.structs());
+    collect_enums(checker.enums());
     collect_global_constants(program);
     collect_functions(program.statements);
     for (const Statement& statement : instantiated_functions) {
@@ -146,7 +149,7 @@ void LlvmIrGenerator::collect_functions(const std::vector<Statement>& statements
 
 void LlvmIrGenerator::collect_global_constants(const Program& program) {
     for (const Statement& statement : program.statements) {
-        if (statement.kind == StatementKind::const_statement && statement.name.find('.') != std::string::npos) {
+        if (statement.kind == StatementKind::const_statement) {
             global_constants_.push_back(&statement);
         }
     }
@@ -177,6 +180,13 @@ void LlvmIrGenerator::collect_structs(const std::unordered_map<std::string, Type
         }
 
         structs_.emplace(name, std::move(layout));
+    }
+}
+
+void LlvmIrGenerator::collect_enums(const std::unordered_map<std::string, TypeChecker::EnumDefinition>& enums) {
+    for (const auto& [name, definition] : enums) {
+        (void)definition;
+        enums_.insert(name);
     }
 }
 
@@ -211,18 +221,38 @@ void LlvmIrGenerator::emit_function(const Statement& statement, std::ostream& ou
     }
     output << ") {\n";
 
+    emit_global_constants(output);
+
     for (std::size_t index = 0; index < statement.parameters.size(); ++index) {
         const Parameter& parameter = statement.parameters[index];
         const Type type = signature->second.parameters[index];
         const std::string pointer = next_register();
         output << "  " << pointer << " = alloca " << llvm_type(type) << '\n';
         output << "  store " << llvm_type(type) << " %arg" << index << ", ptr " << pointer << '\n';
-        locals_.emplace(parameter.name, Local{pointer, type});
+        locals_[parameter.name] = Local{pointer, type};
     }
 
-    emit_global_constants(output);
+    const bool has_tail_expression =
+        !statement.body.empty() && statement.body.back().kind == StatementKind::expression_statement &&
+        statement.body.back().expression != nullptr && signature->second.return_type.kind != ValueType::unit_type;
+    bool terminated = false;
+    if (has_tail_expression) {
+        for (std::size_t index = 0; index + 1 < statement.body.size(); ++index) {
+            if (emit_statement(statement.body[index], output)) {
+                terminated = true;
+                break;
+            }
+        }
 
-    const bool terminated = emit_statements(statement.body, output);
+        if (!terminated) {
+            const TypedValue value = emit_expression(*statement.body.back().expression, output);
+            output << "  ret " << llvm_type(signature->second.return_type) << ' ' << value.name << '\n';
+            terminated = true;
+        }
+    } else {
+        terminated = emit_statements(statement.body, output);
+    }
+
     if (!terminated) {
         output << "  ret " << llvm_type(signature->second.return_type) << ' '
                << default_value(signature->second.return_type) << '\n';
@@ -382,7 +412,7 @@ bool LlvmIrGenerator::emit_statements(const std::vector<Statement>& statements, 
 
 bool LlvmIrGenerator::emit_statement(const Statement& statement, std::ostream& output) {
     switch (statement.kind) {
-    case StatementKind::let:
+    case StatementKind::binding:
     case StatementKind::const_statement: {
         const TypedValue value = emit_expression(*statement.expression, output);
         auto existing = locals_.find(statement.name);
@@ -397,12 +427,14 @@ bool LlvmIrGenerator::emit_statement(const Statement& statement, std::ostream& o
         return false;
     }
     case StatementKind::assign: {
-        const auto local = locals_.find(statement.name);
+        const TypedValue value = emit_expression(*statement.expression, output);
+        auto local = locals_.find(statement.name);
         if (local == locals_.end()) {
-            throw std::runtime_error("undefined variable '" + statement.name + "'");
+            const std::string pointer = next_register();
+            output << "  " << pointer << " = alloca " << llvm_type(value.type) << '\n';
+            local = locals_.emplace(statement.name, Local{pointer, value.type}).first;
         }
 
-        const TypedValue value = emit_expression(*statement.expression, output);
         output << "  store " << llvm_type(value.type) << ' ' << value.name << ", ptr " << local->second.pointer << '\n';
         return false;
     }
@@ -499,8 +531,9 @@ bool LlvmIrGenerator::emit_statement(const Statement& statement, std::ostream& o
         output << "  br label %" << loop_stack_.back().continue_label << '\n';
         return true;
     case StatementKind::function:
-    case StatementKind::impl_statement:
+    case StatementKind::method_block:
     case StatementKind::struct_statement:
+    case StatementKind::enum_statement:
         return false;
     case StatementKind::return_statement: {
         if (statement.expression == nullptr) {
@@ -526,6 +559,10 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_expression(const Expression& e
     const auto type = expression_types_.find(&expression);
     if (type == expression_types_.end()) {
         throw std::runtime_error("missing inferred expression type");
+    }
+
+    if (resolved_variants_.contains(&expression)) {
+        return emit_variant_constructor(expression, output);
     }
 
     switch (expression.kind) {
@@ -570,8 +607,8 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_expression(const Expression& e
         return emit_cast_expression(expression, output);
     case ExpressionKind::binary:
         return emit_binary_expression(expression, output);
-    case ExpressionKind::match_expression:
-        return emit_match_expression(expression, output);
+    case ExpressionKind::when_expression:
+        return emit_when_expression(expression, output);
     case ExpressionKind::call:
         return emit_call_expression(expression, output);
     case ExpressionKind::method_call:
@@ -688,26 +725,99 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_logical_expression(const Expre
     return TypedValue{result, make_type(ValueType::bool_type)};
 }
 
-LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_match_expression(const Expression& expression, std::ostream& output) {
+LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_when_expression(const Expression& expression, std::ostream& output) {
     const TypedValue subject = emit_expression(*expression.left, output);
     const auto inferred = expression_types_.find(&expression);
     if (inferred == expression_types_.end()) {
-        throw std::runtime_error("missing inferred match type");
+        throw std::runtime_error("missing inferred when type");
     }
 
     const std::string subject_pointer = next_register();
     const std::string result_pointer = next_register();
-    const std::string end_label = next_label("match_end");
+    const std::string end_label = next_label("when_end");
     output << "  " << subject_pointer << " = alloca " << llvm_type(subject.type) << '\n';
     output << "  store " << llvm_type(subject.type) << ' ' << subject.name << ", ptr " << subject_pointer << '\n';
     output << "  " << result_pointer << " = alloca " << llvm_type(inferred->second) << '\n';
+
+    if (subject.type.kind == ValueType::enum_type) {
+        bool last_when_wildcard = false;
+        for (std::size_t index = 0; index < expression.arguments.size(); index += 2) {
+            const Expression& pattern = *expression.arguments[index];
+            const Expression& result = *expression.arguments[index + 1];
+            const bool wildcard = pattern.kind == ExpressionKind::identifier && pattern.lexeme == "_";
+            last_when_wildcard = wildcard;
+            const std::string next_label_name = next_label("when_next");
+            const std::string case_label = next_label("when_arm");
+
+            const TypeChecker::VariantResolution* resolution = nullptr;
+            bool had_previous_binding = false;
+            Local previous_binding;
+            if (!wildcard) {
+                resolution = &resolved_variants_.at(&pattern);
+                const std::string subject_value = next_register();
+                const std::string tag = next_register();
+                const std::string matched = next_register();
+                output << "  " << subject_value << " = load ptr, ptr " << subject_pointer << '\n';
+                output << "  " << tag << " = load i64, ptr " << subject_value << '\n';
+                output << "  " << matched << " = icmp eq i64 " << tag << ", " << resolution->tag << '\n';
+                output << "  br i1 " << matched << ", label %" << case_label << ", label %" << next_label_name << '\n';
+                output << case_label << ":\n";
+
+                if (resolution->binds_payload) {
+                    const auto previous = locals_.find(resolution->binding_name);
+                    if (previous != locals_.end()) {
+                        had_previous_binding = true;
+                        previous_binding = previous->second;
+                    }
+
+                    const std::size_t payload_size = llvm_size(resolution->payload_type);
+                    const std::size_t payload_offset = align_to(std::size_t{8}, payload_size);
+                    const std::string payload_slot = next_register();
+                    const std::string payload = next_register();
+                    const std::string binding_pointer = next_register();
+                    output << "  " << payload_slot << " = getelementptr i8, ptr " << subject_value << ", i64 "
+                           << payload_offset << '\n';
+                    output << "  " << payload << " = load " << llvm_type(resolution->payload_type) << ", ptr "
+                           << payload_slot << '\n';
+                    output << "  " << binding_pointer << " = alloca " << llvm_type(resolution->payload_type) << '\n';
+                    output << "  store " << llvm_type(resolution->payload_type) << ' ' << payload << ", ptr "
+                           << binding_pointer << '\n';
+                    locals_[resolution->binding_name] = Local{binding_pointer, resolution->payload_type};
+                }
+            }
+
+            const TypedValue value = emit_expression(result, output);
+            if (resolution != nullptr && resolution->binds_payload) {
+                if (had_previous_binding) {
+                    locals_[resolution->binding_name] = previous_binding;
+                } else {
+                    locals_.erase(resolution->binding_name);
+                }
+            }
+
+            output << "  store " << llvm_type(inferred->second) << ' ' << value.name << ", ptr " << result_pointer
+                   << '\n';
+            output << "  br label %" << end_label << '\n';
+            if (!wildcard) {
+                output << next_label_name << ":\n";
+            }
+        }
+
+        if (!last_when_wildcard) {
+            output << "  unreachable\n";
+        }
+        output << end_label << ":\n";
+        const std::string value = next_register();
+        output << "  " << value << " = load " << llvm_type(inferred->second) << ", ptr " << result_pointer << '\n';
+        return TypedValue{value, inferred->second};
+    }
 
     for (std::size_t index = 0; index < expression.arguments.size(); index += 2) {
         const Expression& pattern = *expression.arguments[index];
         const Expression& result = *expression.arguments[index + 1];
         const bool wildcard = pattern.kind == ExpressionKind::identifier && pattern.lexeme == "_";
-        const std::string next_label_name = next_label("match_next");
-        const std::string case_label = next_label("match_case");
+        const std::string next_label_name = next_label("when_next");
+        const std::string case_label = next_label("when_arm");
 
         if (!wildcard) {
             const std::string subject_value = next_register();
@@ -936,6 +1046,7 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_array_method_call_expression(c
         output << "  br i1 " << empty << ", label %" << panic_label << ", label %" << ok_label << '\n';
         output << panic_label << ":\n";
         output << "  call i32 (ptr, ...) @printf(ptr @.dune_panic_array_pop)\n";
+        output << "  call void @dune_free_all()\n";
         output << "  call void @exit(i32 1)\n";
         output << "  unreachable\n";
         output << ok_label << ":\n";
@@ -1047,7 +1158,7 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_array_literal(const Expression
 LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_struct_literal(const Expression& expression, std::ostream& output) {
     const auto type = expression_types_.find(&expression);
     if (type == expression_types_.end() || type->second.kind != ValueType::struct_type) {
-        throw std::runtime_error("missing inferred struct literal type");
+        throw std::runtime_error("missing inferred record literal type");
     }
 
     const StructLayout layout = concrete_struct_layout(type->second);
@@ -1066,6 +1177,37 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_struct_literal(const Expressio
         const std::string slot = next_register();
         output << "  " << slot << " = getelementptr i8, ptr " << handle << ", i64 " << offset << '\n';
         output << "  store " << llvm_type(field.type.type) << ' ' << value.name << ", ptr " << slot << '\n';
+    }
+
+    return TypedValue{handle, type->second};
+}
+
+LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_variant_constructor(const Expression& expression,
+                                                                      std::ostream& output) {
+    const auto type = expression_types_.find(&expression);
+    if (type == expression_types_.end() || type->second.kind != ValueType::enum_type) {
+        throw std::runtime_error("missing inferred choice variant type");
+    }
+
+    const TypeChecker::VariantResolution& resolution = resolved_variants_.at(&expression);
+    const std::size_t payload_size = resolution.has_payload ? llvm_size(resolution.payload_type) : 0;
+    const std::size_t payload_offset = resolution.has_payload ? align_to(std::size_t{8}, payload_size) : 8;
+    const std::size_t allocation_size = resolution.has_payload ? payload_offset + payload_size : 8;
+    const std::string handle = next_register();
+    output << "  " << handle << " = call ptr @dune_alloc(i64 " << allocation_size << ")\n";
+    output << "  store i64 " << resolution.tag << ", ptr " << handle << '\n';
+
+    if (resolution.has_payload) {
+        TypedValue payload;
+        if (expression.kind == ExpressionKind::call || expression.kind == ExpressionKind::method_call) {
+            payload = emit_expression(*expression.arguments.at(0), output);
+        } else {
+            throw std::runtime_error("choice variant payload constructor needs an argument");
+        }
+
+        const std::string slot = next_register();
+        output << "  " << slot << " = getelementptr i8, ptr " << handle << ", i64 " << payload_offset << '\n';
+        output << "  store " << llvm_type(resolution.payload_type) << ' ' << payload.name << ", ptr " << slot << '\n';
     }
 
     return TypedValue{handle, type->second};
@@ -1258,6 +1400,7 @@ void LlvmIrGenerator::emit_bounds_check(const std::string& index, const std::str
     output << "  br i1 " << invalid << ", label %" << panic_label << ", label %" << ok_label << '\n';
     output << panic_label << ":\n";
     output << "  call i32 (ptr, ...) @printf(ptr " << global << ")\n";
+    output << "  call void @dune_free_all()\n";
     output << "  call void @exit(i32 1)\n";
     output << "  unreachable\n";
     output << ok_label << ":\n";
@@ -1285,6 +1428,7 @@ void LlvmIrGenerator::emit_slice_bounds_check(const std::string& start, const st
     output << "  br i1 " << invalid << ", label %" << panic_label << ", label %" << ok_label << '\n';
     output << panic_label << ":\n";
     output << "  call i32 (ptr, ...) @printf(ptr @.dune_panic_slice)\n";
+    output << "  call void @dune_free_all()\n";
     output << "  call void @exit(i32 1)\n";
     output << "  unreachable\n";
     output << ok_label << ":\n";
@@ -1333,7 +1477,8 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::cast_value(const TypedValue& value,
     }
 
     if (target.kind == ValueType::text_type || target.kind == ValueType::unit_type ||
-        target.kind == ValueType::array_type || target.kind == ValueType::struct_type) {
+        target.kind == ValueType::array_type || target.kind == ValueType::struct_type ||
+        target.kind == ValueType::enum_type) {
         return TypedValue{value.name, target};
     }
 
@@ -1457,6 +1602,7 @@ std::string LlvmIrGenerator::llvm_type(const Type& type) const {
     case ValueType::text_type:
     case ValueType::array_type:
     case ValueType::struct_type:
+    case ValueType::enum_type:
         return "ptr";
     case ValueType::unit_type:
         return "i8";
@@ -1494,6 +1640,7 @@ std::size_t LlvmIrGenerator::llvm_bit_width(const Type& type) const {
     case ValueType::array_type:
     case ValueType::generic_type:
     case ValueType::struct_type:
+    case ValueType::enum_type:
         break;
     }
 
@@ -1527,6 +1674,7 @@ std::string LlvmIrGenerator::printf_format_name(const Type& type) const {
     case ValueType::array_type:
     case ValueType::generic_type:
     case ValueType::struct_type:
+    case ValueType::enum_type:
         break;
     }
 
@@ -1534,12 +1682,12 @@ std::string LlvmIrGenerator::printf_format_name(const Type& type) const {
 }
 
 std::string LlvmIrGenerator::function_name(const std::string& name) const {
-    return "@dune_fn_" + llvm_symbol(name);
+    return "@dune_func_" + llvm_symbol(name);
 }
 
 std::string LlvmIrGenerator::extern_function_name(const FunctionSignature& signature) const {
     if (signature.extern_symbol.empty()) {
-        throw std::runtime_error("missing extern symbol");
+        throw std::runtime_error("missing foreign symbol");
     }
 
     return "@" + signature.extern_symbol;
@@ -1562,6 +1710,10 @@ Type LlvmIrGenerator::normalize_type(const Type& type) const {
 
     if (type.kind == ValueType::generic_type && structs_.contains(type.name)) {
         return make_struct_type(type.name, std::move(arguments));
+    }
+
+    if (type.kind == ValueType::generic_type && enums_.contains(type.name)) {
+        return make_enum_type(type.name, std::move(arguments));
     }
 
     Type result = type;
@@ -1599,11 +1751,11 @@ Type LlvmIrGenerator::substitute_struct_type(const Type& type,
 LlvmIrGenerator::StructLayout LlvmIrGenerator::concrete_struct_layout(const Type& type) const {
     const auto base = structs_.find(type.name);
     if (base == structs_.end()) {
-        throw std::runtime_error("unknown struct '" + type.name + "'");
+        throw std::runtime_error("unknown record '" + type.name + "'");
     }
 
     if (base->second.generic_parameters.size() != type.arguments.size()) {
-        throw std::runtime_error("struct '" + type.name + "' expects " +
+        throw std::runtime_error("record '" + type.name + "' expects " +
                                  std::to_string(base->second.generic_parameters.size()) + " type arguments but got " +
                                  std::to_string(type.arguments.size()));
     }
@@ -1672,6 +1824,7 @@ std::size_t LlvmIrGenerator::llvm_size(const Type& type) const {
     case ValueType::text_type:
     case ValueType::array_type:
     case ValueType::struct_type:
+    case ValueType::enum_type:
         return 8;
     case ValueType::generic_type:
         break;
@@ -1686,7 +1839,7 @@ std::string LlvmIrGenerator::default_value(const Type& type) const {
     }
 
     if (type.kind == ValueType::text_type || type.kind == ValueType::array_type ||
-        type.kind == ValueType::struct_type) {
+        type.kind == ValueType::struct_type || type.kind == ValueType::enum_type) {
         return "null";
     }
 

@@ -27,11 +27,39 @@ public:
         SourceLocation location;
     };
 
+    struct EnumVariant {
+        std::string name;
+        bool has_payload = false;
+        Type payload_type;
+        std::size_t tag = 0;
+        SourceLocation location;
+    };
+
+    struct EnumDefinition {
+        std::string name;
+        std::vector<GenericParameter> generic_parameters;
+        std::vector<EnumVariant> variants;
+        std::unordered_map<std::string, std::size_t> variant_indices;
+        SourceLocation location;
+    };
+
+    struct VariantResolution {
+        std::string enum_name;
+        std::string variant_name;
+        std::size_t tag = 0;
+        bool has_payload = false;
+        Type payload_type;
+        std::string binding_name;
+        bool binds_payload = false;
+    };
+
     void check(const Program& program);
     const std::unordered_map<const Expression*, Type>& expression_types() const;
     const std::unordered_map<const Expression*, std::string>& resolved_calls() const;
+    const std::unordered_map<const Expression*, VariantResolution>& resolved_variants() const;
     const std::deque<Statement>& instantiated_functions() const;
     const std::unordered_map<std::string, StructDefinition>& structs() const;
+    const std::unordered_map<std::string, EnumDefinition>& enums() const;
 
 private:
     struct FunctionSignature {
@@ -44,6 +72,8 @@ private:
 
     void declare_struct(const Statement& statement);
     void define_struct(const Statement& statement);
+    void declare_enum(const Statement& statement);
+    void define_enum(const Statement& statement);
     void collect_function(const Statement& statement);
     void collect_generic_function(const Statement& statement);
     void check_function(const Statement& statement);
@@ -51,10 +81,10 @@ private:
     void check_statements(const std::vector<Statement>& statements);
     Type check_expression(const Expression& expression, const TypeAnnotation& expected = {});
     Type check_binary_expression(const Expression& expression, const TypeAnnotation& expected);
-    Type check_match_expression(const Expression& expression, const TypeAnnotation& expected);
+    Type check_when_expression(const Expression& expression, const TypeAnnotation& expected);
     Type check_call_expression(const Expression& expression, const TypeAnnotation& expected);
     Type check_method_call_expression(const Expression& expression, const TypeAnnotation& expected);
-    Type check_member_expression(const Expression& expression);
+    Type check_member_expression(const Expression& expression, const TypeAnnotation& expected);
     Type check_unary_expression(const Expression& expression);
     Type check_cast_expression(const Expression& expression);
     Type check_array_literal(const Expression& expression, const TypeAnnotation& expected);
@@ -64,7 +94,10 @@ private:
     Type check_function_call(const Expression& expression, const std::string& name,
                              const std::vector<std::unique_ptr<Expression>>& arguments, SourceLocation location,
                              const TypeAnnotation& expected = {});
-    Type check_extension_method_call(const Expression& expression, const TypeAnnotation& expected);
+    Type check_variant_constructor(const Expression& expression, const std::string& name,
+                                   const std::vector<std::unique_ptr<Expression>>& arguments, SourceLocation location,
+                                   const TypeAnnotation& expected);
+    Type check_receiver_method_call(const Expression& expression, const TypeAnnotation& expected);
     Type check_array_method_call(const Type& receiver, const Expression& expression);
     Type check_text_method_call(const Type& receiver, const Expression& expression);
 
@@ -90,6 +123,13 @@ private:
     bool collect_generic_constraints(const Type& pattern, const Type& actual,
                                      std::unordered_map<std::string, std::vector<std::pair<Type, bool>>>& constraints,
                                      bool preferred) const;
+    const EnumVariant* find_enum_variant(const EnumDefinition& definition, const std::string& name) const;
+    const EnumDefinition* find_expected_enum(const TypeAnnotation& expected) const;
+    Type substitute_enum_payload(const EnumDefinition& definition, const Type& enum_type,
+                                 const EnumVariant& variant) const;
+    bool is_variant_name_for_expected_enum(const std::string& name, const TypeAnnotation& expected) const;
+    VariantResolution resolve_variant_pattern(const Expression& pattern, const Type& subject);
+    Type check_enum_when_expression(const Expression& expression, const Type& subject, const TypeAnnotation& expected);
     void check_integer_literal_range(const Expression& expression, const Type& target) const;
     unsigned long long max_integer_literal(ValueType target) const;
     Type coerce_numeric_literal(const Expression& expression, const Type& actual, const Type& target);
@@ -115,6 +155,7 @@ private:
                                     const std::unordered_map<std::string, Type>& substitutions) const;
 
     std::unordered_map<std::string, StructDefinition> structs_;
+    std::unordered_map<std::string, EnumDefinition> enums_;
     std::unordered_map<std::string, FunctionSignature> functions_;
     std::unordered_map<std::string, std::vector<std::string>> overloads_;
     std::unordered_map<std::string, std::vector<const Statement*>> generic_overloads_;
@@ -128,6 +169,7 @@ private:
     std::unordered_set<std::string> known_modules_;
     std::unordered_map<const Expression*, Type> expression_types_;
     std::unordered_map<const Expression*, std::string> resolved_calls_;
+    std::unordered_map<const Expression*, VariantResolution> resolved_variants_;
     std::unordered_set<std::string> imports_;
     const FunctionSignature* current_function_ = nullptr;
     std::size_t loop_depth_ = 0;
@@ -139,6 +181,8 @@ Type make_type(ValueType type);
 Type make_array_type(Type element);
 Type make_struct_type(std::string name);
 Type make_struct_type(std::string name, std::vector<Type> arguments);
+Type make_enum_type(std::string name);
+Type make_enum_type(std::string name, std::vector<Type> arguments);
 std::string type_key(const Type& type);
 std::string function_key(const std::string& name, const std::vector<Type>& parameters);
 

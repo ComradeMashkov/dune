@@ -190,10 +190,6 @@ Token Lexer::identifier(std::size_t start, std::size_t line, std::size_t column)
     }
 
     const std::string lexeme = source_.substr(start, current_ - start);
-    if (lexeme == "let") {
-        return Token{TokenType::let, lexeme, line, column};
-    }
-
     if (lexeme == "const") {
         return Token{TokenType::const_keyword, lexeme, line, column};
     }
@@ -202,28 +198,28 @@ Token Lexer::identifier(std::size_t start, std::size_t line, std::size_t column)
         return Token{TokenType::export_keyword, lexeme, line, column};
     }
 
-    if (lexeme == "extern") {
-        return Token{TokenType::extern_keyword, lexeme, line, column};
+    if (lexeme == "foreign") {
+        return Token{TokenType::foreign_keyword, lexeme, line, column};
     }
 
-    if (lexeme == "fn") {
-        return Token{TokenType::fn_keyword, lexeme, line, column};
+    if (lexeme == "method") {
+        return Token{TokenType::method_keyword, lexeme, line, column};
     }
 
-    if (lexeme == "impl") {
-        return Token{TokenType::impl_keyword, lexeme, line, column};
+    if (lexeme == "record") {
+        return Token{TokenType::record_keyword, lexeme, line, column};
     }
 
-    if (lexeme == "struct") {
-        return Token{TokenType::struct_keyword, lexeme, line, column};
+    if (lexeme == "choice") {
+        return Token{TokenType::choice_keyword, lexeme, line, column};
     }
 
     if (lexeme == "import") {
         return Token{TokenType::import_keyword, lexeme, line, column};
     }
 
-    if (lexeme == "match") {
-        return Token{TokenType::match_keyword, lexeme, line, column};
+    if (lexeme == "when") {
+        return Token{TokenType::when_keyword, lexeme, line, column};
     }
 
     if (lexeme == "return") {
@@ -258,8 +254,12 @@ Token Lexer::identifier(std::size_t start, std::size_t line, std::size_t column)
         return Token{TokenType::continue_keyword, lexeme, line, column};
     }
 
-    if (lexeme == "as") {
-        return Token{TokenType::as_keyword, lexeme, line, column};
+    if (lexeme == "to") {
+        return Token{TokenType::to_keyword, lexeme, line, column};
+    }
+
+    if (lexeme == "is") {
+        return Token{TokenType::is_keyword, lexeme, line, column};
     }
 
     if (lexeme == "int") {

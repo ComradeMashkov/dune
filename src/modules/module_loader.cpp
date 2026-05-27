@@ -3,6 +3,7 @@
 #include "lexer/lexer.hpp"
 #include "parser/parser.hpp"
 
+#include <cstdlib>
 #include <fstream>
 #include <iterator>
 #include <sstream>
@@ -16,6 +17,33 @@ namespace {
 #ifndef DUNE_STDLIB_PATH
 #define DUNE_STDLIB_PATH "stdlib"
 #endif
+
+std::vector<std::filesystem::path> default_search_paths() {
+    const char* env_path = std::getenv("DUNE_STDLIB_PATH");
+    if (env_path == nullptr || *env_path == '\0') {
+        return {std::filesystem::path(DUNE_STDLIB_PATH)};
+    }
+
+#if defined(_WIN32)
+    constexpr char delimiter = ';';
+#else
+    constexpr char delimiter = ':';
+#endif
+
+    std::vector<std::filesystem::path> paths;
+    std::stringstream stream(env_path);
+    std::string item;
+    while (std::getline(stream, item, delimiter)) {
+        if (!item.empty()) {
+            paths.emplace_back(item);
+        }
+    }
+
+    if (paths.empty()) {
+        paths.emplace_back(DUNE_STDLIB_PATH);
+    }
+    return paths;
+}
 
 std::string read_file(const std::filesystem::path& path) {
     std::ifstream input(path);
@@ -39,7 +67,8 @@ bool is_relative_to_parent(const std::filesystem::path& path) {
 }
 
 std::string diagnostic(SourceLocation location, const std::string& message) {
-    return "line " + std::to_string(location.line) + ", column " + std::to_string(location.column) + ": " + message;
+    return "line " + std::to_string(location.line) + ", columns " + std::to_string(location.column) + "-" +
+           std::to_string(location.column + location.length - 1) + ": " + message;
 }
 
 Type clone_type(const Type& type) {
@@ -62,6 +91,22 @@ TypeAnnotation clone_type_annotation(const TypeAnnotation& annotation) {
     }
 
     return TypeAnnotation{true, clone_type(annotation.type)};
+}
+
+Type make_generic_type(std::string name) {
+    Type type{ValueType::generic_type, nullptr};
+    type.name = std::move(name);
+    return type;
+}
+
+TypeAnnotation receiver_type_for_record(const Statement& statement) {
+    Type type = make_generic_type(statement.name);
+    type.arguments.reserve(statement.generic_parameters.size());
+    for (const GenericParameter& parameter : statement.generic_parameters) {
+        type.arguments.push_back(make_generic_type(parameter.name));
+    }
+
+    return TypeAnnotation{true, std::move(type)};
 }
 
 std::unique_ptr<Expression> clone_expression(const Expression& expression);
@@ -131,18 +176,43 @@ Statement clone_statement(const Statement& statement) {
 void desugar_impls(Program& program) {
     std::vector<Statement> desugared;
     for (const Statement& statement : program.statements) {
-        if (statement.kind != StatementKind::impl_statement) {
+        if (statement.kind == StatementKind::struct_statement && !statement.body.empty()) {
+            Statement record = clone_statement(statement);
+            record.body.clear();
+            desugared.push_back(std::move(record));
+
+            TypeAnnotation receiver_type = receiver_type_for_record(statement);
+            for (const Statement& method : statement.body) {
+                if (method.kind != StatementKind::function) {
+                    throw std::runtime_error(diagnostic(method.location, "record method must be a function"));
+                }
+
+                Statement function = clone_statement(method);
+                std::vector<GenericParameter> generic_parameters = statement.generic_parameters;
+                generic_parameters.insert(generic_parameters.end(), function.generic_parameters.begin(),
+                                          function.generic_parameters.end());
+                function.generic_parameters = std::move(generic_parameters);
+                function.parameters.insert(function.parameters.begin(),
+                                           Parameter{"this", clone_type_annotation(receiver_type), statement.location});
+                function.exported = statement.exported || function.exported;
+                desugared.push_back(std::move(function));
+            }
+
+            continue;
+        }
+
+        if (statement.kind != StatementKind::method_block) {
             desugared.push_back(clone_statement(statement));
             continue;
         }
 
         if (!statement.type.has_type) {
-            throw std::runtime_error(diagnostic(statement.location, "impl block needs a receiver type"));
+            throw std::runtime_error(diagnostic(statement.location, "method declaration needs a receiver type"));
         }
 
         for (const Statement& method : statement.body) {
             if (method.kind != StatementKind::function) {
-                throw std::runtime_error(diagnostic(method.location, "impl block can only contain functions"));
+                throw std::runtime_error(diagnostic(method.location, "method block can only contain functions"));
             }
 
             Statement function = clone_statement(method);
@@ -151,7 +221,7 @@ void desugar_impls(Program& program) {
                                       function.generic_parameters.end());
             function.generic_parameters = std::move(generic_parameters);
             function.parameters.insert(function.parameters.begin(),
-                                       Parameter{"self", clone_type_annotation(statement.type), statement.location});
+                                       Parameter{"this", clone_type_annotation(statement.type), statement.location});
             function.exported = statement.exported || function.exported;
             desugared.push_back(std::move(function));
         }
@@ -162,7 +232,7 @@ void desugar_impls(Program& program) {
 
 } // namespace
 
-ModuleLoader::ModuleLoader() : ModuleLoader({std::filesystem::path(DUNE_STDLIB_PATH)}) {}
+ModuleLoader::ModuleLoader() : ModuleLoader(default_search_paths()) {}
 
 ModuleLoader::ModuleLoader(std::vector<std::filesystem::path> search_paths) : search_paths_(std::move(search_paths)) {}
 
@@ -207,10 +277,11 @@ std::vector<Statement> ModuleLoader::load_module(const std::string& module_name,
     qualify_module_program(module, module_name);
     for (Statement& statement : module.statements) {
         if (statement.kind != StatementKind::function && statement.kind != StatementKind::const_statement &&
-            statement.kind != StatementKind::struct_statement && statement.kind != StatementKind::import_statement) {
+            statement.kind != StatementKind::struct_statement && statement.kind != StatementKind::enum_statement &&
+            statement.kind != StatementKind::import_statement) {
             throw std::runtime_error("module '" + module_name +
                                      "' can only contain imports, constants, functions, and "
-                                     "structs");
+                                     "types");
         }
 
         statements.push_back(std::move(statement));
@@ -266,12 +337,20 @@ void ModuleLoader::qualify_module_program(Program& program, const std::string& m
             local_structs.insert(statement.name);
         }
 
+        if (statement.kind == StatementKind::enum_statement) {
+            local_structs.insert(statement.name);
+            for (const Parameter& variant : statement.parameters) {
+                local_functions.insert(variant.name);
+                local_constants.insert(variant.name);
+            }
+        }
+
         if (statement.kind == StatementKind::const_statement) {
             local_constants.insert(statement.name);
         }
 
         if ((statement.kind == StatementKind::function || statement.kind == StatementKind::const_statement ||
-             statement.kind == StatementKind::struct_statement) &&
+             statement.kind == StatementKind::struct_statement || statement.kind == StatementKind::enum_statement) &&
             statement.exported) {
             has_explicit_exports = true;
         }
@@ -303,6 +382,17 @@ void ModuleLoader::qualify_module_program(Program& program, const std::string& m
                 statement.exported = true;
             }
             statement.name = module_name + "." + statement.name;
+        }
+
+        if (statement.kind == StatementKind::enum_statement) {
+            qualify_statement(statement, module_name, local_functions, local_constants, local_structs);
+            if (!has_explicit_exports) {
+                statement.exported = true;
+            }
+            statement.name = module_name + "." + statement.name;
+            for (Parameter& variant : statement.parameters) {
+                variant.name = module_name + "." + variant.name;
+            }
         }
     }
 }

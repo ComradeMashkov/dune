@@ -16,7 +16,7 @@ source code
 Example:
 
 ```txt
-let x = 40 + 2;
+var x = 40 + 2;
 print(x);
 ```
 

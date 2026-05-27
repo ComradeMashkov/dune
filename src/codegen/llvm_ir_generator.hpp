@@ -52,7 +52,7 @@ private:
     TypedValue emit_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_binary_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_logical_expression(const Expression& expression, std::ostream& output);
-    TypedValue emit_match_expression(const Expression& expression, std::ostream& output);
+    TypedValue emit_when_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_unary_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_cast_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_call_expression(const Expression& expression, std::ostream& output);
@@ -61,6 +61,7 @@ private:
     TypedValue emit_text_method_call_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_array_literal(const Expression& expression, std::ostream& output);
     TypedValue emit_struct_literal(const Expression& expression, std::ostream& output);
+    TypedValue emit_variant_constructor(const Expression& expression, std::ostream& output);
     TypedValue emit_member_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_index_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_slice_expression(const Expression& expression, std::ostream& output);
@@ -77,6 +78,7 @@ private:
     void collect_functions(const std::vector<Statement>& statements);
     void collect_function(const Statement& statement);
     void collect_structs(const std::unordered_map<std::string, TypeChecker::StructDefinition>& structs);
+    void collect_enums(const std::unordered_map<std::string, TypeChecker::EnumDefinition>& enums);
     void collect_global_constants(const Program& program);
 
     std::string next_register();
@@ -101,8 +103,10 @@ private:
 
     std::unordered_map<const Expression*, Type> expression_types_;
     std::unordered_map<const Expression*, std::string> resolved_calls_;
+    std::unordered_map<const Expression*, TypeChecker::VariantResolution> resolved_variants_;
     std::unordered_map<std::string, FunctionSignature> functions_;
     std::unordered_map<std::string, StructLayout> structs_;
+    std::unordered_set<std::string> enums_;
     std::unordered_map<std::string, Local> locals_;
     std::vector<const Statement*> global_constants_;
     std::vector<std::string> string_globals_;

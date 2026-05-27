@@ -1,0 +1,23 @@
+choice Maybe {
+    Present(int),
+    Absent,
+}
+
+fallback(value: Maybe, default: int): int {
+    return when value {
+        is Present(x) { x }
+        is Absent { default }
+    };
+}
+
+x = 99;
+value: Maybe = Present(30);
+missing: Maybe = Absent;
+
+print(fallback(value, 0));
+print(fallback(missing, 7));
+print(when value {
+    is Present(x) { x + 1 }
+    is Absent { 0 }
+});
+print(x);

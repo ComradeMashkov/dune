@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(dune VERSION 0.12.0 LANGUAGES CXX)
+project(dune VERSION 0.13.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -117,6 +117,18 @@ target_link_libraries(dune_codegen
         dune_typechecker
 )
 
+add_library(dune_lsp
+    src/lsp/lsp_server.cpp
+)
+dune_add_lint_dependencies(dune_lsp)
+target_compile_definitions(dune_lsp PRIVATE DUNE_STDLIB_PATH="${CMAKE_CURRENT_SOURCE_DIR}/stdlib")
+
+target_link_libraries(dune_lsp
+    PUBLIC
+        dune_modules
+        dune_typechecker
+)
+
 add_library(dune_vm
     src/vm/vm.cpp
 )
@@ -128,7 +140,7 @@ target_link_libraries(dune_vm
 )
 
 add_executable(dune src/main.cpp)
-target_link_libraries(dune PRIVATE dune_codegen dune_modules dune_vm)
+target_link_libraries(dune PRIVATE dune_codegen dune_lsp dune_modules dune_vm)
 target_compile_definitions(dune PRIVATE DUNE_CLANGXX_PATH="${DUNE_CLANGXX_EXE}")
 dune_add_lint_dependencies(dune)
 
@@ -152,16 +164,24 @@ add_executable(vm_tests tests/vm_tests.cpp)
 target_link_libraries(vm_tests PRIVATE dune_modules dune_vm)
 dune_add_lint_dependencies(vm_tests)
 
+add_executable(lsp_tests tests/lsp_tests.cpp)
+target_link_libraries(lsp_tests PRIVATE dune_lsp)
+dune_add_lint_dependencies(lsp_tests)
+
 enable_testing()
 
 add_test(NAME smoke COMMAND dune --version)
-set_tests_properties(smoke PROPERTIES PASS_REGULAR_EXPRESSION "dune 0.12.0")
+set_tests_properties(smoke PROPERTIES PASS_REGULAR_EXPRESSION "dune 0.13.0")
 
 add_test(NAME lexer_tests COMMAND lexer_tests)
 add_test(NAME parser_tests COMMAND parser_tests)
 add_test(NAME compiler_tests COMMAND compiler_tests)
 add_test(NAME type_checker_tests COMMAND type_checker_tests)
 add_test(NAME vm_tests COMMAND vm_tests)
+add_test(NAME lsp_tests COMMAND lsp_tests)
+add_test(NAME cli_check_static_types COMMAND dune check ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/static_types.dn)
+add_test(NAME cli_check_type_error COMMAND dune check ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/type_error.dn)
+set_tests_properties(cli_check_type_error PROPERTIES WILL_FAIL TRUE)
 
 add_test(
     NAME cli_hello
@@ -279,17 +299,27 @@ add_test(
         ${CMAKE_COMMAND}
         -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/generics_bounds.dn
-        -D EXPECTED_OUTPUT="42\nok\nlang\n144\n2.25\n18"
+        -D EXPECTED_OUTPUT="42\ndone\nlang\n144\n2.25\n18"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
 )
 
 add_test(
-    NAME cli_structs_stdlib
+    NAME cli_records_stdlib
     COMMAND
         ${CMAKE_COMMAND}
         -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
-        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/structs_stdlib.dn
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/records_stdlib.dn
         -D EXPECTED_OUTPUT="10\n30\n42\n7\n1\n1\n100\n9\n5\nbad\n1\n4\n1"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
+    NAME cli_choices_when
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/choices_when.dn
+        -D EXPECTED_OUTPUT="30\n7\n31\n99"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
 )
 
@@ -388,18 +418,29 @@ add_test(
         -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/generics_bounds.dn
         -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/generics_bounds_native
-        -D EXPECTED_OUTPUT="42\nok\nlang\n144\n2.25\n18"
+        -D EXPECTED_OUTPUT="42\ndone\nlang\n144\n2.25\n18"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
 )
 
 add_test(
-    NAME cli_build_native_structs_stdlib
+    NAME cli_build_native_records_stdlib
     COMMAND
         ${CMAKE_COMMAND}
         -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
-        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/structs_stdlib.dn
-        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/structs_stdlib_native
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/records_stdlib.dn
+        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/records_stdlib_native
         -D EXPECTED_OUTPUT="10\n30\n42\n7\n1\n1\n100\n9\n5\nbad\n1\n4\n1"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
+)
+
+add_test(
+    NAME cli_build_native_choices_when
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/choices_when.dn
+        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/choices_when_native
+        -D EXPECTED_OUTPUT="30\n7\n31\n99"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
 )
 
