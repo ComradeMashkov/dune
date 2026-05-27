@@ -121,6 +121,7 @@ add_library(dune_lsp
     src/lsp/lsp_server.cpp
 )
 dune_add_lint_dependencies(dune_lsp)
+target_compile_definitions(dune_lsp PRIVATE DUNE_STDLIB_PATH="${CMAKE_CURRENT_SOURCE_DIR}/stdlib")
 
 target_link_libraries(dune_lsp
     PUBLIC

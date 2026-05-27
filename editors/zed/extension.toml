@@ -1,6 +1,6 @@
 id = "dune"
 name = "Dune"
-description = "Dune language support: Tree-sitter highlighting and compiler diagnostics."
+description = "Dune language support: Tree-sitter highlighting, LSP diagnostics, completions, hover, and file icons."
 version = "0.1.0"
 schema_version = 1
 authors = ["ComradeMashkov"]

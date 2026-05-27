@@ -1,0 +1,31 @@
+{
+  "$schema": "https://zed.dev/schema/icon_themes/v0.3.0.json",
+  "name": "Dune Icons",
+  "author": "ComradeMashkov",
+  "themes": [
+    {
+      "name": "Dune Icons",
+      "appearance": "dark",
+      "file_suffixes": {
+        "dn": "dune"
+      },
+      "file_icons": {
+        "dune": {
+          "path": "./icons/dune.svg"
+        }
+      }
+    },
+    {
+      "name": "Dune Icons",
+      "appearance": "light",
+      "file_suffixes": {
+        "dn": "dune"
+      },
+      "file_icons": {
+        "dune": {
+          "path": "./icons/dune.svg"
+        }
+      }
+    }
+  ]
+}
