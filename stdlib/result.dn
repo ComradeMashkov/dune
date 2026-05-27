@@ -1,15 +1,14 @@
-export struct Result<T, E> {
-    ok: bool,
-    value: T,
-    error: E,
+export enum Result<T, E> {
+    Ok(T),
+    Err(E),
 }
 
 export fn ok<T, E>(value: T, error_default: E) -> Result<T, E> {
-    return Result { ok: true, value: value, error: error_default };
+    return Ok(value);
 }
 
 export fn err<T, E>(value_default: T, error: E) -> Result<T, E> {
-    return Result { ok: false, value: value_default, error: error };
+    return Err(error);
 }
 
 export fn ok_int(value: int) -> Result<int, text> {
@@ -30,26 +29,30 @@ export fn err_text(error: text) -> Result<text, text> {
 
 export impl<T, E> Result<T, E> {
     fn is_ok() -> bool {
-        return self.ok;
+        return match self {
+            Ok(value) => true,
+            Err(error) => false,
+        };
     }
 
     fn is_err() -> bool {
-        return !self.ok;
+        return match self {
+            Ok(value) => false,
+            Err(error) => true,
+        };
     }
 
     fn unwrap_or(default: T) -> T {
-        if self.ok {
-            return self.value;
-        }
-
-        return default;
+        return match self {
+            Ok(value) => value,
+            Err(error) => default,
+        };
     }
 
     fn error_or(default: E) -> E {
-        if self.ok {
-            return default;
-        }
-
-        return self.error;
+        return match self {
+            Ok(value) => default,
+            Err(error) => error,
+        };
     }
 }

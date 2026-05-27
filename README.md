@@ -6,11 +6,11 @@ pipeline. It has a lexer, parser, AST, static type checker, bytecode VM, and an
 LLVM-based native backend.
 
 The language is intentionally compact: explicit types when they matter,
-overloads and generics for reusable code, modules loaded from `.dn` files, and a
-standard library that is increasingly written in Dune itself. Runtime checks
-catch common mistakes such as invalid indexes and slices, while the type checker
-rejects mismatched assignments, calls, returns, and binary operations before
-execution.
+overloads, generics, enums with pattern matching, modules loaded from `.dn`
+files, and a standard library that is increasingly written in Dune itself.
+Runtime checks catch common mistakes such as invalid indexes and slices, while
+the type checker rejects mismatched assignments, calls, returns, and binary
+operations before execution.
 
 Good fits for Dune today:
 
@@ -272,6 +272,24 @@ fn boxed<T>(value: T) -> Box<T> {
 let answer: Box<int> = boxed(42);
 ```
 
+Enums model values that can be one of several variants. Variants can either be
+empty or carry one payload value, and generic enum payloads are substituted from
+the expected enum type.
+
+```dn
+enum Option<T> {
+  Some(T),
+  None,
+}
+
+let value: Option<int> = Some(42);
+
+let answer = match value {
+  Some(x) => x,
+  None => 0,
+};
+```
+
 Receiver methods can be written with `impl`. The receiver is available inside
 the method body as `self`; exported impl methods can also be called as module
 functions after import.
@@ -284,13 +302,20 @@ export impl<T> [T] {
 }
 ```
 
-`match` expressions compare a subject against literal patterns and require a
-`_` fallback arm.
+`match` expressions compare a subject against literal patterns or enum variant
+patterns. Literal matches require a `_` fallback arm. Enum matches must cover
+every variant, or include `_` as a fallback. A payload variant pattern binds the
+payload only inside that arm.
 
 ```dn
 let label = match answer.value {
   42 => "answer",
   _ => "other",
+};
+
+let unwrapped = match value {
+  Some(x) => x,
+  None => 0,
 };
 ```
 
@@ -307,7 +332,9 @@ Supported compound types:
 
 - `[T]` dynamic arrays, for example `[int]` or `[text]`
 - `struct` records with named fields, for example `Point { x: 1, y: 2 }`
-- generic structs, for example `Option<int>` or `Result<int, text>`
+- generic structs, for example `Box<int>`
+- generic enums, for example `Option<int>` or `Result<int, text>`
+- enum variants, for example `Some(42)` or `None`
 
 Indexing and slicing:
 
@@ -330,8 +357,8 @@ Standard library receiver methods are enabled by importing their module:
 
 - `import array;` enables helpers such as `values.first()` and `values.reverse()`
 - `import text;` enables helpers such as `message.trim()` and `message.ends_with("x")`
-- `import option;` exposes `Option<T>`, `some(value)`, `none(default)`, and `unwrap_or()`
-- `import result;` exposes `Result<T, E>`, `ok(value, error_default)`, `err(value_default, error)`, and `error_or()`
+- `import option;` exposes enum `Option<T>`, `some(value)`, `none(default)`, and `unwrap_or()`
+- `import result;` exposes enum `Result<T, E>`, `ok(value, error_default)`, `err(value_default, error)`, and `error_or()`
 - `import collections;` exposes small array builders such as `pair_int()` and `repeat_int()`
 
 ## Run
@@ -390,6 +417,7 @@ The current release implements a small compiled language with:
 - generic functions with basic bounds
 - call-site generic instantiation
 - generic structs
+- enums
 - impl blocks
 - static scalar types
 - booleans
@@ -399,7 +427,7 @@ The current release implements a small compiled language with:
 - unit-returning functions
 - dynamic arrays
 - structs with fields and methods
-- match expressions
+- match expressions with literal and enum variant patterns
 - array methods
 - text methods
 - standard library extension methods
@@ -409,7 +437,7 @@ The current release implements a small compiled language with:
 - export visibility
 - extern functions
 - standard library modules
-- native heap cleanup on normal program exit
+- native heap cleanup on normal program exit and runtime panic paths
 - comparison operators
 - print
 - assignment

@@ -1,14 +1,14 @@
-export struct Option<T> {
-    present: bool,
-    value: T,
+export enum Option<T> {
+    Some(T),
+    None,
 }
 
 export fn some<T>(value: T) -> Option<T> {
-    return Option { present: true, value: value };
+    return Some(value);
 }
 
 export fn none<T>(default: T) -> Option<T> {
-    return Option { present: false, value: default };
+    return None;
 }
 
 export fn none_int() -> Option<int> {
@@ -21,18 +21,23 @@ export fn none_text() -> Option<text> {
 
 export impl<T> Option<T> {
     fn is_some() -> bool {
-        return self.present;
+        return match self {
+            Some(value) => true,
+            None => false,
+        };
     }
 
     fn is_none() -> bool {
-        return !self.present;
+        return match self {
+            Some(value) => false,
+            None => true,
+        };
     }
 
     fn unwrap_or(default: T) -> T {
-        if self.present {
-            return self.value;
-        }
-
-        return default;
+        return match self {
+            Some(value) => value,
+            None => default,
+        };
     }
 }

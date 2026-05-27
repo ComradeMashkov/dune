@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(dune VERSION 0.12.0 LANGUAGES CXX)
+project(dune VERSION 0.13.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -155,7 +155,7 @@ dune_add_lint_dependencies(vm_tests)
 enable_testing()
 
 add_test(NAME smoke COMMAND dune --version)
-set_tests_properties(smoke PROPERTIES PASS_REGULAR_EXPRESSION "dune 0.12.0")
+set_tests_properties(smoke PROPERTIES PASS_REGULAR_EXPRESSION "dune 0.13.0")
 
 add_test(NAME lexer_tests COMMAND lexer_tests)
 add_test(NAME parser_tests COMMAND parser_tests)
@@ -294,6 +294,16 @@ add_test(
 )
 
 add_test(
+    NAME cli_enums_match
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/enums_match.dn
+        -D EXPECTED_OUTPUT="30\n7\n31\n99"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
     NAME cli_build_native_hello
     COMMAND
         ${CMAKE_COMMAND}
@@ -400,6 +410,17 @@ add_test(
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/structs_stdlib.dn
         -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/structs_stdlib_native
         -D EXPECTED_OUTPUT="10\n30\n42\n7\n1\n1\n100\n9\n5\nbad\n1\n4\n1"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
+)
+
+add_test(
+    NAME cli_build_native_enums_match
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/enums_match.dn
+        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/enums_match_native
+        -D EXPECTED_OUTPUT="30\n7\n31\n99"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
 )
 
