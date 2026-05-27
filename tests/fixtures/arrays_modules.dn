@@ -1,7 +1,7 @@
 import math;
 
-let values: [int] = [1, math.square(2), 5];
-let base: u64 = 7;
+var values: [int] = [1, math.square(2), 5];
+var base: u64 = 7;
 values.push(math.square(values[2]));
 
 print(values.len());
@@ -15,7 +15,7 @@ print(math.min(4, 9));
 print(math.max(4, 9));
 print(math.clamp(12, 0, 10));
 
-let rough: real32 = 1.5;
+var rough: real32 = 1.5;
 print(math.max(rough, 2.5));
 print(math.abs(0.0 - 2.5));
 print(math.round(math.PI));

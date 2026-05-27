@@ -37,9 +37,9 @@ int main() {
 
     bool passed = true;
 
-    passed = expect_tokens("let x = 40 + 2;\nprint(x);",
+    passed = expect_tokens("var x = 40 + 2;\nprint(x);",
                            {
-                               {let, "let"},
+                               {var_keyword, "var"},
                                {identifier, "x"},
                                {equal, "="},
                                {number, "40"},
@@ -104,9 +104,9 @@ int main() {
                            }) &&
              passed;
 
-    passed = expect_tokens("fn add(a: int, b: int) -> int { return a + b; }\nlet ok: bool = true;",
+    passed = expect_tokens("func add(a: int, b: int): int { return a + b; }\nvar done: bool = true;",
                            {
-                               {fn_keyword, "fn"},
+                               {func_keyword, "func"},
                                {identifier, "add"},
                                {left_paren, "("},
                                {identifier, "a"},
@@ -117,7 +117,7 @@ int main() {
                                {colon, ":"},
                                {int_keyword, "int"},
                                {right_paren, ")"},
-                               {arrow, "->"},
+                               {colon, ":"},
                                {int_keyword, "int"},
                                {left_brace, "{"},
                                {return_keyword, "return"},
@@ -126,8 +126,8 @@ int main() {
                                {identifier, "b"},
                                {semicolon, ";"},
                                {right_brace, "}"},
-                               {let, "let"},
-                               {identifier, "ok"},
+                               {var_keyword, "var"},
+                               {identifier, "done"},
                                {colon, ":"},
                                {bool_keyword, "bool"},
                                {equal, "="},
@@ -137,30 +137,30 @@ int main() {
                            }) &&
              passed;
 
-    passed = expect_tokens("let a: u8 = 1; let b: uint64 = 2; let c: real = 1.5; let d: glyph = 'x';",
+    passed = expect_tokens("var a: u8 = 1; var b: uint64 = 2; var c: real = 1.5; var d: glyph = 'x';",
                            {
-                               {let, "let"},
+                               {var_keyword, "var"},
                                {identifier, "a"},
                                {colon, ":"},
                                {u8_keyword, "u8"},
                                {equal, "="},
                                {number, "1"},
                                {semicolon, ";"},
-                               {let, "let"},
+                               {var_keyword, "var"},
                                {identifier, "b"},
                                {colon, ":"},
                                {uint64_keyword, "uint64"},
                                {equal, "="},
                                {number, "2"},
                                {semicolon, ";"},
-                               {let, "let"},
+                               {var_keyword, "var"},
                                {identifier, "c"},
                                {colon, ":"},
                                {real_keyword, "real"},
                                {equal, "="},
                                {float_number, "1.5"},
                                {semicolon, ";"},
-                               {let, "let"},
+                               {var_keyword, "var"},
                                {identifier, "d"},
                                {colon, ":"},
                                {glyph_keyword, "glyph"},
@@ -171,74 +171,74 @@ int main() {
                            }) &&
              passed;
 
-    passed = expect_tokens("fn log(message: text) -> unit { return; } "
-                           "let a: i8 = 1; let b: i16 = 2; let c: i32 = 3; let d: i64 = 4; "
-                           "let e: isize = 5; let f: usize = 6; let g: real32 = 1.5; "
-                           "let h: real64 = 2.5; log(\"ok\");",
+    passed = expect_tokens("func log(message: text): unit { return; } "
+                           "var a: i8 = 1; var b: i16 = 2; var c: i32 = 3; var d: i64 = 4; "
+                           "var e: isize = 5; var f: usize = 6; var g: real32 = 1.5; "
+                           "var h: real64 = 2.5; log(\"done\");",
                            {
-                               {fn_keyword, "fn"},
+                               {func_keyword, "func"},
                                {identifier, "log"},
                                {left_paren, "("},
                                {identifier, "message"},
                                {colon, ":"},
                                {text_keyword, "text"},
                                {right_paren, ")"},
-                               {arrow, "->"},
+                               {colon, ":"},
                                {unit_keyword, "unit"},
                                {left_brace, "{"},
                                {return_keyword, "return"},
                                {semicolon, ";"},
                                {right_brace, "}"},
-                               {let, "let"},
+                               {var_keyword, "var"},
                                {identifier, "a"},
                                {colon, ":"},
                                {i8_keyword, "i8"},
                                {equal, "="},
                                {number, "1"},
                                {semicolon, ";"},
-                               {let, "let"},
+                               {var_keyword, "var"},
                                {identifier, "b"},
                                {colon, ":"},
                                {i16_keyword, "i16"},
                                {equal, "="},
                                {number, "2"},
                                {semicolon, ";"},
-                               {let, "let"},
+                               {var_keyword, "var"},
                                {identifier, "c"},
                                {colon, ":"},
                                {i32_keyword, "i32"},
                                {equal, "="},
                                {number, "3"},
                                {semicolon, ";"},
-                               {let, "let"},
+                               {var_keyword, "var"},
                                {identifier, "d"},
                                {colon, ":"},
                                {i64_keyword, "i64"},
                                {equal, "="},
                                {number, "4"},
                                {semicolon, ";"},
-                               {let, "let"},
+                               {var_keyword, "var"},
                                {identifier, "e"},
                                {colon, ":"},
                                {isize_keyword, "isize"},
                                {equal, "="},
                                {number, "5"},
                                {semicolon, ";"},
-                               {let, "let"},
+                               {var_keyword, "var"},
                                {identifier, "f"},
                                {colon, ":"},
                                {usize_keyword, "usize"},
                                {equal, "="},
                                {number, "6"},
                                {semicolon, ";"},
-                               {let, "let"},
+                               {var_keyword, "var"},
                                {identifier, "g"},
                                {colon, ":"},
                                {real32_keyword, "real32"},
                                {equal, "="},
                                {float_number, "1.5"},
                                {semicolon, ";"},
-                               {let, "let"},
+                               {var_keyword, "var"},
                                {identifier, "h"},
                                {colon, ":"},
                                {real64_keyword, "real64"},
@@ -247,20 +247,20 @@ int main() {
                                {semicolon, ";"},
                                {identifier, "log"},
                                {left_paren, "("},
-                               {string_literal, "\"ok\""},
+                               {string_literal, "\"done\""},
                                {right_paren, ")"},
                                {semicolon, ";"},
                                {eof, ""},
                            }) &&
              passed;
 
-    passed = expect_tokens("import math; let values: [int] = [1, 2]; values.push(math.square(values[0])); "
+    passed = expect_tokens("import math; var values: [int] = [1, 2]; values.push(math.square(values[0])); "
                            "print(values.len());",
                            {
                                {import_keyword, "import"},
                                {identifier, "math"},
                                {semicolon, ";"},
-                               {let, "let"},
+                               {var_keyword, "var"},
                                {identifier, "values"},
                                {colon, ":"},
                                {left_bracket, "["},
@@ -318,10 +318,10 @@ int main() {
                            }) &&
              passed;
 
-    passed = expect_tokens("let ok: bool = !false && true || (17 % 5 == 2); let x: real64 = 17 as real64;",
+    passed = expect_tokens("var done: bool = !false && true || (17 % 5 == 2); var x: real64 = 17 to real64;",
                            {
-                               {let, "let"},
-                               {identifier, "ok"},
+                               {var_keyword, "var"},
+                               {identifier, "done"},
                                {colon, ":"},
                                {bool_keyword, "bool"},
                                {equal, "="},
@@ -338,39 +338,39 @@ int main() {
                                {number, "2"},
                                {right_paren, ")"},
                                {semicolon, ";"},
-                               {let, "let"},
+                               {var_keyword, "var"},
                                {identifier, "x"},
                                {colon, ":"},
                                {real64_keyword, "real64"},
                                {equal, "="},
                                {number, "17"},
-                               {as_keyword, "as"},
+                               {to_keyword, "to"},
                                {real64_keyword, "real64"},
                                {semicolon, ";"},
                                {eof, ""},
                            }) &&
              passed;
 
-    passed = expect_tokens("export extern fn c_sqrt(value: real64) -> real64 = \"sqrt\"; "
-                           "for let i = 0; i < 3; i = i + 1 { if i == 1 { continue; } break; } "
+    passed = expect_tokens("export foreign func c_sqrt(value: real64): real64 = \"sqrt\"; "
+                           "for var i = 0; i < 3; i = i + 1 { if i == 1 { continue; } break; } "
                            "print(\"dune\"[1:3]);",
                            {
                                {export_keyword, "export"},
-                               {extern_keyword, "extern"},
-                               {fn_keyword, "fn"},
+                               {foreign_keyword, "foreign"},
+                               {func_keyword, "func"},
                                {identifier, "c_sqrt"},
                                {left_paren, "("},
                                {identifier, "value"},
                                {colon, ":"},
                                {real64_keyword, "real64"},
                                {right_paren, ")"},
-                               {arrow, "->"},
+                               {colon, ":"},
                                {real64_keyword, "real64"},
                                {equal, "="},
                                {string_literal, "\"sqrt\""},
                                {semicolon, ";"},
                                {for_keyword, "for"},
-                               {let, "let"},
+                               {var_keyword, "var"},
                                {identifier, "i"},
                                {equal, "="},
                                {number, "0"},
@@ -411,13 +411,13 @@ int main() {
              passed;
 
     passed = expect_tokens("// leading comment\n"
-                           "export impl<T> [T] { // methods\n"
-                           "fn first() -> T { return self[0]; }\n"
+                           "export extend<T> [T] { // methods\n"
+                           "func first(): T { return this[0]; }\n"
                            "} // trailing comment\n"
-                           "let half = 8 / 2;",
+                           "var half = 8 / 2;",
                            {
                                {export_keyword, "export"},
-                               {impl_keyword, "impl"},
+                               {extend_keyword, "extend"},
                                {less, "<"},
                                {identifier, "T"},
                                {greater, ">"},
@@ -425,22 +425,22 @@ int main() {
                                {identifier, "T"},
                                {right_bracket, "]"},
                                {left_brace, "{"},
-                               {fn_keyword, "fn"},
+                               {func_keyword, "func"},
                                {identifier, "first"},
                                {left_paren, "("},
                                {right_paren, ")"},
-                               {arrow, "->"},
+                               {colon, ":"},
                                {identifier, "T"},
                                {left_brace, "{"},
                                {return_keyword, "return"},
-                               {identifier, "self"},
+                               {identifier, "this"},
                                {left_bracket, "["},
                                {number, "0"},
                                {right_bracket, "]"},
                                {semicolon, ";"},
                                {right_brace, "}"},
                                {right_brace, "}"},
-                               {let, "let"},
+                               {var_keyword, "var"},
                                {identifier, "half"},
                                {equal, "="},
                                {number, "8"},
@@ -451,11 +451,11 @@ int main() {
                            }) &&
              passed;
 
-    passed = expect_tokens("export struct Point { x: real64, y: real64 } "
-                           "let p: Point = Point { x: 1.0, y: 2.0 }; print(p.x);",
+    passed = expect_tokens("export record Point { x: real64, y: real64 } "
+                           "var p: Point = Point { x: 1.0, y: 2.0 }; print(p.x);",
                            {
                                {export_keyword, "export"},
-                               {struct_keyword, "struct"},
+                               {record_keyword, "record"},
                                {identifier, "Point"},
                                {left_brace, "{"},
                                {identifier, "x"},
@@ -466,7 +466,7 @@ int main() {
                                {colon, ":"},
                                {real64_keyword, "real64"},
                                {right_brace, "}"},
-                               {let, "let"},
+                               {var_keyword, "var"},
                                {identifier, "p"},
                                {colon, ":"},
                                {identifier, "Point"},
@@ -493,20 +493,20 @@ int main() {
                            }) &&
              passed;
 
-    passed = expect_tokens("let out = match value { 1 => 10, _ => 20 };",
+    passed = expect_tokens("var out = case value { 1 : 10, _ : 20 };",
                            {
-                               {let, "let"},
+                               {var_keyword, "var"},
                                {identifier, "out"},
                                {equal, "="},
-                               {match_keyword, "match"},
+                               {case_keyword, "case"},
                                {identifier, "value"},
                                {left_brace, "{"},
                                {number, "1"},
-                               {fat_arrow, "=>"},
+                               {colon, ":"},
                                {number, "10"},
                                {comma, ","},
                                {identifier, "_"},
-                               {fat_arrow, "=>"},
+                               {colon, ":"},
                                {number, "20"},
                                {right_brace, "}"},
                                {semicolon, ";"},
@@ -514,21 +514,21 @@ int main() {
                            }) &&
              passed;
 
-    passed = expect_tokens("export enum Option<T> { Some(T), None, }",
+    passed = expect_tokens("export choice Maybe<T> { Present(T), Absent, }",
                            {
                                {export_keyword, "export"},
-                               {enum_keyword, "enum"},
-                               {identifier, "Option"},
+                               {choice_keyword, "choice"},
+                               {identifier, "Maybe"},
                                {less, "<"},
                                {identifier, "T"},
                                {greater, ">"},
                                {left_brace, "{"},
-                               {identifier, "Some"},
+                               {identifier, "Present"},
                                {left_paren, "("},
                                {identifier, "T"},
                                {right_paren, ")"},
                                {comma, ","},
-                               {identifier, "None"},
+                               {identifier, "Absent"},
                                {comma, ","},
                                {right_brace, "}"},
                                {eof, ""},

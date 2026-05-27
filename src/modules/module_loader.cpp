@@ -166,12 +166,12 @@ void desugar_impls(Program& program) {
         }
 
         if (!statement.type.has_type) {
-            throw std::runtime_error(diagnostic(statement.location, "impl block needs a receiver type"));
+            throw std::runtime_error(diagnostic(statement.location, "extend block needs a receiver type"));
         }
 
         for (const Statement& method : statement.body) {
             if (method.kind != StatementKind::function) {
-                throw std::runtime_error(diagnostic(method.location, "impl block can only contain functions"));
+                throw std::runtime_error(diagnostic(method.location, "extend block can only contain functions"));
             }
 
             Statement function = clone_statement(method);
@@ -180,7 +180,7 @@ void desugar_impls(Program& program) {
                                       function.generic_parameters.end());
             function.generic_parameters = std::move(generic_parameters);
             function.parameters.insert(function.parameters.begin(),
-                                       Parameter{"self", clone_type_annotation(statement.type), statement.location});
+                                       Parameter{"this", clone_type_annotation(statement.type), statement.location});
             function.exported = statement.exported || function.exported;
             desugared.push_back(std::move(function));
         }

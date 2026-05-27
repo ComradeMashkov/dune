@@ -137,7 +137,7 @@ std::string expression_to_type_name(const Expression& expression) {
         return expression_to_type_name(*expression.left) + "." + expression.lexeme;
     }
 
-    throw std::runtime_error("expected type name before struct literal");
+    throw std::runtime_error("expected type name before record literal");
 }
 
 std::string decode_string_literal(const std::string& lexeme) {
@@ -284,23 +284,23 @@ Statement Parser::statement() {
         return export_statement();
     }
 
-    if (match(TokenType::extern_keyword)) {
+    if (match(TokenType::foreign_keyword)) {
         return extern_statement();
     }
 
-    if (match(TokenType::fn_keyword)) {
+    if (match(TokenType::func_keyword)) {
         return function_statement();
     }
 
-    if (match(TokenType::impl_keyword)) {
+    if (match(TokenType::extend_keyword)) {
         return impl_statement();
     }
 
-    if (match(TokenType::struct_keyword)) {
+    if (match(TokenType::record_keyword)) {
         return struct_statement();
     }
 
-    if (match(TokenType::enum_keyword)) {
+    if (match(TokenType::choice_keyword)) {
         return enum_statement();
     }
 
@@ -308,7 +308,7 @@ Statement Parser::statement() {
         return import_statement();
     }
 
-    if (match(TokenType::let)) {
+    if (match(TokenType::var_keyword)) {
         return let_statement();
     }
 
@@ -399,31 +399,31 @@ Statement Parser::continue_statement() {
 }
 
 Statement Parser::export_statement() {
-    if (match(TokenType::extern_keyword)) {
+    if (match(TokenType::foreign_keyword)) {
         Statement statement = extern_statement();
         statement.exported = true;
         return statement;
     }
 
-    if (match(TokenType::fn_keyword)) {
+    if (match(TokenType::func_keyword)) {
         Statement statement = function_statement();
         statement.exported = true;
         return statement;
     }
 
-    if (match(TokenType::impl_keyword)) {
+    if (match(TokenType::extend_keyword)) {
         Statement statement = impl_statement();
         statement.exported = true;
         return statement;
     }
 
-    if (match(TokenType::struct_keyword)) {
+    if (match(TokenType::record_keyword)) {
         Statement statement = struct_statement();
         statement.exported = true;
         return statement;
     }
 
-    if (match(TokenType::enum_keyword)) {
+    if (match(TokenType::choice_keyword)) {
         Statement statement = enum_statement();
         statement.exported = true;
         return statement;
@@ -435,11 +435,12 @@ Statement Parser::export_statement() {
         return statement;
     }
 
-    throw std::runtime_error("expected function, extern function, struct, enum, or constant after export");
+    throw std::runtime_error(
+        "expected function, foreign function, record, choice, extension, or constant after export");
 }
 
 Statement Parser::extern_statement() {
-    consume(TokenType::fn_keyword, "expected fn after extern");
+    consume(TokenType::func_keyword, "expected func after foreign");
     return function_statement(true);
 }
 
@@ -450,7 +451,7 @@ Statement Parser::for_statement() {
 
     if (match(TokenType::semicolon)) {
         statement.initializer = nullptr;
-    } else if (match(TokenType::let)) {
+    } else if (match(TokenType::var_keyword)) {
         statement.initializer = std::make_unique<Statement>(let_statement());
     } else if (check(TokenType::identifier) && check_next(TokenType::equal)) {
         statement.initializer = std::make_unique<Statement>(assignment_statement());
@@ -483,7 +484,7 @@ Statement Parser::for_statement() {
 
 Statement Parser::function_statement(bool is_extern) {
     const Token& keyword = previous();
-    const Token& name = consume(TokenType::identifier, "expected function name after fn");
+    const Token& name = consume(TokenType::identifier, "expected function name after func");
     std::vector<GenericParameter> parsed_generics;
     if (match(TokenType::less)) {
         parsed_generics = generic_parameters();
@@ -495,18 +496,18 @@ Statement Parser::function_statement(bool is_extern) {
     consume(TokenType::right_paren, "expected ')' after function parameters");
 
     TypeAnnotation return_type;
-    if (match(TokenType::arrow)) {
+    if (match(TokenType::colon)) {
         return_type = type_annotation();
     }
 
     if (is_extern) {
         std::string extern_symbol;
         if (match(TokenType::equal)) {
-            const Token& symbol = consume(TokenType::string_literal, "expected extern symbol string after '='");
+            const Token& symbol = consume(TokenType::string_literal, "expected foreign symbol string after '='");
             extern_symbol = decode_string_literal(symbol.lexeme);
         }
 
-        consume(TokenType::semicolon, "expected ';' after extern function declaration");
+        consume(TokenType::semicolon, "expected ';' after foreign function declaration");
 
         Statement statement{StatementKind::function, name.lexeme, nullptr, {}, {}};
         statement.type = return_type;
@@ -538,7 +539,7 @@ Statement Parser::impl_statement() {
     }
 
     TypeAnnotation receiver_type = type_annotation();
-    consume(TokenType::left_brace, "expected '{' before impl body");
+    consume(TokenType::left_brace, "expected '{' before extension body");
 
     std::vector<Statement> methods;
     while (!check(TokenType::right_brace) && !is_at_end()) {
@@ -547,13 +548,13 @@ Statement Parser::impl_statement() {
             exported = true;
         }
 
-        consume(TokenType::fn_keyword, "expected function in impl body");
+        consume(TokenType::func_keyword, "expected function in extension body");
         Statement method = function_statement();
         method.exported = exported;
         methods.push_back(std::move(method));
     }
 
-    consume(TokenType::right_brace, "expected '}' after impl body");
+    consume(TokenType::right_brace, "expected '}' after extension body");
 
     Statement statement{StatementKind::impl_statement, "", nullptr, std::move(methods), {}};
     statement.type = std::move(receiver_type);
@@ -606,13 +607,13 @@ Statement Parser::if_statement() {
 
 Statement Parser::let_statement() {
     const Token& keyword = previous();
-    const Token& name = consume(TokenType::identifier, "expected variable name after let");
+    const Token& name = consume(TokenType::identifier, "expected variable name after var");
     TypeAnnotation declared_type = optional_type_annotation();
     consume(TokenType::equal, "expected '=' after variable name");
     std::unique_ptr<Expression> value = expression();
-    consume(TokenType::semicolon, "expected ';' after let statement");
+    consume(TokenType::semicolon, "expected ';' after var statement");
 
-    Statement statement{StatementKind::let, name.lexeme, std::move(value), {}, {}};
+    Statement statement{StatementKind::var, name.lexeme, std::move(value), {}, {}};
     statement.type = declared_type;
     statement.location = location_from_token(keyword);
     return statement;
@@ -645,20 +646,20 @@ Statement Parser::return_statement() {
 
 Statement Parser::struct_statement() {
     const Token& keyword = previous();
-    const Token& name = consume(TokenType::identifier, "expected struct name after struct");
+    const Token& name = consume(TokenType::identifier, "expected record name after record");
     std::vector<GenericParameter> parsed_generics;
     if (match(TokenType::less)) {
         parsed_generics = generic_parameters();
-        consume(TokenType::greater, "expected '>' after struct generic parameters");
+        consume(TokenType::greater, "expected '>' after record generic parameters");
     }
 
-    consume(TokenType::left_brace, "expected '{' before struct fields");
+    consume(TokenType::left_brace, "expected '{' before record fields");
 
     std::vector<Parameter> fields;
     if (!check(TokenType::right_brace)) {
         while (true) {
-            const Token& field = consume(TokenType::identifier, "expected struct field name");
-            consume(TokenType::colon, "expected ':' after struct field name");
+            const Token& field = consume(TokenType::identifier, "expected record field name");
+            consume(TokenType::colon, "expected ':' after record field name");
             fields.push_back(Parameter{field.lexeme, type_annotation(), location_from_token(field)});
 
             if (!match(TokenType::comma)) {
@@ -671,7 +672,7 @@ Statement Parser::struct_statement() {
         }
     }
 
-    consume(TokenType::right_brace, "expected '}' after struct fields");
+    consume(TokenType::right_brace, "expected '}' after record fields");
 
     Statement statement{StatementKind::struct_statement, name.lexeme, nullptr, {}, {}};
     statement.parameters = std::move(fields);
@@ -682,23 +683,23 @@ Statement Parser::struct_statement() {
 
 Statement Parser::enum_statement() {
     const Token& keyword = previous();
-    const Token& name = consume(TokenType::identifier, "expected enum name after enum");
+    const Token& name = consume(TokenType::identifier, "expected choice name after choice");
     std::vector<GenericParameter> parsed_generics;
     if (match(TokenType::less)) {
         parsed_generics = generic_parameters();
-        consume(TokenType::greater, "expected '>' after enum generic parameters");
+        consume(TokenType::greater, "expected '>' after choice generic parameters");
     }
 
-    consume(TokenType::left_brace, "expected '{' before enum variants");
+    consume(TokenType::left_brace, "expected '{' before choice variants");
 
     std::vector<Parameter> variants;
     if (!check(TokenType::right_brace)) {
         while (true) {
-            const Token& variant = consume(TokenType::identifier, "expected enum variant name");
+            const Token& variant = consume(TokenType::identifier, "expected choice variant name");
             TypeAnnotation payload_type;
             if (match(TokenType::left_paren)) {
                 payload_type = type_annotation();
-                consume(TokenType::right_paren, "expected ')' after enum variant payload type");
+                consume(TokenType::right_paren, "expected ')' after choice variant payload type");
             }
 
             variants.push_back(Parameter{variant.lexeme, std::move(payload_type), location_from_token(variant)});
@@ -713,7 +714,7 @@ Statement Parser::enum_statement() {
         }
     }
 
-    consume(TokenType::right_brace, "expected '}' after enum variants");
+    consume(TokenType::right_brace, "expected '}' after choice variants");
 
     Statement statement{StatementKind::enum_statement, name.lexeme, nullptr, {}, {}};
     statement.parameters = std::move(variants);
@@ -767,7 +768,7 @@ std::vector<GenericParameter> Parser::generic_parameters() {
     while (true) {
         const Token& name = consume(TokenType::identifier, "expected generic parameter name");
         std::string bound;
-        if (match(TokenType::colon)) {
+        if (match(TokenType::is_keyword)) {
             if (!check(TokenType::identifier) && !check(TokenType::int_keyword) && !check(TokenType::real_keyword)) {
                 throw std::runtime_error("expected generic bound name");
             }
@@ -997,7 +998,7 @@ std::unique_ptr<Expression> Parser::factor() {
 std::unique_ptr<Expression> Parser::cast() {
     std::unique_ptr<Expression> expr = unary();
 
-    while (match(TokenType::as_keyword)) {
+    while (match(TokenType::to_keyword)) {
         const Token& op = previous();
         expr = make_cast(std::move(expr), type_annotation(), location_from_token(op));
     }
@@ -1011,7 +1012,7 @@ std::unique_ptr<Expression> Parser::unary() {
         return make_unary(op.lexeme, unary(), location_from_token(op));
     }
 
-    if (match(TokenType::match_keyword)) {
+    if (match(TokenType::case_keyword)) {
         return match_expression();
     }
 
@@ -1021,7 +1022,7 @@ std::unique_ptr<Expression> Parser::unary() {
 std::unique_ptr<Expression> Parser::match_expression() {
     const Token& keyword = previous();
     std::unique_ptr<Expression> subject = expression();
-    consume(TokenType::left_brace, "expected '{' before match cases");
+    consume(TokenType::left_brace, "expected '{' before case arms");
 
     std::vector<std::unique_ptr<Expression>> cases;
     while (!check(TokenType::right_brace) && !is_at_end()) {
@@ -1033,7 +1034,7 @@ std::unique_ptr<Expression> Parser::match_expression() {
             pattern = expression();
         }
 
-        consume(TokenType::fat_arrow, "expected '=>' after match pattern");
+        consume(TokenType::colon, "expected ':' after case pattern");
         cases.push_back(std::move(pattern));
         cases.push_back(expression());
 
@@ -1042,7 +1043,7 @@ std::unique_ptr<Expression> Parser::match_expression() {
         }
     }
 
-    consume(TokenType::right_brace, "expected '}' after match cases");
+    consume(TokenType::right_brace, "expected '}' after case arms");
     return make_match(std::move(subject), std::move(cases), location_from_token(keyword));
 }
 
@@ -1078,14 +1079,14 @@ std::unique_ptr<Expression> Parser::call() {
         if (looks_like_struct_literal()) {
             const SourceLocation location = expr->location;
             const std::string name = expression_to_type_name(*expr);
-            consume(TokenType::left_brace, "expected '{' before struct literal fields");
+            consume(TokenType::left_brace, "expected '{' before record literal fields");
 
             std::vector<std::string> field_names;
             std::vector<std::unique_ptr<Expression>> values;
             if (!check(TokenType::right_brace)) {
                 while (true) {
-                    const Token field = consume(TokenType::identifier, "expected struct literal field name");
-                    consume(TokenType::colon, "expected ':' after struct literal field name");
+                    const Token field = consume(TokenType::identifier, "expected record literal field name");
+                    consume(TokenType::colon, "expected ':' after record literal field name");
                     field_names.push_back(field.lexeme);
                     values.push_back(expression());
 
@@ -1099,7 +1100,7 @@ std::unique_ptr<Expression> Parser::call() {
                 }
             }
 
-            consume(TokenType::right_brace, "expected '}' after struct literal fields");
+            consume(TokenType::right_brace, "expected '}' after record literal fields");
             expr = make_struct_literal(name, std::move(field_names), std::move(values), location);
             continue;
         }

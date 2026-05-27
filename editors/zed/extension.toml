@@ -8,7 +8,7 @@ repository = "https://github.com/ComradeMashkov/dune"
 
 [grammars.dune]
 repository = "https://github.com/ComradeMashkov/dune"
-rev = "codex/zed-language-support"
+rev = "codex/dune-syntax-refresh"
 
 [language_servers.dune-lsp]
 name = "Dune LSP"

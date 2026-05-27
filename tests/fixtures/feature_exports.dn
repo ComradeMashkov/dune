@@ -1,11 +1,11 @@
 const HIDDEN: int = 7;
 
-fn hidden() -> int {
+func hidden(): int {
     return HIDDEN;
 }
 
 export const ANSWER: int = 42;
 
-export fn public() -> int {
+export func public(): int {
     return hidden();
 }

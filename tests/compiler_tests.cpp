@@ -26,7 +26,7 @@ bool expect(bool condition, const char* message) {
 }
 
 bool compiles_function_table_and_call() {
-    const dune::Bytecode bytecode = compile_source("fn add(a: int, b: int) -> int { return a + b; } "
+    const dune::Bytecode bytecode = compile_source("func add(a: int, b: int): int { return a + b; } "
                                                    "print(add(1, 2));");
 
     bool passed = true;
@@ -55,7 +55,7 @@ bool compiles_function_table_and_call() {
 }
 
 bool compiles_unit_call_statement() {
-    const dune::Bytecode bytecode = compile_source("fn log(message: text) -> unit { print(message); } log(\"ok\");");
+    const dune::Bytecode bytecode = compile_source("func log(message: text): unit { print(message); } log(\"done\");");
 
     bool saw_call = false;
     bool saw_pop = false;
@@ -71,13 +71,13 @@ bool compiles_unit_call_statement() {
 
     bool passed = true;
     passed = expect(saw_call, "expected unit call instruction") && passed;
-    passed = expect(saw_pop, "expected call statement result pop") && passed;
+    passed = expect(saw_pop, "expected call statement outcome pop") && passed;
     return passed;
 }
 
 bool compiles_arrays_and_module_calls() {
     const dune::Bytecode bytecode = compile_source("import math; "
-                                                   "let values: [int] = [1, 2]; "
+                                                   "var values: [int] = [1, 2]; "
                                                    "values.push(math.square(3)); "
                                                    "print(values.len()); print(values[2]);");
 
@@ -120,11 +120,11 @@ bool compiles_module_constants() {
 }
 
 bool compiles_operators_casts_and_methods() {
-    const dune::Bytecode bytecode = compile_source("let values: [int] = [1, 2]; values.push(3); "
+    const dune::Bytecode bytecode = compile_source("var values: [int] = [1, 2]; values.push(3); "
                                                    "print(values.pop()); values.clear(); print(values.is_empty()); "
-                                                   "let message: text = \"dune\"; print(message.len()); "
+                                                   "var message: text = \"dune\"; print(message.len()); "
                                                    "print(message.contains(\"un\")); "
-                                                   "let value: real64 = 17 as real64; "
+                                                   "var value: real64 = 17 to real64; "
                                                    "print(!false && (17 % 5 == 2));");
 
     bool saw_modulo = false;
@@ -159,43 +159,43 @@ bool compiles_operators_casts_and_methods() {
 }
 
 bool compiles_stdlib_primitives() {
-    const dune::Bytecode bytecode = compile_source("extern fn c_sqrt(value: real64) -> real64 = \"sqrt\"; "
-                                                   "let message: text = \"dune\"; print(message[0]); "
+    const dune::Bytecode bytecode = compile_source("foreign func c_sqrt(value: real64): real64 = \"sqrt\"; "
+                                                   "var message: text = \"dune\"; print(message[0]); "
                                                    "print(message[1:3]); "
-                                                   "let values: [int] = [1, 2, 3]; let part: [int] = values[:2]; "
-                                                   "for let i = 0; i < 3; i = i + 1 { "
+                                                   "var values: [int] = [1, 2, 3]; var part: [int] = values[:2]; "
+                                                   "for var i = 0; i < 3; i = i + 1 { "
                                                    "if i == 1 { continue; } break; } "
                                                    "print(c_sqrt(81.0));");
 
     bool saw_text_index = false;
     bool saw_slice = false;
     bool saw_backward_jump = false;
-    bool saw_extern_call = false;
+    bool saw_foreign_call = false;
     for (std::size_t index = 0; index < bytecode.instructions.size(); ++index) {
         const dune::Instruction& instruction = bytecode.instructions[index];
         saw_text_index = saw_text_index || instruction.op == dune::OpCode::load_index;
         saw_slice = saw_slice || instruction.op == dune::OpCode::load_slice;
-        saw_extern_call = saw_extern_call || instruction.op == dune::OpCode::call;
+        saw_foreign_call = saw_foreign_call || instruction.op == dune::OpCode::call;
         if (instruction.op == dune::OpCode::jump && instruction.operand < index) {
             saw_backward_jump = true;
         }
     }
 
     bool passed = true;
-    passed = expect(bytecode.functions.size() == 1, "expected one extern function") && passed;
-    passed = expect(bytecode.functions[0].is_extern, "expected extern function flag") && passed;
-    passed = expect(bytecode.functions[0].extern_symbol == "sqrt", "expected extern symbol") && passed;
+    passed = expect(bytecode.functions.size() == 1, "expected one foreign function") && passed;
+    passed = expect(bytecode.functions[0].is_extern, "expected foreign function flag") && passed;
+    passed = expect(bytecode.functions[0].extern_symbol == "sqrt", "expected foreign symbol") && passed;
     passed = expect(saw_text_index, "expected text index instruction") && passed;
     passed = expect(saw_slice, "expected slice instruction") && passed;
     passed = expect(saw_backward_jump, "expected loop backward jump") && passed;
-    passed = expect(saw_extern_call, "expected extern call instruction") && passed;
+    passed = expect(saw_foreign_call, "expected foreign call instruction") && passed;
     return passed;
 }
 
 bool compiles_generic_functions() {
-    const dune::Bytecode bytecode = compile_source("fn identity<T>(value: T) -> T { return value; } "
-                                                   "fn twice<T: numeric>(value: T) -> T { return value + value; } "
-                                                   "print(identity(42)); print(identity(\"ok\")); print(twice(9));");
+    const dune::Bytecode bytecode = compile_source("func identity<T>(value: T): T { return value; } "
+                                                   "func twice<T is numeric>(value: T): T { return value + value; } "
+                                                   "print(identity(42)); print(identity(\"done\")); print(twice(9));");
 
     int identity_count = 0;
     int twice_count = 0;
@@ -225,9 +225,9 @@ bool compiles_generic_functions() {
 
 bool compiles_stdlib_extension_methods() {
     const dune::Bytecode bytecode = compile_source("import array; import text; "
-                                                   "let values: [int] = [1, 2, 3]; "
+                                                   "var values: [int] = [1, 2, 3]; "
                                                    "print(values.first()); print(values.append(4).last()); "
-                                                   "let message: text = \" dune \"; print(message.trim());");
+                                                   "var message: text = \" dune \"; print(message.trim());");
 
     int call_count = 0;
     bool saw_array_first = false;
@@ -253,11 +253,11 @@ bool compiles_stdlib_extension_methods() {
     return passed;
 }
 
-bool compiles_struct_literals_fields_and_methods() {
+bool compiles_record_literals_fields_and_methods() {
     const dune::Bytecode bytecode =
-        compile_source("struct Point { x: int, y: int } "
-                       "impl Point { fn sum() -> int { return self.x + self.y; } } "
-                       "let p: Point = Point { x: 10, y: 20 }; print(p.x); print(p.sum());");
+        compile_source("record Point { x: int, y: int } "
+                       "extend Point { func sum(): int { return this.x + this.y; } } "
+                       "var p: Point = Point { x: 10, y: 20 }; print(p.x); print(p.sum());");
 
     bool saw_make_record = false;
     bool saw_load_field = false;
@@ -277,13 +277,13 @@ bool compiles_struct_literals_fields_and_methods() {
     bool passed = true;
     passed = expect(saw_make_record, "expected make_record instruction") && passed;
     passed = expect(saw_load_field, "expected load_field instruction") && passed;
-    passed = expect(saw_method, "expected struct method function") && passed;
+    passed = expect(saw_method, "expected record method function") && passed;
     return passed;
 }
 
-bool compiles_match_expression() {
-    const dune::Bytecode bytecode = compile_source("let value = 2; let chosen = match value { "
-                                                   "1 => 10, 2 => 20, _ => 30, }; print(chosen);");
+bool compiles_case_expression() {
+    const dune::Bytecode bytecode = compile_source("var value = 2; var chosen = case value { "
+                                                   "1 : 10, 2 : 20, _ : 30, }; print(chosen);");
 
     bool saw_equal = false;
     bool saw_false_jump = false;
@@ -295,18 +295,18 @@ bool compiles_match_expression() {
     }
 
     bool passed = true;
-    passed = expect(saw_equal, "expected match equality checks") && passed;
-    passed = expect(saw_false_jump, "expected match false jump") && passed;
-    passed = expect(saw_end_jump, "expected match end jump") && passed;
+    passed = expect(saw_equal, "expected case equality checks") && passed;
+    passed = expect(saw_false_jump, "expected case false jump") && passed;
+    passed = expect(saw_end_jump, "expected case end jump") && passed;
     return passed;
 }
 
-bool compiles_enum_variants_and_match() {
-    const dune::Bytecode bytecode = compile_source("enum Maybe { Some(int), None, } "
-                                                   "let value: Maybe = Some(42); "
-                                                   "let empty: Maybe = None; "
-                                                   "let chosen = match value { Some(x) => x, None => 0, }; "
-                                                   "print(chosen); print(match empty { Some(x) => x, None => 0, });");
+bool compiles_choice_variants_and_case() {
+    const dune::Bytecode bytecode = compile_source("choice Maybe { Present(int), Absent, } "
+                                                   "var value: Maybe = Present(42); "
+                                                   "var empty: Maybe = Absent; "
+                                                   "var chosen = case value { Present(x) : x, Absent : 0, }; "
+                                                   "print(chosen); print(case empty { Present(x) : x, Absent : 0, });");
 
     bool saw_make_variant = false;
     bool saw_make_unit_variant = false;
@@ -326,7 +326,7 @@ bool compiles_enum_variants_and_match() {
     passed = expect(saw_make_unit_variant, "expected unit variant construction") && passed;
     passed = expect(saw_load_variant_tag, "expected variant tag checks") && passed;
     passed = expect(saw_load_variant_payload, "expected variant payload binding") && passed;
-    passed = expect(saw_false_jump, "expected variant match branch") && passed;
+    passed = expect(saw_false_jump, "expected variant case branch") && passed;
     return passed;
 }
 
@@ -342,9 +342,9 @@ int main() {
     passed = compiles_stdlib_primitives() && passed;
     passed = compiles_generic_functions() && passed;
     passed = compiles_stdlib_extension_methods() && passed;
-    passed = compiles_struct_literals_fields_and_methods() && passed;
-    passed = compiles_match_expression() && passed;
-    passed = compiles_enum_variants_and_match() && passed;
+    passed = compiles_record_literals_fields_and_methods() && passed;
+    passed = compiles_case_expression() && passed;
+    passed = compiles_choice_variants_and_case() && passed;
 
     return passed ? 0 : 1;
 }

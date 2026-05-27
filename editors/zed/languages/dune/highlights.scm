@@ -1,22 +1,23 @@
 [
-  "as"
   "break"
+  "case"
+  "choice"
   "const"
   "continue"
   "else"
-  "enum"
   "export"
-  "extern"
-  "fn"
+  "extend"
+  "foreign"
+  "func"
   "for"
   "if"
-  "impl"
   "import"
-  "let"
-  "match"
+  "is"
   "print"
+  "record"
   "return"
-  "struct"
+  "to"
+  "var"
   "while"
 ] @keyword
 
@@ -59,7 +60,7 @@
 (function_declaration
   name: (identifier) @function)
 
-(extern_function_declaration
+(foreign_function_declaration
   name: (identifier) @function)
 
 (parameter
@@ -77,10 +78,10 @@
 (field_initializer
   name: (identifier) @property)
 
-(struct_field
+(record_field
   name: (identifier) @property)
 
-(enum_variant
+(choice_variant
   name: (identifier) @variant)
 
 (identifier) @variable
@@ -106,8 +107,6 @@
   "||"
   "!"
   "="
-  "=>"
-  "->"
 ] @operator
 
 [

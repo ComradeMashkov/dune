@@ -329,7 +329,7 @@ void print_value(const Value& value, std::ostream& output) {
     case ValueKind::record:
         throw std::runtime_error("cannot print record value");
     case ValueKind::variant:
-        throw std::runtime_error("cannot print enum value");
+        throw std::runtime_error("cannot print choice value");
     }
 }
 
@@ -400,7 +400,7 @@ double numeric_argument(const Value& value) {
         break;
     }
 
-    throw std::runtime_error("extern function expected numeric argument");
+    throw std::runtime_error("foreign function expected numeric argument");
 }
 
 Value cast_signed(const Value& value) {
@@ -721,7 +721,7 @@ void VirtualMachine::run(std::ostream& output) {
         case OpCode::load_variant_tag: {
             const Value value = pop();
             if (value.kind != ValueKind::variant) {
-                throw std::runtime_error("expected enum value");
+                throw std::runtime_error("expected choice value");
             }
 
             stack_.push_back(make_unsigned(value.variant_tag));
@@ -731,7 +731,7 @@ void VirtualMachine::run(std::ostream& output) {
         case OpCode::load_variant_payload: {
             const Value value = pop();
             if (value.kind != ValueKind::variant || value.variant_payload == nullptr) {
-                throw std::runtime_error("expected enum variant payload");
+                throw std::runtime_error("expected choice variant payload");
             }
 
             stack_.push_back(*value.variant_payload);
@@ -965,7 +965,7 @@ Value VirtualMachine::call_extern_function(const Bytecode::Function& function, s
         return make_real(std::pow(numeric_argument(arguments[0]), numeric_argument(arguments[1])));
     }
 
-    throw std::runtime_error("unsupported extern function '" + symbol + "'");
+    throw std::runtime_error("unsupported foreign function '" + symbol + "'");
 }
 
 Value VirtualMachine::pop() {

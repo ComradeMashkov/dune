@@ -93,7 +93,7 @@ struct Expression {
 };
 
 enum class StatementKind {
-    let,
+    var,
     const_statement,
     assign,
     print,

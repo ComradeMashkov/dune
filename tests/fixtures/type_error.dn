@@ -1,1 +1,1 @@
-let x: int = true;
+var x: int = true;

@@ -299,26 +299,26 @@ add_test(
         ${CMAKE_COMMAND}
         -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/generics_bounds.dn
-        -D EXPECTED_OUTPUT="42\nok\nlang\n144\n2.25\n18"
+        -D EXPECTED_OUTPUT="42\ndone\nlang\n144\n2.25\n18"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
 )
 
 add_test(
-    NAME cli_structs_stdlib
+    NAME cli_records_stdlib
     COMMAND
         ${CMAKE_COMMAND}
         -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
-        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/structs_stdlib.dn
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/records_stdlib.dn
         -D EXPECTED_OUTPUT="10\n30\n42\n7\n1\n1\n100\n9\n5\nbad\n1\n4\n1"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
 )
 
 add_test(
-    NAME cli_enums_match
+    NAME cli_choices_case
     COMMAND
         ${CMAKE_COMMAND}
         -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
-        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/enums_match.dn
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/choices_case.dn
         -D EXPECTED_OUTPUT="30\n7\n31\n99"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
 )
@@ -418,28 +418,28 @@ add_test(
         -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/generics_bounds.dn
         -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/generics_bounds_native
-        -D EXPECTED_OUTPUT="42\nok\nlang\n144\n2.25\n18"
+        -D EXPECTED_OUTPUT="42\ndone\nlang\n144\n2.25\n18"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
 )
 
 add_test(
-    NAME cli_build_native_structs_stdlib
+    NAME cli_build_native_records_stdlib
     COMMAND
         ${CMAKE_COMMAND}
         -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
-        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/structs_stdlib.dn
-        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/structs_stdlib_native
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/records_stdlib.dn
+        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/records_stdlib_native
         -D EXPECTED_OUTPUT="10\n30\n42\n7\n1\n1\n100\n9\n5\nbad\n1\n4\n1"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
 )
 
 add_test(
-    NAME cli_build_native_enums_match
+    NAME cli_build_native_choices_case
     COMMAND
         ${CMAKE_COMMAND}
         -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
-        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/enums_match.dn
-        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/enums_match_native
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/choices_case.dn
+        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/choices_case_native
         -D EXPECTED_OUTPUT="30\n7\n31\n99"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
 )

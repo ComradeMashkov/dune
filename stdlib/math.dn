@@ -7,15 +7,15 @@ const TAU32: real32 = PI32 * 2.0;
 const E32: real32 = 2.7182817;
 const INVERSE_E32: real32 = 1.0 / E32;
 
-fn square<T: numeric>(value: T) -> T {
+func square<T is numeric>(value: T): T {
     return value * value;
 }
 
-fn cube<T: numeric>(value: T) -> T {
+func cube<T is numeric>(value: T): T {
     return value * value * value;
 }
 
-fn abs<T: numeric>(value: T) -> T {
+func abs<T is numeric>(value: T): T {
     if value < 0 {
         return 0 - value;
     }
@@ -23,7 +23,7 @@ fn abs<T: numeric>(value: T) -> T {
     return value;
 }
 
-fn min<T: numeric>(left: T, right: T) -> T {
+func min<T is numeric>(left: T, right: T): T {
     if left < right {
         return left;
     }
@@ -31,7 +31,7 @@ fn min<T: numeric>(left: T, right: T) -> T {
     return right;
 }
 
-fn max<T: numeric>(left: T, right: T) -> T {
+func max<T is numeric>(left: T, right: T): T {
     if left > right {
         return left;
     }
@@ -39,7 +39,7 @@ fn max<T: numeric>(left: T, right: T) -> T {
     return right;
 }
 
-fn clamp<T: numeric>(value: T, lower: T, upper: T) -> T {
+func clamp<T is numeric>(value: T, lower: T, upper: T): T {
     if value < lower {
         return lower;
     }
@@ -51,13 +51,13 @@ fn clamp<T: numeric>(value: T, lower: T, upper: T) -> T {
     return value;
 }
 
-fn sqrt<T: real>(value: T) -> T {
+func sqrt<T is real>(value: T): T {
     if value <= 0.0 {
         return 0.0;
     }
 
-    let guess: T = value;
-    let index = 0;
+    var guess: T = value;
+    var index = 0;
     while index < 24 {
         guess = (guess + value / guess) / 2.0;
         index = index + 1;
@@ -66,10 +66,10 @@ fn sqrt<T: real>(value: T) -> T {
     return guess;
 }
 
-fn normalize_radians<T: real>(value: T) -> T {
-    let pi: T = 3.141592653589793;
-    let tau: T = pi * 2.0;
-    let x: T = value;
+func normalize_radians<T is real>(value: T): T {
+    var pi: T = 3.141592653589793;
+    var tau: T = pi * 2.0;
+    var x: T = value;
 
     while x > pi {
         x = x - tau;
@@ -82,15 +82,15 @@ fn normalize_radians<T: real>(value: T) -> T {
     return x;
 }
 
-fn sin<T: real>(value: T) -> T {
-    let x: T = normalize_radians(value);
-    let term: T = x;
-    let sum: T = x;
-    let n: T = 1.0;
+func sin<T is real>(value: T): T {
+    var x: T = normalize_radians(value);
+    var term: T = x;
+    var sum: T = x;
+    var n: T = 1.0;
 
     while n < 12.0 {
-        let a: T = 2.0 * n;
-        let b: T = 2.0 * n + 1.0;
+        var a: T = 2.0 * n;
+        var b: T = 2.0 * n + 1.0;
         term = (0.0 - term) * x * x / (a * b);
         sum = sum + term;
         n = n + 1.0;
@@ -99,15 +99,15 @@ fn sin<T: real>(value: T) -> T {
     return sum;
 }
 
-fn cos<T: real>(value: T) -> T {
-    let x: T = normalize_radians(value);
-    let term: T = 1.0;
-    let sum: T = 1.0;
-    let n: T = 1.0;
+func cos<T is real>(value: T): T {
+    var x: T = normalize_radians(value);
+    var term: T = 1.0;
+    var sum: T = 1.0;
+    var n: T = 1.0;
 
     while n < 12.0 {
-        let a: T = 2.0 * n - 1.0;
-        let b: T = 2.0 * n;
+        var a: T = 2.0 * n - 1.0;
+        var b: T = 2.0 * n;
         term = (0.0 - term) * x * x / (a * b);
         sum = sum + term;
         n = n + 1.0;
@@ -116,15 +116,15 @@ fn cos<T: real>(value: T) -> T {
     return sum;
 }
 
-fn tan<T: real>(value: T) -> T {
+func tan<T is real>(value: T): T {
     return sin(value) / cos(value);
 }
 
-fn exp<T: real>(value: T) -> T {
-    let e: T = 2.718281828459045;
-    let x: T = value;
-    let scale = 0;
-    let negative_one: T = 0.0 - 1.0;
+func exp<T is real>(value: T): T {
+    var e: T = 2.718281828459045;
+    var x: T = value;
+    var scale = 0;
+    var negative_one: T = 0.0 - 1.0;
 
     while x > 1.0 {
         x = x - 1.0;
@@ -136,9 +136,9 @@ fn exp<T: real>(value: T) -> T {
         scale = scale - 1;
     }
 
-    let term: T = 1.0;
-    let sum: T = 1.0;
-    let n: T = 1.0;
+    var term: T = 1.0;
+    var sum: T = 1.0;
+    var n: T = 1.0;
     while n < 28.0 {
         term = term * x / n;
         sum = sum + term;
@@ -158,15 +158,15 @@ fn exp<T: real>(value: T) -> T {
     return sum;
 }
 
-fn ln<T: real>(value: T) -> T {
+func ln<T is real>(value: T): T {
     if value <= 0.0 {
         return 0.0;
     }
 
-    let e: T = 2.718281828459045;
-    let inverse_e: T = 1.0 / e;
-    let x: T = value;
-    let scale_value: T = 0.0;
+    var e: T = 2.718281828459045;
+    var inverse_e: T = 1.0 / e;
+    var x: T = value;
+    var scale_value: T = 0.0;
 
     while x > e {
         x = x / e;
@@ -178,11 +178,11 @@ fn ln<T: real>(value: T) -> T {
         scale_value = scale_value - 1.0;
     }
 
-    let y: T = (x - 1.0) / (x + 1.0);
-    let y2: T = y * y;
-    let term: T = y;
-    let sum: T = 0.0;
-    let n: T = 1.0;
+    var y: T = (x - 1.0) / (x + 1.0);
+    var y2: T = y * y;
+    var term: T = y;
+    var sum: T = 0.0;
+    var n: T = 1.0;
 
     while n < 39.0 {
         sum = sum + term / n;
@@ -193,9 +193,9 @@ fn ln<T: real>(value: T) -> T {
     return 2.0 * sum + scale_value;
 }
 
-fn pow<T: real>(base: T, exponent: int) -> T {
-    let result: T = 1.0;
-    let count = exponent;
+func pow<T is real>(base: T, exponent: int): T {
+    var result: T = 1.0;
+    var count = exponent;
     if count < 0 {
         count = 0 - count;
     }
@@ -212,12 +212,12 @@ fn pow<T: real>(base: T, exponent: int) -> T {
     return result;
 }
 
-fn pow<T: real>(base: T, exponent: T) -> T {
+func pow<T is real>(base: T, exponent: T): T {
     return exp(exponent * ln(base));
 }
 
-fn floor<T: real>(value: T) -> T {
-    let result: T = 0.0;
+func floor<T is real>(value: T): T {
+    var result: T = 0.0;
     if value >= 0.0 {
         while result + 1.0 <= value {
             result = result + 1.0;
@@ -231,8 +231,8 @@ fn floor<T: real>(value: T) -> T {
     return result;
 }
 
-fn ceil<T: real>(value: T) -> T {
-    let result: T = floor(value);
+func ceil<T is real>(value: T): T {
+    var result: T = floor(value);
     if result < value {
         return result + 1.0;
     }
@@ -240,7 +240,7 @@ fn ceil<T: real>(value: T) -> T {
     return result;
 }
 
-fn round<T: real>(value: T) -> T {
+func round<T is real>(value: T): T {
     if value >= 0.0 {
         return floor(value + 0.5);
     }

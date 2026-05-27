@@ -1,4 +1,4 @@
-let value = 17;
+var value = 17;
 print(0 - value);
 print(-value);
 print(17 % 5);
@@ -6,17 +6,17 @@ print(!false);
 print(false && (1 / 0 == 0));
 print(true || (1 / 0 == 0));
 
-let count: real64 = value as real64;
+var count: real64 = value to real64;
 print(count / 2.0);
 
-let code: int = 'A' as int;
-let letter: glyph = 66 as glyph;
-let flag: bool = 0 as bool;
+var code: int = 'A' to int;
+var letter: glyph = 66 to glyph;
+var flag: bool = 0 to bool;
 print(code);
 print(letter);
 print(flag);
 
-let values: [int] = [1, 2];
+var values: [int] = [1, 2];
 print(values.is_empty());
 values.push(3);
 print(values.pop());
@@ -24,7 +24,7 @@ print(values.len());
 values.clear();
 print(values.is_empty());
 
-let message: text = "dune language";
+var message: text = "dune language";
 print(message.len());
 print(message.contains("lang"));
 print(message.starts_with("dune"));

@@ -350,7 +350,7 @@ void Compiler::compile_statements(const std::vector<Statement>& statements) {
 
 void Compiler::compile_statement(const Statement& statement) {
     switch (statement.kind) {
-    case StatementKind::let:
+    case StatementKind::var:
     case StatementKind::const_statement: {
         compile_expression(*statement.expression);
         const Type type =
@@ -549,7 +549,7 @@ void Compiler::compile_match_expression(const Expression& expression) {
     const Type subject_type = expression_type(*expression.left);
     compile_expression(*expression.left);
     const std::size_t subject_slot =
-        declare_local("__match_subject_" + std::to_string(temporary_count_++), subject_type);
+        declare_local("__case_subject_" + std::to_string(temporary_count_++), subject_type);
     emit(OpCode::store_local, subject_slot);
 
     if (subject_type.kind == ValueType::enum_type) {
@@ -641,7 +641,7 @@ void Compiler::compile_variant_constructor(const Expression& expression) {
         if (expression.kind == ExpressionKind::call || expression.kind == ExpressionKind::method_call) {
             compile_expression(*expression.arguments.at(0));
         } else {
-            throw std::runtime_error("enum variant payload constructor needs an argument");
+            throw std::runtime_error("choice variant payload constructor needs an argument");
         }
 
         emit(OpCode::make_variant, resolution.tag);
@@ -656,7 +656,7 @@ void Compiler::compile_member_expression(const Expression& expression) {
     if (receiver_type != expression_types_.end() && receiver_type->second.kind == ValueType::struct_type) {
         const auto layout = structs_.find(receiver_type->second.name);
         if (layout == structs_.end()) {
-            throw std::runtime_error("unknown struct '" + receiver_type->second.name + "'");
+            throw std::runtime_error("unknown record '" + receiver_type->second.name + "'");
         }
 
         const auto field = layout->second.field_indices.find(expression.lexeme);
@@ -680,7 +680,7 @@ void Compiler::compile_member_expression(const Expression& expression) {
 void Compiler::compile_struct_literal(const Expression& expression) {
     const auto layout = structs_.find(expression.lexeme);
     if (layout == structs_.end()) {
-        throw std::runtime_error("unknown struct '" + expression.lexeme + "'");
+        throw std::runtime_error("unknown record '" + expression.lexeme + "'");
     }
 
     for (const Parameter& field : layout->second.fields) {

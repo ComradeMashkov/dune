@@ -21,26 +21,26 @@ bool expect(bool condition, const char* message) {
     return true;
 }
 
-bool parses_let_and_print() {
-    const dune::Program program = parse_source("let x = 40 + 2;\nprint(x);");
+bool parses_var_and_print() {
+    const dune::Program program = parse_source("var x = 40 + 2;\nprint(x);");
 
     if (!expect(program.statements.size() == 2, "expected two statements")) {
         return false;
     }
 
     bool passed = true;
-    const dune::Statement& let_statement = program.statements[0];
-    passed = expect(let_statement.kind == dune::StatementKind::let, "expected let statement") && passed;
-    passed = expect(let_statement.name == "x", "expected let variable name") && passed;
+    const dune::Statement& var_statement = program.statements[0];
+    passed = expect(var_statement.kind == dune::StatementKind::var, "expected var statement") && passed;
+    passed = expect(var_statement.name == "x", "expected var variable name") && passed;
     passed =
-        expect(let_statement.expression->kind == dune::ExpressionKind::binary, "expected binary expression") && passed;
-    passed = expect(let_statement.expression->lexeme == "+", "expected plus expression") && passed;
+        expect(var_statement.expression->kind == dune::ExpressionKind::binary, "expected binary expression") && passed;
+    passed = expect(var_statement.expression->lexeme == "+", "expected plus expression") && passed;
     passed =
-        expect(let_statement.expression->left->kind == dune::ExpressionKind::number, "expected left number") && passed;
-    passed = expect(let_statement.expression->left->lexeme == "40", "expected left number lexeme") && passed;
-    passed = expect(let_statement.expression->right->kind == dune::ExpressionKind::number, "expected right number") &&
+        expect(var_statement.expression->left->kind == dune::ExpressionKind::number, "expected left number") && passed;
+    passed = expect(var_statement.expression->left->lexeme == "40", "expected left number lexeme") && passed;
+    passed = expect(var_statement.expression->right->kind == dune::ExpressionKind::number, "expected right number") &&
              passed;
-    passed = expect(let_statement.expression->right->lexeme == "2", "expected right number lexeme") && passed;
+    passed = expect(var_statement.expression->right->lexeme == "2", "expected right number lexeme") && passed;
 
     const dune::Statement& print_statement = program.statements[1];
     passed = expect(print_statement.kind == dune::StatementKind::print, "expected print statement") && passed;
@@ -53,7 +53,7 @@ bool parses_let_and_print() {
 }
 
 bool parses_operator_precedence() {
-    const dune::Program program = parse_source("let value = 1 + 2 * 3;");
+    const dune::Program program = parse_source("var value = 1 + 2 * 3;");
 
     if (!expect(program.statements.size() == 1, "expected one statement")) {
         return false;
@@ -74,7 +74,7 @@ bool parses_operator_precedence() {
 }
 
 bool parses_control_flow() {
-    const dune::Program program = parse_source("let x = 3; while x > 0 { x = x - 1; } "
+    const dune::Program program = parse_source("var x = 3; while x > 0 { x = x - 1; } "
                                                "if x == 0 { print(true); } else { print(false); }");
 
     if (!expect(program.statements.size() == 3, "expected three statements")) {
@@ -105,10 +105,10 @@ bool parses_control_flow() {
 }
 
 bool parses_functions_and_types() {
-    const dune::Program program = parse_source("fn add(a: int, b: int) -> int { return a + b; } "
-                                               "let total: int = add(10, 20); print(total);");
+    const dune::Program program = parse_source("func add(a: int, b: int): int { return a + b; } "
+                                               "var total: int = add(10, 20); print(total);");
 
-    if (!expect(program.statements.size() == 3, "expected function, let, and print statements")) {
+    if (!expect(program.statements.size() == 3, "expected function, var, and print statements")) {
         return false;
     }
 
@@ -129,18 +129,18 @@ bool parses_functions_and_types() {
     passed =
         expect(function.body[0].expression->kind == dune::ExpressionKind::binary, "expected return binary") && passed;
 
-    const dune::Statement& let_statement = program.statements[1];
-    passed = expect(let_statement.type.has_type, "expected let type annotation") && passed;
-    passed = expect(let_statement.expression->kind == dune::ExpressionKind::call, "expected call expression") && passed;
-    passed = expect(let_statement.expression->lexeme == "add", "expected call target") && passed;
-    passed = expect(let_statement.expression->arguments.size() == 2, "expected two call arguments") && passed;
+    const dune::Statement& var_statement = program.statements[1];
+    passed = expect(var_statement.type.has_type, "expected var type annotation") && passed;
+    passed = expect(var_statement.expression->kind == dune::ExpressionKind::call, "expected call expression") && passed;
+    passed = expect(var_statement.expression->lexeme == "add", "expected call target") && passed;
+    passed = expect(var_statement.expression->arguments.size() == 2, "expected two call arguments") && passed;
 
     return passed;
 }
 
 bool parses_extended_types() {
     const dune::Program program =
-        parse_source("let byte: u8 = 255; let wide: uint64 = 500; let ratio: real = 1.5; let mark: glyph = 'z';");
+        parse_source("var byte: u8 = 255; var wide: uint64 = 500; var ratio: real = 1.5; var mark: glyph = 'z';");
 
     if (!expect(program.statements.size() == 4, "expected four typed statements")) {
         return false;
@@ -164,12 +164,12 @@ bool parses_extended_types() {
 }
 
 bool parses_standard_types_and_unit_calls() {
-    const dune::Program program = parse_source("fn log(message: text) -> unit { print(message); return; } "
-                                               "fn noop() -> unit { } "
-                                               "let tiny: i8 = 1; let wide: i64 = 2; "
-                                               "let index: usize = 3; let offset: isize = 4; "
-                                               "let rough: real32 = 1.5; let exact: real64 = 2.5; "
-                                               "log(\"ok\"); noop();");
+    const dune::Program program = parse_source("func log(message: text): unit { print(message); return; } "
+                                               "func noop(): unit { } "
+                                               "var tiny: i8 = 1; var wide: i64 = 2; "
+                                               "var index: usize = 3; var offset: isize = 4; "
+                                               "var rough: real32 = 1.5; var exact: real64 = 2.5; "
+                                               "log(\"done\"); noop();");
 
     if (!expect(program.statements.size() == 10, "expected ten statements")) {
         return false;
@@ -206,10 +206,10 @@ bool parses_standard_types_and_unit_calls() {
 }
 
 bool parses_arrays_imports_and_module_calls() {
-    const dune::Program program = parse_source("import math; let values: [int] = [1, math.square(2)]; "
+    const dune::Program program = parse_source("import math; var values: [int] = [1, math.square(2)]; "
                                                "values.push(9); print(values.len()); print(values[1]);");
 
-    if (!expect(program.statements.size() == 5, "expected import, array let, calls, and print statements")) {
+    if (!expect(program.statements.size() == 5, "expected import, array var, calls, and print statements")) {
         return false;
     }
 
@@ -217,16 +217,16 @@ bool parses_arrays_imports_and_module_calls() {
     passed = expect(program.statements[0].kind == dune::StatementKind::import_statement, "expected import statement") &&
              passed;
     passed = expect(program.statements[0].name == "math", "expected math import") && passed;
-    const dune::Statement& let_statement = program.statements[1];
-    passed = expect(let_statement.type.type.kind == dune::ValueType::array_type, "expected array annotation") && passed;
-    passed = expect(let_statement.type.type.element != nullptr, "expected array element type") && passed;
-    passed = expect(let_statement.type.type.element->kind == dune::ValueType::int_type, "expected int array") && passed;
-    passed = expect(let_statement.expression->kind == dune::ExpressionKind::array, "expected array literal") && passed;
-    passed = expect(let_statement.expression->arguments.size() == 2, "expected two array elements") && passed;
-    passed = expect(let_statement.expression->arguments[1]->kind == dune::ExpressionKind::method_call,
+    const dune::Statement& var_statement = program.statements[1];
+    passed = expect(var_statement.type.type.kind == dune::ValueType::array_type, "expected array annotation") && passed;
+    passed = expect(var_statement.type.type.element != nullptr, "expected array element type") && passed;
+    passed = expect(var_statement.type.type.element->kind == dune::ValueType::int_type, "expected int array") && passed;
+    passed = expect(var_statement.expression->kind == dune::ExpressionKind::array, "expected array literal") && passed;
+    passed = expect(var_statement.expression->arguments.size() == 2, "expected two array elements") && passed;
+    passed = expect(var_statement.expression->arguments[1]->kind == dune::ExpressionKind::method_call,
                     "expected module method call syntax") &&
              passed;
-    passed = expect(let_statement.expression->arguments[1]->lexeme == "square", "expected square member") && passed;
+    passed = expect(var_statement.expression->arguments[1]->lexeme == "square", "expected square member") && passed;
 
     const dune::Statement& push_statement = program.statements[2];
     passed = expect(push_statement.kind == dune::StatementKind::expression_statement, "expected push call statement") &&
@@ -283,10 +283,10 @@ bool parses_constants_and_module_members() {
 }
 
 bool parses_casts_unary_logical_and_methods() {
-    const dune::Program program = parse_source("let ok: bool = !false && true || (17 % 5 == 2); "
-                                               "let exact: real64 = 17 as real64; "
-                                               "let values: [int] = [1, 2]; values.pop(); "
-                                               "let message: text = \"dune\"; print(message.contains(\"du\"));");
+    const dune::Program program = parse_source("var done: bool = !false && true || (17 % 5 == 2); "
+                                               "var exact: real64 = 17 to real64; "
+                                               "var values: [int] = [1, 2]; values.pop(); "
+                                               "var message: text = \"dune\"; print(message.contains(\"du\"));");
 
     if (!expect(program.statements.size() == 6, "expected operators and methods statements")) {
         return false;
@@ -323,12 +323,12 @@ bool parses_casts_unary_logical_and_methods() {
 
 bool parses_stdlib_primitives() {
     const dune::Program program = parse_source("import text; "
-                                               "export extern fn c_sqrt(value: real64) -> real64 = \"sqrt\"; "
-                                               "let message: text = \"dune\"; print(message[1:3]); print(message[:2]); "
-                                               "for let i = 0; i < 3; i = i + 1 { "
+                                               "export foreign func c_sqrt(value: real64): real64 = \"sqrt\"; "
+                                               "var message: text = \"dune\"; print(message[1:3]); print(message[:2]); "
+                                               "for var i = 0; i < 3; i = i + 1 { "
                                                "if i == 1 { continue; } break; }");
 
-    if (!expect(program.statements.size() == 6, "expected import, extern, text, prints, and for statements")) {
+    if (!expect(program.statements.size() == 6, "expected import, foreign, text, prints, and for statements")) {
         return false;
     }
 
@@ -338,10 +338,10 @@ bool parses_stdlib_primitives() {
     passed = expect(program.statements[0].name == "text", "expected text module name") && passed;
 
     const dune::Statement& external = program.statements[1];
-    passed = expect(external.kind == dune::StatementKind::function, "expected extern function") && passed;
-    passed = expect(external.is_extern, "expected extern flag") && passed;
+    passed = expect(external.kind == dune::StatementKind::function, "expected foreign function") && passed;
+    passed = expect(external.is_extern, "expected foreign flag") && passed;
     passed = expect(external.exported, "expected export flag") && passed;
-    passed = expect(external.extern_symbol == "sqrt", "expected extern symbol") && passed;
+    passed = expect(external.extern_symbol == "sqrt", "expected foreign symbol") && passed;
 
     const dune::Statement& first_print = program.statements[3];
     passed = expect(first_print.expression->kind == dune::ExpressionKind::slice, "expected text slice") && passed;
@@ -367,8 +367,9 @@ bool parses_stdlib_primitives() {
 }
 
 bool parses_generic_functions() {
-    const dune::Program program = parse_source("fn choose<T, R: real, U: numeric>(left: T, middle: R, right: U) -> U { "
-                                               "return right; } print(choose(\"x\", 1.5, 7));");
+    const dune::Program program =
+        parse_source("func choose<T, R is real, U is numeric>(left: T, middle: R, right: U): U { "
+                     "return right; } print(choose(\"x\", 1.5, 7));");
 
     if (!expect(program.statements.size() == 2, "expected generic function and print statements")) {
         return false;
@@ -402,22 +403,22 @@ bool parses_generic_functions() {
     return passed;
 }
 
-bool parses_impl_methods() {
-    const dune::Program program = parse_source("export impl<T> [T] { "
-                                               "fn first() -> T { return self[0]; } "
-                                               "fn append(value: T) -> [T] { return self; } "
+bool parses_extend_methods() {
+    const dune::Program program = parse_source("export extend<T> [T] { "
+                                               "func first(): T { return this[0]; } "
+                                               "func append(value: T): [T] { return this; } "
                                                "}");
 
-    if (!expect(program.statements.size() == 1, "expected one impl statement")) {
+    if (!expect(program.statements.size() == 1, "expected one extend statement")) {
         return false;
     }
 
     bool passed = true;
     const dune::Statement& statement = program.statements[0];
-    passed = expect(statement.kind == dune::StatementKind::impl_statement, "expected impl statement") && passed;
-    passed = expect(statement.exported, "expected exported impl") && passed;
-    passed = expect(statement.generic_parameters.size() == 1, "expected one impl generic") && passed;
-    passed = expect(statement.generic_parameters[0].name == "T", "expected impl generic name") && passed;
+    passed = expect(statement.kind == dune::StatementKind::impl_statement, "expected extend statement") && passed;
+    passed = expect(statement.exported, "expected exported extend") && passed;
+    passed = expect(statement.generic_parameters.size() == 1, "expected one extend generic") && passed;
+    passed = expect(statement.generic_parameters[0].name == "T", "expected extend generic name") && passed;
     passed = expect(statement.type.type.kind == dune::ValueType::array_type, "expected array receiver") && passed;
     passed = expect(statement.type.type.element != nullptr, "expected receiver element") && passed;
     passed = expect(statement.type.type.element->kind == dune::ValueType::generic_type, "expected generic element") &&
@@ -437,32 +438,32 @@ bool parses_impl_methods() {
     return passed;
 }
 
-bool parses_structs_and_struct_literals() {
-    const dune::Program program = parse_source("struct Point { x: real64, y: real64 } "
-                                               "impl Point { fn sum() -> real64 { return self.x + self.y; } } "
-                                               "let p: Point = Point { x: 1.5, y: 2.5 }; print(p.sum());");
+bool parses_records_and_record_literals() {
+    const dune::Program program = parse_source("record Point { x: real64, y: real64 } "
+                                               "extend Point { func sum(): real64 { return this.x + this.y; } } "
+                                               "var p: Point = Point { x: 1.5, y: 2.5 }; print(p.sum());");
 
-    if (!expect(program.statements.size() == 4, "expected struct, impl, let, and print")) {
+    if (!expect(program.statements.size() == 4, "expected record, extend, var, and print")) {
         return false;
     }
 
     bool passed = true;
     const dune::Statement& structure = program.statements[0];
-    passed = expect(structure.kind == dune::StatementKind::struct_statement, "expected struct statement") && passed;
-    passed = expect(structure.name == "Point", "expected struct name") && passed;
-    passed = expect(structure.parameters.size() == 2, "expected two struct fields") && passed;
+    passed = expect(structure.kind == dune::StatementKind::struct_statement, "expected record statement") && passed;
+    passed = expect(structure.name == "Point", "expected record name") && passed;
+    passed = expect(structure.parameters.size() == 2, "expected two record fields") && passed;
     passed = expect(structure.parameters[0].name == "x", "expected first field name") && passed;
     passed =
         expect(structure.parameters[0].type.type.kind == dune::ValueType::real_type, "expected real64 field") && passed;
 
     const dune::Statement& methods = program.statements[1];
-    passed = expect(methods.kind == dune::StatementKind::impl_statement, "expected impl statement") && passed;
+    passed = expect(methods.kind == dune::StatementKind::impl_statement, "expected extend statement") && passed;
     passed = expect(methods.type.type.kind == dune::ValueType::generic_type, "expected named receiver type") && passed;
     passed = expect(methods.type.type.name == "Point", "expected Point receiver") && passed;
 
     const dune::Expression& literal = *program.statements[2].expression;
     passed =
-        expect(literal.kind == dune::ExpressionKind::struct_literal, "expected struct literal expression") && passed;
+        expect(literal.kind == dune::ExpressionKind::struct_literal, "expected record literal expression") && passed;
     passed = expect(literal.lexeme == "Point", "expected Point literal") && passed;
     passed = expect(literal.field_names.size() == 2, "expected two literal field names") && passed;
     passed = expect(literal.field_names[0] == "x", "expected first literal field name") && passed;
@@ -470,27 +471,27 @@ bool parses_structs_and_struct_literals() {
         expect(literal.arguments[1]->kind == dune::ExpressionKind::floating, "expected floating field value") && passed;
 
     const dune::Expression& call = *program.statements[3].expression;
-    passed = expect(call.kind == dune::ExpressionKind::method_call, "expected struct method call") && passed;
+    passed = expect(call.kind == dune::ExpressionKind::method_call, "expected record method call") && passed;
     passed = expect(call.lexeme == "sum", "expected method name") && passed;
 
     return passed;
 }
 
-bool parses_generic_structs_and_match() {
-    const dune::Program program = parse_source("struct Box<T> { value: T } "
-                                               "let box: Box<int> = Box { value: 7 }; "
-                                               "let chosen = match box.value { 7 => \"seven\", _ => \"other\", };");
+bool parses_generic_records_and_case() {
+    const dune::Program program = parse_source("record Box<T> { value: T } "
+                                               "var box: Box<int> = Box { value: 7 }; "
+                                               "var chosen = case box.value { 7 : \"seven\", _ : \"other\", };");
 
-    if (!expect(program.statements.size() == 3, "expected struct, let, and match let")) {
+    if (!expect(program.statements.size() == 3, "expected record, var, and case var")) {
         return false;
     }
 
     bool passed = true;
     const dune::Statement& structure = program.statements[0];
     passed =
-        expect(structure.kind == dune::StatementKind::struct_statement, "expected generic struct statement") && passed;
-    passed = expect(structure.generic_parameters.size() == 1, "expected one struct generic parameter") && passed;
-    passed = expect(structure.generic_parameters[0].name == "T", "expected struct generic name") && passed;
+        expect(structure.kind == dune::StatementKind::struct_statement, "expected generic record statement") && passed;
+    passed = expect(structure.generic_parameters.size() == 1, "expected one record generic parameter") && passed;
+    passed = expect(structure.generic_parameters[0].name == "T", "expected record generic name") && passed;
     passed = expect(structure.parameters[0].type.type.kind == dune::ValueType::generic_type,
                     "expected generic field type") &&
              passed;
@@ -502,61 +503,68 @@ bool parses_generic_structs_and_match() {
     passed =
         expect(box.type.type.arguments[0].kind == dune::ValueType::int_type, "expected int Box argument") && passed;
 
-    const dune::Expression& match = *program.statements[2].expression;
-    passed = expect(match.kind == dune::ExpressionKind::match_expression, "expected match expression") && passed;
-    passed = expect(match.left->kind == dune::ExpressionKind::member, "expected matched member expression") && passed;
-    passed = expect(match.arguments.size() == 4, "expected two match cases") && passed;
-    passed = expect(match.arguments[0]->kind == dune::ExpressionKind::number, "expected literal pattern") && passed;
+    const dune::Expression& case_expression = *program.statements[2].expression;
     passed =
-        expect(match.arguments[2]->kind == dune::ExpressionKind::identifier, "expected wildcard pattern") && passed;
-    passed = expect(match.arguments[2]->lexeme == "_", "expected wildcard lexeme") && passed;
+        expect(case_expression.kind == dune::ExpressionKind::match_expression, "expected case expression") && passed;
+    passed = expect(case_expression.left->kind == dune::ExpressionKind::member, "expected matched member expression") &&
+             passed;
+    passed = expect(case_expression.arguments.size() == 4, "expected two case cases") && passed;
+    passed = expect(case_expression.arguments[0]->kind == dune::ExpressionKind::number, "expected literal pattern") &&
+             passed;
+    passed =
+        expect(case_expression.arguments[2]->kind == dune::ExpressionKind::identifier, "expected wildcard pattern") &&
+        passed;
+    passed = expect(case_expression.arguments[2]->lexeme == "_", "expected wildcard lexeme") && passed;
 
     return passed;
 }
 
-bool parses_enums_and_variant_match() {
-    const dune::Program program = parse_source("export enum Option<T> { Some(T), None, } "
-                                               "let value: Option<int> = Some(42); "
-                                               "let chosen = match value { Some(x) => x, None => 0, };");
+bool parses_choices_and_variant_case() {
+    const dune::Program program = parse_source("export choice Maybe<T> { Present(T), Absent, } "
+                                               "var value: Maybe<int> = Present(42); "
+                                               "var chosen = case value { Present(x) : x, Absent : 0, };");
 
-    if (!expect(program.statements.size() == 3, "expected enum, let, and match let")) {
+    if (!expect(program.statements.size() == 3, "expected choice, var, and case var")) {
         return false;
     }
 
     bool passed = true;
     const dune::Statement& enumeration = program.statements[0];
-    passed = expect(enumeration.kind == dune::StatementKind::enum_statement, "expected enum statement") && passed;
-    passed = expect(enumeration.exported, "expected exported enum") && passed;
-    passed = expect(enumeration.name == "Option", "expected Option enum name") && passed;
-    passed = expect(enumeration.generic_parameters.size() == 1, "expected one enum generic parameter") && passed;
-    passed = expect(enumeration.parameters.size() == 2, "expected two enum variants") && passed;
-    passed = expect(enumeration.parameters[0].name == "Some", "expected Some variant") && passed;
-    passed = expect(enumeration.parameters[0].type.has_type, "expected Some payload type") && passed;
+    passed = expect(enumeration.kind == dune::StatementKind::enum_statement, "expected choice statement") && passed;
+    passed = expect(enumeration.exported, "expected exported choice") && passed;
+    passed = expect(enumeration.name == "Maybe", "expected Maybe choice name") && passed;
+    passed = expect(enumeration.generic_parameters.size() == 1, "expected one choice generic parameter") && passed;
+    passed = expect(enumeration.parameters.size() == 2, "expected two choice variants") && passed;
+    passed = expect(enumeration.parameters[0].name == "Present", "expected Present variant") && passed;
+    passed = expect(enumeration.parameters[0].type.has_type, "expected Present payload type") && passed;
     passed = expect(enumeration.parameters[0].type.type.kind == dune::ValueType::generic_type,
                     "expected generic variant payload") &&
              passed;
-    passed = expect(enumeration.parameters[1].name == "None", "expected None variant") && passed;
+    passed = expect(enumeration.parameters[1].name == "Absent", "expected Absent variant") && passed;
     passed = expect(!enumeration.parameters[1].type.has_type, "expected unit variant") && passed;
 
-    const dune::Statement& let_statement = program.statements[1];
+    const dune::Statement& var_statement = program.statements[1];
     passed =
-        expect(let_statement.type.type.kind == dune::ValueType::generic_type, "expected named enum type") && passed;
-    passed = expect(let_statement.type.type.name == "Option", "expected Option type name") && passed;
+        expect(var_statement.type.type.kind == dune::ValueType::generic_type, "expected named choice type") && passed;
+    passed = expect(var_statement.type.type.name == "Maybe", "expected Maybe type name") && passed;
     passed =
-        expect(let_statement.expression->kind == dune::ExpressionKind::call, "expected variant constructor call") &&
+        expect(var_statement.expression->kind == dune::ExpressionKind::call, "expected variant constructor call") &&
         passed;
 
-    const dune::Expression& match = *program.statements[2].expression;
-    passed = expect(match.kind == dune::ExpressionKind::match_expression, "expected match expression") && passed;
-    passed = expect(match.arguments.size() == 4, "expected two match cases") && passed;
+    const dune::Expression& case_expression = *program.statements[2].expression;
     passed =
-        expect(match.arguments[0]->kind == dune::ExpressionKind::call, "expected payload variant pattern") && passed;
-    passed = expect(match.arguments[0]->lexeme == "Some", "expected Some pattern") && passed;
-    passed = expect(match.arguments[0]->arguments.size() == 1, "expected one variant binding") && passed;
-    passed = expect(match.arguments[0]->arguments[0]->lexeme == "x", "expected x binding") && passed;
+        expect(case_expression.kind == dune::ExpressionKind::match_expression, "expected case expression") && passed;
+    passed = expect(case_expression.arguments.size() == 4, "expected two case cases") && passed;
     passed =
-        expect(match.arguments[2]->kind == dune::ExpressionKind::identifier, "expected unit variant pattern") && passed;
-    passed = expect(match.arguments[2]->lexeme == "None", "expected None pattern") && passed;
+        expect(case_expression.arguments[0]->kind == dune::ExpressionKind::call, "expected payload variant pattern") &&
+        passed;
+    passed = expect(case_expression.arguments[0]->lexeme == "Present", "expected Present pattern") && passed;
+    passed = expect(case_expression.arguments[0]->arguments.size() == 1, "expected one variant binding") && passed;
+    passed = expect(case_expression.arguments[0]->arguments[0]->lexeme == "x", "expected x binding") && passed;
+    passed = expect(case_expression.arguments[2]->kind == dune::ExpressionKind::identifier,
+                    "expected unit variant pattern") &&
+             passed;
+    passed = expect(case_expression.arguments[2]->lexeme == "Absent", "expected Absent pattern") && passed;
 
     return passed;
 }
@@ -565,7 +573,7 @@ bool parses_enums_and_variant_match() {
 
 int main() {
     bool passed = true;
-    passed = parses_let_and_print() && passed;
+    passed = parses_var_and_print() && passed;
     passed = parses_operator_precedence() && passed;
     passed = parses_control_flow() && passed;
     passed = parses_functions_and_types() && passed;
@@ -576,10 +584,10 @@ int main() {
     passed = parses_casts_unary_logical_and_methods() && passed;
     passed = parses_stdlib_primitives() && passed;
     passed = parses_generic_functions() && passed;
-    passed = parses_impl_methods() && passed;
-    passed = parses_structs_and_struct_literals() && passed;
-    passed = parses_generic_structs_and_match() && passed;
-    passed = parses_enums_and_variant_match() && passed;
+    passed = parses_extend_methods() && passed;
+    passed = parses_records_and_record_literals() && passed;
+    passed = parses_generic_records_and_case() && passed;
+    passed = parses_choices_and_variant_case() && passed;
 
     return passed ? 0 : 1;
 }

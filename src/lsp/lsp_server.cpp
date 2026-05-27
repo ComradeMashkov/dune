@@ -386,8 +386,8 @@ void add_completion(std::vector<CompletionItem>& completions, std::string label,
 
 void add_static_completions(std::vector<CompletionItem>& completions) {
     for (const std::string_view keyword :
-         {"as",   "break",  "const", "continue", "else",  "enum",   "export", "extern", "fn",   "for",  "if",
-          "impl", "import", "let",   "match",    "print", "return", "struct", "while",  "true", "false"}) {
+         {"break", "case",   "choice", "const",  "continue", "else", "export", "extend", "foreign", "for",  "func",
+          "if",    "import", "print",  "record", "return",   "to",   "var",    "while",  "true",    "false"}) {
         add_completion(completions, std::string(keyword), "keyword", completion_kind_keyword);
     }
 
@@ -455,11 +455,11 @@ std::vector<std::string> imports_in_source(const std::string& source) {
 void add_token_symbols(const std::string& source, std::vector<CompletionItem>& completions) {
     const std::vector<Token> tokens = tokenize_best_effort(source);
     for (std::size_t index = 0; index + 1 < tokens.size(); ++index) {
-        if (tokens[index].type == TokenType::fn_keyword && tokens[index + 1].type == TokenType::identifier) {
+        if (tokens[index].type == TokenType::func_keyword && tokens[index + 1].type == TokenType::identifier) {
             add_completion(completions, tokens[index + 1].lexeme, "function", completion_kind_function);
         }
 
-        if (tokens[index].type == TokenType::let && tokens[index + 1].type == TokenType::identifier) {
+        if (tokens[index].type == TokenType::var_keyword && tokens[index + 1].type == TokenType::identifier) {
             add_completion(completions, tokens[index + 1].lexeme, "variable", completion_kind_variable);
         }
 
@@ -467,12 +467,12 @@ void add_token_symbols(const std::string& source, std::vector<CompletionItem>& c
             add_completion(completions, tokens[index + 1].lexeme, "constant", completion_kind_constant);
         }
 
-        if (tokens[index].type == TokenType::struct_keyword && tokens[index + 1].type == TokenType::identifier) {
-            add_completion(completions, tokens[index + 1].lexeme, "struct", completion_kind_struct);
+        if (tokens[index].type == TokenType::record_keyword && tokens[index + 1].type == TokenType::identifier) {
+            add_completion(completions, tokens[index + 1].lexeme, "record", completion_kind_struct);
         }
 
-        if (tokens[index].type == TokenType::enum_keyword && tokens[index + 1].type == TokenType::identifier) {
-            add_completion(completions, tokens[index + 1].lexeme, "enum", completion_kind_enum);
+        if (tokens[index].type == TokenType::choice_keyword && tokens[index + 1].type == TokenType::identifier) {
+            add_completion(completions, tokens[index + 1].lexeme, "choice", completion_kind_enum);
         }
     }
 }
@@ -567,7 +567,7 @@ void add_enum_variants(const Statement& statement, bool visible, std::vector<Com
     }
 
     for (const Parameter& variant : statement.parameters) {
-        add_completion(completions, variant.name, "enum variant", completion_kind_enum_member);
+        add_completion(completions, variant.name, "choice variant", completion_kind_enum_member);
     }
 }
 
@@ -584,11 +584,11 @@ void add_module_members(const Program& program, std::vector<CompletionItem>& com
         }
 
         if (statement.kind == StatementKind::struct_statement && visible) {
-            add_completion(completions, statement.name, "struct", completion_kind_struct);
+            add_completion(completions, statement.name, "record", completion_kind_struct);
         }
 
         if (statement.kind == StatementKind::enum_statement && visible) {
-            add_completion(completions, statement.name, "enum", completion_kind_enum);
+            add_completion(completions, statement.name, "choice", completion_kind_enum);
             add_enum_variants(statement, true, completions);
         }
 
@@ -728,7 +728,7 @@ std::string generic_parameters_text(const std::vector<GenericParameter>& paramet
         }
         text += parameters[index].name;
         if (!parameters[index].bound.empty()) {
-            text += ": ";
+            text += " is ";
             text += parameters[index].bound;
         }
     }
@@ -751,10 +751,10 @@ std::string parameter_list_text(const std::vector<Parameter>& parameters) {
 }
 
 std::string function_signature(const Statement& statement) {
-    std::string signature = "fn " + statement.name + generic_parameters_text(statement.generic_parameters) +
+    std::string signature = "func " + statement.name + generic_parameters_text(statement.generic_parameters) +
                             parameter_list_text(statement.parameters);
     if (statement.type.has_type || statement.kind == StatementKind::function) {
-        signature += " -> " + type_annotation_name(statement.type, "unit");
+        signature += ": " + type_annotation_name(statement.type, "unit");
     }
     return signature;
 }
@@ -811,16 +811,16 @@ std::string code_hover(std::string declaration) {
 
 std::string declaration_hover(const Statement& statement) {
     switch (statement.kind) {
-    case StatementKind::let:
-        return code_hover("let " + statement.name + ": " + variable_type_text(statement));
+    case StatementKind::var:
+        return code_hover("var " + statement.name + ": " + variable_type_text(statement));
     case StatementKind::const_statement:
         return code_hover("const " + statement.name + ": " + variable_type_text(statement));
     case StatementKind::function:
         return code_hover(function_signature(statement));
     case StatementKind::struct_statement:
-        return code_hover("struct " + statement.name + generic_parameters_text(statement.generic_parameters));
+        return code_hover("record " + statement.name + generic_parameters_text(statement.generic_parameters));
     case StatementKind::enum_statement:
-        return code_hover("enum " + statement.name + generic_parameters_text(statement.generic_parameters));
+        return code_hover("choice " + statement.name + generic_parameters_text(statement.generic_parameters));
     case StatementKind::impl_statement:
     case StatementKind::assign:
     case StatementKind::print:
@@ -860,9 +860,9 @@ std::optional<std::string> enum_variant_hover(const Statement& statement, const 
         }
 
         if (variant.type.has_type) {
-            return code_hover("variant " + variant.name + "(" + type_name(variant.type.type) + ")");
+            return code_hover("choice variant " + variant.name + "(" + type_name(variant.type.type) + ")");
         }
-        return code_hover("variant " + variant.name);
+        return code_hover("choice variant " + variant.name);
     }
 
     return std::nullopt;
@@ -925,24 +925,24 @@ std::string token_type_after_colon(const std::vector<Token>& tokens, std::size_t
 
 std::optional<std::string> token_symbol_hover(const std::vector<Token>& tokens, const std::string& name) {
     for (std::size_t index = 0; index + 1 < tokens.size(); ++index) {
-        if (tokens[index].type == TokenType::let && tokens[index + 1].lexeme == name) {
-            return code_hover("let " + name + ": " + token_type_after_colon(tokens, index + 2));
+        if (tokens[index].type == TokenType::var_keyword && tokens[index + 1].lexeme == name) {
+            return code_hover("var " + name + ": " + token_type_after_colon(tokens, index + 2));
         }
 
         if (tokens[index].type == TokenType::const_keyword && tokens[index + 1].lexeme == name) {
             return code_hover("const " + name + ": " + token_type_after_colon(tokens, index + 2));
         }
 
-        if (tokens[index].type == TokenType::fn_keyword && tokens[index + 1].lexeme == name) {
-            return code_hover("fn " + name);
+        if (tokens[index].type == TokenType::func_keyword && tokens[index + 1].lexeme == name) {
+            return code_hover("func " + name);
         }
 
-        if (tokens[index].type == TokenType::struct_keyword && tokens[index + 1].lexeme == name) {
-            return code_hover("struct " + name);
+        if (tokens[index].type == TokenType::record_keyword && tokens[index + 1].lexeme == name) {
+            return code_hover("record " + name);
         }
 
-        if (tokens[index].type == TokenType::enum_keyword && tokens[index + 1].lexeme == name) {
-            return code_hover("enum " + name);
+        if (tokens[index].type == TokenType::choice_keyword && tokens[index + 1].lexeme == name) {
+            return code_hover("choice " + name);
         }
     }
 
@@ -1051,16 +1051,16 @@ std::optional<std::string> builtin_hover(const Token& token) {
     case TokenType::right_bracket:
     case TokenType::eof:
         return std::nullopt;
-    case TokenType::let:
+    case TokenType::var_keyword:
     case TokenType::const_keyword:
     case TokenType::export_keyword:
-    case TokenType::extern_keyword:
-    case TokenType::fn_keyword:
-    case TokenType::impl_keyword:
-    case TokenType::struct_keyword:
-    case TokenType::enum_keyword:
+    case TokenType::foreign_keyword:
+    case TokenType::func_keyword:
+    case TokenType::extend_keyword:
+    case TokenType::record_keyword:
+    case TokenType::choice_keyword:
     case TokenType::import_keyword:
-    case TokenType::match_keyword:
+    case TokenType::case_keyword:
     case TokenType::return_keyword:
     case TokenType::print:
     case TokenType::if_keyword:
@@ -1069,7 +1069,8 @@ std::optional<std::string> builtin_hover(const Token& token) {
     case TokenType::for_keyword:
     case TokenType::break_keyword:
     case TokenType::continue_keyword:
-    case TokenType::as_keyword:
+    case TokenType::to_keyword:
+    case TokenType::is_keyword:
     case TokenType::int_keyword:
     case TokenType::bool_keyword:
     case TokenType::i8_keyword:

@@ -2,30 +2,30 @@ import array;
 import feature_exports;
 import text;
 
-extern fn c_sqrt(value: real64) -> real64 = "sqrt";
+foreign func c_sqrt(value: real64): real64 = "sqrt";
 
-let message: text = "dune language";
+var message: text = "dune language";
 print(message[0]);
 print(message[5:13]);
 print(message[:4]);
 print(message[5:]);
 
-let values: [int] = [1, 2, 3, 4, 5];
-let middle: [int] = values[1:4];
+var values: [int] = [1, 2, 3, 4, 5];
+var middle: [int] = values[1:4];
 print(middle.len());
 print(middle[0]);
 print(middle[2]);
 print(array.sum(middle));
 print(array.contains(middle, 3));
 print(array.index_of(middle, 4));
-let reversed: [int] = array.reverse(middle);
+var reversed: [int] = array.reverse(middle);
 print(array.first(reversed));
 print(array.last(reversed));
-let ranged: [int] = array.range(2, 5);
+var ranged: [int] = array.range(2, 5);
 print(array.sum(ranged));
 
-let total = 0;
-for let i = 0; i < 6; i = i + 1 {
+var total = 0;
+for var i = 0; i < 6; i = i + 1 {
     if i == 1 {
         continue;
     }
