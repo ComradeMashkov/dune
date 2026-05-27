@@ -514,5 +514,26 @@ int main() {
                            }) &&
              passed;
 
+    passed = expect_tokens("export enum Option<T> { Some(T), None, }",
+                           {
+                               {export_keyword, "export"},
+                               {enum_keyword, "enum"},
+                               {identifier, "Option"},
+                               {less, "<"},
+                               {identifier, "T"},
+                               {greater, ">"},
+                               {left_brace, "{"},
+                               {identifier, "Some"},
+                               {left_paren, "("},
+                               {identifier, "T"},
+                               {right_paren, ")"},
+                               {comma, ","},
+                               {identifier, "None"},
+                               {comma, ","},
+                               {right_brace, "}"},
+                               {eof, ""},
+                           }) &&
+             passed;
+
     return passed ? 0 : 1;
 }

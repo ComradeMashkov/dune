@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace dune {
@@ -19,6 +20,7 @@ private:
     void collect_function(const Statement& statement);
     void collect_functions(const std::vector<Statement>& statements);
     void collect_structs(const std::unordered_map<std::string, TypeChecker::StructDefinition>& structs);
+    void collect_enums(const std::unordered_map<std::string, TypeChecker::EnumDefinition>& enums);
     void collect_global_constants(const std::vector<Statement>& statements);
     void compile_function(const Statement& statement);
     void compile_global_constants();
@@ -28,6 +30,7 @@ private:
     void compile_method_call_expression(const Expression& expression);
     void compile_member_expression(const Expression& expression);
     void compile_match_expression(const Expression& expression);
+    void compile_variant_constructor(const Expression& expression);
     void compile_struct_literal(const Expression& expression);
     void compile_binary_expression(const Expression& expression);
     void compile_cast_expression(const Expression& expression);
@@ -35,6 +38,7 @@ private:
 
     std::size_t add_constant(Value value);
     std::size_t declare_local(const std::string& name, const Type& type);
+    std::size_t force_local(const std::string& name, const Type& type);
     std::size_t resolve_local(const std::string& name) const;
     const Type& expression_type(const Expression& expression) const;
     std::size_t resolve_function(const std::string& name) const;
@@ -57,12 +61,15 @@ private:
     std::unordered_map<std::string, Type> local_types_;
     std::unordered_map<std::string, std::size_t> functions_;
     std::unordered_map<std::string, StructLayout> structs_;
+    std::unordered_set<std::string> enums_;
     std::vector<const Statement*> global_constants_;
     std::unordered_map<const Expression*, Type> expression_types_;
     std::unordered_map<const Expression*, std::string> resolved_calls_;
+    std::unordered_map<const Expression*, TypeChecker::VariantResolution> resolved_variants_;
     std::vector<LoopJumps> loop_stack_;
     std::vector<Instruction>* instructions_ = nullptr;
     std::size_t temporary_count_ = 0;
+    std::size_t local_count_ = 0;
 };
 
 } // namespace dune

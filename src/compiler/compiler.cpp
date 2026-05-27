@@ -190,6 +190,13 @@ Value default_value(const Type& type) {
         return make_record({});
     }
 
+    if (type.kind == ValueType::enum_type) {
+        Value result;
+        result.kind = ValueKind::variant;
+        result.variant_tag = 0;
+        return result;
+    }
+
     return make_unit();
 }
 
@@ -204,14 +211,18 @@ Bytecode Compiler::compile(const Program& program) {
     local_types_.clear();
     functions_.clear();
     structs_.clear();
+    enums_.clear();
     global_constants_.clear();
     loop_stack_.clear();
     temporary_count_ = 0;
     expression_types_ = type_checker.expression_types();
     resolved_calls_ = type_checker.resolved_calls();
+    resolved_variants_ = type_checker.resolved_variants();
     collect_structs(type_checker.structs());
+    collect_enums(type_checker.enums());
     const auto& instantiated_functions = type_checker.instantiated_functions();
     instructions_ = &bytecode_.instructions;
+    local_count_ = 0;
 
     collect_global_constants(program.statements);
     collect_functions(program.statements);
@@ -221,7 +232,7 @@ Bytecode Compiler::compile(const Program& program) {
     compile_statements(program.statements);
 
     emit(OpCode::halt);
-    bytecode_.local_count = locals_.size();
+    bytecode_.local_count = local_count_;
 
     for (const Statement& statement : program.statements) {
         if (statement.kind == StatementKind::function && statement.generic_parameters.empty()) {
@@ -273,6 +284,13 @@ void Compiler::collect_structs(const std::unordered_map<std::string, TypeChecker
     }
 }
 
+void Compiler::collect_enums(const std::unordered_map<std::string, TypeChecker::EnumDefinition>& enums) {
+    for (const auto& [name, definition] : enums) {
+        (void)definition;
+        enums_.insert(name);
+    }
+}
+
 void Compiler::collect_global_constants(const std::vector<Statement>& statements) {
     for (const Statement& statement : statements) {
         if (statement.kind == StatementKind::const_statement && statement.name.find('.') != std::string::npos) {
@@ -299,6 +317,7 @@ void Compiler::compile_function(const Statement& statement) {
     local_types_.clear();
     loop_stack_.clear();
     temporary_count_ = 0;
+    local_count_ = 0;
     instructions_ = &function.instructions;
     for (const Parameter& parameter : statement.parameters) {
         declare_local(parameter.name,
@@ -311,7 +330,7 @@ void Compiler::compile_function(const Statement& statement) {
                                                                                    : make_type(ValueType::int_type))));
     emit(OpCode::return_value);
 
-    function.local_count = locals_.size();
+    function.local_count = local_count_;
 }
 
 void Compiler::compile_global_constants() {
@@ -425,6 +444,7 @@ void Compiler::compile_statement(const Statement& statement) {
     case StatementKind::function:
     case StatementKind::impl_statement:
     case StatementKind::struct_statement:
+    case StatementKind::enum_statement:
         return;
     case StatementKind::return_statement:
         if (statement.expression == nullptr) {
@@ -445,6 +465,11 @@ void Compiler::compile_statement(const Statement& statement) {
 }
 
 void Compiler::compile_expression(const Expression& expression) {
+    if (resolved_variants_.contains(&expression)) {
+        compile_variant_constructor(expression);
+        return;
+    }
+
     switch (expression.kind) {
     case ExpressionKind::identifier:
         emit(OpCode::load_local, resolve_local(expression.lexeme));
@@ -527,6 +552,63 @@ void Compiler::compile_match_expression(const Expression& expression) {
         declare_local("__match_subject_" + std::to_string(temporary_count_++), subject_type);
     emit(OpCode::store_local, subject_slot);
 
+    if (subject_type.kind == ValueType::enum_type) {
+        std::vector<std::size_t> end_jumps;
+        for (std::size_t index = 0; index < expression.arguments.size(); index += 2) {
+            const Expression& pattern = *expression.arguments[index];
+            const Expression& result = *expression.arguments[index + 1];
+            const bool wildcard = pattern.kind == ExpressionKind::identifier && pattern.lexeme == "_";
+
+            std::size_t next_case = 0;
+            const TypeChecker::VariantResolution* resolution = nullptr;
+            bool had_previous_binding = false;
+            std::size_t previous_binding_slot = 0;
+            Type previous_binding_type;
+            if (!wildcard) {
+                resolution = &resolved_variants_.at(&pattern);
+                emit(OpCode::load_local, subject_slot);
+                emit(OpCode::load_variant_tag);
+                emit(OpCode::push_constant, add_constant(make_unsigned(resolution->tag)));
+                emit(OpCode::equal);
+                next_case = emit(OpCode::jump_if_false);
+
+                if (resolution->binds_payload) {
+                    const auto previous_slot = locals_.find(resolution->binding_name);
+                    if (previous_slot != locals_.end()) {
+                        had_previous_binding = true;
+                        previous_binding_slot = previous_slot->second;
+                        previous_binding_type = local_types_.at(resolution->binding_name);
+                    }
+
+                    emit(OpCode::load_local, subject_slot);
+                    emit(OpCode::load_variant_payload);
+                    emit(OpCode::store_local, force_local(resolution->binding_name, resolution->payload_type));
+                }
+            }
+
+            compile_expression(result);
+            if (resolution != nullptr && resolution->binds_payload) {
+                if (had_previous_binding) {
+                    locals_[resolution->binding_name] = previous_binding_slot;
+                    local_types_[resolution->binding_name] = previous_binding_type;
+                } else {
+                    locals_.erase(resolution->binding_name);
+                    local_types_.erase(resolution->binding_name);
+                }
+            }
+
+            end_jumps.push_back(emit(OpCode::jump));
+            if (!wildcard) {
+                patch_operand(next_case, instructions_->size());
+            }
+        }
+
+        for (const std::size_t jump : end_jumps) {
+            patch_operand(jump, instructions_->size());
+        }
+        return;
+    }
+
     std::vector<std::size_t> end_jumps;
     for (std::size_t index = 0; index < expression.arguments.size(); index += 2) {
         const Expression& pattern = *expression.arguments[index];
@@ -551,6 +633,22 @@ void Compiler::compile_match_expression(const Expression& expression) {
     for (const std::size_t jump : end_jumps) {
         patch_operand(jump, instructions_->size());
     }
+}
+
+void Compiler::compile_variant_constructor(const Expression& expression) {
+    const TypeChecker::VariantResolution& resolution = resolved_variants_.at(&expression);
+    if (resolution.has_payload) {
+        if (expression.kind == ExpressionKind::call || expression.kind == ExpressionKind::method_call) {
+            compile_expression(*expression.arguments.at(0));
+        } else {
+            throw std::runtime_error("enum variant payload constructor needs an argument");
+        }
+
+        emit(OpCode::make_variant, resolution.tag);
+        return;
+    }
+
+    emit(OpCode::make_unit_variant, resolution.tag);
 }
 
 void Compiler::compile_member_expression(const Expression& expression) {
@@ -827,9 +925,16 @@ std::size_t Compiler::declare_local(const std::string& name, const Type& type) {
         return existing->second;
     }
 
-    const std::size_t slot = locals_.size();
+    const std::size_t slot = local_count_++;
     locals_.emplace(name, slot);
     local_types_.emplace(name, type);
+    return slot;
+}
+
+std::size_t Compiler::force_local(const std::string& name, const Type& type) {
+    const std::size_t slot = local_count_++;
+    locals_[name] = slot;
+    local_types_[name] = type;
     return slot;
 }
 
@@ -868,6 +973,16 @@ Type Compiler::normalize_type(const Type& type) const {
 
     if (type.kind == ValueType::generic_type && structs_.contains(type.name)) {
         return make_struct_type(type.name, std::move(arguments));
+    }
+
+    if (type.kind == ValueType::generic_type && enums_.contains(type.name)) {
+        return make_enum_type(type.name, std::move(arguments));
+    }
+
+    if (type.kind == ValueType::enum_type) {
+        Type result = type;
+        result.arguments = std::move(arguments);
+        return result;
     }
 
     Type result = type;

@@ -204,6 +204,12 @@ int main() {
                                   "print(match \"dune\" { \"lang\" => 1, _ => 2, });"),
                        "7\nok\n70\n2\n", "expected generic structs and match output") &&
              passed;
+    passed = expect_eq(run_source("enum Maybe { Some(int), None, } "
+                                  "let x = 99; let value: Maybe = Some(30); let missing: Maybe = None; "
+                                  "print(match value { Some(x) => x + 1, None => 0, }); "
+                                  "print(match missing { Some(x) => x, None => 7, }); print(x);"),
+                       "31\n7\n99\n", "expected enum variants and scoped match bindings") &&
+             passed;
     passed = expect_eq(run_source("import option; import result; import assert; import collections; "
                                   "let maybe: option.Option<int> = option.some(42); "
                                   "let missing: option.Option<int> = option.none(0); "

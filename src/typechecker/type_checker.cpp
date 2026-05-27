@@ -13,6 +13,11 @@ TypeAnnotation expected_type(Type type) {
     return TypeAnnotation{true, std::move(type)};
 }
 
+std::string base_name(const std::string& name) {
+    const std::size_t separator = name.rfind('.');
+    return separator == std::string::npos ? name : name.substr(separator + 1);
+}
+
 Type clone_type(const Type& type) {
     Type result{type.kind, nullptr};
     result.name = type.name;
@@ -206,6 +211,18 @@ Type make_struct_type(std::string name, std::vector<Type> arguments) {
     return type;
 }
 
+Type make_enum_type(std::string name) {
+    Type type{ValueType::enum_type, nullptr};
+    type.name = std::move(name);
+    return type;
+}
+
+Type make_enum_type(std::string name, std::vector<Type> arguments) {
+    Type type = make_enum_type(std::move(name));
+    type.arguments = std::move(arguments);
+    return type;
+}
+
 std::string type_name(ValueType type) {
     switch (type) {
     case ValueType::int_type:
@@ -248,6 +265,8 @@ std::string type_name(ValueType type) {
         return "generic";
     case ValueType::struct_type:
         return "struct";
+    case ValueType::enum_type:
+        return "enum";
     }
 
     return "unknown";
@@ -262,7 +281,8 @@ std::string type_name(const Type& type) {
         return "[" + type_name(*type.element) + "]";
     }
 
-    if (type.kind == ValueType::generic_type || type.kind == ValueType::struct_type) {
+    if (type.kind == ValueType::generic_type || type.kind == ValueType::struct_type ||
+        type.kind == ValueType::enum_type) {
         if (!type.arguments.empty()) {
             std::string name = type.name + "<";
             for (std::size_t index = 0; index < type.arguments.size(); ++index) {
@@ -309,6 +329,14 @@ std::string type_key(const Type& type) {
         return key;
     }
 
+    if (type.kind == ValueType::enum_type) {
+        std::string key = "enum_" + type.name;
+        for (const Type& argument : type.arguments) {
+            key += "_" + type_key(argument);
+        }
+        return key;
+    }
+
     return type_name(type.kind);
 }
 
@@ -327,6 +355,7 @@ std::string function_key(const std::string& name, const std::vector<Type>& param
 
 void TypeChecker::check(const Program& program) {
     structs_.clear();
+    enums_.clear();
     functions_.clear();
     overloads_.clear();
     generic_overloads_.clear();
@@ -336,6 +365,7 @@ void TypeChecker::check(const Program& program) {
     known_modules_.clear();
     expression_types_.clear();
     resolved_calls_.clear();
+    resolved_variants_.clear();
     instantiated_function_keys_.clear();
     instantiated_functions_.clear();
     instantiated_function_traces_.clear();
@@ -345,11 +375,19 @@ void TypeChecker::check(const Program& program) {
         if (statement.kind == StatementKind::struct_statement) {
             declare_struct(statement);
         }
+
+        if (statement.kind == StatementKind::enum_statement) {
+            declare_enum(statement);
+        }
     }
 
     for (const Statement& statement : program.statements) {
         if (statement.kind == StatementKind::struct_statement) {
             define_struct(statement);
+        }
+
+        if (statement.kind == StatementKind::enum_statement) {
+            define_enum(statement);
         }
 
         if (statement.kind == StatementKind::function) {
@@ -383,7 +421,7 @@ void TypeChecker::check(const Program& program) {
     loop_depth_ = 0;
     for (const Statement& statement : program.statements) {
         if (statement.kind != StatementKind::function && statement.kind != StatementKind::import_statement &&
-            statement.kind != StatementKind::struct_statement) {
+            statement.kind != StatementKind::struct_statement && statement.kind != StatementKind::enum_statement) {
             check_statement(statement);
         }
     }
@@ -434,12 +472,20 @@ const std::unordered_map<const Expression*, std::string>& TypeChecker::resolved_
     return resolved_calls_;
 }
 
+const std::unordered_map<const Expression*, TypeChecker::VariantResolution>& TypeChecker::resolved_variants() const {
+    return resolved_variants_;
+}
+
 const std::deque<Statement>& TypeChecker::instantiated_functions() const {
     return instantiated_functions_;
 }
 
 const std::unordered_map<std::string, TypeChecker::StructDefinition>& TypeChecker::structs() const {
     return structs_;
+}
+
+const std::unordered_map<std::string, TypeChecker::EnumDefinition>& TypeChecker::enums() const {
+    return enums_;
 }
 
 void TypeChecker::declare_struct(const Statement& statement) {
@@ -454,6 +500,20 @@ void TypeChecker::declare_struct(const Statement& statement) {
     collect_known_module(statement.name);
     structs_.emplace(statement.name,
                      StructDefinition{statement.name, statement.generic_parameters, {}, {}, statement.location});
+}
+
+void TypeChecker::declare_enum(const Statement& statement) {
+    if (statement.name.empty()) {
+        throw std::runtime_error(diagnostic(statement.location, "enum needs a name"));
+    }
+
+    if (enums_.contains(statement.name)) {
+        throw std::runtime_error(diagnostic(statement.location, "duplicate enum '" + statement.name + "'"));
+    }
+
+    collect_known_module(statement.name);
+    enums_.emplace(statement.name,
+                   EnumDefinition{statement.name, statement.generic_parameters, {}, {}, statement.location});
 }
 
 void TypeChecker::define_struct(const Statement& statement) {
@@ -483,6 +543,39 @@ void TypeChecker::define_struct(const Statement& statement) {
         const std::size_t index = definition->second.fields.size();
         definition->second.field_indices.emplace(field.name, index);
         definition->second.fields.push_back(StructField{field.name, field_type, field.location});
+    }
+}
+
+void TypeChecker::define_enum(const Statement& statement) {
+    auto definition = enums_.find(statement.name);
+    if (definition == enums_.end()) {
+        throw std::runtime_error(diagnostic(statement.location, "undefined enum '" + statement.name + "'"));
+    }
+
+    definition->second.variants.clear();
+    definition->second.variant_indices.clear();
+    std::unordered_set<std::string> generic_names;
+    for (const GenericParameter& parameter : statement.generic_parameters) {
+        generic_names.insert(parameter.name);
+    }
+
+    for (const Parameter& variant : statement.parameters) {
+        if (definition->second.variant_indices.contains(variant.name)) {
+            throw std::runtime_error(diagnostic(variant.location, "duplicate variant '" + variant.name + "' in enum '" +
+                                                                      statement.name + "'"));
+        }
+
+        Type payload_type = variant.type.has_type ? annotation_or_default(variant.type, generic_names)
+                                                  : make_type(ValueType::unit_type);
+        if (variant.type.has_type && payload_type.kind == ValueType::unit_type) {
+            throw std::runtime_error(
+                diagnostic(variant.location, "variant '" + variant.name + "' cannot carry type 'unit'"));
+        }
+
+        const std::size_t tag = definition->second.variants.size();
+        definition->second.variant_indices.emplace(variant.name, tag);
+        definition->second.variants.push_back(
+            EnumVariant{variant.name, variant.type.has_type, std::move(payload_type), tag, variant.location});
     }
 }
 
@@ -616,7 +709,7 @@ void TypeChecker::check_statement(const Statement& statement) {
     case StatementKind::print: {
         const Type type = check_expression(*statement.expression);
         if (type.kind == ValueType::unit_type || type.kind == ValueType::array_type ||
-            type.kind == ValueType::struct_type) {
+            type.kind == ValueType::struct_type || type.kind == ValueType::enum_type) {
             throw std::runtime_error(
                 diagnostic(statement.expression->location, "cannot print type '" + type_name(type) + "'"));
         }
@@ -669,6 +762,8 @@ void TypeChecker::check_statement(const Statement& statement) {
         throw std::runtime_error(diagnostic(statement.location, "impl blocks are only allowed at top level"));
     case StatementKind::struct_statement:
         throw std::runtime_error(diagnostic(statement.location, "struct declarations are only allowed at top level"));
+    case StatementKind::enum_statement:
+        throw std::runtime_error(diagnostic(statement.location, "enum declarations are only allowed at top level"));
     case StatementKind::return_statement:
         if (current_function_ == nullptr) {
             throw std::runtime_error(diagnostic(statement.location, "return statement outside function"));
@@ -714,12 +809,19 @@ Type TypeChecker::check_expression(const Expression& expression, const TypeAnnot
         }
 
         const auto global_constant = global_constants_.find(expression.lexeme);
-        if (global_constant == global_constants_.end()) {
-            throw std::runtime_error(diagnostic(expression.location, "undefined variable '" + expression.lexeme + "'"));
+        if (global_constant != global_constants_.end()) {
+            actual = global_constant->second;
+            break;
         }
 
-        actual = global_constant->second;
-        break;
+        if (wanted.has_type && wanted.type.kind == ValueType::enum_type &&
+            is_variant_name_for_expected_enum(expression.lexeme, wanted)) {
+            actual = check_variant_constructor(expression, expression.lexeme, expression.arguments, expression.location,
+                                               wanted);
+            break;
+        }
+
+        throw std::runtime_error(diagnostic(expression.location, "undefined variable '" + expression.lexeme + "'"));
     }
     case ExpressionKind::number:
         actual = expected.has_type && is_numeric_type(expected.type) ? expected.type : make_type(ValueType::int_type);
@@ -751,7 +853,7 @@ Type TypeChecker::check_expression(const Expression& expression, const TypeAnnot
         actual = check_slice_expression(expression);
         break;
     case ExpressionKind::member:
-        actual = check_member_expression(expression);
+        actual = check_member_expression(expression, wanted);
         break;
     case ExpressionKind::unary:
         actual = check_unary_expression(expression);
@@ -852,6 +954,10 @@ Type TypeChecker::check_match_expression(const Expression& expression, const Typ
     }
 
     const Type subject = check_expression(*expression.left);
+    if (subject.kind == ValueType::enum_type) {
+        return check_enum_match_expression(expression, subject, expected);
+    }
+
     if (!is_comparable_type(subject)) {
         throw std::runtime_error(
             diagnostic(expression.left->location, "cannot match values of type '" + type_name(subject) + "'"));
@@ -888,6 +994,12 @@ Type TypeChecker::check_match_expression(const Expression& expression, const Typ
 }
 
 Type TypeChecker::check_call_expression(const Expression& expression, const TypeAnnotation& expected) {
+    if (expected.has_type && expected.type.kind == ValueType::enum_type &&
+        is_variant_name_for_expected_enum(expression.lexeme, expected)) {
+        return check_variant_constructor(expression, expression.lexeme, expression.arguments, expression.location,
+                                         expected);
+    }
+
     return check_function_call(expression, expression.lexeme, expression.arguments, expression.location, expected);
 }
 
@@ -906,14 +1018,66 @@ Type TypeChecker::check_function_call(const Expression& expression, const std::s
     return function.return_type;
 }
 
+Type TypeChecker::check_variant_constructor(const Expression& expression, const std::string& name,
+                                            const std::vector<std::unique_ptr<Expression>>& arguments,
+                                            SourceLocation location, const TypeAnnotation& expected) {
+    const EnumDefinition* definition = find_expected_enum(expected);
+    if (definition == nullptr) {
+        throw std::runtime_error(diagnostic(location, "enum variant '" + name + "' needs an expected enum type"));
+    }
+
+    const EnumVariant* variant = find_enum_variant(*definition, name);
+    if (variant == nullptr) {
+        throw std::runtime_error(
+            diagnostic(location, "enum '" + type_name(expected.type) + "' has no variant '" + base_name(name) + "'"));
+    }
+
+    const std::size_t expected_arguments = variant->has_payload ? 1 : 0;
+    if (arguments.size() != expected_arguments) {
+        if (!variant->has_payload && !arguments.empty()) {
+            throw std::runtime_error(
+                diagnostic(location, "enum variant '" + base_name(name) + "' does not have a payload"));
+        }
+
+        throw std::runtime_error(diagnostic(location, "enum variant '" + base_name(name) + "' expects " +
+                                                          std::to_string(expected_arguments) + " arguments but got " +
+                                                          std::to_string(arguments.size())));
+    }
+
+    Type payload_type = make_type(ValueType::unit_type);
+    if (variant->has_payload) {
+        payload_type = substitute_enum_payload(*definition, expected.type, *variant);
+        expect_type(payload_type, check_expression(*arguments[0], expected_type(payload_type)), arguments[0]->location);
+    }
+
+    resolved_variants_[&expression] =
+        VariantResolution{definition->name, variant->name, variant->tag, variant->has_payload, payload_type, "", false};
+    return expected.type;
+}
+
 Type TypeChecker::check_method_call_expression(const Expression& expression, const TypeAnnotation& expected) {
     if (expression.left != nullptr && expression.left->kind == ExpressionKind::identifier) {
         const std::string module_name = expression.left->lexeme;
         if (is_known_module(module_name)) {
             expect_imported_module(module_name, expression.location);
             expect_exported_member(module_name, expression.lexeme, expression.location);
-            return check_function_call(expression, module_name + "." + expression.lexeme, expression.arguments,
-                                       expression.location, expected);
+            const std::string qualified_name = module_name + "." + expression.lexeme;
+            if (expected.has_type && expected.type.kind == ValueType::enum_type &&
+                is_variant_name_for_expected_enum(qualified_name, expected)) {
+                return check_variant_constructor(expression, qualified_name, expression.arguments, expression.location,
+                                                 expected);
+            }
+
+            return check_function_call(expression, qualified_name, expression.arguments, expression.location, expected);
+        }
+
+        if (expected.has_type && expected.type.kind == ValueType::enum_type &&
+            (expected.type.name == module_name || base_name(expected.type.name) == module_name)) {
+            const std::string qualified_name = module_name + "." + expression.lexeme;
+            if (is_variant_name_for_expected_enum(qualified_name, expected)) {
+                return check_variant_constructor(expression, qualified_name, expression.arguments, expression.location,
+                                                 expected);
+            }
         }
     }
 
@@ -1014,13 +1178,19 @@ Type TypeChecker::check_cast_expression(const Expression& expression) {
     return target;
 }
 
-Type TypeChecker::check_member_expression(const Expression& expression) {
+Type TypeChecker::check_member_expression(const Expression& expression, const TypeAnnotation& expected) {
     if (expression.left != nullptr && expression.left->kind == ExpressionKind::identifier) {
         const std::string module_name = expression.left->lexeme;
         if (is_known_module(module_name)) {
             expect_imported_module(module_name, expression.location);
             expect_exported_member(module_name, expression.lexeme, expression.location);
             const std::string qualified_name = module_name + "." + expression.lexeme;
+            if (expected.has_type && expected.type.kind == ValueType::enum_type &&
+                is_variant_name_for_expected_enum(qualified_name, expected)) {
+                return check_variant_constructor(expression, qualified_name, expression.arguments, expression.location,
+                                                 expected);
+            }
+
             const auto variable = variables_.find(qualified_name);
             if (variable != variables_.end()) {
                 return variable->second;
@@ -1033,6 +1203,15 @@ Type TypeChecker::check_member_expression(const Expression& expression) {
             }
 
             return global_constant->second;
+        }
+
+        if (expected.has_type && expected.type.kind == ValueType::enum_type &&
+            (expected.type.name == module_name || base_name(expected.type.name) == module_name)) {
+            const std::string qualified_name = module_name + "." + expression.lexeme;
+            if (is_variant_name_for_expected_enum(qualified_name, expected)) {
+                return check_variant_constructor(expression, qualified_name, expression.arguments, expression.location,
+                                                 expected);
+            }
         }
     }
 
@@ -1473,6 +1652,185 @@ bool TypeChecker::type_satisfies_bound(const Type& type, const std::string& boun
     throw std::runtime_error(diagnostic(location, "unknown generic bound '" + bound + "'"));
 }
 
+const TypeChecker::EnumVariant* TypeChecker::find_enum_variant(const EnumDefinition& definition,
+                                                               const std::string& name) const {
+    const auto exact = definition.variant_indices.find(name);
+    if (exact != definition.variant_indices.end()) {
+        return &definition.variants[exact->second];
+    }
+
+    const std::string wanted = base_name(name);
+    for (const EnumVariant& variant : definition.variants) {
+        if (base_name(variant.name) == wanted) {
+            return &variant;
+        }
+    }
+
+    return nullptr;
+}
+
+const TypeChecker::EnumDefinition* TypeChecker::find_expected_enum(const TypeAnnotation& expected) const {
+    if (!expected.has_type || expected.type.kind != ValueType::enum_type) {
+        return nullptr;
+    }
+
+    const auto definition = enums_.find(expected.type.name);
+    return definition == enums_.end() ? nullptr : &definition->second;
+}
+
+Type TypeChecker::substitute_enum_payload(const EnumDefinition& definition, const Type& enum_type,
+                                          const EnumVariant& variant) const {
+    if (!variant.has_payload) {
+        return make_type(ValueType::unit_type);
+    }
+
+    if (definition.generic_parameters.size() != enum_type.arguments.size()) {
+        throw std::runtime_error(diagnostic(variant.location, "enum '" + definition.name + "' expects " +
+                                                                  std::to_string(definition.generic_parameters.size()) +
+                                                                  " type arguments but got " +
+                                                                  std::to_string(enum_type.arguments.size())));
+    }
+
+    std::unordered_map<std::string, Type> substitutions;
+    for (std::size_t index = 0; index < definition.generic_parameters.size(); ++index) {
+        substitutions.emplace(definition.generic_parameters[index].name, enum_type.arguments[index]);
+    }
+
+    return substitute_type(variant.payload_type, substitutions);
+}
+
+bool TypeChecker::is_variant_name_for_expected_enum(const std::string& name, const TypeAnnotation& expected) const {
+    const EnumDefinition* definition = find_expected_enum(expected);
+    return definition != nullptr && find_enum_variant(*definition, name) != nullptr;
+}
+
+TypeChecker::VariantResolution TypeChecker::resolve_variant_pattern(const Expression& pattern, const Type& subject) {
+    const auto definition = enums_.find(subject.name);
+    if (definition == enums_.end()) {
+        throw std::runtime_error(diagnostic(pattern.location, "unknown enum '" + subject.name + "'"));
+    }
+
+    std::string variant_name;
+    const std::vector<std::unique_ptr<Expression>>* arguments = nullptr;
+    if (pattern.kind == ExpressionKind::identifier || pattern.kind == ExpressionKind::call) {
+        variant_name = pattern.lexeme;
+        arguments = &pattern.arguments;
+    } else if ((pattern.kind == ExpressionKind::member || pattern.kind == ExpressionKind::method_call) &&
+               pattern.left != nullptr && pattern.left->kind == ExpressionKind::identifier) {
+        variant_name = pattern.left->lexeme + "." + pattern.lexeme;
+        arguments = &pattern.arguments;
+    } else {
+        throw std::runtime_error(diagnostic(pattern.location, "expected enum variant pattern"));
+    }
+
+    const EnumVariant* variant = find_enum_variant(definition->second, variant_name);
+    if (variant == nullptr) {
+        throw std::runtime_error(diagnostic(pattern.location, "enum '" + type_name(subject) + "' has no variant '" +
+                                                                  base_name(variant_name) + "'"));
+    }
+
+    const std::size_t argument_count = arguments == nullptr ? 0 : arguments->size();
+    const std::size_t expected_arguments = variant->has_payload ? 1 : 0;
+    if (argument_count != expected_arguments) {
+        if (!variant->has_payload && argument_count > 0) {
+            throw std::runtime_error(
+                diagnostic(pattern.location, "enum variant '" + base_name(variant_name) + "' does not have a payload"));
+        }
+
+        throw std::runtime_error(diagnostic(pattern.location, "enum variant '" + base_name(variant_name) +
+                                                                  "' expects " + std::to_string(expected_arguments) +
+                                                                  " pattern arguments but got " +
+                                                                  std::to_string(argument_count)));
+    }
+
+    Type payload_type = substitute_enum_payload(definition->second, subject, *variant);
+    VariantResolution resolution{
+        definition->second.name, variant->name, variant->tag, variant->has_payload, payload_type, "", false};
+    if (variant->has_payload) {
+        const Expression& binding = *arguments->front();
+        if (binding.kind != ExpressionKind::identifier) {
+            throw std::runtime_error(diagnostic(binding.location, "expected binding name in enum variant pattern"));
+        }
+
+        if (binding.lexeme != "_") {
+            resolution.binding_name = binding.lexeme;
+            resolution.binds_payload = true;
+        }
+    }
+
+    resolved_variants_[&pattern] = resolution;
+    return resolution;
+}
+
+Type TypeChecker::check_enum_match_expression(const Expression& expression, const Type& subject,
+                                              const TypeAnnotation& expected) {
+    const auto definition = enums_.find(subject.name);
+    if (definition == enums_.end()) {
+        throw std::runtime_error(diagnostic(expression.left->location, "unknown enum '" + subject.name + "'"));
+    }
+
+    std::unordered_set<std::size_t> covered_tags;
+    bool has_wildcard = false;
+    Type result_type;
+    bool has_result_type = false;
+
+    for (std::size_t index = 0; index < expression.arguments.size(); index += 2) {
+        const Expression& pattern = *expression.arguments[index];
+        const Expression& result = *expression.arguments[index + 1];
+        const bool wildcard = pattern.kind == ExpressionKind::identifier && pattern.lexeme == "_";
+
+        std::string binding_name;
+        Type binding_type;
+        bool has_binding = false;
+        if (wildcard) {
+            has_wildcard = true;
+        } else {
+            VariantResolution resolution = resolve_variant_pattern(pattern, subject);
+            covered_tags.insert(resolution.tag);
+            if (resolution.binds_payload) {
+                binding_name = resolution.binding_name;
+                binding_type = resolution.payload_type;
+                has_binding = true;
+            }
+        }
+
+        bool had_previous = false;
+        Type previous_type;
+        if (has_binding) {
+            const auto previous = variables_.find(binding_name);
+            if (previous != variables_.end()) {
+                had_previous = true;
+                previous_type = previous->second;
+            }
+            variables_[binding_name] = binding_type;
+        }
+
+        const Type value = check_expression(result, has_result_type ? expected_type(result_type) : expected);
+
+        if (has_binding) {
+            if (had_previous) {
+                variables_[binding_name] = previous_type;
+            } else {
+                variables_.erase(binding_name);
+            }
+        }
+
+        if (!has_result_type) {
+            result_type = value;
+            has_result_type = true;
+        }
+
+        expect_type(result_type, value, result.location);
+    }
+
+    if (!has_wildcard && covered_tags.size() != definition->second.variants.size()) {
+        throw std::runtime_error(diagnostic(expression.location, "match expression does not cover every variant of '" +
+                                                                     type_name(subject) + "'"));
+    }
+
+    return result_type;
+}
+
 bool TypeChecker::collect_generic_constraints(
     const Type& pattern, const Type& actual,
     std::unordered_map<std::string, std::vector<std::pair<Type, bool>>>& constraints, bool preferred) const {
@@ -1489,8 +1847,8 @@ bool TypeChecker::collect_generic_constraints(
         return collect_generic_constraints(*pattern.element, *actual.element, constraints, preferred);
     }
 
-    if (pattern.kind == ValueType::struct_type) {
-        if (actual.kind != ValueType::struct_type || pattern.name != actual.name ||
+    if (pattern.kind == ValueType::struct_type || pattern.kind == ValueType::enum_type) {
+        if (actual.kind != pattern.kind || pattern.name != actual.name ||
             pattern.arguments.size() != actual.arguments.size()) {
             return false;
         }
@@ -1671,6 +2029,7 @@ bool TypeChecker::statement_returns(const Statement& statement) const {
     case StatementKind::function:
     case StatementKind::impl_statement:
     case StatementKind::struct_statement:
+    case StatementKind::enum_statement:
     case StatementKind::break_statement:
     case StatementKind::continue_statement:
     case StatementKind::expression_statement:
@@ -1724,6 +2083,10 @@ Type TypeChecker::normalize_type(const Type& type, const std::unordered_set<std:
         return make_struct_type(type.name, std::move(arguments));
     }
 
+    if (type.kind == ValueType::generic_type && !generic_parameters.contains(type.name) && enums_.contains(type.name)) {
+        return make_enum_type(type.name, std::move(arguments));
+    }
+
     Type result = type;
     result.arguments = std::move(arguments);
     return result;
@@ -1734,7 +2097,8 @@ bool TypeChecker::same_type(const Type& left, const Type& right) const {
         return false;
     }
 
-    if (left.kind == ValueType::generic_type || left.kind == ValueType::struct_type) {
+    if (left.kind == ValueType::generic_type || left.kind == ValueType::struct_type ||
+        left.kind == ValueType::enum_type) {
         if (left.name != right.name || left.arguments.size() != right.arguments.size()) {
             return false;
         }
@@ -1797,6 +2161,7 @@ bool TypeChecker::is_cast_allowed(const Type& source, const Type& target) const 
 
     if (source.kind == ValueType::array_type || target.kind == ValueType::array_type ||
         source.kind == ValueType::struct_type || target.kind == ValueType::struct_type ||
+        source.kind == ValueType::enum_type || target.kind == ValueType::enum_type ||
         source.kind == ValueType::unit_type || target.kind == ValueType::unit_type ||
         source.kind == ValueType::text_type || target.kind == ValueType::text_type) {
         return false;
@@ -1861,6 +2226,7 @@ unsigned long long TypeChecker::max_integer_literal(ValueType target) const {
     case ValueType::array_type:
     case ValueType::generic_type:
     case ValueType::struct_type:
+    case ValueType::enum_type:
         break;
     }
 
@@ -1910,7 +2276,7 @@ void TypeChecker::collect_known_module(const std::string& name) {
 void TypeChecker::collect_module_export(const Statement& statement) {
     if (!statement.exported ||
         (statement.kind != StatementKind::function && statement.kind != StatementKind::const_statement &&
-         statement.kind != StatementKind::struct_statement)) {
+         statement.kind != StatementKind::struct_statement && statement.kind != StatementKind::enum_statement)) {
         return;
     }
 
@@ -1920,6 +2286,12 @@ void TypeChecker::collect_module_export(const Statement& statement) {
     }
 
     module_exports_[statement.name.substr(0, separator)].insert(statement.name.substr(separator + 1));
+    if (statement.kind == StatementKind::enum_statement) {
+        const std::string module = statement.name.substr(0, separator);
+        for (const Parameter& variant : statement.parameters) {
+            module_exports_[module].insert(base_name(variant.name));
+        }
+    }
 }
 
 bool TypeChecker::is_qualified_module_name(const std::string& name) const {
@@ -1947,11 +2319,19 @@ bool TypeChecker::is_known_module(const std::string& module) const {
         }
     }
 
+    for (const auto& [name, definition] : enums_) {
+        (void)definition;
+        if (name.starts_with(prefix)) {
+            return true;
+        }
+    }
+
     return false;
 }
 
 std::string TypeChecker::diagnostic(SourceLocation location, const std::string& message) const {
-    return "line " + std::to_string(location.line) + ", column " + std::to_string(location.column) + ": " + message;
+    return "line " + std::to_string(location.line) + ", columns " + std::to_string(location.column) + "-" +
+           std::to_string(location.column + location.length - 1) + ": " + message;
 }
 
 } // namespace dune

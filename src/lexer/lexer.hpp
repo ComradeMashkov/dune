@@ -14,6 +14,7 @@ enum class TokenType {
     fn_keyword,
     impl_keyword,
     struct_keyword,
+    enum_keyword,
     import_keyword,
     match_keyword,
     return_keyword,

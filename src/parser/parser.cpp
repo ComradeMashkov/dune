@@ -10,7 +10,7 @@ namespace dune {
 namespace {
 
 SourceLocation location_from_token(const Token& token) {
-    return SourceLocation{token.line, token.column};
+    return SourceLocation{token.line, token.column, token.lexeme.empty() ? 1 : token.lexeme.size()};
 }
 
 std::unique_ptr<Expression> make_leaf(ExpressionKind kind, std::string lexeme, SourceLocation location) {
@@ -300,6 +300,10 @@ Statement Parser::statement() {
         return struct_statement();
     }
 
+    if (match(TokenType::enum_keyword)) {
+        return enum_statement();
+    }
+
     if (match(TokenType::import_keyword)) {
         return import_statement();
     }
@@ -419,13 +423,19 @@ Statement Parser::export_statement() {
         return statement;
     }
 
+    if (match(TokenType::enum_keyword)) {
+        Statement statement = enum_statement();
+        statement.exported = true;
+        return statement;
+    }
+
     if (match(TokenType::const_keyword)) {
         Statement statement = const_statement();
         statement.exported = true;
         return statement;
     }
 
-    throw std::runtime_error("expected function, extern function, struct, or constant after export");
+    throw std::runtime_error("expected function, extern function, struct, enum, or constant after export");
 }
 
 Statement Parser::extern_statement() {
@@ -665,6 +675,48 @@ Statement Parser::struct_statement() {
 
     Statement statement{StatementKind::struct_statement, name.lexeme, nullptr, {}, {}};
     statement.parameters = std::move(fields);
+    statement.generic_parameters = std::move(parsed_generics);
+    statement.location = location_from_token(keyword);
+    return statement;
+}
+
+Statement Parser::enum_statement() {
+    const Token& keyword = previous();
+    const Token& name = consume(TokenType::identifier, "expected enum name after enum");
+    std::vector<GenericParameter> parsed_generics;
+    if (match(TokenType::less)) {
+        parsed_generics = generic_parameters();
+        consume(TokenType::greater, "expected '>' after enum generic parameters");
+    }
+
+    consume(TokenType::left_brace, "expected '{' before enum variants");
+
+    std::vector<Parameter> variants;
+    if (!check(TokenType::right_brace)) {
+        while (true) {
+            const Token& variant = consume(TokenType::identifier, "expected enum variant name");
+            TypeAnnotation payload_type;
+            if (match(TokenType::left_paren)) {
+                payload_type = type_annotation();
+                consume(TokenType::right_paren, "expected ')' after enum variant payload type");
+            }
+
+            variants.push_back(Parameter{variant.lexeme, std::move(payload_type), location_from_token(variant)});
+
+            if (!match(TokenType::comma)) {
+                break;
+            }
+
+            if (check(TokenType::right_brace)) {
+                break;
+            }
+        }
+    }
+
+    consume(TokenType::right_brace, "expected '}' after enum variants");
+
+    Statement statement{StatementKind::enum_statement, name.lexeme, nullptr, {}, {}};
+    statement.parameters = std::move(variants);
     statement.generic_parameters = std::move(parsed_generics);
     statement.location = location_from_token(keyword);
     return statement;

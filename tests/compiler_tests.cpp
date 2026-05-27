@@ -301,6 +301,35 @@ bool compiles_match_expression() {
     return passed;
 }
 
+bool compiles_enum_variants_and_match() {
+    const dune::Bytecode bytecode = compile_source("enum Maybe { Some(int), None, } "
+                                                   "let value: Maybe = Some(42); "
+                                                   "let empty: Maybe = None; "
+                                                   "let chosen = match value { Some(x) => x, None => 0, }; "
+                                                   "print(chosen); print(match empty { Some(x) => x, None => 0, });");
+
+    bool saw_make_variant = false;
+    bool saw_make_unit_variant = false;
+    bool saw_load_variant_tag = false;
+    bool saw_load_variant_payload = false;
+    bool saw_false_jump = false;
+    for (const dune::Instruction& instruction : bytecode.instructions) {
+        saw_make_variant = saw_make_variant || instruction.op == dune::OpCode::make_variant;
+        saw_make_unit_variant = saw_make_unit_variant || instruction.op == dune::OpCode::make_unit_variant;
+        saw_load_variant_tag = saw_load_variant_tag || instruction.op == dune::OpCode::load_variant_tag;
+        saw_load_variant_payload = saw_load_variant_payload || instruction.op == dune::OpCode::load_variant_payload;
+        saw_false_jump = saw_false_jump || instruction.op == dune::OpCode::jump_if_false;
+    }
+
+    bool passed = true;
+    passed = expect(saw_make_variant, "expected payload variant construction") && passed;
+    passed = expect(saw_make_unit_variant, "expected unit variant construction") && passed;
+    passed = expect(saw_load_variant_tag, "expected variant tag checks") && passed;
+    passed = expect(saw_load_variant_payload, "expected variant payload binding") && passed;
+    passed = expect(saw_false_jump, "expected variant match branch") && passed;
+    return passed;
+}
+
 } // namespace
 
 int main() {
@@ -315,6 +344,7 @@ int main() {
     passed = compiles_stdlib_extension_methods() && passed;
     passed = compiles_struct_literals_fields_and_methods() && passed;
     passed = compiles_match_expression() && passed;
+    passed = compiles_enum_variants_and_match() && passed;
 
     return passed ? 0 : 1;
 }

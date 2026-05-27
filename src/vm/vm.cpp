@@ -74,6 +74,14 @@ Value make_record(std::vector<Value> values) {
     return result;
 }
 
+Value make_variant(std::size_t tag, std::shared_ptr<Value> payload) {
+    Value result;
+    result.kind = ValueKind::variant;
+    result.variant_tag = tag;
+    result.variant_payload = std::move(payload);
+    return result;
+}
+
 void expect_same_kind(const Value& left, const Value& right) {
     if (left.kind != right.kind) {
         throw std::runtime_error("runtime type mismatch");
@@ -95,6 +103,7 @@ Value add_values(const Value& left, const Value& right) {
     case ValueKind::unit:
     case ValueKind::array:
     case ValueKind::record:
+    case ValueKind::variant:
         break;
     }
 
@@ -116,6 +125,7 @@ Value subtract_values(const Value& left, const Value& right) {
     case ValueKind::unit:
     case ValueKind::array:
     case ValueKind::record:
+    case ValueKind::variant:
         break;
     }
 
@@ -137,6 +147,7 @@ Value multiply_values(const Value& left, const Value& right) {
     case ValueKind::unit:
     case ValueKind::array:
     case ValueKind::record:
+    case ValueKind::variant:
         break;
     }
 
@@ -170,6 +181,7 @@ Value divide_values(const Value& left, const Value& right) {
     case ValueKind::unit:
     case ValueKind::array:
     case ValueKind::record:
+    case ValueKind::variant:
         break;
     }
 
@@ -198,6 +210,7 @@ Value modulo_values(const Value& left, const Value& right) {
     case ValueKind::unit:
     case ValueKind::array:
     case ValueKind::record:
+    case ValueKind::variant:
         break;
     }
 
@@ -218,6 +231,7 @@ Value negate_value(const Value& value) {
     case ValueKind::unit:
     case ValueKind::array:
     case ValueKind::record:
+    case ValueKind::variant:
         break;
     }
 
@@ -251,6 +265,7 @@ bool values_equal(const Value& left, const Value& right) {
         return true;
     case ValueKind::array:
     case ValueKind::record:
+    case ValueKind::variant:
         break;
     }
 
@@ -272,6 +287,7 @@ int compare_values(const Value& left, const Value& right) {
     case ValueKind::unit:
     case ValueKind::array:
     case ValueKind::record:
+    case ValueKind::variant:
         break;
     }
 
@@ -312,6 +328,8 @@ void print_value(const Value& value, std::ostream& output) {
         throw std::runtime_error("cannot print array value");
     case ValueKind::record:
         throw std::runtime_error("cannot print record value");
+    case ValueKind::variant:
+        throw std::runtime_error("cannot print enum value");
     }
 }
 
@@ -378,6 +396,7 @@ double numeric_argument(const Value& value) {
     case ValueKind::unit:
     case ValueKind::array:
     case ValueKind::record:
+    case ValueKind::variant:
         break;
     }
 
@@ -400,6 +419,7 @@ Value cast_signed(const Value& value) {
     case ValueKind::unit:
     case ValueKind::array:
     case ValueKind::record:
+    case ValueKind::variant:
         break;
     }
 
@@ -422,6 +442,7 @@ Value cast_unsigned(const Value& value) {
     case ValueKind::unit:
     case ValueKind::array:
     case ValueKind::record:
+    case ValueKind::variant:
         break;
     }
 
@@ -444,6 +465,7 @@ Value cast_real(const Value& value) {
     case ValueKind::unit:
     case ValueKind::array:
     case ValueKind::record:
+    case ValueKind::variant:
         break;
     }
 
@@ -466,6 +488,7 @@ Value cast_bool(const Value& value) {
     case ValueKind::unit:
     case ValueKind::array:
     case ValueKind::record:
+    case ValueKind::variant:
         break;
     }
 
@@ -488,6 +511,7 @@ Value cast_glyph(const Value& value) {
     case ValueKind::unit:
     case ValueKind::array:
     case ValueKind::record:
+    case ValueKind::variant:
         break;
     }
 
@@ -682,6 +706,35 @@ void VirtualMachine::run(std::ostream& output) {
             }
 
             stack_.push_back(make_record(std::move(fields)));
+            ++frame.ip;
+            break;
+        }
+        case OpCode::make_variant: {
+            stack_.push_back(make_variant(instruction.operand, std::make_shared<Value>(pop())));
+            ++frame.ip;
+            break;
+        }
+        case OpCode::make_unit_variant:
+            stack_.push_back(make_variant(instruction.operand, nullptr));
+            ++frame.ip;
+            break;
+        case OpCode::load_variant_tag: {
+            const Value value = pop();
+            if (value.kind != ValueKind::variant) {
+                throw std::runtime_error("expected enum value");
+            }
+
+            stack_.push_back(make_unsigned(value.variant_tag));
+            ++frame.ip;
+            break;
+        }
+        case OpCode::load_variant_payload: {
+            const Value value = pop();
+            if (value.kind != ValueKind::variant || value.variant_payload == nullptr) {
+                throw std::runtime_error("expected enum variant payload");
+            }
+
+            stack_.push_back(*value.variant_payload);
             ++frame.ip;
             break;
         }

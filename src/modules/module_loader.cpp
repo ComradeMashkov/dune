@@ -39,7 +39,8 @@ bool is_relative_to_parent(const std::filesystem::path& path) {
 }
 
 std::string diagnostic(SourceLocation location, const std::string& message) {
-    return "line " + std::to_string(location.line) + ", column " + std::to_string(location.column) + ": " + message;
+    return "line " + std::to_string(location.line) + ", columns " + std::to_string(location.column) + "-" +
+           std::to_string(location.column + location.length - 1) + ": " + message;
 }
 
 Type clone_type(const Type& type) {
@@ -207,10 +208,11 @@ std::vector<Statement> ModuleLoader::load_module(const std::string& module_name,
     qualify_module_program(module, module_name);
     for (Statement& statement : module.statements) {
         if (statement.kind != StatementKind::function && statement.kind != StatementKind::const_statement &&
-            statement.kind != StatementKind::struct_statement && statement.kind != StatementKind::import_statement) {
+            statement.kind != StatementKind::struct_statement && statement.kind != StatementKind::enum_statement &&
+            statement.kind != StatementKind::import_statement) {
             throw std::runtime_error("module '" + module_name +
                                      "' can only contain imports, constants, functions, and "
-                                     "structs");
+                                     "types");
         }
 
         statements.push_back(std::move(statement));
@@ -266,12 +268,20 @@ void ModuleLoader::qualify_module_program(Program& program, const std::string& m
             local_structs.insert(statement.name);
         }
 
+        if (statement.kind == StatementKind::enum_statement) {
+            local_structs.insert(statement.name);
+            for (const Parameter& variant : statement.parameters) {
+                local_functions.insert(variant.name);
+                local_constants.insert(variant.name);
+            }
+        }
+
         if (statement.kind == StatementKind::const_statement) {
             local_constants.insert(statement.name);
         }
 
         if ((statement.kind == StatementKind::function || statement.kind == StatementKind::const_statement ||
-             statement.kind == StatementKind::struct_statement) &&
+             statement.kind == StatementKind::struct_statement || statement.kind == StatementKind::enum_statement) &&
             statement.exported) {
             has_explicit_exports = true;
         }
@@ -303,6 +313,17 @@ void ModuleLoader::qualify_module_program(Program& program, const std::string& m
                 statement.exported = true;
             }
             statement.name = module_name + "." + statement.name;
+        }
+
+        if (statement.kind == StatementKind::enum_statement) {
+            qualify_statement(statement, module_name, local_functions, local_constants, local_structs);
+            if (!has_explicit_exports) {
+                statement.exported = true;
+            }
+            statement.name = module_name + "." + statement.name;
+            for (Parameter& variant : statement.parameters) {
+                variant.name = module_name + "." + variant.name;
+            }
         }
     }
 }

@@ -18,6 +18,7 @@ enum class ValueKind {
     unit,
     array,
     record,
+    variant,
 };
 
 struct Value {
@@ -30,6 +31,8 @@ struct Value {
     std::string text_value;
     std::shared_ptr<std::vector<Value>> array_value;
     std::shared_ptr<std::vector<Value>> record_value;
+    std::size_t variant_tag = 0;
+    std::shared_ptr<Value> variant_payload;
 };
 
 enum class OpCode {
@@ -61,6 +64,10 @@ enum class OpCode {
     pop,
     make_array,
     make_record,
+    make_variant,
+    make_unit_variant,
+    load_variant_tag,
+    load_variant_payload,
     load_index,
     load_field,
     load_slice,

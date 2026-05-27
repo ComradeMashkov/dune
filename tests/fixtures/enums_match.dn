@@ -1,0 +1,23 @@
+enum Maybe {
+    Some(int),
+    None,
+}
+
+fn fallback(value: Maybe, default: int) -> int {
+    return match value {
+        Some(x) => x,
+        None => default,
+    };
+}
+
+let x = 99;
+let value: Maybe = Some(30);
+let missing: Maybe = None;
+
+print(fallback(value, 0));
+print(fallback(missing, 7));
+print(match value {
+    Some(x) => x + 1,
+    None => 0,
+});
+print(x);

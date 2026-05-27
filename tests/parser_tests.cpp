@@ -514,6 +514,53 @@ bool parses_generic_structs_and_match() {
     return passed;
 }
 
+bool parses_enums_and_variant_match() {
+    const dune::Program program = parse_source("export enum Option<T> { Some(T), None, } "
+                                               "let value: Option<int> = Some(42); "
+                                               "let chosen = match value { Some(x) => x, None => 0, };");
+
+    if (!expect(program.statements.size() == 3, "expected enum, let, and match let")) {
+        return false;
+    }
+
+    bool passed = true;
+    const dune::Statement& enumeration = program.statements[0];
+    passed = expect(enumeration.kind == dune::StatementKind::enum_statement, "expected enum statement") && passed;
+    passed = expect(enumeration.exported, "expected exported enum") && passed;
+    passed = expect(enumeration.name == "Option", "expected Option enum name") && passed;
+    passed = expect(enumeration.generic_parameters.size() == 1, "expected one enum generic parameter") && passed;
+    passed = expect(enumeration.parameters.size() == 2, "expected two enum variants") && passed;
+    passed = expect(enumeration.parameters[0].name == "Some", "expected Some variant") && passed;
+    passed = expect(enumeration.parameters[0].type.has_type, "expected Some payload type") && passed;
+    passed = expect(enumeration.parameters[0].type.type.kind == dune::ValueType::generic_type,
+                    "expected generic variant payload") &&
+             passed;
+    passed = expect(enumeration.parameters[1].name == "None", "expected None variant") && passed;
+    passed = expect(!enumeration.parameters[1].type.has_type, "expected unit variant") && passed;
+
+    const dune::Statement& let_statement = program.statements[1];
+    passed =
+        expect(let_statement.type.type.kind == dune::ValueType::generic_type, "expected named enum type") && passed;
+    passed = expect(let_statement.type.type.name == "Option", "expected Option type name") && passed;
+    passed =
+        expect(let_statement.expression->kind == dune::ExpressionKind::call, "expected variant constructor call") &&
+        passed;
+
+    const dune::Expression& match = *program.statements[2].expression;
+    passed = expect(match.kind == dune::ExpressionKind::match_expression, "expected match expression") && passed;
+    passed = expect(match.arguments.size() == 4, "expected two match cases") && passed;
+    passed =
+        expect(match.arguments[0]->kind == dune::ExpressionKind::call, "expected payload variant pattern") && passed;
+    passed = expect(match.arguments[0]->lexeme == "Some", "expected Some pattern") && passed;
+    passed = expect(match.arguments[0]->arguments.size() == 1, "expected one variant binding") && passed;
+    passed = expect(match.arguments[0]->arguments[0]->lexeme == "x", "expected x binding") && passed;
+    passed =
+        expect(match.arguments[2]->kind == dune::ExpressionKind::identifier, "expected unit variant pattern") && passed;
+    passed = expect(match.arguments[2]->lexeme == "None", "expected None pattern") && passed;
+
+    return passed;
+}
+
 } // namespace
 
 int main() {
@@ -532,6 +579,7 @@ int main() {
     passed = parses_impl_methods() && passed;
     passed = parses_structs_and_struct_literals() && passed;
     passed = parses_generic_structs_and_match() && passed;
+    passed = parses_enums_and_variant_match() && passed;
 
     return passed ? 0 : 1;
 }

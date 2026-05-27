@@ -218,6 +218,10 @@ Token Lexer::identifier(std::size_t start, std::size_t line, std::size_t column)
         return Token{TokenType::struct_keyword, lexeme, line, column};
     }
 
+    if (lexeme == "enum") {
+        return Token{TokenType::enum_keyword, lexeme, line, column};
+    }
+
     if (lexeme == "import") {
         return Token{TokenType::import_keyword, lexeme, line, column};
     }

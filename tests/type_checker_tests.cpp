@@ -186,6 +186,13 @@ int main() {
                           "let chosen: text = match number.value { 7 => label.unwrap_or(\"bad\"), _ => \"other\", };",
                           "expected generic structs and match expressions to validate") &&
              passed;
+    passed = expect_valid("enum Option<T> { Some(T), None, } "
+                          "let value: Option<int> = Some(42); let missing: Option<int> = None; "
+                          "let chosen: int = match value { Some(x) => x, None => 0, }; "
+                          "let fallback: int = match missing { Some(x) => x, None => 7, }; "
+                          "let qualified: Option<int> = Option.Some(9);",
+                          "expected enums and variant match expressions to validate") &&
+             passed;
     passed = expect_valid("fn same<T: comparable>(left: T, right: T) -> bool { return left == right; } "
                           "fn lower<T: ordered>(left: T, right: T) -> bool { return left < right; } "
                           "let text_ok: bool = same(\"dune\", \"dune\"); let int_ok: bool = lower(1, 2);",
@@ -336,6 +343,18 @@ int main() {
              passed;
     passed = expect_error_contains("let value: int = match true { true => 1, _ => false, };",
                                    "expected type 'int' but got 'bool'", "expected match result mismatch") &&
+             passed;
+    passed = expect_error_contains("enum Maybe { Some(int), None, } let value: Maybe = Some(true);",
+                                   "expected type 'int' but got 'bool'", "expected enum payload mismatch") &&
+             passed;
+    passed = expect_error_contains("enum Maybe { Some(int), None, } let value: Maybe = None; "
+                                   "let chosen: int = match value { Some(x) => x, };",
+                                   "match expression does not cover every variant of 'Maybe'",
+                                   "expected non-exhaustive enum match error") &&
+             passed;
+    passed = expect_error_contains("enum Maybe { Some(int), None, } let value: Maybe = None; "
+                                   "let chosen: int = match value { Some(x) => x, None(x) => x, };",
+                                   "does not have a payload", "expected unit variant payload pattern error") &&
              passed;
     passed = expect_error_contains("struct Box<T> { value: T } let value = Box { value: 1 };",
                                    "generic struct literal 'Box' needs an expected type",

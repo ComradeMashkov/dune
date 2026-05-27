@@ -42,6 +42,7 @@ private:
     Statement function_statement(bool is_extern = false);
     Statement impl_statement();
     Statement import_statement();
+    Statement enum_statement();
     Statement if_statement();
     Statement let_statement();
     Statement print_statement();
