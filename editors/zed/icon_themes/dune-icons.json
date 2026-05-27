@@ -11,7 +11,7 @@
       },
       "file_icons": {
         "dune": {
-          "path": "./icons/dune-dark.svg"
+          "path": "./icons/dune.svg"
         }
       }
     },
@@ -23,7 +23,7 @@
       },
       "file_icons": {
         "dune": {
-          "path": "./icons/dune-light.svg"
+          "path": "./icons/dune.svg"
         }
       }
     }
