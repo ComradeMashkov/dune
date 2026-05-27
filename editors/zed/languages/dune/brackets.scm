@@ -1,7 +1,6 @@
 (block "{" @open "}" @close)
 (struct_declaration "{" @open "}" @close)
 (enum_declaration "{" @open "}" @close)
-(impl_declaration "{" @open "}" @close)
 (match_expression "{" @open "}" @close)
 (array_literal "[" @open "]" @close)
 (index_expression "[" @open "]" @close)
