@@ -1,6 +1,7 @@
 #include "codegen/llvm_ir_generator.hpp"
 #include "compiler/compiler.hpp"
 #include "lexer/lexer.hpp"
+#include "lsp/lsp_server.hpp"
 #include "modules/module_loader.hpp"
 #include "parser/parser.hpp"
 #include "vm/vm.hpp"
@@ -12,6 +13,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -125,9 +127,24 @@ int emit_llvm_file(const std::string& source_path, const std::string& output_pat
     return 0;
 }
 
+int check_source_file(const std::string& source_path) {
+    const std::string source = read_file(source_path);
+    const std::vector<dune::lsp::Diagnostic> diagnostics =
+        dune::lsp::diagnose_source(source, "file://" + std::filesystem::absolute(source_path).string(),
+                                   std::filesystem::path(source_path).parent_path());
+    for (const dune::lsp::Diagnostic& diagnostic : diagnostics) {
+        std::cerr << "line " << diagnostic.line << ", columns " << diagnostic.start_column << "-"
+                  << diagnostic.end_column << ": " << diagnostic.message << '\n';
+    }
+
+    return diagnostics.empty() ? 0 : 1;
+}
+
 void print_usage() {
     std::cerr << "usage:\n";
     std::cerr << "  dune <file.dn>\n";
+    std::cerr << "  dune check <file.dn>\n";
+    std::cerr << "  dune lsp\n";
     std::cerr << "  dune build <file.dn> -o <output>\n";
     std::cerr << "  dune llvm <file.dn> -o <file.ll>\n";
 }
@@ -142,7 +159,15 @@ int main(int argc, char* argv[]) {
 
     try {
         if (argc == 2) {
+            if (std::string(argv[1]) == "lsp") {
+                return dune::lsp::run(std::cin, std::cout);
+            }
+
             return run_source_file(argv[1]);
+        }
+
+        if (argc == 3 && std::string(argv[1]) == "check") {
+            return check_source_file(argv[2]);
         }
 
         if (argc == 5 && std::string(argv[1]) == "build" && std::string(argv[3]) == "-o") {

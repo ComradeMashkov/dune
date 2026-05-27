@@ -382,6 +382,18 @@ Emit only LLVM IR:
 ./build/dune llvm hello.dn -o hello.ll
 ```
 
+Check a file without running it:
+
+```bash
+./build/dune check hello.dn
+```
+
+Start the editor language server:
+
+```bash
+./build/dune lsp
+```
+
 ## Build And Test
 
 ```bash
@@ -396,6 +408,26 @@ compiling targets. If those tools are not installed locally yet, configure with:
 ```bash
 cmake -S . -B build -D DUNE_ENABLE_LINT=OFF
 ```
+
+## Zed
+
+Dune has a Zed extension in `editors/zed`. It provides Tree-sitter syntax
+highlighting for `.dn` files and compiler diagnostics through `dune lsp`.
+
+To try it locally:
+
+1. Build Dune:
+
+```bash
+cmake -S . -B build
+cmake --build build -j
+```
+
+2. In Zed, use `Extensions: Install Dev Extension` and select `editors/zed`.
+
+The extension uses `dune` from `PATH` when available. Otherwise it falls back to
+`build/dune` inside the opened worktree and sets `DUNE_STDLIB_PATH` to the
+worktree `stdlib` directory, so diagnostics can resolve standard modules.
 
 ## Current Features
 
@@ -437,6 +469,9 @@ The current release implements a small compiled language with:
 - export visibility
 - extern functions
 - standard library modules
+- `dune check`
+- `dune lsp`
+- Zed syntax highlighting
 - native heap cleanup on normal program exit and runtime panic paths
 - comparison operators
 - print

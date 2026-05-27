@@ -1,0 +1,18 @@
+id = "dune"
+name = "Dune"
+description = "Dune language support: Tree-sitter highlighting and compiler diagnostics."
+version = "0.1.0"
+schema_version = 1
+authors = ["ComradeMashkov"]
+repository = "https://github.com/ComradeMashkov/dune"
+
+[grammars.dune]
+repository = "https://github.com/ComradeMashkov/dune"
+rev = "codex/zed-language-support"
+
+[language_servers.dune-lsp]
+name = "Dune LSP"
+languages = ["Dune"]
+
+[language_servers.dune-lsp.language_ids]
+Dune = "dune"

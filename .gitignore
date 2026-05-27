@@ -1,1 +1,3 @@
 build/
+editors/zed/target/
+node_modules/

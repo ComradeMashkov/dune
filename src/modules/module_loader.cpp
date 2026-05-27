@@ -3,6 +3,7 @@
 #include "lexer/lexer.hpp"
 #include "parser/parser.hpp"
 
+#include <cstdlib>
 #include <fstream>
 #include <iterator>
 #include <sstream>
@@ -16,6 +17,33 @@ namespace {
 #ifndef DUNE_STDLIB_PATH
 #define DUNE_STDLIB_PATH "stdlib"
 #endif
+
+std::vector<std::filesystem::path> default_search_paths() {
+    const char* env_path = std::getenv("DUNE_STDLIB_PATH");
+    if (env_path == nullptr || *env_path == '\0') {
+        return {std::filesystem::path(DUNE_STDLIB_PATH)};
+    }
+
+#if defined(_WIN32)
+    constexpr char delimiter = ';';
+#else
+    constexpr char delimiter = ':';
+#endif
+
+    std::vector<std::filesystem::path> paths;
+    std::stringstream stream(env_path);
+    std::string item;
+    while (std::getline(stream, item, delimiter)) {
+        if (!item.empty()) {
+            paths.emplace_back(item);
+        }
+    }
+
+    if (paths.empty()) {
+        paths.emplace_back(DUNE_STDLIB_PATH);
+    }
+    return paths;
+}
 
 std::string read_file(const std::filesystem::path& path) {
     std::ifstream input(path);
@@ -163,7 +191,7 @@ void desugar_impls(Program& program) {
 
 } // namespace
 
-ModuleLoader::ModuleLoader() : ModuleLoader({std::filesystem::path(DUNE_STDLIB_PATH)}) {}
+ModuleLoader::ModuleLoader() : ModuleLoader(default_search_paths()) {}
 
 ModuleLoader::ModuleLoader(std::vector<std::filesystem::path> search_paths) : search_paths_(std::move(search_paths)) {}
 

@@ -1,0 +1,36 @@
+{
+  "grammars": [
+    {
+      "name": "dune",
+      "camelcase": "Dune",
+      "scope": "source.dune",
+      "path": ".",
+      "file-types": [
+        "dn"
+      ],
+      "injection-regex": "^dune$",
+      "class-name": "TreeSitterDune"
+    }
+  ],
+  "metadata": {
+    "version": "0.1.0",
+    "license": "MIT",
+    "description": "Tree-sitter grammar for the Dune programming language",
+    "authors": [
+      {
+        "name": "ComradeMashkov"
+      }
+    ],
+    "links": {
+      "repository": "https://github.com/ComradeMashkov/dune"
+    }
+  },
+  "bindings": {
+    "c": true,
+    "node": true,
+    "rust": false,
+    "go": false,
+    "swift": false,
+    "python": false
+  }
+}

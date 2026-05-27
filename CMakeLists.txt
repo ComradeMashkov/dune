@@ -117,6 +117,17 @@ target_link_libraries(dune_codegen
         dune_typechecker
 )
 
+add_library(dune_lsp
+    src/lsp/lsp_server.cpp
+)
+dune_add_lint_dependencies(dune_lsp)
+
+target_link_libraries(dune_lsp
+    PUBLIC
+        dune_modules
+        dune_typechecker
+)
+
 add_library(dune_vm
     src/vm/vm.cpp
 )
@@ -128,7 +139,7 @@ target_link_libraries(dune_vm
 )
 
 add_executable(dune src/main.cpp)
-target_link_libraries(dune PRIVATE dune_codegen dune_modules dune_vm)
+target_link_libraries(dune PRIVATE dune_codegen dune_lsp dune_modules dune_vm)
 target_compile_definitions(dune PRIVATE DUNE_CLANGXX_PATH="${DUNE_CLANGXX_EXE}")
 dune_add_lint_dependencies(dune)
 
@@ -152,6 +163,10 @@ add_executable(vm_tests tests/vm_tests.cpp)
 target_link_libraries(vm_tests PRIVATE dune_modules dune_vm)
 dune_add_lint_dependencies(vm_tests)
 
+add_executable(lsp_tests tests/lsp_tests.cpp)
+target_link_libraries(lsp_tests PRIVATE dune_lsp)
+dune_add_lint_dependencies(lsp_tests)
+
 enable_testing()
 
 add_test(NAME smoke COMMAND dune --version)
@@ -162,6 +177,10 @@ add_test(NAME parser_tests COMMAND parser_tests)
 add_test(NAME compiler_tests COMMAND compiler_tests)
 add_test(NAME type_checker_tests COMMAND type_checker_tests)
 add_test(NAME vm_tests COMMAND vm_tests)
+add_test(NAME lsp_tests COMMAND lsp_tests)
+add_test(NAME cli_check_static_types COMMAND dune check ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/static_types.dn)
+add_test(NAME cli_check_type_error COMMAND dune check ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/type_error.dn)
+set_tests_properties(cli_check_type_error PROPERTIES WILL_FAIL TRUE)
 
 add_test(
     NAME cli_hello
