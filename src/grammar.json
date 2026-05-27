@@ -916,7 +916,7 @@
         },
         {
           "type": "STRING",
-          "value": ":="
+          "value": "="
         },
         {
           "type": "FIELD",
@@ -1007,10 +1007,6 @@
           "content": {
             "type": "CHOICE",
             "members": [
-              {
-                "type": "SYMBOL",
-                "name": "identifier"
-              },
               {
                 "type": "SYMBOL",
                 "name": "member_expression"
@@ -1215,17 +1211,8 @@
           "type": "CHOICE",
           "members": [
             {
-              "type": "CHOICE",
-              "members": [
-                {
-                  "type": "SYMBOL",
-                  "name": "for_binding_initializer"
-                },
-                {
-                  "type": "SYMBOL",
-                  "name": "for_assignment_initializer"
-                }
-              ]
+              "type": "SYMBOL",
+              "name": "for_binding_initializer"
             },
             {
               "type": "BLANK"
@@ -1320,7 +1307,7 @@
         },
         {
           "type": "STRING",
-          "value": ":="
+          "value": "="
         },
         {
           "type": "FIELD",

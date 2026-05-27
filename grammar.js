@@ -142,7 +142,7 @@ module.exports = grammar({
     binding_statement: $ => seq(
       field("name", $.identifier),
       optional(seq(":", field("type", $._type))),
-      ":=",
+      "=",
       field("value", $._expression),
       optional(";"),
     ),
@@ -157,7 +157,7 @@ module.exports = grammar({
     ),
 
     assignment_statement: $ => seq(
-      field("target", choice($.identifier, $.member_expression, $.index_expression)),
+      field("target", choice($.member_expression, $.index_expression)),
       "=",
       field("value", $._expression),
       ";",
@@ -186,7 +186,7 @@ module.exports = grammar({
 
     for_statement: $ => seq(
       "for",
-      optional(choice($.for_binding_initializer, $.for_assignment_initializer)),
+      optional($.for_binding_initializer),
       ";",
       optional(field("condition", $._expression)),
       ";",
@@ -197,7 +197,7 @@ module.exports = grammar({
     for_binding_initializer: $ => seq(
       field("name", $.identifier),
       optional(seq(":", field("type", $._type))),
-      ":=",
+      "=",
       field("value", $._expression),
     ),
 

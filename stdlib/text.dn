@@ -15,8 +15,8 @@ export method text.starts_with(prefix: text): bool {
 }
 
 export method text.ends_with(suffix: text): bool {
-    suffix_len := suffix.len();
-    value_len := this.len();
+    suffix_len = suffix.len();
+    value_len = this.len();
     if suffix_len > value_len {
         return false;
     }
@@ -41,7 +41,7 @@ export method text.suffix(start: int): text {
 }
 
 export method text.index_of(needle: glyph): int {
-    for index := 0; index < this.len(); index = index + 1 {
+    for index = 0; index < this.len(); index = index + 1 {
         if this[index] == needle {
             return index;
         }
@@ -51,8 +51,8 @@ export method text.index_of(needle: glyph): int {
 }
 
 export method text.count(needle: glyph): int {
-    total := 0;
-    for index := 0; index < this.len(); index = index + 1 {
+    total = 0;
+    for index = 0; index < this.len(); index = index + 1 {
         if this[index] == needle {
             total = total + 1;
         }
@@ -62,7 +62,7 @@ export method text.count(needle: glyph): int {
 }
 
 export method text.trim_start(): text {
-    start := 0;
+    start = 0;
     while start < this.len() && is_space(this[start]) {
         start = start + 1;
     }
@@ -71,7 +71,7 @@ export method text.trim_start(): text {
 }
 
 export method text.trim_end(): text {
-    end := this.len();
+    end = this.len();
     while end > 0 && is_space(this[end - 1]) {
         end = end - 1;
     }
@@ -88,17 +88,17 @@ export is_space(value: glyph): bool {
 }
 
 export is_digit(value: glyph): bool {
-    code: int := value to int;
+    code: int = value to int;
     return code >= ('0' to int) && code <= ('9' to int);
 }
 
 export is_lower(value: glyph): bool {
-    code: int := value to int;
+    code: int = value to int;
     return code >= ('a' to int) && code <= ('z' to int);
 }
 
 export is_upper(value: glyph): bool {
-    code: int := value to int;
+    code: int = value to int;
     return code >= ('A' to int) && code <= ('Z' to int);
 }
 

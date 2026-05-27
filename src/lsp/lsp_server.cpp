@@ -459,7 +459,7 @@ void add_token_symbols(const std::string& source, std::vector<CompletionItem>& c
             add_completion(completions, tokens[index].lexeme, "function", completion_kind_function);
         }
 
-        if (is_identifier_like(tokens[index]) && tokens[index + 1].type == TokenType::colon_equal) {
+        if (is_identifier_like(tokens[index]) && tokens[index + 1].type == TokenType::equal) {
             add_completion(completions, tokens[index].lexeme, "variable", completion_kind_variable);
         }
 
@@ -930,7 +930,7 @@ std::string token_type_after_colon(const std::vector<Token>& tokens, std::size_t
 std::optional<std::string> token_symbol_hover(const std::vector<Token>& tokens, const std::string& name) {
     for (std::size_t index = 0; index + 1 < tokens.size(); ++index) {
         if (is_identifier_like(tokens[index]) && tokens[index].lexeme == name &&
-            tokens[index + 1].type == TokenType::colon_equal) {
+            tokens[index + 1].type == TokenType::equal) {
             return code_hover(name + ": unknown");
         }
 
@@ -1051,7 +1051,6 @@ std::optional<std::string> builtin_hover(const Token& token) {
     case TokenType::less:
     case TokenType::less_equal:
     case TokenType::colon:
-    case TokenType::colon_equal:
     case TokenType::comma:
     case TokenType::dot:
     case TokenType::semicolon:

@@ -22,26 +22,29 @@ bool expect(bool condition, const char* message) {
 }
 
 bool parses_binding_and_print() {
-    const dune::Program program = parse_source("x := 40 + 2;\nprint(x);");
+    const dune::Program program = parse_source("x = 40 + 2;\nprint(x);");
 
     if (!expect(program.statements.size() == 2, "expected two statements")) {
         return false;
     }
 
     bool passed = true;
-    const dune::Statement& binding_statement = program.statements[0];
-    passed = expect(binding_statement.kind == dune::StatementKind::binding, "expected binding statement") && passed;
-    passed = expect(binding_statement.name == "x", "expected binding name") && passed;
-    passed = expect(binding_statement.expression->kind == dune::ExpressionKind::binary, "expected binary expression") &&
-             passed;
-    passed = expect(binding_statement.expression->lexeme == "+", "expected plus expression") && passed;
-    passed = expect(binding_statement.expression->left->kind == dune::ExpressionKind::number, "expected left number") &&
-             passed;
-    passed = expect(binding_statement.expression->left->lexeme == "40", "expected left number lexeme") && passed;
+    const dune::Statement& assignment_statement = program.statements[0];
     passed =
-        expect(binding_statement.expression->right->kind == dune::ExpressionKind::number, "expected right number") &&
+        expect(assignment_statement.kind == dune::StatementKind::assign, "expected assignment statement") && passed;
+    passed = expect(assignment_statement.name == "x", "expected assignment name") && passed;
+    passed =
+        expect(assignment_statement.expression->kind == dune::ExpressionKind::binary, "expected binary expression") &&
         passed;
-    passed = expect(binding_statement.expression->right->lexeme == "2", "expected right number lexeme") && passed;
+    passed = expect(assignment_statement.expression->lexeme == "+", "expected plus expression") && passed;
+    passed =
+        expect(assignment_statement.expression->left->kind == dune::ExpressionKind::number, "expected left number") &&
+        passed;
+    passed = expect(assignment_statement.expression->left->lexeme == "40", "expected left number lexeme") && passed;
+    passed =
+        expect(assignment_statement.expression->right->kind == dune::ExpressionKind::number, "expected right number") &&
+        passed;
+    passed = expect(assignment_statement.expression->right->lexeme == "2", "expected right number lexeme") && passed;
 
     const dune::Statement& print_statement = program.statements[1];
     passed = expect(print_statement.kind == dune::StatementKind::print, "expected print statement") && passed;
@@ -54,7 +57,7 @@ bool parses_binding_and_print() {
 }
 
 bool parses_operator_precedence() {
-    const dune::Program program = parse_source("value := 1 + 2 * 3;");
+    const dune::Program program = parse_source("value = 1 + 2 * 3;");
 
     if (!expect(program.statements.size() == 1, "expected one statement")) {
         return false;
@@ -75,7 +78,7 @@ bool parses_operator_precedence() {
 }
 
 bool parses_control_flow() {
-    const dune::Program program = parse_source("x := 3; while x > 0 { x = x - 1; } "
+    const dune::Program program = parse_source("x = 3; while x > 0 { x = x - 1; } "
                                                "if x == 0 { print(true); } else { print(false); }");
 
     if (!expect(program.statements.size() == 3, "expected three statements")) {
@@ -107,7 +110,7 @@ bool parses_control_flow() {
 
 bool parses_functions_and_types() {
     const dune::Program program = parse_source("add(a: int, b: int): int { return a + b; } "
-                                               "total: int := add(10, 20); print(total);");
+                                               "total: int = add(10, 20); print(total);");
 
     if (!expect(program.statements.size() == 3, "expected function, binding, and print statements")) {
         return false;
@@ -142,7 +145,7 @@ bool parses_functions_and_types() {
 
 bool parses_extended_types() {
     const dune::Program program =
-        parse_source("byte: u8 := 255; wide: uint64 := 500; ratio: real := 1.5; mark: glyph := 'z';");
+        parse_source("byte: u8 = 255; wide: uint64 = 500; ratio: real = 1.5; mark: glyph = 'z';");
 
     if (!expect(program.statements.size() == 4, "expected four typed statements")) {
         return false;
@@ -168,9 +171,9 @@ bool parses_extended_types() {
 bool parses_standard_types_and_unit_calls() {
     const dune::Program program = parse_source("log(message: text): unit { print(message); return; } "
                                                "noop(): unit { } "
-                                               "tiny: i8 := 1; wide: i64 := 2; "
-                                               "index: usize := 3; offset: isize := 4; "
-                                               "rough: real32 := 1.5; exact: real64 := 2.5; "
+                                               "tiny: i8 = 1; wide: i64 = 2; "
+                                               "index: usize = 3; offset: isize = 4; "
+                                               "rough: real32 = 1.5; exact: real64 = 2.5; "
                                                "log(\"done\"); noop();");
 
     if (!expect(program.statements.size() == 10, "expected ten statements")) {
@@ -208,7 +211,7 @@ bool parses_standard_types_and_unit_calls() {
 }
 
 bool parses_arrays_imports_and_module_calls() {
-    const dune::Program program = parse_source("import math; values: [int] := [1, math.square(2)]; "
+    const dune::Program program = parse_source("import math; values: [int] = [1, math.square(2)]; "
                                                "values.push(9); print(values.len()); print(values[1]);");
 
     if (!expect(program.statements.size() == 5, "expected import, array binding, calls, and print statements")) {
@@ -288,10 +291,10 @@ bool parses_constants_and_module_members() {
 }
 
 bool parses_casts_unary_logical_and_methods() {
-    const dune::Program program = parse_source("done: bool := !false && true || (17 % 5 == 2); "
-                                               "exact: real64 := 17 to real64; "
-                                               "values: [int] := [1, 2]; values.pop(); "
-                                               "message: text := \"dune\"; print(message.contains(\"du\"));");
+    const dune::Program program = parse_source("done: bool = !false && true || (17 % 5 == 2); "
+                                               "exact: real64 = 17 to real64; "
+                                               "values: [int] = [1, 2]; values.pop(); "
+                                               "message: text = \"dune\"; print(message.contains(\"du\"));");
 
     if (!expect(program.statements.size() == 6, "expected operators and methods statements")) {
         return false;
@@ -329,8 +332,8 @@ bool parses_casts_unary_logical_and_methods() {
 bool parses_stdlib_primitives() {
     const dune::Program program = parse_source("import text; "
                                                "export foreign c_sqrt(value: real64): real64 = \"sqrt\"; "
-                                               "message: text := \"dune\"; print(message[1:3]); print(message[:2]); "
-                                               "for i := 0; i < 3; i = i + 1 { "
+                                               "message: text = \"dune\"; print(message[1:3]); print(message[:2]); "
+                                               "for i = 0; i < 3; i = i + 1 { "
                                                "if i == 1 { continue; } break; }");
 
     if (!expect(program.statements.size() == 6, "expected import, foreign, text, prints, and for statements")) {
@@ -442,7 +445,7 @@ bool parses_receiver_methods() {
 bool parses_records_and_record_literals() {
     const dune::Program program = parse_source("record Point { x: real64, y: real64, "
                                                "sum(): real64 { return this.x + this.y; } } "
-                                               "p: Point := Point { x: 1.5, y: 2.5 }; print(p.sum());");
+                                               "p: Point = Point { x: 1.5, y: 2.5 }; print(p.sum());");
 
     if (!expect(program.statements.size() == 3, "expected record, binding, and print")) {
         return false;
@@ -478,8 +481,8 @@ bool parses_records_and_record_literals() {
 
 bool parses_generic_records_and_when() {
     const dune::Program program = parse_source("record Box<T> { value: T } "
-                                               "box: Box<int> := Box { value: 7 }; "
-                                               "chosen := when box.value { is 7 { \"seven\" } is _ { \"other\" } };");
+                                               "box: Box<int> = Box { value: 7 }; "
+                                               "chosen = when box.value { is 7 { \"seven\" } is _ { \"other\" } };");
 
     if (!expect(program.statements.size() == 3, "expected record, binding, and when binding")) {
         return false;
@@ -520,8 +523,8 @@ bool parses_generic_records_and_when() {
 
 bool parses_choices_and_variant_when() {
     const dune::Program program = parse_source("export choice Maybe<T> { Present(T), Absent, } "
-                                               "value: Maybe<int> := Present(42); "
-                                               "chosen := when value { is Present(x) { x } is Absent { 0 } };");
+                                               "value: Maybe<int> = Present(42); "
+                                               "chosen = when value { is Present(x) { x } is Absent { 0 } };");
 
     if (!expect(program.statements.size() == 3, "expected choice, binding, and when binding")) {
         return false;

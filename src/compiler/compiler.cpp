@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <memory>
 #include <stdexcept>
+#include <tuple>
 #include <utility>
 
 namespace dune {
@@ -293,7 +294,7 @@ void Compiler::collect_enums(const std::unordered_map<std::string, TypeChecker::
 
 void Compiler::collect_global_constants(const std::vector<Statement>& statements) {
     for (const Statement& statement : statements) {
-        if (statement.kind == StatementKind::const_statement && statement.name.find('.') != std::string::npos) {
+        if (statement.kind == StatementKind::const_statement) {
             global_constants_.push_back(&statement);
         }
     }
@@ -319,12 +320,21 @@ void Compiler::compile_function(const Statement& statement) {
     temporary_count_ = 0;
     local_count_ = 0;
     instructions_ = &function.instructions;
+    std::vector<std::tuple<std::string, Type, std::size_t>> parameter_locals;
+    parameter_locals.reserve(statement.parameters.size());
     for (const Parameter& parameter : statement.parameters) {
-        declare_local(parameter.name,
-                      parameter.type.has_type ? normalize_type(parameter.type.type) : make_type(ValueType::int_type));
+        parameter_locals.emplace_back(parameter.name,
+                                      parameter.type.has_type ? normalize_type(parameter.type.type)
+                                                              : make_type(ValueType::int_type),
+                                      local_count_++);
     }
 
     compile_global_constants();
+    for (const auto& [name, type, slot] : parameter_locals) {
+        locals_[name] = slot;
+        local_types_[name] = type;
+    }
+
     const Type return_type =
         statement.type.has_type ? normalize_type(statement.type.type) : make_type(ValueType::int_type);
     const bool has_tail_expression =
@@ -374,7 +384,11 @@ void Compiler::compile_statement(const Statement& statement) {
     }
     case StatementKind::assign:
         compile_expression(*statement.expression);
-        emit(OpCode::store_local, resolve_local(statement.name));
+        if (const auto local = locals_.find(statement.name); local != locals_.end()) {
+            emit(OpCode::store_local, local->second);
+        } else {
+            emit(OpCode::store_local, declare_local(statement.name, expression_type(*statement.expression)));
+        }
         return;
     case StatementKind::print:
         compile_expression(*statement.expression);

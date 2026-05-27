@@ -1,6 +1,6 @@
 export method<T> [T].copy(): [T] {
-    result: [T] := [];
-    for index := 0; index < this.len(); index = index + 1 {
+    result: [T] = [];
+    for index = 0; index < this.len(); index = index + 1 {
         result.push(this[index]);
     }
 
@@ -8,8 +8,8 @@ export method<T> [T].copy(): [T] {
 }
 
 export method<T> [T].reverse(): [T] {
-    result: [T] := [];
-    index := this.len();
+    result: [T] = [];
+    index = this.len();
     while index > 0 {
         index = index - 1;
         result.push(this[index]);
@@ -23,7 +23,7 @@ export method<T> [T].contains(needle: T): bool {
 }
 
 export method<T> [T].index_of(needle: T): int {
-    for index := 0; index < this.len(); index = index + 1 {
+    for index = 0; index < this.len(); index = index + 1 {
         if this[index] == needle {
             return index;
         }
@@ -41,14 +41,14 @@ export method<T> [T].last(): T {
 }
 
 export method<T> [T].append(value: T): [T] {
-    result: [T] := copy(this);
+    result: [T] = copy(this);
     result.push(value);
     return result;
 }
 
 export range(start: int, end: int): [int] {
-    result: [int] := [];
-    for value := start; value < end; value = value + 1 {
+    result: [int] = [];
+    for value = start; value < end; value = value + 1 {
         result.push(value);
     }
 
@@ -56,8 +56,8 @@ export range(start: int, end: int): [int] {
 }
 
 export sum(values: [int]): int {
-    result := 0;
-    for index := 0; index < values.len(); index = index + 1 {
+    result = 0;
+    for index = 0; index < values.len(); index = index + 1 {
         result = result + values[index];
     }
 
@@ -65,8 +65,8 @@ export sum(values: [int]): int {
 }
 
 export sum(values: [real64]): real64 {
-    result: real64 := 0.0;
-    for index := 0; index < values.len(); index = index + 1 {
+    result: real64 = 0.0;
+    for index = 0; index < values.len(); index = index + 1 {
         result = result + values[index];
     }
 

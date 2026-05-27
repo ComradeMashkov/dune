@@ -72,7 +72,6 @@ enum class TokenType {
     less,
     less_equal,
     colon,
-    colon_equal,
     comma,
     dot,
     semicolon,

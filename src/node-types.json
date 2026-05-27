@@ -214,10 +214,6 @@
         "required": true,
         "types": [
           {
-            "type": "identifier",
-            "named": true
-          },
-          {
             "type": "index_expression",
             "named": true
           },
@@ -1754,10 +1750,6 @@
       "multiple": false,
       "required": false,
       "types": [
-        {
-          "type": "for_assignment_initializer",
-          "named": true
-        },
         {
           "type": "for_binding_initializer",
           "named": true
@@ -3603,10 +3595,6 @@
   },
   {
     "type": ":",
-    "named": false
-  },
-  {
-    "type": ":=",
     "named": false
   },
   {

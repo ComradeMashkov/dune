@@ -56,8 +56,8 @@ sqrt<T is real>(value: T): T {
         return 0.0;
     }
 
-    guess: T := value;
-    index := 0;
+    guess: T = value;
+    index = 0;
     while index < 24 {
         guess = (guess + value / guess) / 2.0;
         index = index + 1;
@@ -67,9 +67,9 @@ sqrt<T is real>(value: T): T {
 }
 
 normalize_radians<T is real>(value: T): T {
-    pi: T := 3.141592653589793;
-    tau: T := pi * 2.0;
-    x: T := value;
+    pi: T = 3.141592653589793;
+    tau: T = pi * 2.0;
+    x: T = value;
 
     while x > pi {
         x = x - tau;
@@ -83,14 +83,14 @@ normalize_radians<T is real>(value: T): T {
 }
 
 sin<T is real>(value: T): T {
-    x: T := normalize_radians(value);
-    term: T := x;
-    sum: T := x;
-    n: T := 1.0;
+    x: T = normalize_radians(value);
+    term: T = x;
+    sum: T = x;
+    n: T = 1.0;
 
     while n < 12.0 {
-        a: T := 2.0 * n;
-        b: T := 2.0 * n + 1.0;
+        a: T = 2.0 * n;
+        b: T = 2.0 * n + 1.0;
         term = (0.0 - term) * x * x / (a * b);
         sum = sum + term;
         n = n + 1.0;
@@ -100,14 +100,14 @@ sin<T is real>(value: T): T {
 }
 
 cos<T is real>(value: T): T {
-    x: T := normalize_radians(value);
-    term: T := 1.0;
-    sum: T := 1.0;
-    n: T := 1.0;
+    x: T = normalize_radians(value);
+    term: T = 1.0;
+    sum: T = 1.0;
+    n: T = 1.0;
 
     while n < 12.0 {
-        a: T := 2.0 * n - 1.0;
-        b: T := 2.0 * n;
+        a: T = 2.0 * n - 1.0;
+        b: T = 2.0 * n;
         term = (0.0 - term) * x * x / (a * b);
         sum = sum + term;
         n = n + 1.0;
@@ -121,10 +121,10 @@ tan<T is real>(value: T): T {
 }
 
 exp<T is real>(value: T): T {
-    e: T := 2.718281828459045;
-    x: T := value;
-    scale := 0;
-    negative_one: T := 0.0 - 1.0;
+    e: T = 2.718281828459045;
+    x: T = value;
+    scale = 0;
+    negative_one: T = 0.0 - 1.0;
 
     while x > 1.0 {
         x = x - 1.0;
@@ -136,9 +136,9 @@ exp<T is real>(value: T): T {
         scale = scale - 1;
     }
 
-    term: T := 1.0;
-    sum: T := 1.0;
-    n: T := 1.0;
+    term: T = 1.0;
+    sum: T = 1.0;
+    n: T = 1.0;
     while n < 28.0 {
         term = term * x / n;
         sum = sum + term;
@@ -163,10 +163,10 @@ ln<T is real>(value: T): T {
         return 0.0;
     }
 
-    e: T := 2.718281828459045;
-    inverse_e: T := 1.0 / e;
-    x: T := value;
-    scale_value: T := 0.0;
+    e: T = 2.718281828459045;
+    inverse_e: T = 1.0 / e;
+    x: T = value;
+    scale_value: T = 0.0;
 
     while x > e {
         x = x / e;
@@ -178,11 +178,11 @@ ln<T is real>(value: T): T {
         scale_value = scale_value - 1.0;
     }
 
-    y: T := (x - 1.0) / (x + 1.0);
-    y2: T := y * y;
-    term: T := y;
-    sum: T := 0.0;
-    n: T := 1.0;
+    y: T = (x - 1.0) / (x + 1.0);
+    y2: T = y * y;
+    term: T = y;
+    sum: T = 0.0;
+    n: T = 1.0;
 
     while n < 39.0 {
         sum = sum + term / n;
@@ -194,8 +194,8 @@ ln<T is real>(value: T): T {
 }
 
 pow<T is real>(base: T, exponent: int): T {
-    result: T := 1.0;
-    count := exponent;
+    result: T = 1.0;
+    count = exponent;
     if count < 0 {
         count = 0 - count;
     }
@@ -217,7 +217,7 @@ pow<T is real>(base: T, exponent: T): T {
 }
 
 floor<T is real>(value: T): T {
-    result: T := 0.0;
+    result: T = 0.0;
     if value >= 0.0 {
         while result + 1.0 <= value {
             result = result + 1.0;
@@ -232,7 +232,7 @@ floor<T is real>(value: T): T {
 }
 
 ceil<T is real>(value: T): T {
-    result: T := floor(value);
+    result: T = floor(value);
     if result < value {
         return result + 1.0;
     }

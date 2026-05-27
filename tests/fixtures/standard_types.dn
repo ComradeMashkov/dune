@@ -10,16 +10,16 @@ next(value: i32): i32 {
     return value + 1;
 }
 
-tiny: i8 := 12;
-small: i16 := 32000;
-mid: i32 := next(40);
-wide: i64 := 9000000000;
-count: usize := 5;
-offset: isize := 6;
-sample: real32 := 1.5;
-sample_sum: real32 := sample + 2.25;
-precise: real64 := 2.25;
-status: text := "same";
+tiny: i8 = 12;
+small: i16 = 32000;
+mid: i32 = next(40);
+wide: i64 = 9000000000;
+count: usize = 5;
+offset: isize = 6;
+sample: real32 = 1.5;
+sample_sum: real32 = sample + 2.25;
+precise: real64 = 2.25;
+status: text = "same";
 
 say("types");
 noop();

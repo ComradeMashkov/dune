@@ -88,10 +88,6 @@ Token Lexer::next_token() {
 
         return make_token(TokenType::less, start, line, column);
     case ':':
-        if (match('=')) {
-            return make_token(TokenType::colon_equal, start, line, column);
-        }
-
         return make_token(TokenType::colon, start, line, column);
     case ',':
         return make_token(TokenType::comma, start, line, column);

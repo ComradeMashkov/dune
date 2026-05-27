@@ -10,9 +10,9 @@ twice<T is numeric>(value: T): T {
     return value + value;
 }
 
-words: [text] := ["dune", "lang"];
-reversed: [text] := array.reverse(words);
-rough: real32 := 1.5;
+words: [text] = ["dune", "lang"];
+reversed: [text] = array.reverse(words);
+rough: real32 = 1.5;
 
 print(identity(42));
 print(identity("done"));

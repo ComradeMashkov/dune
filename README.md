@@ -25,7 +25,7 @@ Example `hello.dn` source:
 
 ```dn
 // Dune supports single-line comments.
-x := 40 + 2;
+x = 40 + 2;
 print(x);
 ```
 
@@ -38,7 +38,7 @@ Expected output:
 Control flow example:
 
 ```dn
-x := 3;
+x = 3;
 
 while x > 0 {
   x = x - 1;
@@ -60,8 +60,8 @@ log(message: text): unit {
   print(message);
 }
 
-count: usize := 5;
-precise: real64 := 2.25;
+count: usize = 5;
+precise: real64 = 2.25;
 
 log("ready");
 print(count);
@@ -74,7 +74,7 @@ Arrays and modules:
 import math;
 import array;
 
-values: [int] := [1, math.square(2), 5];
+values: [int] = [1, math.square(2), 5];
 values.push(math.square(values[2]));
 
 print(values.len());
@@ -114,8 +114,8 @@ export public(): int {
 Operators and explicit casts:
 
 ```dn
-value := 17;
-exact: real64 := value to real64;
+value = 17;
+exact: real64 = value to real64;
 
 print(-value);
 print(value % 5);
@@ -125,12 +125,12 @@ print(!false && true);
 Array and text methods:
 
 ```dn
-values: [int] := [1, 2];
+values: [int] = [1, 2];
 values.push(3);
 print(values.pop());
 print(values.is_empty());
 
-message: text := "dune language";
+message: text = "dune language";
 print(message.len());
 print(message.contains("lang"));
 print(message.starts_with("dune"));
@@ -141,14 +141,14 @@ Indexing, slices, loops, and foreign functions:
 ```dn
 foreign c_sqrt(value: real64): real64 = "sqrt";
 
-message: text := "dune language";
+message: text = "dune language";
 print(message[0]);
 print(message[5:13]);
 
-values: [int] := [1, 2, 3, 4];
-middle: [int] := values[1:3];
+values: [int] = [1, 2, 3, 4];
+middle: [int] = values[1:3];
 
-for i := 0; i < middle.len(); i = i + 1 {
+for i = 0; i < middle.len(); i = i + 1 {
   if i == 1 {
     continue;
   }
@@ -220,7 +220,7 @@ record Point {
   }
 }
 
-point: Point := Point { x: 1.5, y: 2.5 };
+point: Point = Point { x: 1.5, y: 2.5 };
 print(point.sum());
 ```
 
@@ -267,7 +267,7 @@ boxed<T>(value: T): Box<T> {
   return Box { value: value };
 }
 
-answer: Box<int> := boxed(42);
+answer: Box<int> = boxed(42);
 ```
 
 Choices model values that can be one of several variants. Variants can either be
@@ -280,9 +280,9 @@ choice Maybe<T> {
   Absent,
 }
 
-value: Maybe<int> := Present(42);
+value: Maybe<int> = Present(42);
 
-answer := when value {
+answer = when value {
   is Present(x) { x }
   is Absent { 0 }
 };
@@ -304,12 +304,12 @@ every variant, or include `_` as a fallback. A payload variant pattern binds the
 payload only inside that arm.
 
 ```dn
-label := when answer.value {
+label = when answer.value {
   is 42 { "answer" }
   is _ { "other" }
 };
 
-unwrapped := when value {
+unwrapped = when value {
   is Present(x) { x }
   is Absent { 0 }
 };
@@ -433,7 +433,7 @@ The current release implements a small compiled language with:
 - parser
 - AST
 - arithmetic
-- bindings with `:=`
+- inferred bindings through first assignment with `=`
 - constants
 - single-line comments
 - unary operators

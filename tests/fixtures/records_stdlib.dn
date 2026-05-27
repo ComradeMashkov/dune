@@ -12,12 +12,12 @@ record Point {
     }
 }
 
-point: Point := Point { x: 10, y: 20 };
+point: Point = Point { x: 10, y: 20 };
 print(point.x);
 print(point.sum());
 
-maybe_value: maybe.Maybe<int> := maybe.present(42);
-missing: maybe.Maybe<int> := maybe.absent(0);
+maybe_value: maybe.Maybe<int> = maybe.present(42);
+missing: maybe.Maybe<int> = maybe.absent(0);
 print(maybe_value.value_or(0));
 print(missing.value_or(7));
 print(maybe_value.has_value());
@@ -27,8 +27,8 @@ print(when maybe_value.value_or(0) {
     is _ { 0 }
 });
 
-done: outcome.Outcome<int, text> := outcome.done(9, "");
-failed: outcome.Outcome<int, text> := outcome.failed(0, "bad");
+done: outcome.Outcome<int, text> = outcome.done(9, "");
+failed: outcome.Outcome<int, text> = outcome.failed(0, "bad");
 print(done.value_or(0));
 print(failed.value_or(5));
 print(failed.failure_or("absent"));
@@ -37,6 +37,6 @@ print(when failed.failure_or("absent") {
     is _ { 0 }
 });
 
-repeated: [int] := collections.repeat_int(3, 4);
+repeated: [int] = collections.repeat_int(3, 4);
 print(repeated.len());
 print(assert.equals_int(repeated[0], 3));

@@ -77,7 +77,7 @@ bool compiles_unit_call_statement() {
 
 bool compiles_arrays_and_module_calls() {
     const dune::Bytecode bytecode = compile_source("import math; "
-                                                   "values: [int] := [1, 2]; "
+                                                   "values: [int] = [1, 2]; "
                                                    "values.push(math.square(3)); "
                                                    "print(values.len()); print(values[2]);");
 
@@ -120,11 +120,11 @@ bool compiles_module_constants() {
 }
 
 bool compiles_operators_casts_and_methods() {
-    const dune::Bytecode bytecode = compile_source("values: [int] := [1, 2]; values.push(3); "
+    const dune::Bytecode bytecode = compile_source("values: [int] = [1, 2]; values.push(3); "
                                                    "print(values.pop()); values.clear(); print(values.is_empty()); "
-                                                   "message: text := \"dune\"; print(message.len()); "
+                                                   "message: text = \"dune\"; print(message.len()); "
                                                    "print(message.contains(\"un\")); "
-                                                   "value: real64 := 17 to real64; "
+                                                   "value: real64 = 17 to real64; "
                                                    "print(!false && (17 % 5 == 2));");
 
     bool saw_modulo = false;
@@ -160,10 +160,10 @@ bool compiles_operators_casts_and_methods() {
 
 bool compiles_stdlib_primitives() {
     const dune::Bytecode bytecode = compile_source("foreign c_sqrt(value: real64): real64 = \"sqrt\"; "
-                                                   "message: text := \"dune\"; print(message[0]); "
+                                                   "message: text = \"dune\"; print(message[0]); "
                                                    "print(message[1:3]); "
-                                                   "values: [int] := [1, 2, 3]; part: [int] := values[:2]; "
-                                                   "for i := 0; i < 3; i = i + 1 { "
+                                                   "values: [int] = [1, 2, 3]; part: [int] = values[:2]; "
+                                                   "for i = 0; i < 3; i = i + 1 { "
                                                    "if i == 1 { continue; } break; } "
                                                    "print(c_sqrt(81.0));");
 
@@ -225,9 +225,9 @@ bool compiles_generic_functions() {
 
 bool compiles_stdlib_receiver_methods() {
     const dune::Bytecode bytecode = compile_source("import array; import text; "
-                                                   "values: [int] := [1, 2, 3]; "
+                                                   "values: [int] = [1, 2, 3]; "
                                                    "print(values.first()); print(values.append(4).last()); "
-                                                   "message: text := \" dune \"; print(message.trim());");
+                                                   "message: text = \" dune \"; print(message.trim());");
 
     int call_count = 0;
     bool saw_array_first = false;
@@ -256,7 +256,7 @@ bool compiles_stdlib_receiver_methods() {
 bool compiles_record_literals_fields_and_methods() {
     const dune::Bytecode bytecode =
         compile_source("record Point { x: int, y: int, sum(): int { return this.x + this.y; } } "
-                       "p: Point := Point { x: 10, y: 20 }; print(p.x); print(p.sum());");
+                       "p: Point = Point { x: 10, y: 20 }; print(p.x); print(p.sum());");
 
     bool saw_make_record = false;
     bool saw_load_field = false;
@@ -281,7 +281,7 @@ bool compiles_record_literals_fields_and_methods() {
 }
 
 bool compiles_when_expression() {
-    const dune::Bytecode bytecode = compile_source("value := 2; chosen := when value { "
+    const dune::Bytecode bytecode = compile_source("value = 2; chosen = when value { "
                                                    "is 1 { 10 } is 2 { 20 } is _ { 30 } }; print(chosen);");
 
     bool saw_equal = false;
@@ -302,9 +302,9 @@ bool compiles_when_expression() {
 
 bool compiles_choice_variants_and_when() {
     const dune::Bytecode bytecode = compile_source("choice Maybe { Present(int), Absent, } "
-                                                   "value: Maybe := Present(42); "
-                                                   "empty: Maybe := Absent; "
-                                                   "chosen := when value { is Present(x) { x } is Absent { 0 } }; "
+                                                   "value: Maybe = Present(42); "
+                                                   "empty: Maybe = Absent; "
+                                                   "chosen = when value { is Present(x) { x } is Absent { 0 } }; "
                                                    "print(chosen); "
                                                    "print(when empty { is Present(x) { x } is Absent { 0 } });");
 

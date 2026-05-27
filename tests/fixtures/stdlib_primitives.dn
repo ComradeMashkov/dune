@@ -4,28 +4,28 @@ import text;
 
 foreign c_sqrt(value: real64): real64 = "sqrt";
 
-message: text := "dune language";
+message: text = "dune language";
 print(message[0]);
 print(message[5:13]);
 print(message[:4]);
 print(message[5:]);
 
-values: [int] := [1, 2, 3, 4, 5];
-middle: [int] := values[1:4];
+values: [int] = [1, 2, 3, 4, 5];
+middle: [int] = values[1:4];
 print(middle.len());
 print(middle[0]);
 print(middle[2]);
 print(array.sum(middle));
 print(array.contains(middle, 3));
 print(array.index_of(middle, 4));
-reversed: [int] := array.reverse(middle);
+reversed: [int] = array.reverse(middle);
 print(array.first(reversed));
 print(array.last(reversed));
-ranged: [int] := array.range(2, 5);
+ranged: [int] = array.range(2, 5);
 print(array.sum(ranged));
 
-total := 0;
-for i := 0; i < 6; i = i + 1 {
+total = 0;
+for i = 0; i < 6; i = i + 1 {
     if i == 1 {
         continue;
     }

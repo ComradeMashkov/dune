@@ -10,9 +10,9 @@ fallback(value: Maybe, default: int): int {
     };
 }
 
-x := 99;
-value: Maybe := Present(30);
-missing: Maybe := Absent;
+x = 99;
+value: Maybe = Present(30);
+missing: Maybe = Absent;
 
 print(fallback(value, 0));
 print(fallback(missing, 7));

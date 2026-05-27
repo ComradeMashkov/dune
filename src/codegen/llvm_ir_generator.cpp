@@ -149,7 +149,7 @@ void LlvmIrGenerator::collect_functions(const std::vector<Statement>& statements
 
 void LlvmIrGenerator::collect_global_constants(const Program& program) {
     for (const Statement& statement : program.statements) {
-        if (statement.kind == StatementKind::const_statement && statement.name.find('.') != std::string::npos) {
+        if (statement.kind == StatementKind::const_statement) {
             global_constants_.push_back(&statement);
         }
     }
@@ -221,16 +221,16 @@ void LlvmIrGenerator::emit_function(const Statement& statement, std::ostream& ou
     }
     output << ") {\n";
 
+    emit_global_constants(output);
+
     for (std::size_t index = 0; index < statement.parameters.size(); ++index) {
         const Parameter& parameter = statement.parameters[index];
         const Type type = signature->second.parameters[index];
         const std::string pointer = next_register();
         output << "  " << pointer << " = alloca " << llvm_type(type) << '\n';
         output << "  store " << llvm_type(type) << " %arg" << index << ", ptr " << pointer << '\n';
-        locals_.emplace(parameter.name, Local{pointer, type});
+        locals_[parameter.name] = Local{pointer, type};
     }
-
-    emit_global_constants(output);
 
     const bool has_tail_expression =
         !statement.body.empty() && statement.body.back().kind == StatementKind::expression_statement &&
@@ -427,12 +427,14 @@ bool LlvmIrGenerator::emit_statement(const Statement& statement, std::ostream& o
         return false;
     }
     case StatementKind::assign: {
-        const auto local = locals_.find(statement.name);
+        const TypedValue value = emit_expression(*statement.expression, output);
+        auto local = locals_.find(statement.name);
         if (local == locals_.end()) {
-            throw std::runtime_error("undefined variable '" + statement.name + "'");
+            const std::string pointer = next_register();
+            output << "  " << pointer << " = alloca " << llvm_type(value.type) << '\n';
+            local = locals_.emplace(statement.name, Local{pointer, value.type}).first;
         }
 
-        const TypedValue value = emit_expression(*statement.expression, output);
         output << "  store " << llvm_type(value.type) << ' ' << value.name << ", ptr " << local->second.pointer << '\n';
         return false;
     }

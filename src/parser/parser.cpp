@@ -271,10 +271,6 @@ bool Parser::looks_like_binding_declaration() const {
     }
 
     std::size_t index = current_ + 1;
-    if (tokens_[index].type == TokenType::colon_equal) {
-        return true;
-    }
-
     if (tokens_[index].type != TokenType::colon) {
         return false;
     }
@@ -292,7 +288,7 @@ bool Parser::looks_like_binding_declaration() const {
             ++bracket_depth;
         } else if (type == TokenType::right_bracket && bracket_depth > 0) {
             --bracket_depth;
-        } else if (type == TokenType::colon_equal && angle_depth == 0 && bracket_depth == 0) {
+        } else if (type == TokenType::equal && angle_depth == 0 && bracket_depth == 0) {
             return true;
         } else if ((type == TokenType::semicolon || type == TokenType::eof || type == TokenType::left_brace ||
                     type == TokenType::right_brace) &&
@@ -742,7 +738,7 @@ Statement Parser::if_statement() {
 Statement Parser::binding_statement() {
     const Token& name = consume_identifier_like("expected binding name");
     TypeAnnotation declared_type = optional_type_annotation();
-    consume(TokenType::colon_equal, "expected ':=' after binding name");
+    consume(TokenType::equal, "expected '=' after binding name");
     std::unique_ptr<Expression> value = expression();
     if (!match(TokenType::semicolon) && !check(TokenType::right_brace) && !check(TokenType::eof)) {
         throw std::runtime_error("expected ';' after binding statement");

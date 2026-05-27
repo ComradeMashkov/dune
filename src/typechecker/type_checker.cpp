@@ -427,10 +427,6 @@ void TypeChecker::check(const Program& program) {
     }
 
     for (const std::string& constant : constants_) {
-        if (!is_qualified_module_name(constant)) {
-            continue;
-        }
-
         const auto variable = variables_.find(constant);
         if (variable != variables_.end()) {
             global_constants_.emplace(variable->first, variable->second);
@@ -705,7 +701,17 @@ void TypeChecker::check_statement(const Statement& statement) {
     case StatementKind::assign: {
         const auto variable = variables_.find(statement.name);
         if (variable == variables_.end()) {
-            throw std::runtime_error(diagnostic(statement.location, "undefined variable '" + statement.name + "'"));
+            if (global_constants_.contains(statement.name)) {
+                throw std::runtime_error(
+                    diagnostic(statement.location, "cannot assign to constant '" + statement.name + "'"));
+            }
+
+            const Type actual = check_expression(*statement.expression);
+            if (actual.kind == ValueType::unit_type) {
+                throw std::runtime_error(diagnostic(statement.location, "variables cannot have type 'unit'"));
+            }
+            variables_[statement.name] = actual;
+            return;
         }
         if (constants_.contains(statement.name)) {
             throw std::runtime_error(

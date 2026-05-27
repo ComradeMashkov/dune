@@ -1,1 +1,1 @@
-x: int := true;
+x: int = true;
