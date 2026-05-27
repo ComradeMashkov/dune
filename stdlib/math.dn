@@ -7,15 +7,15 @@ const TAU32: real32 = PI32 * 2.0;
 const E32: real32 = 2.7182817;
 const INVERSE_E32: real32 = 1.0 / E32;
 
-func square<T is numeric>(value: T): T {
+square<T is numeric>(value: T): T {
     return value * value;
 }
 
-func cube<T is numeric>(value: T): T {
+cube<T is numeric>(value: T): T {
     return value * value * value;
 }
 
-func abs<T is numeric>(value: T): T {
+abs<T is numeric>(value: T): T {
     if value < 0 {
         return 0 - value;
     }
@@ -23,7 +23,7 @@ func abs<T is numeric>(value: T): T {
     return value;
 }
 
-func min<T is numeric>(left: T, right: T): T {
+min<T is numeric>(left: T, right: T): T {
     if left < right {
         return left;
     }
@@ -31,7 +31,7 @@ func min<T is numeric>(left: T, right: T): T {
     return right;
 }
 
-func max<T is numeric>(left: T, right: T): T {
+max<T is numeric>(left: T, right: T): T {
     if left > right {
         return left;
     }
@@ -39,7 +39,7 @@ func max<T is numeric>(left: T, right: T): T {
     return right;
 }
 
-func clamp<T is numeric>(value: T, lower: T, upper: T): T {
+clamp<T is numeric>(value: T, lower: T, upper: T): T {
     if value < lower {
         return lower;
     }
@@ -51,13 +51,13 @@ func clamp<T is numeric>(value: T, lower: T, upper: T): T {
     return value;
 }
 
-func sqrt<T is real>(value: T): T {
+sqrt<T is real>(value: T): T {
     if value <= 0.0 {
         return 0.0;
     }
 
-    var guess: T = value;
-    var index = 0;
+    guess: T := value;
+    index := 0;
     while index < 24 {
         guess = (guess + value / guess) / 2.0;
         index = index + 1;
@@ -66,10 +66,10 @@ func sqrt<T is real>(value: T): T {
     return guess;
 }
 
-func normalize_radians<T is real>(value: T): T {
-    var pi: T = 3.141592653589793;
-    var tau: T = pi * 2.0;
-    var x: T = value;
+normalize_radians<T is real>(value: T): T {
+    pi: T := 3.141592653589793;
+    tau: T := pi * 2.0;
+    x: T := value;
 
     while x > pi {
         x = x - tau;
@@ -82,15 +82,15 @@ func normalize_radians<T is real>(value: T): T {
     return x;
 }
 
-func sin<T is real>(value: T): T {
-    var x: T = normalize_radians(value);
-    var term: T = x;
-    var sum: T = x;
-    var n: T = 1.0;
+sin<T is real>(value: T): T {
+    x: T := normalize_radians(value);
+    term: T := x;
+    sum: T := x;
+    n: T := 1.0;
 
     while n < 12.0 {
-        var a: T = 2.0 * n;
-        var b: T = 2.0 * n + 1.0;
+        a: T := 2.0 * n;
+        b: T := 2.0 * n + 1.0;
         term = (0.0 - term) * x * x / (a * b);
         sum = sum + term;
         n = n + 1.0;
@@ -99,15 +99,15 @@ func sin<T is real>(value: T): T {
     return sum;
 }
 
-func cos<T is real>(value: T): T {
-    var x: T = normalize_radians(value);
-    var term: T = 1.0;
-    var sum: T = 1.0;
-    var n: T = 1.0;
+cos<T is real>(value: T): T {
+    x: T := normalize_radians(value);
+    term: T := 1.0;
+    sum: T := 1.0;
+    n: T := 1.0;
 
     while n < 12.0 {
-        var a: T = 2.0 * n - 1.0;
-        var b: T = 2.0 * n;
+        a: T := 2.0 * n - 1.0;
+        b: T := 2.0 * n;
         term = (0.0 - term) * x * x / (a * b);
         sum = sum + term;
         n = n + 1.0;
@@ -116,15 +116,15 @@ func cos<T is real>(value: T): T {
     return sum;
 }
 
-func tan<T is real>(value: T): T {
+tan<T is real>(value: T): T {
     return sin(value) / cos(value);
 }
 
-func exp<T is real>(value: T): T {
-    var e: T = 2.718281828459045;
-    var x: T = value;
-    var scale = 0;
-    var negative_one: T = 0.0 - 1.0;
+exp<T is real>(value: T): T {
+    e: T := 2.718281828459045;
+    x: T := value;
+    scale := 0;
+    negative_one: T := 0.0 - 1.0;
 
     while x > 1.0 {
         x = x - 1.0;
@@ -136,9 +136,9 @@ func exp<T is real>(value: T): T {
         scale = scale - 1;
     }
 
-    var term: T = 1.0;
-    var sum: T = 1.0;
-    var n: T = 1.0;
+    term: T := 1.0;
+    sum: T := 1.0;
+    n: T := 1.0;
     while n < 28.0 {
         term = term * x / n;
         sum = sum + term;
@@ -158,15 +158,15 @@ func exp<T is real>(value: T): T {
     return sum;
 }
 
-func ln<T is real>(value: T): T {
+ln<T is real>(value: T): T {
     if value <= 0.0 {
         return 0.0;
     }
 
-    var e: T = 2.718281828459045;
-    var inverse_e: T = 1.0 / e;
-    var x: T = value;
-    var scale_value: T = 0.0;
+    e: T := 2.718281828459045;
+    inverse_e: T := 1.0 / e;
+    x: T := value;
+    scale_value: T := 0.0;
 
     while x > e {
         x = x / e;
@@ -178,11 +178,11 @@ func ln<T is real>(value: T): T {
         scale_value = scale_value - 1.0;
     }
 
-    var y: T = (x - 1.0) / (x + 1.0);
-    var y2: T = y * y;
-    var term: T = y;
-    var sum: T = 0.0;
-    var n: T = 1.0;
+    y: T := (x - 1.0) / (x + 1.0);
+    y2: T := y * y;
+    term: T := y;
+    sum: T := 0.0;
+    n: T := 1.0;
 
     while n < 39.0 {
         sum = sum + term / n;
@@ -193,9 +193,9 @@ func ln<T is real>(value: T): T {
     return 2.0 * sum + scale_value;
 }
 
-func pow<T is real>(base: T, exponent: int): T {
-    var result: T = 1.0;
-    var count = exponent;
+pow<T is real>(base: T, exponent: int): T {
+    result: T := 1.0;
+    count := exponent;
     if count < 0 {
         count = 0 - count;
     }
@@ -212,12 +212,12 @@ func pow<T is real>(base: T, exponent: int): T {
     return result;
 }
 
-func pow<T is real>(base: T, exponent: T): T {
+pow<T is real>(base: T, exponent: T): T {
     return exp(exponent * ln(base));
 }
 
-func floor<T is real>(value: T): T {
-    var result: T = 0.0;
+floor<T is real>(value: T): T {
+    result: T := 0.0;
     if value >= 0.0 {
         while result + 1.0 <= value {
             result = result + 1.0;
@@ -231,8 +231,8 @@ func floor<T is real>(value: T): T {
     return result;
 }
 
-func ceil<T is real>(value: T): T {
-    var result: T = floor(value);
+ceil<T is real>(value: T): T {
+    result: T := floor(value);
     if result < value {
         return result + 1.0;
     }
@@ -240,7 +240,7 @@ func ceil<T is real>(value: T): T {
     return result;
 }
 
-func round<T is real>(value: T): T {
+round<T is real>(value: T): T {
     if value >= 0.0 {
         return floor(value + 0.5);
     }

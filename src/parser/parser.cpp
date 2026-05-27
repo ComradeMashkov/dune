@@ -9,6 +9,10 @@ namespace dune {
 
 namespace {
 
+bool is_identifier_like_token(TokenType type) {
+    return type == TokenType::identifier || type == TokenType::text_keyword;
+}
+
 SourceLocation location_from_token(const Token& token) {
     return SourceLocation{token.line, token.column, token.lexeme.empty() ? 1 : token.lexeme.size()};
 }
@@ -103,7 +107,7 @@ std::unique_ptr<Expression> make_slice(std::unique_ptr<Expression> value, std::u
 std::unique_ptr<Expression> make_match(std::unique_ptr<Expression> subject,
                                        std::vector<std::unique_ptr<Expression>> cases, SourceLocation location) {
     auto expression =
-        std::make_unique<Expression>(Expression{ExpressionKind::match_expression, "", std::move(subject), nullptr});
+        std::make_unique<Expression>(Expression{ExpressionKind::when_expression, "", std::move(subject), nullptr});
     expression->arguments = std::move(cases);
     expression->location = location;
     return expression;
@@ -126,6 +130,16 @@ Type make_generic_type(std::string name) {
 Type with_type_arguments(Type type, std::vector<Type> arguments) {
     type.arguments = std::move(arguments);
     return type;
+}
+
+Type make_named_type(std::string name, const std::vector<GenericParameter>& generic_parameters) {
+    std::vector<Type> arguments;
+    arguments.reserve(generic_parameters.size());
+    for (const GenericParameter& parameter : generic_parameters) {
+        arguments.push_back(make_generic_type(parameter.name));
+    }
+
+    return with_type_arguments(make_generic_type(std::move(name)), std::move(arguments));
 }
 
 std::string expression_to_type_name(const Expression& expression) {
@@ -215,6 +229,10 @@ bool Parser::check_next(TokenType type) const {
     return tokens_[current_ + 1].type == type;
 }
 
+bool Parser::check_identifier_like() const {
+    return is_identifier_like_token(peek().type);
+}
+
 bool Parser::match(TokenType type) {
     if (!check(type)) {
         return false;
@@ -236,6 +254,129 @@ bool Parser::looks_like_struct_literal() const {
 
     return first == TokenType::identifier && current_ + 2 < tokens_.size() &&
            tokens_[current_ + 2].type == TokenType::colon;
+}
+
+bool can_start_struct_literal(const Expression& expression) {
+    if (expression.kind == ExpressionKind::identifier) {
+        return true;
+    }
+
+    return expression.kind == ExpressionKind::member && expression.left != nullptr &&
+           can_start_struct_literal(*expression.left);
+}
+
+bool Parser::looks_like_binding_declaration() const {
+    if (!check_identifier_like() || current_ + 1 >= tokens_.size()) {
+        return false;
+    }
+
+    std::size_t index = current_ + 1;
+    if (tokens_[index].type == TokenType::colon_equal) {
+        return true;
+    }
+
+    if (tokens_[index].type != TokenType::colon) {
+        return false;
+    }
+
+    int angle_depth = 0;
+    int bracket_depth = 0;
+    ++index;
+    while (index < tokens_.size()) {
+        const TokenType type = tokens_[index].type;
+        if (type == TokenType::less) {
+            ++angle_depth;
+        } else if (type == TokenType::greater && angle_depth > 0) {
+            --angle_depth;
+        } else if (type == TokenType::left_bracket) {
+            ++bracket_depth;
+        } else if (type == TokenType::right_bracket && bracket_depth > 0) {
+            --bracket_depth;
+        } else if (type == TokenType::colon_equal && angle_depth == 0 && bracket_depth == 0) {
+            return true;
+        } else if ((type == TokenType::semicolon || type == TokenType::eof || type == TokenType::left_brace ||
+                    type == TokenType::right_brace) &&
+                   angle_depth == 0 && bracket_depth == 0) {
+            return false;
+        }
+
+        ++index;
+    }
+
+    return false;
+}
+
+bool Parser::looks_like_function_declaration(bool is_extern) const {
+    if (!check_identifier_like()) {
+        return false;
+    }
+
+    std::size_t index = current_ + 1;
+    if (index < tokens_.size() && tokens_[index].type == TokenType::less) {
+        int depth = 1;
+        ++index;
+        while (index < tokens_.size() && depth > 0) {
+            if (tokens_[index].type == TokenType::less) {
+                ++depth;
+            } else if (tokens_[index].type == TokenType::greater) {
+                --depth;
+            }
+            ++index;
+        }
+        if (depth != 0) {
+            return false;
+        }
+    }
+
+    if (index >= tokens_.size() || tokens_[index].type != TokenType::left_paren) {
+        return false;
+    }
+
+    int paren_depth = 1;
+    ++index;
+    while (index < tokens_.size() && paren_depth > 0) {
+        if (tokens_[index].type == TokenType::left_paren) {
+            ++paren_depth;
+        } else if (tokens_[index].type == TokenType::right_paren) {
+            --paren_depth;
+        }
+        ++index;
+    }
+    if (paren_depth != 0) {
+        return false;
+    }
+
+    if (index < tokens_.size() && tokens_[index].type == TokenType::colon) {
+        int angle_depth = 0;
+        int bracket_depth = 0;
+        ++index;
+        while (index < tokens_.size()) {
+            const TokenType type = tokens_[index].type;
+            if (type == TokenType::less) {
+                ++angle_depth;
+            } else if (type == TokenType::greater && angle_depth > 0) {
+                --angle_depth;
+            } else if (type == TokenType::left_bracket) {
+                ++bracket_depth;
+            } else if (type == TokenType::right_bracket && bracket_depth > 0) {
+                --bracket_depth;
+            } else if ((type == TokenType::left_brace || type == TokenType::equal || type == TokenType::semicolon) &&
+                       angle_depth == 0 && bracket_depth == 0) {
+                break;
+            }
+            ++index;
+        }
+    }
+
+    if (index >= tokens_.size()) {
+        return false;
+    }
+
+    if (tokens_[index].type == TokenType::left_brace) {
+        return true;
+    }
+
+    return is_extern && (tokens_[index].type == TokenType::equal || tokens_[index].type == TokenType::semicolon);
 }
 
 const Token& Parser::advance() {
@@ -263,7 +404,7 @@ const Token& Parser::consume(TokenType type, std::string_view message) {
 }
 
 Token Parser::consume_identifier_like(std::string_view message) {
-    if (check(TokenType::identifier) || check(TokenType::text_keyword)) {
+    if (check_identifier_like()) {
         return advance();
     }
 
@@ -271,7 +412,7 @@ Token Parser::consume_identifier_like(std::string_view message) {
 }
 
 bool Parser::match_identifier_like() {
-    if (check(TokenType::identifier) || check(TokenType::text_keyword)) {
+    if (check_identifier_like()) {
         advance();
         return true;
     }
@@ -288,12 +429,8 @@ Statement Parser::statement() {
         return extern_statement();
     }
 
-    if (match(TokenType::func_keyword)) {
-        return function_statement();
-    }
-
-    if (match(TokenType::extend_keyword)) {
-        return impl_statement();
+    if (match(TokenType::method_keyword)) {
+        return method_statement();
     }
 
     if (match(TokenType::record_keyword)) {
@@ -308,8 +445,8 @@ Statement Parser::statement() {
         return import_statement();
     }
 
-    if (match(TokenType::var_keyword)) {
-        return let_statement();
+    if (looks_like_binding_declaration()) {
+        return binding_statement();
     }
 
     if (match(TokenType::const_keyword)) {
@@ -348,12 +485,18 @@ Statement Parser::statement() {
         return block_statement();
     }
 
-    if (check(TokenType::identifier) && check_next(TokenType::equal)) {
+    if (check_identifier_like() && check_next(TokenType::equal)) {
         return assignment_statement();
     }
 
+    if (looks_like_function_declaration()) {
+        return function_statement();
+    }
+
     std::unique_ptr<Expression> value = expression();
-    consume(TokenType::semicolon, "expected ';' after expression statement");
+    if (!match(TokenType::semicolon) && !check(TokenType::right_brace) && !check(TokenType::eof)) {
+        throw std::runtime_error("expected ';' after expression statement");
+    }
 
     Statement statement{StatementKind::expression_statement, "", std::move(value), {}, {}};
     statement.location = statement.expression->location;
@@ -361,7 +504,7 @@ Statement Parser::statement() {
 }
 
 Statement Parser::assignment_statement(bool require_semicolon) {
-    const Token& name = consume(TokenType::identifier, "expected assignment target");
+    const Token& name = consume_identifier_like("expected assignment target");
     consume(TokenType::equal, "expected '=' after assignment target");
     std::unique_ptr<Expression> value = expression();
     if (require_semicolon) {
@@ -405,14 +548,14 @@ Statement Parser::export_statement() {
         return statement;
     }
 
-    if (match(TokenType::func_keyword)) {
+    if (looks_like_function_declaration()) {
         Statement statement = function_statement();
         statement.exported = true;
         return statement;
     }
 
-    if (match(TokenType::extend_keyword)) {
-        Statement statement = impl_statement();
+    if (match(TokenType::method_keyword)) {
+        Statement statement = method_statement();
         statement.exported = true;
         return statement;
     }
@@ -435,12 +578,10 @@ Statement Parser::export_statement() {
         return statement;
     }
 
-    throw std::runtime_error(
-        "expected function, foreign function, record, choice, extension, or constant after export");
+    throw std::runtime_error("expected function, foreign function, record, choice, method, or constant after export");
 }
 
 Statement Parser::extern_statement() {
-    consume(TokenType::func_keyword, "expected func after foreign");
     return function_statement(true);
 }
 
@@ -451,9 +592,9 @@ Statement Parser::for_statement() {
 
     if (match(TokenType::semicolon)) {
         statement.initializer = nullptr;
-    } else if (match(TokenType::var_keyword)) {
-        statement.initializer = std::make_unique<Statement>(let_statement());
-    } else if (check(TokenType::identifier) && check_next(TokenType::equal)) {
+    } else if (looks_like_binding_declaration()) {
+        statement.initializer = std::make_unique<Statement>(binding_statement());
+    } else if (check_identifier_like() && check_next(TokenType::equal)) {
         statement.initializer = std::make_unique<Statement>(assignment_statement());
     } else {
         throw std::runtime_error("expected for initializer");
@@ -467,7 +608,7 @@ Statement Parser::for_statement() {
     consume(TokenType::semicolon, "expected ';' after for condition");
 
     if (!check(TokenType::left_brace)) {
-        if (check(TokenType::identifier) && check_next(TokenType::equal)) {
+        if (check_identifier_like() && check_next(TokenType::equal)) {
             statement.increment = std::make_unique<Statement>(assignment_statement(false));
         } else {
             std::unique_ptr<Expression> value = expression();
@@ -483,11 +624,17 @@ Statement Parser::for_statement() {
 }
 
 Statement Parser::function_statement(bool is_extern) {
-    const Token& keyword = previous();
-    const Token& name = consume(TokenType::identifier, "expected function name after func");
+    const Token name = consume_identifier_like("expected function name");
+    return finish_function_statement(name, {}, is_extern);
+}
+
+Statement Parser::finish_function_statement(const Token& name, std::vector<GenericParameter> leading_generics,
+                                            bool is_extern) {
     std::vector<GenericParameter> parsed_generics;
+    parsed_generics = std::move(leading_generics);
     if (match(TokenType::less)) {
-        parsed_generics = generic_parameters();
+        std::vector<GenericParameter> function_generics = generic_parameters();
+        parsed_generics.insert(parsed_generics.end(), function_generics.begin(), function_generics.end());
         consume(TokenType::greater, "expected '>' after generic parameters");
     }
 
@@ -513,7 +660,7 @@ Statement Parser::function_statement(bool is_extern) {
         statement.type = return_type;
         statement.parameters = std::move(parsed_parameters);
         statement.generic_parameters = std::move(parsed_generics);
-        statement.location = location_from_token(keyword);
+        statement.location = location_from_token(name);
         statement.is_extern = true;
         statement.extern_symbol = std::move(extern_symbol);
         return statement;
@@ -526,39 +673,26 @@ Statement Parser::function_statement(bool is_extern) {
     statement.type = return_type;
     statement.parameters = std::move(parsed_parameters);
     statement.generic_parameters = std::move(parsed_generics);
-    statement.location = location_from_token(keyword);
+    statement.location = location_from_token(name);
     return statement;
 }
 
-Statement Parser::impl_statement() {
+Statement Parser::method_statement() {
     const Token& keyword = previous();
     std::vector<GenericParameter> parsed_generics;
     if (match(TokenType::less)) {
         parsed_generics = generic_parameters();
-        consume(TokenType::greater, "expected '>' after generic parameters");
+        consume(TokenType::greater, "expected '>' after method generic parameters");
     }
 
     TypeAnnotation receiver_type = type_annotation();
-    consume(TokenType::left_brace, "expected '{' before extension body");
+    consume(TokenType::dot, "expected '.' between method receiver and method name");
+    const Token method_name = consume_identifier_like("expected method name");
+    Statement method = finish_function_statement(method_name, parsed_generics);
 
-    std::vector<Statement> methods;
-    while (!check(TokenType::right_brace) && !is_at_end()) {
-        bool exported = false;
-        if (match(TokenType::export_keyword)) {
-            exported = true;
-        }
-
-        consume(TokenType::func_keyword, "expected function in extension body");
-        Statement method = function_statement();
-        method.exported = exported;
-        methods.push_back(std::move(method));
-    }
-
-    consume(TokenType::right_brace, "expected '}' after extension body");
-
-    Statement statement{StatementKind::impl_statement, "", nullptr, std::move(methods), {}};
+    Statement statement{StatementKind::method_block, "", nullptr, {}, {}};
     statement.type = std::move(receiver_type);
-    statement.generic_parameters = std::move(parsed_generics);
+    statement.body.push_back(std::move(method));
     statement.location = location_from_token(keyword);
     return statement;
 }
@@ -580,7 +714,7 @@ Statement Parser::const_statement() {
 Statement Parser::import_statement() {
     const Token& keyword = previous();
     const Token name = consume_identifier_like("expected module name after import");
-    consume(TokenType::semicolon, "expected ';' after import");
+    match(TokenType::semicolon);
 
     Statement statement{StatementKind::import_statement, name.lexeme, nullptr, {}, {}};
     statement.location = location_from_token(keyword);
@@ -605,17 +739,18 @@ Statement Parser::if_statement() {
     return statement;
 }
 
-Statement Parser::let_statement() {
-    const Token& keyword = previous();
-    const Token& name = consume(TokenType::identifier, "expected variable name after var");
+Statement Parser::binding_statement() {
+    const Token& name = consume_identifier_like("expected binding name");
     TypeAnnotation declared_type = optional_type_annotation();
-    consume(TokenType::equal, "expected '=' after variable name");
+    consume(TokenType::colon_equal, "expected ':=' after binding name");
     std::unique_ptr<Expression> value = expression();
-    consume(TokenType::semicolon, "expected ';' after var statement");
+    if (!match(TokenType::semicolon) && !check(TokenType::right_brace) && !check(TokenType::eof)) {
+        throw std::runtime_error("expected ';' after binding statement");
+    }
 
-    Statement statement{StatementKind::var, name.lexeme, std::move(value), {}, {}};
+    Statement statement{StatementKind::binding, name.lexeme, std::move(value), {}, {}};
     statement.type = declared_type;
-    statement.location = location_from_token(keyword);
+    statement.location = location_from_token(name);
     return statement;
 }
 
@@ -656,25 +791,28 @@ Statement Parser::struct_statement() {
     consume(TokenType::left_brace, "expected '{' before record fields");
 
     std::vector<Parameter> fields;
-    if (!check(TokenType::right_brace)) {
-        while (true) {
-            const Token& field = consume(TokenType::identifier, "expected record field name");
-            consume(TokenType::colon, "expected ':' after record field name");
-            fields.push_back(Parameter{field.lexeme, type_annotation(), location_from_token(field)});
-
-            if (!match(TokenType::comma)) {
-                break;
-            }
-
-            if (check(TokenType::right_brace)) {
-                break;
-            }
+    std::vector<Statement> methods;
+    while (!check(TokenType::right_brace) && !is_at_end()) {
+        if (looks_like_function_declaration()) {
+            methods.push_back(function_statement());
+            continue;
         }
+
+        const Token& field = consume_identifier_like("expected record field name");
+        consume(TokenType::colon, "expected ':' after record field name");
+        fields.push_back(Parameter{field.lexeme, type_annotation(), location_from_token(field)});
+
+        if (check(TokenType::right_brace)) {
+            break;
+        }
+
+        match(TokenType::comma);
     }
 
     consume(TokenType::right_brace, "expected '}' after record fields");
 
     Statement statement{StatementKind::struct_statement, name.lexeme, nullptr, {}, {}};
+    statement.body = std::move(methods);
     statement.parameters = std::move(fields);
     statement.generic_parameters = std::move(parsed_generics);
     statement.location = location_from_token(keyword);
@@ -1012,20 +1150,21 @@ std::unique_ptr<Expression> Parser::unary() {
         return make_unary(op.lexeme, unary(), location_from_token(op));
     }
 
-    if (match(TokenType::case_keyword)) {
-        return match_expression();
+    if (match(TokenType::when_keyword)) {
+        return when_expression();
     }
 
     return call();
 }
 
-std::unique_ptr<Expression> Parser::match_expression() {
+std::unique_ptr<Expression> Parser::when_expression() {
     const Token& keyword = previous();
     std::unique_ptr<Expression> subject = expression();
-    consume(TokenType::left_brace, "expected '{' before case arms");
+    consume(TokenType::left_brace, "expected '{' before when arms");
 
     std::vector<std::unique_ptr<Expression>> cases;
     while (!check(TokenType::right_brace) && !is_at_end()) {
+        consume(TokenType::is_keyword, "expected 'is' before when pattern");
         std::unique_ptr<Expression> pattern;
         if (check(TokenType::identifier) && peek().lexeme == "_") {
             const Token& wildcard = advance();
@@ -1034,16 +1173,18 @@ std::unique_ptr<Expression> Parser::match_expression() {
             pattern = expression();
         }
 
-        consume(TokenType::colon, "expected ':' after case pattern");
+        consume(TokenType::left_brace, "expected '{' before when arm body");
         cases.push_back(std::move(pattern));
         cases.push_back(expression());
+        match(TokenType::semicolon);
+        consume(TokenType::right_brace, "expected '}' after when arm body");
 
-        if (!match(TokenType::comma)) {
-            break;
+        if (match(TokenType::comma)) {
+            continue;
         }
     }
 
-    consume(TokenType::right_brace, "expected '}' after case arms");
+    consume(TokenType::right_brace, "expected '}' after when arms");
     return make_match(std::move(subject), std::move(cases), location_from_token(keyword));
 }
 
@@ -1076,7 +1217,7 @@ std::unique_ptr<Expression> Parser::call() {
             continue;
         }
 
-        if (looks_like_struct_literal()) {
+        if (can_start_struct_literal(*expr) && looks_like_struct_literal()) {
             const SourceLocation location = expr->location;
             const std::string name = expression_to_type_name(*expr);
             consume(TokenType::left_brace, "expected '{' before record literal fields");

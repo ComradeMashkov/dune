@@ -1,9 +1,9 @@
-func is_equal(left: int, right: int): bool {
+is_equal(left: int, right: int): bool {
     return left == right;
 }
 
-var x: int = 10;
-var y: int = 20;
-var done: bool = is_equal(x + y, 30);
+x: int := 10;
+y: int := 20;
+done: bool := is_equal(x + y, 30);
 
 print(done);

@@ -93,6 +93,22 @@ TypeAnnotation clone_type_annotation(const TypeAnnotation& annotation) {
     return TypeAnnotation{true, clone_type(annotation.type)};
 }
 
+Type make_generic_type(std::string name) {
+    Type type{ValueType::generic_type, nullptr};
+    type.name = std::move(name);
+    return type;
+}
+
+TypeAnnotation receiver_type_for_record(const Statement& statement) {
+    Type type = make_generic_type(statement.name);
+    type.arguments.reserve(statement.generic_parameters.size());
+    for (const GenericParameter& parameter : statement.generic_parameters) {
+        type.arguments.push_back(make_generic_type(parameter.name));
+    }
+
+    return TypeAnnotation{true, std::move(type)};
+}
+
 std::unique_ptr<Expression> clone_expression(const Expression& expression);
 
 std::unique_ptr<Expression> clone_expression_pointer(const std::unique_ptr<Expression>& expression) {
@@ -160,18 +176,43 @@ Statement clone_statement(const Statement& statement) {
 void desugar_impls(Program& program) {
     std::vector<Statement> desugared;
     for (const Statement& statement : program.statements) {
-        if (statement.kind != StatementKind::impl_statement) {
+        if (statement.kind == StatementKind::struct_statement && !statement.body.empty()) {
+            Statement record = clone_statement(statement);
+            record.body.clear();
+            desugared.push_back(std::move(record));
+
+            TypeAnnotation receiver_type = receiver_type_for_record(statement);
+            for (const Statement& method : statement.body) {
+                if (method.kind != StatementKind::function) {
+                    throw std::runtime_error(diagnostic(method.location, "record method must be a function"));
+                }
+
+                Statement function = clone_statement(method);
+                std::vector<GenericParameter> generic_parameters = statement.generic_parameters;
+                generic_parameters.insert(generic_parameters.end(), function.generic_parameters.begin(),
+                                          function.generic_parameters.end());
+                function.generic_parameters = std::move(generic_parameters);
+                function.parameters.insert(function.parameters.begin(),
+                                           Parameter{"this", clone_type_annotation(receiver_type), statement.location});
+                function.exported = statement.exported || function.exported;
+                desugared.push_back(std::move(function));
+            }
+
+            continue;
+        }
+
+        if (statement.kind != StatementKind::method_block) {
             desugared.push_back(clone_statement(statement));
             continue;
         }
 
         if (!statement.type.has_type) {
-            throw std::runtime_error(diagnostic(statement.location, "extend block needs a receiver type"));
+            throw std::runtime_error(diagnostic(statement.location, "method declaration needs a receiver type"));
         }
 
         for (const Statement& method : statement.body) {
             if (method.kind != StatementKind::function) {
-                throw std::runtime_error(diagnostic(method.location, "extend block can only contain functions"));
+                throw std::runtime_error(diagnostic(method.location, "method block can only contain functions"));
             }
 
             Statement function = clone_statement(method);

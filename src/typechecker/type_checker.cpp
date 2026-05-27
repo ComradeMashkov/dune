@@ -653,7 +653,17 @@ void TypeChecker::check_function(const Statement& statement) {
 
     current_function_ = &function;
     check_statements(statement.body);
-    if (function.return_type.kind != ValueType::unit_type && !statements_return(statement.body)) {
+    const bool has_tail_expression = !statement.body.empty() &&
+                                     statement.body.back().kind == StatementKind::expression_statement &&
+                                     statement.body.back().expression != nullptr;
+    if (function.return_type.kind != ValueType::unit_type && has_tail_expression) {
+        expect_type(function.return_type,
+                    check_expression(*statement.body.back().expression, expected_type(function.return_type)),
+                    statement.body.back().expression->location);
+    }
+
+    if (function.return_type.kind != ValueType::unit_type && !has_tail_expression &&
+        !statements_return(statement.body)) {
         throw std::runtime_error(diagnostic(statement.location, "function '" + statement.name + "' must return type '" +
                                                                     type_name(function.return_type) + "'"));
     }
@@ -663,7 +673,7 @@ void TypeChecker::check_function(const Statement& statement) {
 
 void TypeChecker::check_statement(const Statement& statement) {
     switch (statement.kind) {
-    case StatementKind::var:
+    case StatementKind::binding:
     case StatementKind::const_statement: {
         TypeAnnotation expected = statement.type;
         if (expected.has_type) {
@@ -758,8 +768,8 @@ void TypeChecker::check_statement(const Statement& statement) {
         return;
     case StatementKind::function:
         throw std::runtime_error(diagnostic(statement.location, "function declarations are only allowed at top level"));
-    case StatementKind::impl_statement:
-        throw std::runtime_error(diagnostic(statement.location, "extend blocks are only allowed at top level"));
+    case StatementKind::method_block:
+        throw std::runtime_error(diagnostic(statement.location, "method declarations are only allowed at top level"));
     case StatementKind::struct_statement:
         throw std::runtime_error(diagnostic(statement.location, "record declarations are only allowed at top level"));
     case StatementKind::enum_statement:
@@ -864,8 +874,8 @@ Type TypeChecker::check_expression(const Expression& expression, const TypeAnnot
     case ExpressionKind::binary:
         actual = check_binary_expression(expression, wanted);
         break;
-    case ExpressionKind::match_expression:
-        actual = check_match_expression(expression, wanted);
+    case ExpressionKind::when_expression:
+        actual = check_when_expression(expression, wanted);
         break;
     case ExpressionKind::call:
         actual = check_call_expression(expression, wanted);
@@ -948,19 +958,19 @@ Type TypeChecker::check_binary_expression(const Expression& expression, const Ty
     throw std::runtime_error(diagnostic(expression.location, "unknown binary operator '" + expression.lexeme + "'"));
 }
 
-Type TypeChecker::check_match_expression(const Expression& expression, const TypeAnnotation& expected) {
+Type TypeChecker::check_when_expression(const Expression& expression, const TypeAnnotation& expected) {
     if (expression.arguments.empty() || expression.arguments.size() % 2 != 0) {
-        throw std::runtime_error(diagnostic(expression.location, "case expression needs at least one arm"));
+        throw std::runtime_error(diagnostic(expression.location, "when expression needs at least one arm"));
     }
 
     const Type subject = check_expression(*expression.left);
     if (subject.kind == ValueType::enum_type) {
-        return check_enum_match_expression(expression, subject, expected);
+        return check_enum_when_expression(expression, subject, expected);
     }
 
     if (!is_comparable_type(subject)) {
         throw std::runtime_error(
-            diagnostic(expression.left->location, "cannot apply case to values of type '" + type_name(subject) + "'"));
+            diagnostic(expression.left->location, "cannot apply when to values of type '" + type_name(subject) + "'"));
     }
 
     bool has_wildcard = false;
@@ -987,7 +997,7 @@ Type TypeChecker::check_match_expression(const Expression& expression, const Typ
     }
 
     if (!has_wildcard) {
-        throw std::runtime_error(diagnostic(expression.location, "case expression needs a '_' fallback arm"));
+        throw std::runtime_error(diagnostic(expression.location, "when expression needs a '_' fallback arm"));
     }
 
     return result_type;
@@ -1094,10 +1104,10 @@ Type TypeChecker::check_method_call_expression(const Expression& expression, con
         return check_text_method_call(receiver, expression);
     }
 
-    return check_extension_method_call(expression, expected);
+    return check_receiver_method_call(expression, expected);
 }
 
-Type TypeChecker::check_extension_method_call(const Expression& expression, const TypeAnnotation& expected) {
+Type TypeChecker::check_receiver_method_call(const Expression& expression, const TypeAnnotation& expected) {
     std::vector<const Expression*> arguments;
     arguments.reserve(expression.arguments.size() + 1);
     arguments.push_back(expression.left.get());
@@ -1762,8 +1772,8 @@ TypeChecker::VariantResolution TypeChecker::resolve_variant_pattern(const Expres
     return resolution;
 }
 
-Type TypeChecker::check_enum_match_expression(const Expression& expression, const Type& subject,
-                                              const TypeAnnotation& expected) {
+Type TypeChecker::check_enum_when_expression(const Expression& expression, const Type& subject,
+                                             const TypeAnnotation& expected) {
     const auto definition = enums_.find(subject.name);
     if (definition == enums_.end()) {
         throw std::runtime_error(diagnostic(expression.left->location, "unknown choice '" + subject.name + "'"));
@@ -1824,7 +1834,7 @@ Type TypeChecker::check_enum_match_expression(const Expression& expression, cons
     }
 
     if (!has_wildcard && covered_tags.size() != definition->second.variants.size()) {
-        throw std::runtime_error(diagnostic(expression.location, "case expression does not cover every variant of '" +
+        throw std::runtime_error(diagnostic(expression.location, "when expression does not cover every variant of '" +
                                                                      type_name(subject) + "'"));
     }
 
@@ -2020,14 +2030,14 @@ bool TypeChecker::statement_returns(const Statement& statement) const {
     case StatementKind::if_statement:
         return !statement.else_body.empty() && statements_return(statement.body) &&
                statements_return(statement.else_body);
-    case StatementKind::var:
+    case StatementKind::binding:
     case StatementKind::const_statement:
     case StatementKind::assign:
     case StatementKind::print:
     case StatementKind::while_statement:
     case StatementKind::for_statement:
     case StatementKind::function:
-    case StatementKind::impl_statement:
+    case StatementKind::method_block:
     case StatementKind::struct_statement:
     case StatementKind::enum_statement:
     case StatementKind::break_statement:

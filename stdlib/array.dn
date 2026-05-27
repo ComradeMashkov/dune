@@ -1,75 +1,72 @@
-export extend<T> [T] {
-    func copy(): [T] {
-        var result: [T] = [];
-        for var index = 0; index < this.len(); index = index + 1 {
-            result.push(this[index]);
-        }
-
-        return result;
+export method<T> [T].copy(): [T] {
+    result: [T] := [];
+    for index := 0; index < this.len(); index = index + 1 {
+        result.push(this[index]);
     }
 
-    func reverse(): [T] {
-        var result: [T] = [];
-        var index = this.len();
-        while index > 0 {
-            index = index - 1;
-            result.push(this[index]);
-        }
-
-        return result;
-    }
-
-    func contains(needle: T): bool {
-        return index_of(this, needle) >= 0;
-    }
-
-    func index_of(needle: T): int {
-        for var index = 0; index < this.len(); index = index + 1 {
-            if this[index] == needle {
-                return index;
-            }
-        }
-
-        return 0 - 1;
-    }
-
-    func first(): T {
-        return this[0];
-    }
-
-    func last(): T {
-        return this[this.len() - 1];
-    }
-
-    func append(value: T): [T] {
-        var result: [T] = copy(this);
-        result.push(value);
-        return result;
-    }
-
+    return result;
 }
 
-export func range(start: int, end: int): [int] {
-    var result: [int] = [];
-    for var value = start; value < end; value = value + 1 {
+export method<T> [T].reverse(): [T] {
+    result: [T] := [];
+    index := this.len();
+    while index > 0 {
+        index = index - 1;
+        result.push(this[index]);
+    }
+
+    return result;
+}
+
+export method<T> [T].contains(needle: T): bool {
+    return index_of(this, needle) >= 0;
+}
+
+export method<T> [T].index_of(needle: T): int {
+    for index := 0; index < this.len(); index = index + 1 {
+        if this[index] == needle {
+            return index;
+        }
+    }
+
+    return 0 - 1;
+}
+
+export method<T> [T].first(): T {
+    return this[0];
+}
+
+export method<T> [T].last(): T {
+    return this[this.len() - 1];
+}
+
+export method<T> [T].append(value: T): [T] {
+    result: [T] := copy(this);
+    result.push(value);
+    return result;
+}
+
+export range(start: int, end: int): [int] {
+    result: [int] := [];
+    for value := start; value < end; value = value + 1 {
         result.push(value);
     }
 
     return result;
 }
 
-export func sum(values: [int]): int {
-    var result = 0;
-    for var index = 0; index < values.len(); index = index + 1 {
+export sum(values: [int]): int {
+    result := 0;
+    for index := 0; index < values.len(); index = index + 1 {
         result = result + values[index];
     }
 
     return result;
 }
 
-export func sum(values: [real64]): real64 {
-    var result: real64 = 0.0;
-    for var index = 0; index < values.len(); index = index + 1 {
+export sum(values: [real64]): real64 {
+    result: real64 := 0.0;
+    for index := 0; index < values.len(); index = index + 1 {
         result = result + values[index];
     }
 

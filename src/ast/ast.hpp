@@ -76,7 +76,7 @@ enum class ExpressionKind {
     unary,
     cast,
     binary,
-    match_expression,
+    when_expression,
     call,
     method_call,
 };
@@ -93,7 +93,7 @@ struct Expression {
 };
 
 enum class StatementKind {
-    var,
+    binding,
     const_statement,
     assign,
     print,
@@ -104,7 +104,7 @@ enum class StatementKind {
     break_statement,
     continue_statement,
     function,
-    impl_statement,
+    method_block,
     struct_statement,
     enum_statement,
     return_statement,

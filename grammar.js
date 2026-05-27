@@ -21,6 +21,10 @@ module.exports = grammar({
 
   word: $ => $.identifier,
 
+  conflicts: $ => [
+    [$.parameter, $._primary_expression],
+  ],
+
   rules: {
     source_file: $ => repeat($._statement),
 
@@ -33,8 +37,8 @@ module.exports = grammar({
       $.foreign_function_declaration,
       $.record_declaration,
       $.choice_declaration,
-      $.extend_declaration,
-      $.var_statement,
+      $.method_declaration,
+      $.binding_statement,
       $.const_statement,
       $.assignment_statement,
       $.print_statement,
@@ -55,31 +59,28 @@ module.exports = grammar({
         $.foreign_function_declaration,
         $.record_declaration,
         $.choice_declaration,
-        $.extend_declaration,
+        $.method_declaration,
         $.const_statement,
       ),
     ),
 
-    import_statement: $ => seq("import", field("module", $.identifier), ";"),
+    import_statement: $ => seq("import", field("module", $.identifier), optional(";")),
 
-    function_declaration: $ => seq(
-      "func",
+    function_declaration: $ => prec(2, seq(
       field("name", $.identifier),
       optional($.generic_parameters),
       field("parameters", $.parameter_list),
       optional(seq(":", field("return_type", $._type))),
       field("body", $.block),
-    ),
+    )),
 
     foreign_function_declaration: $ => seq(
       "foreign",
-      "func",
       field("name", $.identifier),
       optional($.generic_parameters),
       field("parameters", $.parameter_list),
       optional(seq(":", field("return_type", $._type))),
-      "=",
-      field("symbol", $.string),
+      optional(seq("=", field("symbol", $.string))),
       ";",
     ),
 
@@ -88,12 +89,14 @@ module.exports = grammar({
       field("name", $.identifier),
       optional($.generic_parameters),
       "{",
-      optional(commaSep($.record_field)),
+      optional(commaSep(choice($.record_field, $.record_method))),
       optional(","),
       "}",
     ),
 
     record_field: $ => seq(field("name", $.identifier), ":", field("type", $._type)),
+
+    record_method: $ => $.function_declaration,
 
     choice_declaration: $ => seq(
       "choice",
@@ -110,10 +113,15 @@ module.exports = grammar({
       optional(seq("(", field("payload", $._type), ")")),
     ),
 
-    extend_declaration: $ => seq(
-      "extend",
+    method_declaration: $ => seq(
+      "method",
       optional($.generic_parameters),
       field("receiver", $._type),
+      ".",
+      field("name", $.identifier),
+      optional($.generic_parameters),
+      field("parameters", $.parameter_list),
+      optional(seq(":", field("return_type", $._type))),
       field("body", $.block),
     ),
 
@@ -131,13 +139,12 @@ module.exports = grammar({
       optional(seq(":", field("type", $._type))),
     ),
 
-    var_statement: $ => seq(
-      "var",
+    binding_statement: $ => seq(
       field("name", $.identifier),
       optional(seq(":", field("type", $._type))),
-      "=",
+      ":=",
       field("value", $._expression),
-      ";",
+      optional(";"),
     ),
 
     const_statement: $ => seq(
@@ -179,7 +186,7 @@ module.exports = grammar({
 
     for_statement: $ => seq(
       "for",
-      optional(choice($.for_var_initializer, $.for_assignment_initializer)),
+      optional(choice($.for_binding_initializer, $.for_assignment_initializer)),
       ";",
       optional(field("condition", $._expression)),
       ";",
@@ -187,11 +194,10 @@ module.exports = grammar({
       field("body", $.block),
     ),
 
-    for_var_initializer: $ => seq(
-      "var",
+    for_binding_initializer: $ => seq(
       field("name", $.identifier),
       optional(seq(":", field("type", $._type))),
-      "=",
+      ":=",
       field("value", $._expression),
     ),
 
@@ -201,7 +207,7 @@ module.exports = grammar({
       field("value", $._expression),
     ),
 
-    block: $ => seq("{", repeat($._statement), "}"),
+    block: $ => seq("{", repeat($._statement), optional(field("tail", $._expression)), "}"),
 
     expression_statement: $ => seq($._expression, ";"),
 
@@ -248,7 +254,7 @@ module.exports = grammar({
     ),
 
     _expression: $ => choice(
-      $.case_expression,
+      $.when_expression,
       $.method_call_expression,
       $.member_expression,
       $.call_expression,
@@ -275,15 +281,15 @@ module.exports = grammar({
 
     parenthesized_expression: $ => seq("(", $._expression, ")"),
 
-    case_expression: $ => seq(
-      "case",
+    when_expression: $ => seq(
+      "when",
       field("value", $._expression),
       "{",
-      repeat(seq($.case_arm, optional(","))),
+      repeat(seq($.when_arm, optional(","))),
       "}",
     ),
 
-    case_arm: $ => seq(field("pattern", $._pattern), ":", field("body", $._expression)),
+    when_arm: $ => seq("is", field("pattern", $._pattern), field("body", $.block)),
 
     _pattern: $ => choice(
       $.wildcard_pattern,

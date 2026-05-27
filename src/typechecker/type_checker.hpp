@@ -81,7 +81,7 @@ private:
     void check_statements(const std::vector<Statement>& statements);
     Type check_expression(const Expression& expression, const TypeAnnotation& expected = {});
     Type check_binary_expression(const Expression& expression, const TypeAnnotation& expected);
-    Type check_match_expression(const Expression& expression, const TypeAnnotation& expected);
+    Type check_when_expression(const Expression& expression, const TypeAnnotation& expected);
     Type check_call_expression(const Expression& expression, const TypeAnnotation& expected);
     Type check_method_call_expression(const Expression& expression, const TypeAnnotation& expected);
     Type check_member_expression(const Expression& expression, const TypeAnnotation& expected);
@@ -97,7 +97,7 @@ private:
     Type check_variant_constructor(const Expression& expression, const std::string& name,
                                    const std::vector<std::unique_ptr<Expression>>& arguments, SourceLocation location,
                                    const TypeAnnotation& expected);
-    Type check_extension_method_call(const Expression& expression, const TypeAnnotation& expected);
+    Type check_receiver_method_call(const Expression& expression, const TypeAnnotation& expected);
     Type check_array_method_call(const Type& receiver, const Expression& expression);
     Type check_text_method_call(const Type& receiver, const Expression& expression);
 
@@ -129,7 +129,7 @@ private:
                                  const EnumVariant& variant) const;
     bool is_variant_name_for_expected_enum(const std::string& name, const TypeAnnotation& expected) const;
     VariantResolution resolve_variant_pattern(const Expression& pattern, const Type& subject);
-    Type check_enum_match_expression(const Expression& expression, const Type& subject, const TypeAnnotation& expected);
+    Type check_enum_when_expression(const Expression& expression, const Type& subject, const TypeAnnotation& expected);
     void check_integer_literal_range(const Expression& expression, const Type& target) const;
     unsigned long long max_integer_literal(ValueType target) const;
     Type coerce_numeric_literal(const Expression& expression, const Type& actual, const Type& target);

@@ -1,23 +1,21 @@
 [
   "break"
-  "case"
   "choice"
   "const"
   "continue"
   "else"
   "export"
-  "extend"
   "foreign"
-  "func"
   "for"
   "if"
   "import"
   "is"
+  "method"
   "print"
   "record"
   "return"
   "to"
-  "var"
+  "when"
   "while"
 ] @keyword
 
@@ -63,6 +61,9 @@
 (foreign_function_declaration
   name: (identifier) @function)
 
+(method_declaration
+  name: (identifier) @function.method)
+
 (parameter
   name: (identifier) @variable.parameter)
 
@@ -107,6 +108,7 @@
   "||"
   "!"
   "="
+  ":="
 ] @operator
 
 [

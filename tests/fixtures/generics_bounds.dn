@@ -2,17 +2,17 @@ import array;
 import math;
 
 // Generic functions are instantiated only for call sites.
-func identity<T>(value: T): T {
+identity<T>(value: T): T {
     return value;
 }
 
-func twice<T is numeric>(value: T): T {
+twice<T is numeric>(value: T): T {
     return value + value;
 }
 
-var words: [text] = ["dune", "lang"];
-var reversed: [text] = array.reverse(words);
-var rough: real32 = 1.5;
+words: [text] := ["dune", "lang"];
+reversed: [text] := array.reverse(words);
+rough: real32 := 1.5;
 
 print(identity(42));
 print(identity("done"));

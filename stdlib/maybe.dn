@@ -3,41 +3,39 @@ export choice Maybe<T> {
     Absent,
 }
 
-export func present<T>(value: T): Maybe<T> {
+export present<T>(value: T): Maybe<T> {
     return Present(value);
 }
 
-export func absent<T>(default: T): Maybe<T> {
+export absent<T>(default: T): Maybe<T> {
     return Absent;
 }
 
-export func absent_int(): Maybe<int> {
+export absent_int(): Maybe<int> {
     return absent(0);
 }
 
-export func absent_text(): Maybe<text> {
+export absent_text(): Maybe<text> {
     return absent("");
 }
 
-export extend<T> Maybe<T> {
-    func has_value(): bool {
-        return case this {
-            Present(value) : true,
-            Absent : false,
-        };
-    }
+export method<T> Maybe<T>.has_value(): bool {
+    return when this {
+        is Present(value) { true }
+        is Absent { false }
+    };
+}
 
-    func is_absent(): bool {
-        return case this {
-            Present(value) : false,
-            Absent : true,
-        };
-    }
+export method<T> Maybe<T>.is_absent(): bool {
+    return when this {
+        is Present(value) { false }
+        is Absent { true }
+    };
+}
 
-    func value_or(default: T): T {
-        return case this {
-            Present(value) : value,
-            Absent : default,
-        };
-    }
+export method<T> Maybe<T>.value_or(default: T): T {
+    return when this {
+        is Present(value) { value }
+        is Absent { default }
+    };
 }

@@ -33,21 +33,21 @@ bool has_completion(const std::vector<dune::lsp::CompletionItem>& completions, c
 
 bool diagnoses_valid_source() {
     const std::vector<dune::lsp::Diagnostic> diagnostics =
-        dune::lsp::diagnose_source("func add(a: int, b: int): int { return a + b; } "
-                                   "var total: int = add(10, 20);");
+        dune::lsp::diagnose_source("add(a: int, b: int): int { return a + b; } "
+                                   "total: int := add(10, 20);");
 
     return expect(diagnostics.empty(), "expected no diagnostics for valid source");
 }
 
 bool diagnoses_type_errors_with_range() {
-    const std::vector<dune::lsp::Diagnostic> diagnostics = dune::lsp::diagnose_source("var x: int = true;");
+    const std::vector<dune::lsp::Diagnostic> diagnostics = dune::lsp::diagnose_source("x: int := true;");
 
     bool passed = true;
     passed = expect(diagnostics.size() == 1, "expected one diagnostic") && passed;
     if (!diagnostics.empty()) {
         passed = expect(diagnostics[0].line == 1, "expected diagnostic line") && passed;
-        passed = expect(diagnostics[0].start_column == 14, "expected diagnostic start column") && passed;
-        passed = expect(diagnostics[0].end_column == 17, "expected diagnostic end column") && passed;
+        passed = expect(diagnostics[0].start_column == 11, "expected diagnostic start column") && passed;
+        passed = expect(diagnostics[0].end_column == 14, "expected diagnostic end column") && passed;
         passed = expect(diagnostics[0].message.find("expected type 'int' but got 'bool'") != std::string::npos,
                         "expected type mismatch message") &&
                  passed;
@@ -58,10 +58,10 @@ bool diagnoses_type_errors_with_range() {
 
 bool completes_keywords_and_local_symbols() {
     const std::vector<dune::lsp::CompletionItem> completions =
-        dune::lsp::complete_source("func add(a: int, b: int): int { return a + b; }\nvar total: int = add(10, 20);");
+        dune::lsp::complete_source("add(a: int, b: int): int { return a + b; }\ntotal: int := add(10, 20);");
 
     bool passed = true;
-    passed = expect(has_completion(completions, "func"), "expected keyword completion") && passed;
+    passed = expect(has_completion(completions, "method"), "expected keyword completion") && passed;
     passed = expect(has_completion(completions, "real64"), "expected type completion") && passed;
     passed = expect(has_completion(completions, "add"), "expected function completion") && passed;
     passed = expect(has_completion(completions, "total"), "expected local variable completion") && passed;
@@ -80,13 +80,12 @@ bool completes_imported_module_members() {
 
 bool hovers_local_symbols() {
     const std::optional<dune::lsp::Hover> hover =
-        dune::lsp::hover_source("var total: int = 42;\nprint(total);", {}, {}, 1, 7);
+        dune::lsp::hover_source("total: int := 42;\nprint(total);", {}, {}, 1, 7);
 
     bool passed = true;
     passed = expect(hover.has_value(), "expected hover") && passed;
     if (hover.has_value()) {
-        passed =
-            expect(hover->contents.find("var total: int") != std::string::npos, "expected variable hover") && passed;
+        passed = expect(hover->contents.find("total: int") != std::string::npos, "expected variable hover") && passed;
     }
     return passed;
 }
@@ -98,7 +97,7 @@ bool hovers_imported_module_members() {
     bool passed = true;
     passed = expect(hover.has_value(), "expected module member hover") && passed;
     if (hover.has_value()) {
-        passed = expect(hover->contents.find("func square<T is numeric>(value: T): T") != std::string::npos,
+        passed = expect(hover->contents.find("square<T is numeric>(value: T): T") != std::string::npos,
                         "expected module function hover") &&
                  passed;
     }
@@ -109,7 +108,7 @@ bool publishes_lsp_diagnostics() {
     const std::string uri = "file:///tmp/bad.dn";
     const std::string initialize = R"({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}})";
     const std::string opened = R"({"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":")" +
-                               uri + R"(","languageId":"dune","version":1,"text":"var x: int = true;"}}})";
+                               uri + R"(","languageId":"dune","version":1,"text":"x: int := true;"}}})";
     const std::string shutdown = R"({"jsonrpc":"2.0","id":2,"method":"shutdown","params":null})";
     const std::string exit = R"({"jsonrpc":"2.0","method":"exit","params":null})";
 
@@ -132,7 +131,7 @@ bool publishes_lsp_diagnostics() {
 
 bool serves_lsp_completions_and_hover() {
     const std::string uri = "file:///tmp/main.dn";
-    const std::string source = "import math;\\nvar total: int = 42;\\nprint(math.);\\nprint(total);";
+    const std::string source = "import math;\\ntotal: int := 42;\\nprint(math.);\\nprint(total);";
     const std::string initialize = R"({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}})";
     const std::string opened = R"({"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":")" +
                                uri + R"(","languageId":"dune","version":1,"text":")" + source + R"("}}})";
@@ -156,7 +155,7 @@ bool serves_lsp_completions_and_hover() {
         expect(text.find("\"completionProvider\"") != std::string::npos, "expected completion capability") && passed;
     passed = expect(text.find("\"hoverProvider\":true") != std::string::npos, "expected hover capability") && passed;
     passed = expect(text.find("\"label\":\"square\"") != std::string::npos, "expected completion response") && passed;
-    passed = expect(text.find("var total: int") != std::string::npos, "expected hover response") && passed;
+    passed = expect(text.find("total: int") != std::string::npos, "expected hover response") && passed;
     return passed;
 }
 

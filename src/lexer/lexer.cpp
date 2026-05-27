@@ -88,6 +88,10 @@ Token Lexer::next_token() {
 
         return make_token(TokenType::less, start, line, column);
     case ':':
+        if (match('=')) {
+            return make_token(TokenType::colon_equal, start, line, column);
+        }
+
         return make_token(TokenType::colon, start, line, column);
     case ',':
         return make_token(TokenType::comma, start, line, column);
@@ -190,10 +194,6 @@ Token Lexer::identifier(std::size_t start, std::size_t line, std::size_t column)
     }
 
     const std::string lexeme = source_.substr(start, current_ - start);
-    if (lexeme == "var") {
-        return Token{TokenType::var_keyword, lexeme, line, column};
-    }
-
     if (lexeme == "const") {
         return Token{TokenType::const_keyword, lexeme, line, column};
     }
@@ -206,12 +206,8 @@ Token Lexer::identifier(std::size_t start, std::size_t line, std::size_t column)
         return Token{TokenType::foreign_keyword, lexeme, line, column};
     }
 
-    if (lexeme == "func") {
-        return Token{TokenType::func_keyword, lexeme, line, column};
-    }
-
-    if (lexeme == "extend") {
-        return Token{TokenType::extend_keyword, lexeme, line, column};
+    if (lexeme == "method") {
+        return Token{TokenType::method_keyword, lexeme, line, column};
     }
 
     if (lexeme == "record") {
@@ -226,8 +222,8 @@ Token Lexer::identifier(std::size_t start, std::size_t line, std::size_t column)
         return Token{TokenType::import_keyword, lexeme, line, column};
     }
 
-    if (lexeme == "case") {
-        return Token{TokenType::case_keyword, lexeme, line, column};
+    if (lexeme == "when") {
+        return Token{TokenType::when_keyword, lexeme, line, column};
     }
 
     if (lexeme == "return") {

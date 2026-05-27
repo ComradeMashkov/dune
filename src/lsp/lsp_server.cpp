@@ -386,8 +386,8 @@ void add_completion(std::vector<CompletionItem>& completions, std::string label,
 
 void add_static_completions(std::vector<CompletionItem>& completions) {
     for (const std::string_view keyword :
-         {"break", "case",   "choice", "const",  "continue", "else", "export", "extend", "foreign", "for",  "func",
-          "if",    "import", "print",  "record", "return",   "to",   "var",    "while",  "true",    "false"}) {
+         {"break", "choice", "const", "continue", "else",   "export", "foreign", "for",   "if",   "import",
+          "is",    "method", "print", "record",   "return", "to",     "when",    "while", "true", "false"}) {
         add_completion(completions, std::string(keyword), "keyword", completion_kind_keyword);
     }
 
@@ -455,12 +455,16 @@ std::vector<std::string> imports_in_source(const std::string& source) {
 void add_token_symbols(const std::string& source, std::vector<CompletionItem>& completions) {
     const std::vector<Token> tokens = tokenize_best_effort(source);
     for (std::size_t index = 0; index + 1 < tokens.size(); ++index) {
-        if (tokens[index].type == TokenType::func_keyword && tokens[index + 1].type == TokenType::identifier) {
-            add_completion(completions, tokens[index + 1].lexeme, "function", completion_kind_function);
+        if (is_identifier_like(tokens[index]) && tokens[index + 1].type == TokenType::left_paren) {
+            add_completion(completions, tokens[index].lexeme, "function", completion_kind_function);
         }
 
-        if (tokens[index].type == TokenType::var_keyword && tokens[index + 1].type == TokenType::identifier) {
-            add_completion(completions, tokens[index + 1].lexeme, "variable", completion_kind_variable);
+        if (is_identifier_like(tokens[index]) && tokens[index + 1].type == TokenType::colon_equal) {
+            add_completion(completions, tokens[index].lexeme, "variable", completion_kind_variable);
+        }
+
+        if (is_identifier_like(tokens[index]) && tokens[index + 1].type == TokenType::colon) {
+            add_completion(completions, tokens[index].lexeme, "variable", completion_kind_variable);
         }
 
         if (tokens[index].type == TokenType::const_keyword && tokens[index + 1].type == TokenType::identifier) {
@@ -557,7 +561,7 @@ bool module_has_explicit_exports(const Program& program) {
         return statement.exported &&
                (statement.kind == StatementKind::function || statement.kind == StatementKind::const_statement ||
                 statement.kind == StatementKind::struct_statement || statement.kind == StatementKind::enum_statement ||
-                statement.kind == StatementKind::impl_statement);
+                statement.kind == StatementKind::method_block);
     });
 }
 
@@ -592,7 +596,7 @@ void add_module_members(const Program& program, std::vector<CompletionItem>& com
             add_enum_variants(statement, true, completions);
         }
 
-        if (statement.kind == StatementKind::impl_statement) {
+        if (statement.kind == StatementKind::method_block) {
             for (const Statement& method : statement.body) {
                 const bool method_visible = !exported_only || statement.exported || method.exported;
                 if (method.kind == StatementKind::function && method_visible) {
@@ -751,7 +755,7 @@ std::string parameter_list_text(const std::vector<Parameter>& parameters) {
 }
 
 std::string function_signature(const Statement& statement) {
-    std::string signature = "func " + statement.name + generic_parameters_text(statement.generic_parameters) +
+    std::string signature = statement.name + generic_parameters_text(statement.generic_parameters) +
                             parameter_list_text(statement.parameters);
     if (statement.type.has_type || statement.kind == StatementKind::function) {
         signature += ": " + type_annotation_name(statement.type, "unit");
@@ -782,7 +786,7 @@ std::optional<std::string> literal_expression_type(const Expression& expression)
     case ExpressionKind::unary:
     case ExpressionKind::cast:
     case ExpressionKind::binary:
-    case ExpressionKind::match_expression:
+    case ExpressionKind::when_expression:
     case ExpressionKind::call:
     case ExpressionKind::method_call:
         return std::nullopt;
@@ -811,8 +815,8 @@ std::string code_hover(std::string declaration) {
 
 std::string declaration_hover(const Statement& statement) {
     switch (statement.kind) {
-    case StatementKind::var:
-        return code_hover("var " + statement.name + ": " + variable_type_text(statement));
+    case StatementKind::binding:
+        return code_hover(statement.name + ": " + variable_type_text(statement));
     case StatementKind::const_statement:
         return code_hover("const " + statement.name + ": " + variable_type_text(statement));
     case StatementKind::function:
@@ -821,7 +825,7 @@ std::string declaration_hover(const Statement& statement) {
         return code_hover("record " + statement.name + generic_parameters_text(statement.generic_parameters));
     case StatementKind::enum_statement:
         return code_hover("choice " + statement.name + generic_parameters_text(statement.generic_parameters));
-    case StatementKind::impl_statement:
+    case StatementKind::method_block:
     case StatementKind::assign:
     case StatementKind::print:
     case StatementKind::block:
@@ -925,16 +929,23 @@ std::string token_type_after_colon(const std::vector<Token>& tokens, std::size_t
 
 std::optional<std::string> token_symbol_hover(const std::vector<Token>& tokens, const std::string& name) {
     for (std::size_t index = 0; index + 1 < tokens.size(); ++index) {
-        if (tokens[index].type == TokenType::var_keyword && tokens[index + 1].lexeme == name) {
-            return code_hover("var " + name + ": " + token_type_after_colon(tokens, index + 2));
+        if (is_identifier_like(tokens[index]) && tokens[index].lexeme == name &&
+            tokens[index + 1].type == TokenType::colon_equal) {
+            return code_hover(name + ": unknown");
+        }
+
+        if (is_identifier_like(tokens[index]) && tokens[index].lexeme == name &&
+            tokens[index + 1].type == TokenType::colon) {
+            return code_hover(name + ": " + token_type_after_colon(tokens, index + 1));
         }
 
         if (tokens[index].type == TokenType::const_keyword && tokens[index + 1].lexeme == name) {
             return code_hover("const " + name + ": " + token_type_after_colon(tokens, index + 2));
         }
 
-        if (tokens[index].type == TokenType::func_keyword && tokens[index + 1].lexeme == name) {
-            return code_hover("func " + name);
+        if (is_identifier_like(tokens[index]) && tokens[index].lexeme == name &&
+            tokens[index + 1].type == TokenType::left_paren) {
+            return code_hover(name + "(...)");
         }
 
         if (tokens[index].type == TokenType::record_keyword && tokens[index + 1].lexeme == name) {
@@ -970,7 +981,7 @@ std::optional<std::string> module_member_hover(const Program& program, const std
             }
         }
 
-        if (statement.kind != StatementKind::impl_statement) {
+        if (statement.kind != StatementKind::method_block) {
             continue;
         }
 
@@ -1040,6 +1051,7 @@ std::optional<std::string> builtin_hover(const Token& token) {
     case TokenType::less:
     case TokenType::less_equal:
     case TokenType::colon:
+    case TokenType::colon_equal:
     case TokenType::comma:
     case TokenType::dot:
     case TokenType::semicolon:
@@ -1051,16 +1063,14 @@ std::optional<std::string> builtin_hover(const Token& token) {
     case TokenType::right_bracket:
     case TokenType::eof:
         return std::nullopt;
-    case TokenType::var_keyword:
     case TokenType::const_keyword:
     case TokenType::export_keyword:
     case TokenType::foreign_keyword:
-    case TokenType::func_keyword:
-    case TokenType::extend_keyword:
+    case TokenType::method_keyword:
     case TokenType::record_keyword:
     case TokenType::choice_keyword:
     case TokenType::import_keyword:
-    case TokenType::case_keyword:
+    case TokenType::when_keyword:
     case TokenType::return_keyword:
     case TokenType::print:
     case TokenType::if_keyword:

@@ -6,7 +6,7 @@ pipeline. It has a lexer, parser, AST, static type checker, bytecode VM, and an
 LLVM-based native backend.
 
 The language is intentionally compact: explicit types when they matter,
-overloads, generics, choices with case expressions, modules loaded from `.dn`
+overloads, generics, choices with `when` expressions, modules loaded from `.dn`
 files, and a standard library that is increasingly written in Dune itself.
 Runtime checks catch common mistakes such as invalid indexes and slices, while
 the type checker rejects mismatched assignments, calls, returns, and binary
@@ -25,7 +25,7 @@ Example `hello.dn` source:
 
 ```dn
 // Dune supports single-line comments.
-var x = 40 + 2;
+x := 40 + 2;
 print(x);
 ```
 
@@ -38,7 +38,7 @@ Expected output:
 Control flow example:
 
 ```dn
-var x = 3;
+x := 3;
 
 while x > 0 {
   x = x - 1;
@@ -56,12 +56,12 @@ Boolean values are represented as `1` for `true` and `0` for `false` when printe
 Typed functions and scalar values:
 
 ```dn
-func log(message: text): unit {
+log(message: text): unit {
   print(message);
 }
 
-var count: usize = 5;
-var precise: real64 = 2.25;
+count: usize := 5;
+precise: real64 := 2.25;
 
 log("ready");
 print(count);
@@ -74,7 +74,7 @@ Arrays and modules:
 import math;
 import array;
 
-var values: [int] = [1, math.square(2), 5];
+values: [int] := [1, math.square(2), 5];
 values.push(math.square(values[2]));
 
 print(values.len());
@@ -90,7 +90,7 @@ array and text operations such as `len`, `push`, indexing, and slicing remain
 runtime primitives; higher-level helpers are ordinary Dune functions in the
 standard library.
 
-The standard library can expose receiver methods with `extend` blocks. For
+The standard library can expose receiver methods with `method` declarations. For
 example, importing `array` makes both `array.first(values)` and `values.first()`
 available. Importing `text` similarly enables helpers such as
 `message.trim().ends_with("x")`.
@@ -102,11 +102,11 @@ explicit exports, only exported functions and constants can be accessed through
 ```dn
 export const ANSWER: int = 42;
 
-func hidden(): int {
+hidden(): int {
   return 7;
 }
 
-export func public(): int {
+export public(): int {
   return hidden();
 }
 ```
@@ -114,8 +114,8 @@ export func public(): int {
 Operators and explicit casts:
 
 ```dn
-var value = 17;
-var exact: real64 = value to real64;
+value := 17;
+exact: real64 := value to real64;
 
 print(-value);
 print(value % 5);
@@ -125,12 +125,12 @@ print(!false && true);
 Array and text methods:
 
 ```dn
-var values: [int] = [1, 2];
+values: [int] := [1, 2];
 values.push(3);
 print(values.pop());
 print(values.is_empty());
 
-var message: text = "dune language";
+message: text := "dune language";
 print(message.len());
 print(message.contains("lang"));
 print(message.starts_with("dune"));
@@ -139,16 +139,16 @@ print(message.starts_with("dune"));
 Indexing, slices, loops, and foreign functions:
 
 ```dn
-foreign func c_sqrt(value: real64): real64 = "sqrt";
+foreign c_sqrt(value: real64): real64 = "sqrt";
 
-var message: text = "dune language";
+message: text := "dune language";
 print(message[0]);
 print(message[5:13]);
 
-var values: [int] = [1, 2, 3, 4];
-var middle: [int] = values[1:3];
+values: [int] := [1, 2, 3, 4];
+middle: [int] := values[1:3];
 
-for var i = 0; i < middle.len(); i = i + 1 {
+for i := 0; i < middle.len(); i = i + 1 {
   if i == 1 {
     continue;
   }
@@ -214,26 +214,24 @@ Records group named fields and can have receiver methods:
 record Point {
   x: real64,
   y: real64,
-}
 
-extend Point {
-  func sum(): real64 {
+  sum(): real64 {
     return this.x + this.y;
   }
 }
 
-var point: Point = Point { x: 1.5, y: 2.5 };
+point: Point := Point { x: 1.5, y: 2.5 };
 print(point.sum());
 ```
 
 Functions can be overloaded by parameter types:
 
 ```dn
-func show(value: int): int {
+show(value: int): int {
   return value + 1;
 }
 
-func show(value: bool): int {
+show(value: bool): int {
   if value {
     return 10;
   } else {
@@ -248,11 +246,11 @@ parameter can be unbounded, or it can use one of the current built-in bounds:
 `integer`, `numeric`, `real`, `comparable`, or `ordered`.
 
 ```dn
-func identity<T>(value: T): T {
+identity<T>(value: T): T {
   return value;
 }
 
-func square<T is numeric>(value: T): T {
+square<T is numeric>(value: T): T {
   return value * value;
 }
 ```
@@ -265,11 +263,11 @@ record Box<T> {
   value: T,
 }
 
-func boxed<T>(value: T): Box<T> {
+boxed<T>(value: T): Box<T> {
   return Box { value: value };
 }
 
-var answer: Box<int> = boxed(42);
+answer: Box<int> := boxed(42);
 ```
 
 Choices model values that can be one of several variants. Variants can either be
@@ -282,40 +280,38 @@ choice Maybe<T> {
   Absent,
 }
 
-var value: Maybe<int> = Present(42);
+value: Maybe<int> := Present(42);
 
-var answer = case value {
-  Present(x) : x,
-  Absent : 0,
+answer := when value {
+  is Present(x) { x }
+  is Absent { 0 }
 };
 ```
 
-Receiver methods can be written with `extend`. The receiver is available inside
-the method body to `this`; exported extend methods can also be called as module
+Receiver methods can be written with `method`. The receiver is available inside
+the method body as `this`; exported methods can also be called as module
 functions after import.
 
 ```dn
-export extend<T> [T] {
-  func first(): T {
-    return this[0];
-  }
+export method<T> [T].first(): T {
+  return this[0];
 }
 ```
 
-`case` expressions compare a subject against literal patterns or choice variant
+`when` expressions compare a subject against literal patterns or choice variant
 patterns. Literal matches require a `_` fallback arm. Choice matches must cover
 every variant, or include `_` as a fallback. A payload variant pattern binds the
 payload only inside that arm.
 
 ```dn
-var label = case answer.value {
-  42 : "answer",
-  _ : "other",
+label := when answer.value {
+  is 42 { "answer" }
+  is _ { "other" }
 };
 
-var unwrapped = case value {
-  Present(x) : x,
-  Absent : 0,
+unwrapped := when value {
+  is Present(x) { x }
+  is Absent { 0 }
 };
 ```
 
@@ -437,7 +433,7 @@ The current release implements a small compiled language with:
 - parser
 - AST
 - arithmetic
-- variables
+- bindings with `:=`
 - constants
 - single-line comments
 - unary operators
@@ -450,7 +446,7 @@ The current release implements a small compiled language with:
 - call-site generic instantiation
 - generic records
 - choices
-- extend blocks
+- receiver methods
 - static scalar types
 - booleans
 - signed and unsigned integer widths
@@ -459,10 +455,10 @@ The current release implements a small compiled language with:
 - unit-returning functions
 - dynamic arrays
 - records with fields and methods
-- case expressions with literal and choice variant patterns
+- `when` expressions with literal and choice variant patterns
 - array methods
 - text methods
-- standard library extension methods
+- standard library receiver methods
 - text indexing
 - slices
 - imports

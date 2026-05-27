@@ -325,9 +325,23 @@ void Compiler::compile_function(const Statement& statement) {
     }
 
     compile_global_constants();
+    const Type return_type =
+        statement.type.has_type ? normalize_type(statement.type.type) : make_type(ValueType::int_type);
+    const bool has_tail_expression =
+        !statement.body.empty() && statement.body.back().kind == StatementKind::expression_statement &&
+        statement.body.back().expression != nullptr && return_type.kind != ValueType::unit_type;
+    if (has_tail_expression) {
+        for (std::size_t index = 0; index + 1 < statement.body.size(); ++index) {
+            compile_statement(statement.body[index]);
+        }
+        compile_expression(*statement.body.back().expression);
+        emit(OpCode::return_value);
+        function.local_count = local_count_;
+        return;
+    }
+
     compile_statements(statement.body);
-    emit(OpCode::push_constant, add_constant(default_value(statement.type.has_type ? normalize_type(statement.type.type)
-                                                                                   : make_type(ValueType::int_type))));
+    emit(OpCode::push_constant, add_constant(default_value(return_type)));
     emit(OpCode::return_value);
 
     function.local_count = local_count_;
@@ -350,7 +364,7 @@ void Compiler::compile_statements(const std::vector<Statement>& statements) {
 
 void Compiler::compile_statement(const Statement& statement) {
     switch (statement.kind) {
-    case StatementKind::var:
+    case StatementKind::binding:
     case StatementKind::const_statement: {
         compile_expression(*statement.expression);
         const Type type =
@@ -442,7 +456,7 @@ void Compiler::compile_statement(const Statement& statement) {
         loop_stack_.back().continues.push_back(emit(OpCode::jump));
         return;
     case StatementKind::function:
-    case StatementKind::impl_statement:
+    case StatementKind::method_block:
     case StatementKind::struct_statement:
     case StatementKind::enum_statement:
         return;
@@ -539,17 +553,17 @@ void Compiler::compile_expression(const Expression& expression) {
     case ExpressionKind::binary:
         compile_binary_expression(expression);
         return;
-    case ExpressionKind::match_expression:
-        compile_match_expression(expression);
+    case ExpressionKind::when_expression:
+        compile_when_expression(expression);
         return;
     }
 }
 
-void Compiler::compile_match_expression(const Expression& expression) {
+void Compiler::compile_when_expression(const Expression& expression) {
     const Type subject_type = expression_type(*expression.left);
     compile_expression(*expression.left);
     const std::size_t subject_slot =
-        declare_local("__case_subject_" + std::to_string(temporary_count_++), subject_type);
+        declare_local("__when_subject_" + std::to_string(temporary_count_++), subject_type);
     emit(OpCode::store_local, subject_slot);
 
     if (subject_type.kind == ValueType::enum_type) {
@@ -559,7 +573,7 @@ void Compiler::compile_match_expression(const Expression& expression) {
             const Expression& result = *expression.arguments[index + 1];
             const bool wildcard = pattern.kind == ExpressionKind::identifier && pattern.lexeme == "_";
 
-            std::size_t next_case = 0;
+            std::size_t next_when = 0;
             const TypeChecker::VariantResolution* resolution = nullptr;
             bool had_previous_binding = false;
             std::size_t previous_binding_slot = 0;
@@ -570,7 +584,7 @@ void Compiler::compile_match_expression(const Expression& expression) {
                 emit(OpCode::load_variant_tag);
                 emit(OpCode::push_constant, add_constant(make_unsigned(resolution->tag)));
                 emit(OpCode::equal);
-                next_case = emit(OpCode::jump_if_false);
+                next_when = emit(OpCode::jump_if_false);
 
                 if (resolution->binds_payload) {
                     const auto previous_slot = locals_.find(resolution->binding_name);
@@ -599,7 +613,7 @@ void Compiler::compile_match_expression(const Expression& expression) {
 
             end_jumps.push_back(emit(OpCode::jump));
             if (!wildcard) {
-                patch_operand(next_case, instructions_->size());
+                patch_operand(next_when, instructions_->size());
             }
         }
 
@@ -615,18 +629,18 @@ void Compiler::compile_match_expression(const Expression& expression) {
         const Expression& result = *expression.arguments[index + 1];
         const bool wildcard = pattern.kind == ExpressionKind::identifier && pattern.lexeme == "_";
 
-        std::size_t next_case = 0;
+        std::size_t next_when = 0;
         if (!wildcard) {
             emit(OpCode::load_local, subject_slot);
             compile_expression(pattern);
             emit(OpCode::equal);
-            next_case = emit(OpCode::jump_if_false);
+            next_when = emit(OpCode::jump_if_false);
         }
 
         compile_expression(result);
         end_jumps.push_back(emit(OpCode::jump));
         if (!wildcard) {
-            patch_operand(next_case, instructions_->size());
+            patch_operand(next_when, instructions_->size());
         }
     }
 

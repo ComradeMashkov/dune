@@ -7,16 +7,14 @@
 namespace dune {
 
 enum class TokenType {
-    var_keyword,
     const_keyword,
     export_keyword,
     foreign_keyword,
-    func_keyword,
-    extend_keyword,
+    method_keyword,
     record_keyword,
     choice_keyword,
     import_keyword,
-    case_keyword,
+    when_keyword,
     return_keyword,
     print,
     if_keyword,
@@ -74,6 +72,7 @@ enum class TokenType {
     less,
     less_equal,
     colon,
+    colon_equal,
     comma,
     dot,
     semicolon,

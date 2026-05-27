@@ -29,7 +29,7 @@ private:
     void compile_expression(const Expression& expression);
     void compile_method_call_expression(const Expression& expression);
     void compile_member_expression(const Expression& expression);
-    void compile_match_expression(const Expression& expression);
+    void compile_when_expression(const Expression& expression);
     void compile_variant_constructor(const Expression& expression);
     void compile_struct_literal(const Expression& expression);
     void compile_binary_expression(const Expression& expression);

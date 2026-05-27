@@ -52,7 +52,7 @@ private:
     TypedValue emit_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_binary_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_logical_expression(const Expression& expression, std::ostream& output);
-    TypedValue emit_match_expression(const Expression& expression, std::ostream& output);
+    TypedValue emit_when_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_unary_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_cast_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_call_expression(const Expression& expression, std::ostream& output);

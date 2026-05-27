@@ -1,12 +1,12 @@
-func add_real(left: real, right: real): real {
+add_real(left: real, right: real): real {
     return left + right;
 }
 
-var small: u8 = 250;
-var large: uint64 = 10000000000;
-var total: uint64 = large + 5;
-var ratio: real = add_real(1.25, 2.5);
-var mark: glyph = 'Q';
+small: u8 := 250;
+large: uint64 := 10000000000;
+total: uint64 := large + 5;
+ratio: real := add_real(1.25, 2.5);
+mark: glyph := 'Q';
 
 print(small);
 print(total);

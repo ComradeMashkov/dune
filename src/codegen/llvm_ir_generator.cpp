@@ -232,7 +232,27 @@ void LlvmIrGenerator::emit_function(const Statement& statement, std::ostream& ou
 
     emit_global_constants(output);
 
-    const bool terminated = emit_statements(statement.body, output);
+    const bool has_tail_expression =
+        !statement.body.empty() && statement.body.back().kind == StatementKind::expression_statement &&
+        statement.body.back().expression != nullptr && signature->second.return_type.kind != ValueType::unit_type;
+    bool terminated = false;
+    if (has_tail_expression) {
+        for (std::size_t index = 0; index + 1 < statement.body.size(); ++index) {
+            if (emit_statement(statement.body[index], output)) {
+                terminated = true;
+                break;
+            }
+        }
+
+        if (!terminated) {
+            const TypedValue value = emit_expression(*statement.body.back().expression, output);
+            output << "  ret " << llvm_type(signature->second.return_type) << ' ' << value.name << '\n';
+            terminated = true;
+        }
+    } else {
+        terminated = emit_statements(statement.body, output);
+    }
+
     if (!terminated) {
         output << "  ret " << llvm_type(signature->second.return_type) << ' '
                << default_value(signature->second.return_type) << '\n';
@@ -392,7 +412,7 @@ bool LlvmIrGenerator::emit_statements(const std::vector<Statement>& statements, 
 
 bool LlvmIrGenerator::emit_statement(const Statement& statement, std::ostream& output) {
     switch (statement.kind) {
-    case StatementKind::var:
+    case StatementKind::binding:
     case StatementKind::const_statement: {
         const TypedValue value = emit_expression(*statement.expression, output);
         auto existing = locals_.find(statement.name);
@@ -509,7 +529,7 @@ bool LlvmIrGenerator::emit_statement(const Statement& statement, std::ostream& o
         output << "  br label %" << loop_stack_.back().continue_label << '\n';
         return true;
     case StatementKind::function:
-    case StatementKind::impl_statement:
+    case StatementKind::method_block:
     case StatementKind::struct_statement:
     case StatementKind::enum_statement:
         return false;
@@ -585,8 +605,8 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_expression(const Expression& e
         return emit_cast_expression(expression, output);
     case ExpressionKind::binary:
         return emit_binary_expression(expression, output);
-    case ExpressionKind::match_expression:
-        return emit_match_expression(expression, output);
+    case ExpressionKind::when_expression:
+        return emit_when_expression(expression, output);
     case ExpressionKind::call:
         return emit_call_expression(expression, output);
     case ExpressionKind::method_call:
@@ -703,29 +723,29 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_logical_expression(const Expre
     return TypedValue{result, make_type(ValueType::bool_type)};
 }
 
-LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_match_expression(const Expression& expression, std::ostream& output) {
+LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_when_expression(const Expression& expression, std::ostream& output) {
     const TypedValue subject = emit_expression(*expression.left, output);
     const auto inferred = expression_types_.find(&expression);
     if (inferred == expression_types_.end()) {
-        throw std::runtime_error("missing inferred case type");
+        throw std::runtime_error("missing inferred when type");
     }
 
     const std::string subject_pointer = next_register();
     const std::string result_pointer = next_register();
-    const std::string end_label = next_label("case_end");
+    const std::string end_label = next_label("when_end");
     output << "  " << subject_pointer << " = alloca " << llvm_type(subject.type) << '\n';
     output << "  store " << llvm_type(subject.type) << ' ' << subject.name << ", ptr " << subject_pointer << '\n';
     output << "  " << result_pointer << " = alloca " << llvm_type(inferred->second) << '\n';
 
     if (subject.type.kind == ValueType::enum_type) {
-        bool last_case_wildcard = false;
+        bool last_when_wildcard = false;
         for (std::size_t index = 0; index < expression.arguments.size(); index += 2) {
             const Expression& pattern = *expression.arguments[index];
             const Expression& result = *expression.arguments[index + 1];
             const bool wildcard = pattern.kind == ExpressionKind::identifier && pattern.lexeme == "_";
-            last_case_wildcard = wildcard;
-            const std::string next_label_name = next_label("case_next");
-            const std::string case_label = next_label("case_arm");
+            last_when_wildcard = wildcard;
+            const std::string next_label_name = next_label("when_next");
+            const std::string case_label = next_label("when_arm");
 
             const TypeChecker::VariantResolution* resolution = nullptr;
             bool had_previous_binding = false;
@@ -781,7 +801,7 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_match_expression(const Express
             }
         }
 
-        if (!last_case_wildcard) {
+        if (!last_when_wildcard) {
             output << "  unreachable\n";
         }
         output << end_label << ":\n";
@@ -794,8 +814,8 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_match_expression(const Express
         const Expression& pattern = *expression.arguments[index];
         const Expression& result = *expression.arguments[index + 1];
         const bool wildcard = pattern.kind == ExpressionKind::identifier && pattern.lexeme == "_";
-        const std::string next_label_name = next_label("case_next");
-        const std::string case_label = next_label("case_arm");
+        const std::string next_label_name = next_label("when_next");
+        const std::string case_label = next_label("when_arm");
 
         if (!wildcard) {
             const std::string subject_value = next_register();

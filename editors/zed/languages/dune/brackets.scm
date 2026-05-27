@@ -1,7 +1,7 @@
 (block "{" @open "}" @close)
 (record_declaration "{" @open "}" @close)
 (choice_declaration "{" @open "}" @close)
-(case_expression "{" @open "}" @close)
+(when_expression "{" @open "}" @close)
 (array_literal "[" @open "]" @close)
 (index_expression "[" @open "]" @close)
 (slice_expression "[" @open "]" @close)

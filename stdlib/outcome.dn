@@ -3,56 +3,54 @@ export choice Outcome<T, E> {
     Failed(E),
 }
 
-export func done<T, E>(value: T, error_default: E): Outcome<T, E> {
+export done<T, E>(value: T, error_default: E): Outcome<T, E> {
     return Done(value);
 }
 
-export func failed<T, E>(value_default: T, error: E): Outcome<T, E> {
+export failed<T, E>(value_default: T, error: E): Outcome<T, E> {
     return Failed(error);
 }
 
-export func done_int(value: int): Outcome<int, text> {
+export done_int(value: int): Outcome<int, text> {
     return done(value, "");
 }
 
-export func failed_int(error: text): Outcome<int, text> {
+export failed_int(error: text): Outcome<int, text> {
     return failed(0, error);
 }
 
-export func done_text(value: text): Outcome<text, text> {
+export done_text(value: text): Outcome<text, text> {
     return done(value, "");
 }
 
-export func failed_text(error: text): Outcome<text, text> {
+export failed_text(error: text): Outcome<text, text> {
     return failed("", error);
 }
 
-export extend<T, E> Outcome<T, E> {
-    func is_done(): bool {
-        return case this {
-            Done(value) : true,
-            Failed(error) : false,
-        };
-    }
+export method<T, E> Outcome<T, E>.is_done(): bool {
+    return when this {
+        is Done(value) { true }
+        is Failed(error) { false }
+    };
+}
 
-    func is_failed(): bool {
-        return case this {
-            Done(value) : false,
-            Failed(error) : true,
-        };
-    }
+export method<T, E> Outcome<T, E>.is_failed(): bool {
+    return when this {
+        is Done(value) { false }
+        is Failed(error) { true }
+    };
+}
 
-    func value_or(default: T): T {
-        return case this {
-            Done(value) : value,
-            Failed(error) : default,
-        };
-    }
+export method<T, E> Outcome<T, E>.value_or(default: T): T {
+    return when this {
+        is Done(value) { value }
+        is Failed(error) { default }
+    };
+}
 
-    func failure_or(default: E): E {
-        return case this {
-            Done(value) : default,
-            Failed(error) : error,
-        };
-    }
+export method<T, E> Outcome<T, E>.failure_or(default: E): E {
+    return when this {
+        is Done(value) { default }
+        is Failed(error) { error }
+    };
 }

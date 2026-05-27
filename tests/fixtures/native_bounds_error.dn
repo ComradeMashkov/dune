@@ -1,2 +1,2 @@
-var values: [int] = [1];
+values: [int] := [1];
 print(values[2]);

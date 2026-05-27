@@ -1,15 +1,15 @@
-export func is_true(value: bool): bool {
+export is_true(value: bool): bool {
     return value;
 }
 
-export func is_false(value: bool): bool {
+export is_false(value: bool): bool {
     return !value;
 }
 
-export func equals_int(actual: int, expected: int): bool {
+export equals_int(actual: int, expected: int): bool {
     return actual == expected;
 }
 
-export func equals_text(actual: text, expected: text): bool {
+export equals_text(actual: text, expected: text): bool {
     return actual == expected;
 }

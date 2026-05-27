@@ -1,109 +1,107 @@
-export extend text {
-    func len(): int {
-        return this.len();
-    }
-
-    func is_empty(): bool {
-        return this.is_empty();
-    }
-
-    func contains(needle: text): bool {
-        return this.contains(needle);
-    }
-
-    func starts_with(prefix: text): bool {
-        return this.starts_with(prefix);
-    }
-
-    func ends_with(suffix: text): bool {
-        var suffix_len = suffix.len();
-        var value_len = this.len();
-        if suffix_len > value_len {
-            return false;
-        }
-
-        return this[value_len - suffix_len:] == suffix;
-    }
-
-    func char_at(index: int): glyph {
-        return this[index];
-    }
-
-    func slice(start: int, end: int): text {
-        return this[start:end];
-    }
-
-    func prefix(end: int): text {
-        return this[:end];
-    }
-
-    func suffix(start: int): text {
-        return this[start:];
-    }
-
-    func index_of(needle: glyph): int {
-        for var index = 0; index < this.len(); index = index + 1 {
-            if this[index] == needle {
-                return index;
-            }
-        }
-
-        return 0 - 1;
-    }
-
-    func count(needle: glyph): int {
-        var total = 0;
-        for var index = 0; index < this.len(); index = index + 1 {
-            if this[index] == needle {
-                total = total + 1;
-            }
-        }
-
-        return total;
-    }
-
-    func trim_start(): text {
-        var start = 0;
-        while start < this.len() && is_space(this[start]) {
-            start = start + 1;
-        }
-
-        return this[start:];
-    }
-
-    func trim_end(): text {
-        var end = this.len();
-        while end > 0 && is_space(this[end - 1]) {
-            end = end - 1;
-        }
-
-        return this[:end];
-    }
-
-    func trim(): text {
-        return trim_end(trim_start(this));
-    }
+export method text.len(): int {
+    return this.len();
 }
 
-export func is_space(value: glyph): bool {
+export method text.is_empty(): bool {
+    return this.is_empty();
+}
+
+export method text.contains(needle: text): bool {
+    return this.contains(needle);
+}
+
+export method text.starts_with(prefix: text): bool {
+    return this.starts_with(prefix);
+}
+
+export method text.ends_with(suffix: text): bool {
+    suffix_len := suffix.len();
+    value_len := this.len();
+    if suffix_len > value_len {
+        return false;
+    }
+
+    return this[value_len - suffix_len:] == suffix;
+}
+
+export method text.char_at(index: int): glyph {
+    return this[index];
+}
+
+export method text.slice(start: int, end: int): text {
+    return this[start:end];
+}
+
+export method text.prefix(end: int): text {
+    return this[:end];
+}
+
+export method text.suffix(start: int): text {
+    return this[start:];
+}
+
+export method text.index_of(needle: glyph): int {
+    for index := 0; index < this.len(); index = index + 1 {
+        if this[index] == needle {
+            return index;
+        }
+    }
+
+    return 0 - 1;
+}
+
+export method text.count(needle: glyph): int {
+    total := 0;
+    for index := 0; index < this.len(); index = index + 1 {
+        if this[index] == needle {
+            total = total + 1;
+        }
+    }
+
+    return total;
+}
+
+export method text.trim_start(): text {
+    start := 0;
+    while start < this.len() && is_space(this[start]) {
+        start = start + 1;
+    }
+
+    return this[start:];
+}
+
+export method text.trim_end(): text {
+    end := this.len();
+    while end > 0 && is_space(this[end - 1]) {
+        end = end - 1;
+    }
+
+    return this[:end];
+}
+
+export method text.trim(): text {
+    return trim_end(trim_start(this));
+}
+
+export is_space(value: glyph): bool {
     return value == ' ' || value == '\n' || value == '\r' || value == '\t';
 }
 
-export func is_digit(value: glyph): bool {
-    var code: int = value to int;
+export is_digit(value: glyph): bool {
+    code: int := value to int;
     return code >= ('0' to int) && code <= ('9' to int);
 }
 
-export func is_lower(value: glyph): bool {
-    var code: int = value to int;
+export is_lower(value: glyph): bool {
+    code: int := value to int;
     return code >= ('a' to int) && code <= ('z' to int);
 }
 
-export func is_upper(value: glyph): bool {
-    var code: int = value to int;
+export is_upper(value: glyph): bool {
+    code: int := value to int;
     return code >= ('A' to int) && code <= ('Z' to int);
 }
 
-export func is_alpha(value: glyph): bool {
+export is_alpha(value: glyph): bool {
     return is_lower(value) || is_upper(value);
 }
