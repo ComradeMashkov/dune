@@ -100,6 +100,15 @@ std::unique_ptr<Expression> make_slice(std::unique_ptr<Expression> value, std::u
     return expression;
 }
 
+std::unique_ptr<Expression> make_match(std::unique_ptr<Expression> subject,
+                                       std::vector<std::unique_ptr<Expression>> cases, SourceLocation location) {
+    auto expression =
+        std::make_unique<Expression>(Expression{ExpressionKind::match_expression, "", std::move(subject), nullptr});
+    expression->arguments = std::move(cases);
+    expression->location = location;
+    return expression;
+}
+
 Type make_type(ValueType type) {
     return Type{type, nullptr};
 }
@@ -111,6 +120,11 @@ Type make_array_type(Type element) {
 Type make_generic_type(std::string name) {
     Type type{ValueType::generic_type, nullptr};
     type.name = std::move(name);
+    return type;
+}
+
+Type with_type_arguments(Type type, std::vector<Type> arguments) {
+    type.arguments = std::move(arguments);
     return type;
 }
 
@@ -622,6 +636,12 @@ Statement Parser::return_statement() {
 Statement Parser::struct_statement() {
     const Token& keyword = previous();
     const Token& name = consume(TokenType::identifier, "expected struct name after struct");
+    std::vector<GenericParameter> parsed_generics;
+    if (match(TokenType::less)) {
+        parsed_generics = generic_parameters();
+        consume(TokenType::greater, "expected '>' after struct generic parameters");
+    }
+
     consume(TokenType::left_brace, "expected '{' before struct fields");
 
     std::vector<Parameter> fields;
@@ -645,6 +665,7 @@ Statement Parser::struct_statement() {
 
     Statement statement{StatementKind::struct_statement, name.lexeme, nullptr, {}, {}};
     statement.parameters = std::move(fields);
+    statement.generic_parameters = std::move(parsed_generics);
     statement.location = location_from_token(keyword);
     return statement;
 }
@@ -825,7 +846,20 @@ TypeAnnotation Parser::type_annotation() {
             name += "." + member.lexeme;
         }
 
-        return TypeAnnotation{true, make_generic_type(std::move(name))};
+        std::vector<Type> arguments;
+        if (match(TokenType::less)) {
+            while (true) {
+                TypeAnnotation argument = type_annotation();
+                arguments.push_back(std::move(argument.type));
+
+                if (!match(TokenType::comma)) {
+                    break;
+                }
+            }
+            consume(TokenType::greater, "expected '>' after type arguments");
+        }
+
+        return TypeAnnotation{true, with_type_arguments(make_generic_type(std::move(name)), std::move(arguments))};
     }
 
     throw std::runtime_error("expected type annotation");
@@ -925,7 +959,39 @@ std::unique_ptr<Expression> Parser::unary() {
         return make_unary(op.lexeme, unary(), location_from_token(op));
     }
 
+    if (match(TokenType::match_keyword)) {
+        return match_expression();
+    }
+
     return call();
+}
+
+std::unique_ptr<Expression> Parser::match_expression() {
+    const Token& keyword = previous();
+    std::unique_ptr<Expression> subject = expression();
+    consume(TokenType::left_brace, "expected '{' before match cases");
+
+    std::vector<std::unique_ptr<Expression>> cases;
+    while (!check(TokenType::right_brace) && !is_at_end()) {
+        std::unique_ptr<Expression> pattern;
+        if (check(TokenType::identifier) && peek().lexeme == "_") {
+            const Token& wildcard = advance();
+            pattern = make_leaf(ExpressionKind::identifier, "_", location_from_token(wildcard));
+        } else {
+            pattern = expression();
+        }
+
+        consume(TokenType::fat_arrow, "expected '=>' after match pattern");
+        cases.push_back(std::move(pattern));
+        cases.push_back(expression());
+
+        if (!match(TokenType::comma)) {
+            break;
+        }
+    }
+
+    consume(TokenType::right_brace, "expected '}' after match cases");
+    return make_match(std::move(subject), std::move(cases), location_from_token(keyword));
 }
 
 std::unique_ptr<Expression> Parser::call() {

@@ -27,6 +27,7 @@ private:
     void compile_expression(const Expression& expression);
     void compile_method_call_expression(const Expression& expression);
     void compile_member_expression(const Expression& expression);
+    void compile_match_expression(const Expression& expression);
     void compile_struct_literal(const Expression& expression);
     void compile_binary_expression(const Expression& expression);
     void compile_cast_expression(const Expression& expression);
@@ -61,6 +62,7 @@ private:
     std::unordered_map<const Expression*, std::string> resolved_calls_;
     std::vector<LoopJumps> loop_stack_;
     std::vector<Instruction>* instructions_ = nullptr;
+    std::size_t temporary_count_ = 0;
 };
 
 } // namespace dune

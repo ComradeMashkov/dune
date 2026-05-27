@@ -21,6 +21,7 @@ public:
 
     struct StructDefinition {
         std::string name;
+        std::vector<GenericParameter> generic_parameters;
         std::vector<StructField> fields;
         std::unordered_map<std::string, std::size_t> field_indices;
         SourceLocation location;
@@ -50,6 +51,7 @@ private:
     void check_statements(const std::vector<Statement>& statements);
     Type check_expression(const Expression& expression, const TypeAnnotation& expected = {});
     Type check_binary_expression(const Expression& expression, const TypeAnnotation& expected);
+    Type check_match_expression(const Expression& expression, const TypeAnnotation& expected);
     Type check_call_expression(const Expression& expression, const TypeAnnotation& expected);
     Type check_method_call_expression(const Expression& expression, const TypeAnnotation& expected);
     Type check_member_expression(const Expression& expression);
@@ -136,6 +138,7 @@ std::string type_name(const Type& type);
 Type make_type(ValueType type);
 Type make_array_type(Type element);
 Type make_struct_type(std::string name);
+Type make_struct_type(std::string name, std::vector<Type> arguments);
 std::string type_key(const Type& type);
 std::string function_key(const std::string& name, const std::vector<Type>& parameters);
 

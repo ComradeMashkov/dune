@@ -66,6 +66,7 @@ private:
     std::unique_ptr<Expression> cast();
     std::unique_ptr<Expression> unary();
     std::unique_ptr<Expression> call();
+    std::unique_ptr<Expression> match_expression();
     std::unique_ptr<Expression> primary();
 
     std::vector<Token> tokens_;

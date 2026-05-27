@@ -40,6 +40,7 @@ private:
     };
 
     struct StructLayout {
+        std::vector<GenericParameter> generic_parameters;
         std::vector<Parameter> fields;
         std::unordered_map<std::string, std::size_t> field_indices;
         std::unordered_map<std::string, std::size_t> field_offsets;
@@ -51,6 +52,7 @@ private:
     TypedValue emit_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_binary_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_logical_expression(const Expression& expression, std::ostream& output);
+    TypedValue emit_match_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_unary_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_cast_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_call_expression(const Expression& expression, std::ostream& output);
@@ -65,6 +67,7 @@ private:
     TypedValue emit_text_literal(const std::string& lexeme);
     void emit_function(const Statement& statement, std::ostream& output);
     void emit_extern_declarations(std::ostream& output);
+    void emit_memory_runtime(std::ostream& output);
     void emit_global_constants(std::ostream& output);
     void emit_print(const TypedValue& value, std::ostream& output);
     void emit_bounds_check(const std::string& index, const std::string& length, std::string_view message,
@@ -86,6 +89,8 @@ private:
     std::string extern_function_name(const FunctionSignature& signature) const;
     std::string default_value(const Type& type) const;
     Type normalize_type(const Type& type) const;
+    Type substitute_struct_type(const Type& type, const std::unordered_map<std::string, Type>& substitutions) const;
+    StructLayout concrete_struct_layout(const Type& type) const;
     std::string decode_glyph_literal(const std::string& lexeme) const;
     std::string decode_text_literal(const std::string& lexeme) const;
     std::string llvm_text_literal(const std::string& value) const;
@@ -106,6 +111,7 @@ private:
     std::size_t register_count_ = 0;
     std::size_t label_count_ = 0;
     std::size_t string_literal_count_ = 0;
+    std::size_t temporary_count_ = 0;
 };
 
 } // namespace dune

@@ -281,6 +281,26 @@ bool compiles_struct_literals_fields_and_methods() {
     return passed;
 }
 
+bool compiles_match_expression() {
+    const dune::Bytecode bytecode = compile_source("let value = 2; let chosen = match value { "
+                                                   "1 => 10, 2 => 20, _ => 30, }; print(chosen);");
+
+    bool saw_equal = false;
+    bool saw_false_jump = false;
+    bool saw_end_jump = false;
+    for (const dune::Instruction& instruction : bytecode.instructions) {
+        saw_equal = saw_equal || instruction.op == dune::OpCode::equal;
+        saw_false_jump = saw_false_jump || instruction.op == dune::OpCode::jump_if_false;
+        saw_end_jump = saw_end_jump || instruction.op == dune::OpCode::jump;
+    }
+
+    bool passed = true;
+    passed = expect(saw_equal, "expected match equality checks") && passed;
+    passed = expect(saw_false_jump, "expected match false jump") && passed;
+    passed = expect(saw_end_jump, "expected match end jump") && passed;
+    return passed;
+}
+
 } // namespace
 
 int main() {
@@ -294,6 +314,7 @@ int main() {
     passed = compiles_generic_functions() && passed;
     passed = compiles_stdlib_extension_methods() && passed;
     passed = compiles_struct_literals_fields_and_methods() && passed;
+    passed = compiles_match_expression() && passed;
 
     return passed ? 0 : 1;
 }

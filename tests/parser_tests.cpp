@@ -476,6 +476,44 @@ bool parses_structs_and_struct_literals() {
     return passed;
 }
 
+bool parses_generic_structs_and_match() {
+    const dune::Program program = parse_source("struct Box<T> { value: T } "
+                                               "let box: Box<int> = Box { value: 7 }; "
+                                               "let chosen = match box.value { 7 => \"seven\", _ => \"other\", };");
+
+    if (!expect(program.statements.size() == 3, "expected struct, let, and match let")) {
+        return false;
+    }
+
+    bool passed = true;
+    const dune::Statement& structure = program.statements[0];
+    passed =
+        expect(structure.kind == dune::StatementKind::struct_statement, "expected generic struct statement") && passed;
+    passed = expect(structure.generic_parameters.size() == 1, "expected one struct generic parameter") && passed;
+    passed = expect(structure.generic_parameters[0].name == "T", "expected struct generic name") && passed;
+    passed = expect(structure.parameters[0].type.type.kind == dune::ValueType::generic_type,
+                    "expected generic field type") &&
+             passed;
+
+    const dune::Statement& box = program.statements[1];
+    passed = expect(box.type.type.kind == dune::ValueType::generic_type, "expected named generic type") && passed;
+    passed = expect(box.type.type.name == "Box", "expected Box type name") && passed;
+    passed = expect(box.type.type.arguments.size() == 1, "expected one Box type argument") && passed;
+    passed =
+        expect(box.type.type.arguments[0].kind == dune::ValueType::int_type, "expected int Box argument") && passed;
+
+    const dune::Expression& match = *program.statements[2].expression;
+    passed = expect(match.kind == dune::ExpressionKind::match_expression, "expected match expression") && passed;
+    passed = expect(match.left->kind == dune::ExpressionKind::member, "expected matched member expression") && passed;
+    passed = expect(match.arguments.size() == 4, "expected two match cases") && passed;
+    passed = expect(match.arguments[0]->kind == dune::ExpressionKind::number, "expected literal pattern") && passed;
+    passed =
+        expect(match.arguments[2]->kind == dune::ExpressionKind::identifier, "expected wildcard pattern") && passed;
+    passed = expect(match.arguments[2]->lexeme == "_", "expected wildcard lexeme") && passed;
+
+    return passed;
+}
+
 } // namespace
 
 int main() {
@@ -493,6 +531,7 @@ int main() {
     passed = parses_generic_functions() && passed;
     passed = parses_impl_methods() && passed;
     passed = parses_structs_and_struct_literals() && passed;
+    passed = parses_generic_structs_and_match() && passed;
 
     return passed ? 0 : 1;
 }

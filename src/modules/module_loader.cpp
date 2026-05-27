@@ -48,6 +48,10 @@ Type clone_type(const Type& type) {
     if (type.element != nullptr) {
         result.element = std::make_shared<Type>(clone_type(*type.element));
     }
+    result.arguments.reserve(type.arguments.size());
+    for (const Type& argument : type.arguments) {
+        result.arguments.push_back(clone_type(argument));
+    }
 
     return result;
 }
@@ -317,6 +321,10 @@ void ModuleLoader::qualify_type(Type& type, const std::string& module_name,
     if (type.kind == ValueType::array_type && type.element != nullptr) {
         qualify_type(*type.element, module_name, local_structs);
         return;
+    }
+
+    for (Type& argument : type.arguments) {
+        qualify_type(argument, module_name, local_structs);
     }
 
     if (type.kind == ValueType::generic_type && local_structs.contains(type.name)) {

@@ -19,6 +19,10 @@ Type clone_type(const Type& type) {
     if (type.element != nullptr) {
         result.element = std::make_shared<Type>(clone_type(*type.element));
     }
+    result.arguments.reserve(type.arguments.size());
+    for (const Type& argument : type.arguments) {
+        result.arguments.push_back(clone_type(argument));
+    }
 
     return result;
 }
@@ -34,6 +38,9 @@ Type substitute_type(const Type& type, const std::unordered_map<std::string, Typ
     Type result = clone_type(type);
     if (result.element != nullptr) {
         result.element = std::make_shared<Type>(substitute_type(*result.element, substitutions));
+    }
+    for (Type& argument : result.arguments) {
+        argument = substitute_type(argument, substitutions);
     }
 
     return result;
@@ -193,6 +200,12 @@ Type make_struct_type(std::string name) {
     return type;
 }
 
+Type make_struct_type(std::string name, std::vector<Type> arguments) {
+    Type type = make_struct_type(std::move(name));
+    type.arguments = std::move(arguments);
+    return type;
+}
+
 std::string type_name(ValueType type) {
     switch (type) {
     case ValueType::int_type:
@@ -250,6 +263,18 @@ std::string type_name(const Type& type) {
     }
 
     if (type.kind == ValueType::generic_type || type.kind == ValueType::struct_type) {
+        if (!type.arguments.empty()) {
+            std::string name = type.name + "<";
+            for (std::size_t index = 0; index < type.arguments.size(); ++index) {
+                if (index > 0) {
+                    name += ", ";
+                }
+                name += type_name(type.arguments[index]);
+            }
+            name += ">";
+            return name;
+        }
+
         return type.name;
     }
 
@@ -266,11 +291,22 @@ std::string type_key(const Type& type) {
     }
 
     if (type.kind == ValueType::generic_type) {
+        if (!type.arguments.empty()) {
+            std::string key = "generic_" + type.name;
+            for (const Type& argument : type.arguments) {
+                key += "_" + type_key(argument);
+            }
+            return key;
+        }
         return "generic_" + type.name;
     }
 
     if (type.kind == ValueType::struct_type) {
-        return "struct_" + type.name;
+        std::string key = "struct_" + type.name;
+        for (const Type& argument : type.arguments) {
+            key += "_" + type_key(argument);
+        }
+        return key;
     }
 
     return type_name(type.kind);
@@ -416,7 +452,8 @@ void TypeChecker::declare_struct(const Statement& statement) {
     }
 
     collect_known_module(statement.name);
-    structs_.emplace(statement.name, StructDefinition{statement.name, {}, {}, statement.location});
+    structs_.emplace(statement.name,
+                     StructDefinition{statement.name, statement.generic_parameters, {}, {}, statement.location});
 }
 
 void TypeChecker::define_struct(const Statement& statement) {
@@ -427,13 +464,18 @@ void TypeChecker::define_struct(const Statement& statement) {
 
     definition->second.fields.clear();
     definition->second.field_indices.clear();
+    std::unordered_set<std::string> generic_names;
+    for (const GenericParameter& parameter : statement.generic_parameters) {
+        generic_names.insert(parameter.name);
+    }
+
     for (const Parameter& field : statement.parameters) {
         if (definition->second.field_indices.contains(field.name)) {
             throw std::runtime_error(
                 diagnostic(field.location, "duplicate field '" + field.name + "' in struct '" + statement.name + "'"));
         }
 
-        const Type field_type = annotation_or_default(field.type);
+        const Type field_type = annotation_or_default(field.type, generic_names);
         if (field_type.kind == ValueType::unit_type) {
             throw std::runtime_error(diagnostic(field.location, "field '" + field.name + "' cannot have type 'unit'"));
         }
@@ -720,6 +762,9 @@ Type TypeChecker::check_expression(const Expression& expression, const TypeAnnot
     case ExpressionKind::binary:
         actual = check_binary_expression(expression, wanted);
         break;
+    case ExpressionKind::match_expression:
+        actual = check_match_expression(expression, wanted);
+        break;
     case ExpressionKind::call:
         actual = check_call_expression(expression, wanted);
         break;
@@ -799,6 +844,47 @@ Type TypeChecker::check_binary_expression(const Expression& expression, const Ty
     }
 
     throw std::runtime_error(diagnostic(expression.location, "unknown binary operator '" + expression.lexeme + "'"));
+}
+
+Type TypeChecker::check_match_expression(const Expression& expression, const TypeAnnotation& expected) {
+    if (expression.arguments.empty() || expression.arguments.size() % 2 != 0) {
+        throw std::runtime_error(diagnostic(expression.location, "match expression needs at least one case"));
+    }
+
+    const Type subject = check_expression(*expression.left);
+    if (!is_comparable_type(subject)) {
+        throw std::runtime_error(
+            diagnostic(expression.left->location, "cannot match values of type '" + type_name(subject) + "'"));
+    }
+
+    bool has_wildcard = false;
+    Type result_type;
+    bool has_result_type = false;
+    for (std::size_t index = 0; index < expression.arguments.size(); index += 2) {
+        const Expression& pattern = *expression.arguments[index];
+        const Expression& result = *expression.arguments[index + 1];
+        const bool wildcard = pattern.kind == ExpressionKind::identifier && pattern.lexeme == "_";
+
+        if (wildcard) {
+            has_wildcard = true;
+        } else {
+            expect_type(subject, check_expression(pattern, expected_type(subject)), pattern.location);
+        }
+
+        const Type value = check_expression(result, has_result_type ? expected_type(result_type) : expected);
+        if (!has_result_type) {
+            result_type = value;
+            has_result_type = true;
+        }
+
+        expect_type(result_type, value, result.location);
+    }
+
+    if (!has_wildcard) {
+        throw std::runtime_error(diagnostic(expression.location, "match expression needs a '_' fallback case"));
+    }
+
+    return result_type;
 }
 
 Type TypeChecker::check_call_expression(const Expression& expression, const TypeAnnotation& expected) {
@@ -963,7 +1049,19 @@ Type TypeChecker::check_member_expression(const Expression& expression) {
                                                                          expression.lexeme + "'"));
         }
 
-        return definition->second.fields[field->second].type;
+        if (definition->second.generic_parameters.size() != receiver.arguments.size()) {
+            throw std::runtime_error(diagnostic(
+                expression.location, "struct '" + receiver.name + "' expects " +
+                                         std::to_string(definition->second.generic_parameters.size()) +
+                                         " type arguments but got " + std::to_string(receiver.arguments.size())));
+        }
+
+        std::unordered_map<std::string, Type> substitutions;
+        for (std::size_t index = 0; index < definition->second.generic_parameters.size(); ++index) {
+            substitutions.emplace(definition->second.generic_parameters[index].name, receiver.arguments[index]);
+        }
+
+        return substitute_type(definition->second.fields[field->second].type, substitutions);
     }
 
     throw std::runtime_error(diagnostic(expression.location, "type '" + type_name(receiver) + "' has no member '" +
@@ -1391,6 +1489,22 @@ bool TypeChecker::collect_generic_constraints(
         return collect_generic_constraints(*pattern.element, *actual.element, constraints, preferred);
     }
 
+    if (pattern.kind == ValueType::struct_type) {
+        if (actual.kind != ValueType::struct_type || pattern.name != actual.name ||
+            pattern.arguments.size() != actual.arguments.size()) {
+            return false;
+        }
+
+        for (std::size_t index = 0; index < pattern.arguments.size(); ++index) {
+            if (!collect_generic_constraints(pattern.arguments[index], actual.arguments[index], constraints,
+                                             preferred)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     return same_type(pattern, actual);
 }
 
@@ -1430,9 +1544,27 @@ Type TypeChecker::check_struct_literal(const Expression& expression, const TypeA
         throw std::runtime_error(diagnostic(expression.location, "unknown struct '" + expression.lexeme + "'"));
     }
 
-    const Type result_type = make_struct_type(expression.lexeme);
-    if (expected.has_type) {
+    Type result_type = make_struct_type(expression.lexeme);
+    if (expected.has_type && expected.type.kind == ValueType::struct_type && expected.type.name == expression.lexeme) {
+        result_type = expected.type;
         expect_type(expected.type, result_type, expression.location);
+    } else if (!definition->second.generic_parameters.empty()) {
+        throw std::runtime_error(diagnostic(expression.location, "generic struct literal '" + expression.lexeme +
+                                                                     "' needs an expected type"));
+    } else if (expected.has_type) {
+        expect_type(expected.type, result_type, expression.location);
+    }
+
+    if (definition->second.generic_parameters.size() != result_type.arguments.size()) {
+        throw std::runtime_error(diagnostic(
+            expression.location, "struct '" + expression.lexeme + "' expects " +
+                                     std::to_string(definition->second.generic_parameters.size()) +
+                                     " type arguments but got " + std::to_string(result_type.arguments.size())));
+    }
+
+    std::unordered_map<std::string, Type> substitutions;
+    for (std::size_t index = 0; index < definition->second.generic_parameters.size(); ++index) {
+        substitutions.emplace(definition->second.generic_parameters[index].name, result_type.arguments[index]);
     }
 
     if (expression.field_names.size() != expression.arguments.size()) {
@@ -1454,7 +1586,7 @@ Type TypeChecker::check_struct_literal(const Expression& expression, const TypeA
                            "struct '" + expression.lexeme + "' has no field '" + field_name + "'"));
         }
 
-        const Type& field_type = definition->second.fields[field->second].type;
+        const Type field_type = substitute_type(definition->second.fields[field->second].type, substitutions);
         expect_type(field_type, check_expression(*expression.arguments[index], expected_type(field_type)),
                     expression.arguments[index]->location);
     }
@@ -1581,12 +1713,20 @@ Type TypeChecker::normalize_type(const Type& type, const std::unordered_set<std:
         return result;
     }
 
-    if (type.kind == ValueType::generic_type && !generic_parameters.contains(type.name) &&
-        structs_.contains(type.name)) {
-        return make_struct_type(type.name);
+    std::vector<Type> arguments;
+    arguments.reserve(type.arguments.size());
+    for (const Type& argument : type.arguments) {
+        arguments.push_back(normalize_type(argument, generic_parameters));
     }
 
-    return type;
+    if (type.kind == ValueType::generic_type && !generic_parameters.contains(type.name) &&
+        structs_.contains(type.name)) {
+        return make_struct_type(type.name, std::move(arguments));
+    }
+
+    Type result = type;
+    result.arguments = std::move(arguments);
+    return result;
 }
 
 bool TypeChecker::same_type(const Type& left, const Type& right) const {
@@ -1595,7 +1735,17 @@ bool TypeChecker::same_type(const Type& left, const Type& right) const {
     }
 
     if (left.kind == ValueType::generic_type || left.kind == ValueType::struct_type) {
-        return left.name == right.name;
+        if (left.name != right.name || left.arguments.size() != right.arguments.size()) {
+            return false;
+        }
+
+        for (std::size_t index = 0; index < left.arguments.size(); ++index) {
+            if (!same_type(left.arguments[index], right.arguments[index])) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     if (left.kind != ValueType::array_type) {

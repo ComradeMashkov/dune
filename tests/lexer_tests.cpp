@@ -493,5 +493,26 @@ int main() {
                            }) &&
              passed;
 
+    passed = expect_tokens("let out = match value { 1 => 10, _ => 20 };",
+                           {
+                               {let, "let"},
+                               {identifier, "out"},
+                               {equal, "="},
+                               {match_keyword, "match"},
+                               {identifier, "value"},
+                               {left_brace, "{"},
+                               {number, "1"},
+                               {fat_arrow, "=>"},
+                               {number, "10"},
+                               {comma, ","},
+                               {identifier, "_"},
+                               {fat_arrow, "=>"},
+                               {number, "20"},
+                               {right_brace, "}"},
+                               {semicolon, ";"},
+                               {eof, ""},
+                           }) &&
+             passed;
+
     return passed ? 0 : 1;
 }

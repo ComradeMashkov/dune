@@ -195,10 +195,19 @@ int main() {
                                   "let p: Point = make(10, 20); print(p.x); print(p.y); print(p.sum());"),
                        "10\n20\n30\n", "expected struct fields and methods output") &&
              passed;
+    passed = expect_eq(run_source("struct Box<T> { value: T } "
+                                  "impl<T> Box<T> { fn unwrap_or(default: T) -> T { return self.value; } } "
+                                  "fn boxed<T>(value: T) -> Box<T> { return Box { value: value }; } "
+                                  "let number: Box<int> = boxed(7); let label: Box<text> = boxed(\"ok\"); "
+                                  "print(number.unwrap_or(0)); print(label.unwrap_or(\"bad\")); "
+                                  "print(match number.value { 7 => 70, _ => 0, }); "
+                                  "print(match \"dune\" { \"lang\" => 1, _ => 2, });"),
+                       "7\nok\n70\n2\n", "expected generic structs and match output") &&
+             passed;
     passed = expect_eq(run_source("import option; import result; import assert; import collections; "
-                                  "let maybe: option.OptionInt = option.some_int(42); "
-                                  "let missing: option.OptionInt = option.none_int(); "
-                                  "let failed: result.ResultInt = result.err_int(\"bad\"); "
+                                  "let maybe: option.Option<int> = option.some(42); "
+                                  "let missing: option.Option<int> = option.none(0); "
+                                  "let failed: result.Result<int, text> = result.err(0, \"bad\"); "
                                   "let repeated: [int] = collections.repeat_int(3, 4); "
                                   "print(maybe.unwrap_or(0)); print(missing.unwrap_or(7)); "
                                   "print(failed.error_or(\"none\")); print(repeated.len()); "
