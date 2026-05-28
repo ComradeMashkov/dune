@@ -187,7 +187,14 @@ module.exports = grammar({
       ";",
     ),
 
-    print_statement: $ => seq("print", "(", field("value", $._expression), ")", ";"),
+    print_statement: $ => seq(
+      "print",
+      "(",
+      field("value", $._expression),
+      repeat(seq(",", field("argument", $._expression))),
+      ")",
+      ";"
+    ),
 
     return_statement: $ => seq("return", optional($._expression), ";"),
 

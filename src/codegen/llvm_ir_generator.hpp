@@ -79,6 +79,10 @@ private:
     void emit_panic_runtime(std::ostream& output);
     void emit_global_constants(std::ostream& output);
     void emit_print(const TypedValue& value, std::ostream& output);
+    void emit_format_print(const Statement& statement, std::ostream& output);
+    void emit_print_fragment(const TypedValue& value, std::ostream& output);
+    void emit_print_text_segment(const std::string& value, std::ostream& output);
+    void emit_print_newline(std::ostream& output);
     void emit_bounds_check(const std::string& index, const std::string& length, std::string_view message,
                            std::ostream& output);
     void emit_slice_bounds_check(const std::string& start, const std::string& end, const std::string& length,
@@ -94,6 +98,7 @@ private:
     std::string llvm_type(const Type& type) const;
     std::size_t llvm_bit_width(const Type& type) const;
     std::string printf_format_name(const Type& type) const;
+    std::string printf_fragment_format_name(const Type& type) const;
     std::size_t llvm_size(const Type& type) const;
     std::string function_name(const std::string& name) const;
     std::string extern_function_name(const FunctionSignature& signature) const;
@@ -103,6 +108,7 @@ private:
     StructLayout concrete_struct_layout(const Type& type) const;
     std::string decode_glyph_literal(const std::string& lexeme) const;
     std::string decode_text_literal(const std::string& lexeme) const;
+    std::string emit_c_string_literal(const std::string& value);
     std::string llvm_text_literal(const std::string& value) const;
     std::string llvm_symbol(const std::string& value) const;
     TypedValue cast_for_print(const TypedValue& value, std::ostream& output);

@@ -178,6 +178,10 @@ Statement clone_statement(const Statement& statement) {
     result.extern_symbol = statement.extern_symbol;
     result.owner_record = statement.owner_record;
     result.target = clone_expression_pointer(statement.target);
+    result.arguments.reserve(statement.arguments.size());
+    for (const std::unique_ptr<Expression>& argument : statement.arguments) {
+        result.arguments.push_back(clone_expression_pointer(argument));
+    }
     return result;
 }
 
@@ -485,6 +489,10 @@ void ModuleLoader::qualify_statement(Statement& statement, const std::string& mo
 
     if (statement.expression != nullptr) {
         qualify_expression(*statement.expression, module_name, local_functions, local_constants, local_structs);
+    }
+
+    for (std::unique_ptr<Expression>& argument : statement.arguments) {
+        qualify_expression(*argument, module_name, local_functions, local_constants, local_structs);
     }
 
     for (Statement& child : statement.body) {

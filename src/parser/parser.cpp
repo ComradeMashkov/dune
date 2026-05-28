@@ -833,10 +833,15 @@ Statement Parser::print_statement() {
     const Token& keyword = previous();
     consume(TokenType::left_paren, "expected '(' after print");
     std::unique_ptr<Expression> value = expression();
+    std::vector<std::unique_ptr<Expression>> arguments;
+    while (match(TokenType::comma)) {
+        arguments.push_back(expression());
+    }
     consume(TokenType::right_paren, "expected ')' after print expression");
     consume(TokenType::semicolon, "expected ';' after print statement");
 
     Statement statement{StatementKind::print, "", std::move(value), {}, {}};
+    statement.arguments = std::move(arguments);
     statement.location = location_from_token(keyword);
     return statement;
 }
