@@ -234,6 +234,13 @@ int main() {
                           "error: text = failed.failure_or(\"absent\");",
                           "expected record-based stdlib modules to validate") &&
              passed;
+    passed = expect_valid("import autograd; "
+                          "x: autograd.Value = autograd.variable(2.0); "
+                          "y: autograd.Value = x.mul(3.0).add(x.pow(2.0)); "
+                          "y.backward(); value: real64 = y.data; gradient: real64 = x.grad; "
+                          "active: bool = x.requires_grad;",
+                          "expected autograd stdlib module to validate") &&
+             passed;
     passed = expect_fixture_valid("import feature_exports; answer: int = feature_exports.ANSWER; "
                                   "value: int = feature_exports.public();",
                                   "expected exported module members to validate") &&

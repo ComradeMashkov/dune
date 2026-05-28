@@ -85,7 +85,8 @@ print(values.first());
 
 Modules are loaded from `.dn` files. The standard library currently includes
 `stdlib/math.dn`, `stdlib/array.dn`, `stdlib/text.dn`, `stdlib/maybe.dn`,
-`stdlib/outcome.dn`, `stdlib/assert.dn`, and `stdlib/collections.dn`. Low-level
+`stdlib/outcome.dn`, `stdlib/assert.dn`, `stdlib/collections.dn`, and
+`stdlib/autograd.dn`. Low-level
 array and text operations such as `len`, `push`, indexing, and slicing remain
 runtime primitives; higher-level helpers are ordinary Dune functions in the
 standard library.
@@ -182,6 +183,45 @@ The `math` module currently provides constants and generic numeric functions:
 - `floor(value)`
 - `ceil(value)`
 - `round(value)`
+
+The `autograd` module provides scalar reverse-mode automatic differentiation.
+It is implemented in Dune itself with records, arrays, methods, and mutation;
+the VM does not contain autograd-specific primitives.
+
+```dn
+import autograd;
+
+x = autograd.variable(2.0);
+y = autograd.variable(3.0);
+loss = x.mul(y).add(x.pow(2.0)).add(1.0);
+loss.backward();
+
+print(loss.data);
+print(x.grad);
+print(y.grad);
+```
+
+Expected output:
+
+```txt
+11
+7
+2
+```
+
+Core helpers:
+
+- `variable(data)`, `value(data)`, `constant(data)`
+- `data(value)` and `grad(value)`, with exported `value.data`, `value.grad`,
+  and `value.requires_grad` fields
+- `add(left, right)` or `left.add(right)`
+- `sub(left, right)` or `left.sub(right)`
+- `mul(left, right)` or `left.mul(right)`
+- `div(left, right)` or `left.div(right)`
+- `neg(value)`, `pow(value, exponent)`, `relu(value)`
+- `tanh(value)`, `exp(value)`, `ln(value)`, `sqrt(value)`
+- `backward(value)` or `value.backward()`
+- `zero_grad(value)` or `value.zero_grad()`
 
 The `array` module provides generic helpers for common element types:
 
