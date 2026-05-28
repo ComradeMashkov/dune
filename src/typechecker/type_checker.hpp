@@ -70,6 +70,11 @@ private:
         SourceLocation location;
     };
 
+    struct VariableBinding {
+        Type type;
+        bool constant = false;
+    };
+
     void declare_struct(const Statement& statement);
     void define_struct(const Statement& statement);
     void declare_enum(const Statement& statement);
@@ -79,6 +84,7 @@ private:
     void check_function(const Statement& statement);
     void check_statement(const Statement& statement);
     void check_statements(const std::vector<Statement>& statements);
+    Type check_assignment_target(const Expression& target, SourceLocation location);
     Type check_expression(const Expression& expression, const TypeAnnotation& expected = {});
     Type check_binary_expression(const Expression& expression, const TypeAnnotation& expected);
     Type check_when_expression(const Expression& expression, const TypeAnnotation& expected);
@@ -141,6 +147,13 @@ private:
     bool is_qualified_module_name(const std::string& name) const;
     bool is_known_module(const std::string& module) const;
     std::string diagnostic(SourceLocation location, const std::string& message) const;
+    void reset_scopes();
+    void push_scope();
+    void pop_scope();
+    VariableBinding* find_binding(const std::string& name);
+    const VariableBinding* find_binding(const std::string& name) const;
+    bool has_visible_constant(const std::string& name) const;
+    void declare_binding(const std::string& name, const Type& type, bool constant, SourceLocation location);
 
     const FunctionSignature& resolve_overload(const std::string& name, const std::vector<const Expression*>& arguments,
                                               SourceLocation location, const TypeAnnotation& expected);
@@ -162,10 +175,9 @@ private:
     std::unordered_set<std::string> instantiated_function_keys_;
     std::deque<Statement> instantiated_functions_;
     std::unordered_map<std::string, std::string> instantiated_function_traces_;
-    std::unordered_map<std::string, Type> variables_;
+    std::vector<std::unordered_map<std::string, VariableBinding>> scopes_;
     std::unordered_map<std::string, Type> global_constants_;
     std::unordered_map<std::string, std::unordered_set<std::string>> module_exports_;
-    std::unordered_set<std::string> constants_;
     std::unordered_set<std::string> known_modules_;
     std::unordered_map<const Expression*, Type> expression_types_;
     std::unordered_map<const Expression*, std::string> resolved_calls_;

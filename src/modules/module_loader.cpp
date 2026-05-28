@@ -170,6 +170,7 @@ Statement clone_statement(const Statement& statement) {
     result.exported = statement.exported;
     result.is_extern = statement.is_extern;
     result.extern_symbol = statement.extern_symbol;
+    result.target = clone_expression_pointer(statement.target);
     return result;
 }
 

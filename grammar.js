@@ -299,13 +299,14 @@ module.exports = grammar({
       $.character,
       $.string,
       $.boolean,
+      $.constructor_identifier,
       $.identifier,
     ),
 
     wildcard_pattern: _ => "_",
 
     variant_pattern: $ => prec(1, seq(
-      field("name", choice($.identifier, $.member_expression)),
+      field("name", choice($.identifier, $.constructor_identifier, $.member_expression)),
       "(",
       optional(choice($.identifier, $.wildcard_pattern)),
       ")",
@@ -338,21 +339,20 @@ module.exports = grammar({
     argument_list: $ => seq("(", optional(commaSep($._expression)), optional(","), ")"),
 
     member_expression: $ => prec.left(PREC.member, seq(
-      field("receiver", $.identifier),
-      repeat(seq(".", $.identifier)),
+      field("receiver", choice($.identifier, $.member_expression, $.call_expression, $.index_expression, $.parenthesized_expression)),
       ".",
       field("property", choice($.identifier, $.constructor_identifier)),
     )),
 
     index_expression: $ => prec.left(PREC.member, seq(
-      field("receiver", choice($.identifier, $.member_expression, $.call_expression, $.parenthesized_expression)),
+      field("receiver", choice($.identifier, $.member_expression, $.call_expression, $.index_expression, $.parenthesized_expression)),
       "[",
       field("index", $._expression),
       "]",
     )),
 
     slice_expression: $ => prec.left(PREC.member, seq(
-      field("receiver", choice($.identifier, $.member_expression, $.call_expression, $.parenthesized_expression)),
+      field("receiver", choice($.identifier, $.member_expression, $.call_expression, $.index_expression, $.parenthesized_expression)),
       "[",
       optional(field("start", $._expression)),
       ":",

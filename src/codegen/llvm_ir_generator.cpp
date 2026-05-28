@@ -73,6 +73,7 @@ void LlvmIrGenerator::generate(const Program& program, std::ostream& output) {
     global_constants_.clear();
     string_globals_.clear();
     loop_stack_.clear();
+    local_scopes_.clear();
     collect_structs(checker.structs());
     collect_enums(checker.enums());
     collect_global_constants(program);
@@ -88,6 +89,7 @@ void LlvmIrGenerator::generate(const Program& program, std::ostream& output) {
     std::ostringstream body;
 
     locals_.clear();
+    reset_scopes();
     temporary_count_ = 0;
     current_return_type_ = make_type(ValueType::int_type);
     body << "define i32 @main() {\n";
@@ -209,6 +211,7 @@ void LlvmIrGenerator::emit_function(const Statement& statement, std::ostream& ou
     }
 
     locals_.clear();
+    reset_scopes();
     current_return_type_ = signature->second.return_type;
 
     output << "define " << llvm_type(signature->second.return_type) << " " << function_name(key) << "(";
@@ -229,7 +232,7 @@ void LlvmIrGenerator::emit_function(const Statement& statement, std::ostream& ou
         const std::string pointer = next_register();
         output << "  " << pointer << " = alloca " << llvm_type(type) << '\n';
         output << "  store " << llvm_type(type) << " %arg" << index << ", ptr " << pointer << '\n';
-        locals_[parameter.name] = Local{pointer, type};
+        declare_scoped_local(parameter.name, Local{pointer, type});
     }
 
     const bool has_tail_expression =
@@ -392,7 +395,8 @@ void LlvmIrGenerator::emit_global_constants(std::ostream& output) {
         if (existing == locals_.end()) {
             const std::string pointer = next_register();
             output << "  " << pointer << " = alloca " << llvm_type(value.type) << '\n';
-            existing = locals_.emplace(statement->name, Local{pointer, value.type}).first;
+            declare_scoped_local(statement->name, Local{pointer, value.type});
+            existing = locals_.find(statement->name);
         }
 
         output << "  store " << llvm_type(value.type) << ' ' << value.name << ", ptr " << existing->second.pointer
@@ -415,24 +419,26 @@ bool LlvmIrGenerator::emit_statement(const Statement& statement, std::ostream& o
     case StatementKind::binding:
     case StatementKind::const_statement: {
         const TypedValue value = emit_expression(*statement.expression, output);
-        auto existing = locals_.find(statement.name);
-        if (existing == locals_.end()) {
-            const std::string pointer = next_register();
-            output << "  " << pointer << " = alloca " << llvm_type(value.type) << '\n';
-            existing = locals_.emplace(statement.name, Local{pointer, value.type}).first;
-        }
-
-        output << "  store " << llvm_type(value.type) << ' ' << value.name << ", ptr " << existing->second.pointer
-               << '\n';
+        const std::string pointer = next_register();
+        output << "  " << pointer << " = alloca " << llvm_type(value.type) << '\n';
+        declare_scoped_local(statement.name, Local{pointer, value.type});
+        output << "  store " << llvm_type(value.type) << ' ' << value.name << ", ptr " << pointer << '\n';
         return false;
     }
     case StatementKind::assign: {
+        if (statement.target != nullptr && statement.target->kind != ExpressionKind::identifier) {
+            emit_assignment_target(*statement.target, *statement.expression, output);
+            return false;
+        }
+
+        const std::string name = statement.target != nullptr ? statement.target->lexeme : statement.name;
         const TypedValue value = emit_expression(*statement.expression, output);
-        auto local = locals_.find(statement.name);
+        auto local = locals_.find(name);
         if (local == locals_.end()) {
             const std::string pointer = next_register();
             output << "  " << pointer << " = alloca " << llvm_type(value.type) << '\n';
-            local = locals_.emplace(statement.name, Local{pointer, value.type}).first;
+            declare_scoped_local(name, Local{pointer, value.type});
+            local = locals_.find(name);
         }
 
         output << "  store " << llvm_type(value.type) << ' ' << value.name << ", ptr " << local->second.pointer << '\n';
@@ -442,7 +448,12 @@ bool LlvmIrGenerator::emit_statement(const Statement& statement, std::ostream& o
         emit_print(emit_expression(*statement.expression, output), output);
         return false;
     case StatementKind::block:
-        return emit_statements(statement.body, output);
+        push_scope();
+        {
+            const bool terminated = emit_statements(statement.body, output);
+            pop_scope();
+            return terminated;
+        }
     case StatementKind::if_statement: {
         const TypedValue condition = emit_expression(*statement.expression, output);
         const std::string then_label = next_label("then");
@@ -450,13 +461,17 @@ bool LlvmIrGenerator::emit_statement(const Statement& statement, std::ostream& o
         const std::string end_label = next_label("endif");
         output << "  br i1 " << condition.name << ", label %" << then_label << ", label %" << else_label << '\n';
         output << then_label << ":\n";
+        push_scope();
         const bool then_terminated = emit_statements(statement.body, output);
+        pop_scope();
         if (!then_terminated) {
             output << "  br label %" << end_label << '\n';
         }
 
         output << else_label << ":\n";
+        push_scope();
         const bool else_terminated = emit_statements(statement.else_body, output);
+        pop_scope();
         if (!else_terminated) {
             output << "  br label %" << end_label << '\n';
         }
@@ -478,7 +493,9 @@ bool LlvmIrGenerator::emit_statement(const Statement& statement, std::ostream& o
         output << "  br i1 " << condition.name << ", label %" << body_label << ", label %" << end_label << '\n';
         output << body_label << ":\n";
         loop_stack_.push_back(LoopLabels{end_label, condition_label});
+        push_scope();
         const bool body_terminated = emit_statements(statement.body, output);
+        pop_scope();
         loop_stack_.pop_back();
         if (!body_terminated) {
             output << "  br label %" << condition_label << '\n';
@@ -488,6 +505,7 @@ bool LlvmIrGenerator::emit_statement(const Statement& statement, std::ostream& o
         return false;
     }
     case StatementKind::for_statement: {
+        push_scope();
         if (statement.initializer != nullptr) {
             emit_statement(*statement.initializer, output);
         }
@@ -502,7 +520,9 @@ bool LlvmIrGenerator::emit_statement(const Statement& statement, std::ostream& o
         output << "  br i1 " << condition.name << ", label %" << body_label << ", label %" << end_label << '\n';
         output << body_label << ":\n";
         loop_stack_.push_back(LoopLabels{end_label, increment_label});
+        push_scope();
         const bool body_terminated = emit_statements(statement.body, output);
+        pop_scope();
         loop_stack_.pop_back();
         if (!body_terminated) {
             output << "  br label %" << increment_label << '\n';
@@ -514,6 +534,7 @@ bool LlvmIrGenerator::emit_statement(const Statement& statement, std::ostream& o
         }
         output << "  br label %" << condition_label << '\n';
         output << end_label << ":\n";
+        pop_scope();
         return false;
     }
     case StatementKind::break_statement:
@@ -750,8 +771,6 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_when_expression(const Expressi
             const std::string case_label = next_label("when_arm");
 
             const TypeChecker::VariantResolution* resolution = nullptr;
-            bool had_previous_binding = false;
-            Local previous_binding;
             if (!wildcard) {
                 resolution = &resolved_variants_.at(&pattern);
                 const std::string subject_value = next_register();
@@ -762,38 +781,29 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_when_expression(const Expressi
                 output << "  " << matched << " = icmp eq i64 " << tag << ", " << resolution->tag << '\n';
                 output << "  br i1 " << matched << ", label %" << case_label << ", label %" << next_label_name << '\n';
                 output << case_label << ":\n";
+            }
 
-                if (resolution->binds_payload) {
-                    const auto previous = locals_.find(resolution->binding_name);
-                    if (previous != locals_.end()) {
-                        had_previous_binding = true;
-                        previous_binding = previous->second;
-                    }
-
-                    const std::size_t payload_size = llvm_size(resolution->payload_type);
-                    const std::size_t payload_offset = align_to(std::size_t{8}, payload_size);
-                    const std::string payload_slot = next_register();
-                    const std::string payload = next_register();
-                    const std::string binding_pointer = next_register();
-                    output << "  " << payload_slot << " = getelementptr i8, ptr " << subject_value << ", i64 "
-                           << payload_offset << '\n';
-                    output << "  " << payload << " = load " << llvm_type(resolution->payload_type) << ", ptr "
-                           << payload_slot << '\n';
-                    output << "  " << binding_pointer << " = alloca " << llvm_type(resolution->payload_type) << '\n';
-                    output << "  store " << llvm_type(resolution->payload_type) << ' ' << payload << ", ptr "
-                           << binding_pointer << '\n';
-                    locals_[resolution->binding_name] = Local{binding_pointer, resolution->payload_type};
-                }
+            push_scope();
+            if (resolution != nullptr && resolution->binds_payload) {
+                const std::string subject_value = next_register();
+                const std::size_t payload_size = llvm_size(resolution->payload_type);
+                const std::size_t payload_offset = align_to(std::size_t{8}, payload_size);
+                const std::string payload_slot = next_register();
+                const std::string payload = next_register();
+                const std::string binding_pointer = next_register();
+                output << "  " << subject_value << " = load ptr, ptr " << subject_pointer << '\n';
+                output << "  " << payload_slot << " = getelementptr i8, ptr " << subject_value << ", i64 "
+                       << payload_offset << '\n';
+                output << "  " << payload << " = load " << llvm_type(resolution->payload_type) << ", ptr "
+                       << payload_slot << '\n';
+                output << "  " << binding_pointer << " = alloca " << llvm_type(resolution->payload_type) << '\n';
+                output << "  store " << llvm_type(resolution->payload_type) << ' ' << payload << ", ptr "
+                       << binding_pointer << '\n';
+                declare_scoped_local(resolution->binding_name, Local{binding_pointer, resolution->payload_type});
             }
 
             const TypedValue value = emit_expression(result, output);
-            if (resolution != nullptr && resolution->binds_payload) {
-                if (had_previous_binding) {
-                    locals_[resolution->binding_name] = previous_binding;
-                } else {
-                    locals_.erase(resolution->binding_name);
-                }
-            }
+            pop_scope();
 
             output << "  store " << llvm_type(inferred->second) << ' ' << value.name << ", ptr " << result_pointer
                    << '\n';
@@ -841,7 +851,9 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_when_expression(const Expressi
             output << case_label << ":\n";
         }
 
+        push_scope();
         const TypedValue value = emit_expression(result, output);
+        pop_scope();
         output << "  store " << llvm_type(inferred->second) << ' ' << value.name << ", ptr " << result_pointer << '\n';
         output << "  br label %" << end_label << '\n';
         if (!wildcard) {
@@ -1377,6 +1389,83 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_text_literal(const std::string
                       make_type(ValueType::text_type)};
 }
 
+LlvmIrGenerator::TypedPointer LlvmIrGenerator::emit_lvalue_pointer(const Expression& expression, std::ostream& output) {
+    switch (expression.kind) {
+    case ExpressionKind::identifier: {
+        const auto local = locals_.find(expression.lexeme);
+        if (local == locals_.end()) {
+            throw std::runtime_error("undefined variable '" + expression.lexeme + "'");
+        }
+
+        return TypedPointer{local->second.pointer, local->second.type};
+    }
+    case ExpressionKind::index: {
+        const TypedValue indexed = emit_expression(*expression.left, output);
+        const TypedValue index = emit_expression(*expression.right, output);
+        const std::string index_name = emit_index_as_i64(index, output);
+        if (indexed.type.element == nullptr) {
+            throw std::runtime_error("index assignment used with non-array type");
+        }
+
+        const Type& element_type = *indexed.type.element;
+        const std::size_t element_size = llvm_size(element_type);
+        const std::string length = next_register();
+        const std::string data_pointer_pointer = next_register();
+        const std::string data = next_register();
+        const std::string offset = next_register();
+        const std::string slot = next_register();
+        output << "  " << length << " = load i64, ptr " << indexed.name << '\n';
+        emit_bounds_check(index_name, length, "array", output);
+        output << "  " << data_pointer_pointer << " = getelementptr i8, ptr " << indexed.name << ", i64 16\n";
+        output << "  " << data << " = load ptr, ptr " << data_pointer_pointer << '\n';
+        output << "  " << offset << " = mul i64 " << index_name << ", " << element_size << '\n';
+        output << "  " << slot << " = getelementptr i8, ptr " << data << ", i64 " << offset << '\n';
+        return TypedPointer{slot, element_type};
+    }
+    case ExpressionKind::member: {
+        const auto receiver_type = expression_types_.find(expression.left.get());
+        if (receiver_type == expression_types_.end() || receiver_type->second.kind != ValueType::struct_type) {
+            throw std::runtime_error("member assignment used with non-record type");
+        }
+
+        const StructLayout layout = concrete_struct_layout(receiver_type->second);
+        const auto field = layout.field_indices.find(expression.lexeme);
+        if (field == layout.field_indices.end()) {
+            throw std::runtime_error("unknown field '" + expression.lexeme + "'");
+        }
+
+        const TypedValue receiver = emit_expression(*expression.left, output);
+        const std::string slot = next_register();
+        output << "  " << slot << " = getelementptr i8, ptr " << receiver.name << ", i64 "
+               << layout.field_offsets.at(expression.lexeme) << '\n';
+        return TypedPointer{slot, layout.fields[field->second].type.type};
+    }
+    case ExpressionKind::number:
+    case ExpressionKind::floating:
+    case ExpressionKind::character:
+    case ExpressionKind::string:
+    case ExpressionKind::boolean:
+    case ExpressionKind::array:
+    case ExpressionKind::struct_literal:
+    case ExpressionKind::slice:
+    case ExpressionKind::unary:
+    case ExpressionKind::cast:
+    case ExpressionKind::binary:
+    case ExpressionKind::when_expression:
+    case ExpressionKind::call:
+    case ExpressionKind::method_call:
+        break;
+    }
+
+    throw std::runtime_error("invalid assignment target");
+}
+
+void LlvmIrGenerator::emit_assignment_target(const Expression& target, const Expression& value, std::ostream& output) {
+    const TypedPointer pointer = emit_lvalue_pointer(target, output);
+    const TypedValue assigned = emit_expression(value, output);
+    output << "  store " << llvm_type(pointer.type) << ' ' << assigned.name << ", ptr " << pointer.pointer << '\n';
+}
+
 void LlvmIrGenerator::emit_print(const TypedValue& value, std::ostream& output) {
     const TypedValue printable = cast_for_print(value, output);
     const std::string format = next_register();
@@ -1564,6 +1653,48 @@ std::string LlvmIrGenerator::emit_index_as_i64(const TypedValue& index, std::ost
     }
 
     return index.name;
+}
+
+void LlvmIrGenerator::reset_scopes() {
+    local_scopes_.clear();
+    push_scope();
+}
+
+void LlvmIrGenerator::push_scope() {
+    local_scopes_.emplace_back();
+}
+
+void LlvmIrGenerator::pop_scope() {
+    if (local_scopes_.empty()) {
+        return;
+    }
+
+    for (auto local = local_scopes_.back().rbegin(); local != local_scopes_.back().rend(); ++local) {
+        if (local->had_previous) {
+            locals_[local->name] = local->previous;
+        } else {
+            locals_.erase(local->name);
+        }
+    }
+
+    local_scopes_.pop_back();
+}
+
+void LlvmIrGenerator::declare_scoped_local(const std::string& name, Local local) {
+    if (local_scopes_.empty()) {
+        push_scope();
+    }
+
+    ScopedLocal scoped;
+    scoped.name = name;
+    const auto previous = locals_.find(name);
+    if (previous != locals_.end()) {
+        scoped.had_previous = true;
+        scoped.previous = previous->second;
+    }
+
+    locals_[name] = std::move(local);
+    local_scopes_.back().push_back(std::move(scoped));
 }
 
 std::string LlvmIrGenerator::next_register() {

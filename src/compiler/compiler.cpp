@@ -210,6 +210,7 @@ Bytecode Compiler::compile(const Program& program) {
     bytecode_ = Bytecode{};
     locals_.clear();
     local_types_.clear();
+    local_scopes_.clear();
     functions_.clear();
     structs_.clear();
     enums_.clear();
@@ -224,6 +225,7 @@ Bytecode Compiler::compile(const Program& program) {
     const auto& instantiated_functions = type_checker.instantiated_functions();
     instructions_ = &bytecode_.instructions;
     local_count_ = 0;
+    reset_scopes();
 
     collect_global_constants(program.statements);
     collect_functions(program.statements);
@@ -316,10 +318,12 @@ void Compiler::compile_function(const Statement& statement) {
 
     locals_.clear();
     local_types_.clear();
+    local_scopes_.clear();
     loop_stack_.clear();
     temporary_count_ = 0;
     local_count_ = 0;
     instructions_ = &function.instructions;
+    reset_scopes();
     std::vector<std::tuple<std::string, Type, std::size_t>> parameter_locals;
     parameter_locals.reserve(statement.parameters.size());
     for (const Parameter& parameter : statement.parameters) {
@@ -331,6 +335,9 @@ void Compiler::compile_function(const Statement& statement) {
 
     compile_global_constants();
     for (const auto& [name, type, slot] : parameter_locals) {
+        ScopedLocal local;
+        local.name = name;
+        local_scopes_.back().push_back(std::move(local));
         locals_[name] = slot;
         local_types_[name] = type;
     }
@@ -362,7 +369,7 @@ void Compiler::compile_global_constants() {
         compile_expression(*statement->expression);
         const Type type =
             statement->type.has_type ? normalize_type(statement->type.type) : expression_type(*statement->expression);
-        emit(OpCode::store_local, declare_local(statement->name, type));
+        emit(OpCode::store_local, declare_scoped_local(statement->name, type));
     }
 }
 
@@ -379,28 +386,39 @@ void Compiler::compile_statement(const Statement& statement) {
         compile_expression(*statement.expression);
         const Type type =
             statement.type.has_type ? normalize_type(statement.type.type) : expression_type(*statement.expression);
-        emit(OpCode::store_local, declare_local(statement.name, type));
+        emit(OpCode::store_local, declare_scoped_local(statement.name, type));
         return;
     }
-    case StatementKind::assign:
+    case StatementKind::assign: {
+        if (statement.target != nullptr && statement.target->kind != ExpressionKind::identifier) {
+            compile_assignment_target(*statement.target, *statement.expression);
+            return;
+        }
+
+        const std::string name = statement.target != nullptr ? statement.target->lexeme : statement.name;
         compile_expression(*statement.expression);
-        if (const auto local = locals_.find(statement.name); local != locals_.end()) {
+        if (const auto local = locals_.find(name); local != locals_.end()) {
             emit(OpCode::store_local, local->second);
         } else {
-            emit(OpCode::store_local, declare_local(statement.name, expression_type(*statement.expression)));
+            emit(OpCode::store_local, declare_scoped_local(name, expression_type(*statement.expression)));
         }
         return;
+    }
     case StatementKind::print:
         compile_expression(*statement.expression);
         emit(OpCode::print);
         return;
     case StatementKind::block:
+        push_scope();
         compile_statements(statement.body);
+        pop_scope();
         return;
     case StatementKind::if_statement: {
         compile_expression(*statement.expression);
         const std::size_t false_jump = emit(OpCode::jump_if_false);
+        push_scope();
         compile_statements(statement.body);
+        pop_scope();
 
         if (statement.else_body.empty()) {
             patch_operand(false_jump, instructions_->size());
@@ -409,7 +427,9 @@ void Compiler::compile_statement(const Statement& statement) {
 
         const std::size_t end_jump = emit(OpCode::jump);
         patch_operand(false_jump, instructions_->size());
+        push_scope();
         compile_statements(statement.else_body);
+        pop_scope();
         patch_operand(end_jump, instructions_->size());
         return;
     }
@@ -418,7 +438,9 @@ void Compiler::compile_statement(const Statement& statement) {
         compile_expression(*statement.expression);
         const std::size_t exit_jump = emit(OpCode::jump_if_false);
         loop_stack_.push_back(LoopJumps{});
+        push_scope();
         compile_statements(statement.body);
+        pop_scope();
         LoopJumps jumps = std::move(loop_stack_.back());
         loop_stack_.pop_back();
         for (const std::size_t jump : jumps.continues) {
@@ -432,6 +454,7 @@ void Compiler::compile_statement(const Statement& statement) {
         return;
     }
     case StatementKind::for_statement: {
+        push_scope();
         if (statement.initializer != nullptr) {
             compile_statement(*statement.initializer);
         }
@@ -440,7 +463,9 @@ void Compiler::compile_statement(const Statement& statement) {
         compile_expression(*statement.expression);
         const std::size_t exit_jump = emit(OpCode::jump_if_false);
         loop_stack_.push_back(LoopJumps{});
+        push_scope();
         compile_statements(statement.body);
+        pop_scope();
         LoopJumps jumps = std::move(loop_stack_.back());
         loop_stack_.pop_back();
         const std::size_t continue_target = instructions_->size();
@@ -455,6 +480,7 @@ void Compiler::compile_statement(const Statement& statement) {
         for (const std::size_t jump : jumps.breaks) {
             patch_operand(jump, instructions_->size());
         }
+        pop_scope();
         return;
     }
     case StatementKind::break_statement:
@@ -577,7 +603,7 @@ void Compiler::compile_when_expression(const Expression& expression) {
     const Type subject_type = expression_type(*expression.left);
     compile_expression(*expression.left);
     const std::size_t subject_slot =
-        declare_local("__when_subject_" + std::to_string(temporary_count_++), subject_type);
+        declare_scoped_local("__when_subject_" + std::to_string(temporary_count_++), subject_type);
     emit(OpCode::store_local, subject_slot);
 
     if (subject_type.kind == ValueType::enum_type) {
@@ -589,9 +615,6 @@ void Compiler::compile_when_expression(const Expression& expression) {
 
             std::size_t next_when = 0;
             const TypeChecker::VariantResolution* resolution = nullptr;
-            bool had_previous_binding = false;
-            std::size_t previous_binding_slot = 0;
-            Type previous_binding_type;
             if (!wildcard) {
                 resolution = &resolved_variants_.at(&pattern);
                 emit(OpCode::load_local, subject_slot);
@@ -599,31 +622,17 @@ void Compiler::compile_when_expression(const Expression& expression) {
                 emit(OpCode::push_constant, add_constant(make_unsigned(resolution->tag)));
                 emit(OpCode::equal);
                 next_when = emit(OpCode::jump_if_false);
+            }
 
-                if (resolution->binds_payload) {
-                    const auto previous_slot = locals_.find(resolution->binding_name);
-                    if (previous_slot != locals_.end()) {
-                        had_previous_binding = true;
-                        previous_binding_slot = previous_slot->second;
-                        previous_binding_type = local_types_.at(resolution->binding_name);
-                    }
-
-                    emit(OpCode::load_local, subject_slot);
-                    emit(OpCode::load_variant_payload);
-                    emit(OpCode::store_local, force_local(resolution->binding_name, resolution->payload_type));
-                }
+            push_scope();
+            if (resolution != nullptr && resolution->binds_payload) {
+                emit(OpCode::load_local, subject_slot);
+                emit(OpCode::load_variant_payload);
+                emit(OpCode::store_local, declare_scoped_local(resolution->binding_name, resolution->payload_type));
             }
 
             compile_expression(result);
-            if (resolution != nullptr && resolution->binds_payload) {
-                if (had_previous_binding) {
-                    locals_[resolution->binding_name] = previous_binding_slot;
-                    local_types_[resolution->binding_name] = previous_binding_type;
-                } else {
-                    locals_.erase(resolution->binding_name);
-                    local_types_.erase(resolution->binding_name);
-                }
-            }
+            pop_scope();
 
             end_jumps.push_back(emit(OpCode::jump));
             if (!wildcard) {
@@ -651,7 +660,9 @@ void Compiler::compile_when_expression(const Expression& expression) {
             next_when = emit(OpCode::jump_if_false);
         }
 
+        push_scope();
         compile_expression(result);
+        pop_scope();
         end_jumps.push_back(emit(OpCode::jump));
         if (!wildcard) {
             patch_operand(next_when, instructions_->size());
@@ -661,6 +672,59 @@ void Compiler::compile_when_expression(const Expression& expression) {
     for (const std::size_t jump : end_jumps) {
         patch_operand(jump, instructions_->size());
     }
+}
+
+void Compiler::compile_assignment_target(const Expression& target, const Expression& value) {
+    switch (target.kind) {
+    case ExpressionKind::index:
+        compile_expression(*target.left);
+        compile_expression(*target.right);
+        compile_expression(value);
+        emit(OpCode::store_index);
+        return;
+    case ExpressionKind::member: {
+        const Type receiver = expression_type(*target.left);
+        if (receiver.kind != ValueType::struct_type) {
+            throw std::runtime_error("expected record assignment target");
+        }
+
+        const auto layout = structs_.find(receiver.name);
+        if (layout == structs_.end()) {
+            throw std::runtime_error("unknown record '" + receiver.name + "'");
+        }
+
+        const auto field = layout->second.field_indices.find(target.lexeme);
+        if (field == layout->second.field_indices.end()) {
+            throw std::runtime_error("unknown field '" + target.lexeme + "'");
+        }
+
+        compile_expression(*target.left);
+        compile_expression(value);
+        emit(OpCode::store_field, field->second);
+        return;
+    }
+    case ExpressionKind::identifier:
+        compile_expression(value);
+        emit(OpCode::store_local, resolve_local(target.lexeme));
+        return;
+    case ExpressionKind::number:
+    case ExpressionKind::floating:
+    case ExpressionKind::character:
+    case ExpressionKind::string:
+    case ExpressionKind::boolean:
+    case ExpressionKind::array:
+    case ExpressionKind::struct_literal:
+    case ExpressionKind::slice:
+    case ExpressionKind::unary:
+    case ExpressionKind::cast:
+    case ExpressionKind::binary:
+    case ExpressionKind::when_expression:
+    case ExpressionKind::call:
+    case ExpressionKind::method_call:
+        break;
+    }
+
+    throw std::runtime_error("invalid assignment target");
 }
 
 void Compiler::compile_variant_constructor(const Expression& expression) {
@@ -959,11 +1023,52 @@ std::size_t Compiler::declare_local(const std::string& name, const Type& type) {
     return slot;
 }
 
-std::size_t Compiler::force_local(const std::string& name, const Type& type) {
+std::size_t Compiler::declare_scoped_local(const std::string& name, const Type& type) {
+    if (local_scopes_.empty()) {
+        push_scope();
+    }
+
+    ScopedLocal local;
+    local.name = name;
+    const auto previous = locals_.find(name);
+    if (previous != locals_.end()) {
+        local.had_previous = true;
+        local.previous_slot = previous->second;
+        local.previous_type = local_types_.at(name);
+    }
+
     const std::size_t slot = local_count_++;
     locals_[name] = slot;
     local_types_[name] = type;
+    local_scopes_.back().push_back(std::move(local));
     return slot;
+}
+
+void Compiler::reset_scopes() {
+    local_scopes_.clear();
+    push_scope();
+}
+
+void Compiler::push_scope() {
+    local_scopes_.emplace_back();
+}
+
+void Compiler::pop_scope() {
+    if (local_scopes_.empty()) {
+        return;
+    }
+
+    for (auto local = local_scopes_.back().rbegin(); local != local_scopes_.back().rend(); ++local) {
+        if (local->had_previous) {
+            locals_[local->name] = local->previous_slot;
+            local_types_[local->name] = local->previous_type;
+        } else {
+            locals_.erase(local->name);
+            local_types_.erase(local->name);
+        }
+    }
+
+    local_scopes_.pop_back();
 }
 
 std::size_t Compiler::resolve_local(const std::string& name) const {

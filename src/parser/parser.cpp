@@ -256,6 +256,30 @@ bool Parser::looks_like_struct_literal() const {
            tokens_[current_ + 2].type == TokenType::colon;
 }
 
+bool Parser::looks_like_assignment_statement() const {
+    if (!check_identifier_like()) {
+        return false;
+    }
+
+    int bracket_depth = 0;
+    for (std::size_t index = current_ + 1; index < tokens_.size(); ++index) {
+        const TokenType type = tokens_[index].type;
+        if (type == TokenType::left_bracket) {
+            ++bracket_depth;
+        } else if (type == TokenType::right_bracket && bracket_depth > 0) {
+            --bracket_depth;
+        } else if (type == TokenType::equal && bracket_depth == 0) {
+            return true;
+        } else if ((type == TokenType::semicolon || type == TokenType::eof || type == TokenType::left_brace ||
+                    type == TokenType::right_brace || type == TokenType::left_paren) &&
+                   bracket_depth == 0) {
+            return false;
+        }
+    }
+
+    return false;
+}
+
 bool can_start_struct_literal(const Expression& expression) {
     if (expression.kind == ExpressionKind::identifier) {
         return true;
@@ -481,7 +505,7 @@ Statement Parser::statement() {
         return block_statement();
     }
 
-    if (check_identifier_like() && check_next(TokenType::equal)) {
+    if (looks_like_assignment_statement()) {
         return assignment_statement();
     }
 
@@ -500,15 +524,21 @@ Statement Parser::statement() {
 }
 
 Statement Parser::assignment_statement(bool require_semicolon) {
-    const Token& name = consume_identifier_like("expected assignment target");
+    std::unique_ptr<Expression> target = assignment_target();
     consume(TokenType::equal, "expected '=' after assignment target");
     std::unique_ptr<Expression> value = expression();
     if (require_semicolon) {
         consume(TokenType::semicolon, "expected ';' after assignment");
     }
 
-    Statement statement{StatementKind::assign, name.lexeme, std::move(value), {}, {}};
-    statement.location = location_from_token(name);
+    std::string name;
+    if (target->kind == ExpressionKind::identifier) {
+        name = target->lexeme;
+    }
+
+    Statement statement{StatementKind::assign, std::move(name), std::move(value), {}, {}};
+    statement.location = target->location;
+    statement.target = std::move(target);
     return statement;
 }
 
@@ -590,7 +620,7 @@ Statement Parser::for_statement() {
         statement.initializer = nullptr;
     } else if (looks_like_binding_declaration()) {
         statement.initializer = std::make_unique<Statement>(binding_statement());
-    } else if (check_identifier_like() && check_next(TokenType::equal)) {
+    } else if (looks_like_assignment_statement()) {
         statement.initializer = std::make_unique<Statement>(assignment_statement());
     } else {
         throw std::runtime_error("expected for initializer");
@@ -604,7 +634,7 @@ Statement Parser::for_statement() {
     consume(TokenType::semicolon, "expected ';' after for condition");
 
     if (!check(TokenType::left_brace)) {
-        if (check_identifier_like() && check_next(TokenType::equal)) {
+        if (looks_like_assignment_statement()) {
             statement.increment = std::make_unique<Statement>(assignment_statement(false));
         } else {
             std::unique_ptr<Expression> value = expression();
@@ -1050,6 +1080,32 @@ TypeAnnotation Parser::type_annotation() {
     }
 
     throw std::runtime_error("expected type annotation");
+}
+
+std::unique_ptr<Expression> Parser::assignment_target() {
+    const Token name = consume_identifier_like("expected assignment target");
+    std::unique_ptr<Expression> target = make_leaf(ExpressionKind::identifier, name.lexeme, location_from_token(name));
+
+    while (true) {
+        if (match(TokenType::dot)) {
+            const SourceLocation location = target->location;
+            const Token member = consume_identifier_like("expected member name after '.'");
+            target = make_member(std::move(target), member.lexeme, location);
+            continue;
+        }
+
+        if (match(TokenType::left_bracket)) {
+            const SourceLocation location = target->location;
+            std::unique_ptr<Expression> index = expression();
+            consume(TokenType::right_bracket, "expected ']' after assignment target index");
+            target = make_index(std::move(target), std::move(index), location);
+            continue;
+        }
+
+        break;
+    }
+
+    return target;
 }
 
 std::unique_ptr<Expression> Parser::expression() {

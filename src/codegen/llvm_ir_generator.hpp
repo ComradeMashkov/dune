@@ -34,6 +34,11 @@ private:
         Type type;
     };
 
+    struct TypedPointer {
+        std::string pointer;
+        Type type;
+    };
+
     struct LoopLabels {
         std::string break_label;
         std::string continue_label;
@@ -66,6 +71,8 @@ private:
     TypedValue emit_index_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_slice_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_text_literal(const std::string& lexeme);
+    TypedPointer emit_lvalue_pointer(const Expression& expression, std::ostream& output);
+    void emit_assignment_target(const Expression& target, const Expression& value, std::ostream& output);
     void emit_function(const Statement& statement, std::ostream& output);
     void emit_extern_declarations(std::ostream& output);
     void emit_memory_runtime(std::ostream& output);
@@ -100,6 +107,16 @@ private:
     TypedValue cast_for_print(const TypedValue& value, std::ostream& output);
     TypedValue cast_value(const TypedValue& value, const Type& target, std::ostream& output);
     std::string emit_index_as_i64(const TypedValue& index, std::ostream& output);
+    void reset_scopes();
+    void push_scope();
+    void pop_scope();
+    void declare_scoped_local(const std::string& name, Local local);
+
+    struct ScopedLocal {
+        std::string name;
+        bool had_previous = false;
+        Local previous;
+    };
 
     std::unordered_map<const Expression*, Type> expression_types_;
     std::unordered_map<const Expression*, std::string> resolved_calls_;
@@ -108,6 +125,7 @@ private:
     std::unordered_map<std::string, StructLayout> structs_;
     std::unordered_set<std::string> enums_;
     std::unordered_map<std::string, Local> locals_;
+    std::vector<std::vector<ScopedLocal>> local_scopes_;
     std::vector<const Statement*> global_constants_;
     std::vector<std::string> string_globals_;
     std::vector<LoopLabels> loop_stack_;
