@@ -223,6 +223,19 @@ int main() {
                                   "points: [Point] = [Point { x: 3, y: 4 }]; points[0].y = 11; print(points[0].y);"),
                        "9\n8\n7\n11\n", "expected assignment target output") &&
              passed;
+    passed = expect_eq(run_source("record Point { x: int, y: int } "
+                                  "values: [int] = [1]; alias = values; alias[0] = 2; print(values[0]); "
+                                  "const frozen: [int] = [5]; mutable_alias = frozen; mutable_alias[0] = 6; "
+                                  "print(frozen[0]); "
+                                  "point: Point = Point { x: 3, y: 0 }; point_alias = point; point_alias.x = 4; "
+                                  "print(point.x); "
+                                  "const fixed_point: Point = Point { x: 7, y: 0 }; "
+                                  "mutable_point_alias = fixed_point; mutable_point_alias.x = 9; "
+                                  "print(fixed_point.x); "
+                                  "scalar = 1; scalar_copy = scalar; scalar_copy = 2; "
+                                  "print(scalar); print(scalar_copy);"),
+                       "2\n6\n4\n9\n1\n2\n", "expected mutability and aliasing output") &&
+             passed;
     passed = expect_eq(run_source("import maybe; import outcome; import assert; import collections; "
                                   "maybe_value: maybe.Maybe<int> = maybe.present(42); "
                                   "missing: maybe.Maybe<int> = maybe.absent(0); "

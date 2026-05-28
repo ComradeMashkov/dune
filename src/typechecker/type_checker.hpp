@@ -85,6 +85,7 @@ private:
     void check_statement(const Statement& statement);
     void check_statements(const std::vector<Statement>& statements);
     Type check_assignment_target(const Expression& target, SourceLocation location);
+    Type check_member_assignment_target(const Expression& target, SourceLocation location);
     Type check_expression(const Expression& expression, const TypeAnnotation& expected = {});
     Type check_binary_expression(const Expression& expression, const TypeAnnotation& expected);
     Type check_when_expression(const Expression& expression, const TypeAnnotation& expected);

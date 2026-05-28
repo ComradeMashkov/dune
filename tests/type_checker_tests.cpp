@@ -247,10 +247,13 @@ int main() {
                                    "chosen: int = when value { is Present(x) { x } is Absent { 0 } }; print(x);",
                                    "undefined variable 'x'", "expected when payload scope error") &&
              passed;
-    passed =
-        expect_error_contains("const values: [int] = [1]; values[0] = 2;", "cannot assign through constant 'values'",
-                              "expected const indexed assignment error") &&
-        passed;
+    passed = expect_error_contains("const values: [int] = [1]; values[0] = 2;",
+                                   "cannot mutate through constant binding 'values'",
+                                   "expected const indexed assignment error") &&
+             passed;
+    passed = expect_valid("const values: [int] = [1]; alias = values; alias[0] = 2;",
+                          "expected const array alias mutation to validate") &&
+             passed;
     passed = expect_error_contains("print(true + 1);", "expected numeric type but got 'bool'",
                                    "expected invalid binary operation") &&
              passed;
@@ -304,8 +307,19 @@ int main() {
     passed = expect_error_contains("values: [int] = [1]; values[0] = true;", "expected type 'int' but got 'bool'",
                                    "expected indexed assignment type mismatch") &&
              passed;
-    passed = expect_error_contains("message: text = \"a\"; message[0] = 'b';", "cannot assign to text index",
+    passed = expect_error_contains("message: text = \"a\"; message[0] = 'b';",
+                                   "text values are immutable; cannot assign to text index",
                                    "expected text index assignment error") &&
+             passed;
+    passed = expect_error_contains("value: int = 1; value[0] = 2;", "expected array assignment target but got 'int'",
+                                   "expected non-array index assignment target error") &&
+             passed;
+    passed =
+        expect_error_contains("values: [int] = [1]; values.x = 2;", "expected record assignment target but got '[int]'",
+                              "expected non-record member assignment target error") &&
+        passed;
+    passed = expect_error_contains("import math; math.PI = 1.0;", "cannot assign to module member 'math.PI'",
+                                   "expected module member assignment target error") &&
              passed;
     passed = expect_error_contains("values: [int] = [1]; values.contains(1);", "type '[int]' has no method 'contains'",
                                    "expected missing array module method") &&
