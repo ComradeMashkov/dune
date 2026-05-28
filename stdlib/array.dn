@@ -46,6 +46,72 @@ export method<T> [T].append(value: T): [T] {
     return result;
 }
 
+export method<T> [T].prepend(value: T): [T] {
+    result: [T] = [value];
+    for index = 0; index < this.len(); index = index + 1 {
+        result.push(this[index]);
+    }
+
+    return result;
+}
+
+export method<T> [T].concat(other: [T]): [T] {
+    result: [T] = copy(this);
+    for index = 0; index < other.len(); index = index + 1 {
+        result.push(other[index]);
+    }
+
+    return result;
+}
+
+export method<T> [T].slice(start: int, end: int): [T] {
+    result: [T] = [];
+    for index = start; index < end; index = index + 1 {
+        result.push(this[index]);
+    }
+
+    return result;
+}
+
+export method<T> [T].take(count: int): [T] {
+    return slice(this, 0, count);
+}
+
+export method<T> [T].drop(count: int): [T] {
+    return slice(this, count, this.len());
+}
+
+export method<T> [T].count_value(needle: T): int {
+    count = 0;
+    for index = 0; index < this.len(); index = index + 1 {
+        if this[index] == needle {
+            count = count + 1;
+        }
+    }
+
+    return count;
+}
+
+export method<T> [T].equals(other: [T]): bool {
+    if this.len() != other.len() {
+        return false;
+    }
+
+    for index = 0; index < this.len(); index = index + 1 {
+        if this[index] != other[index] {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+export method<T> [T].fill(value: T): unit {
+    for index = 0; index < this.len(); index = index + 1 {
+        this[index] = value;
+    }
+}
+
 export range(start: int, end: int): [int] {
     result: [int] = [];
     for value = start; value < end; value = value + 1 {
@@ -55,6 +121,62 @@ export range(start: int, end: int): [int] {
     return result;
 }
 
+export range(end: int): [int] {
+    return range(0, end);
+}
+
+export range(start: int, end: int, step: int): [int] {
+    result: [int] = [];
+    if step > 0 {
+        value = start;
+        while value < end {
+            result.push(value);
+            value = value + step;
+        }
+
+        return result;
+    }
+
+    value = start;
+    while value > end {
+        result.push(value);
+        value = value + step;
+    }
+
+    return result;
+}
+
+export repeat<T>(value: T, count: int): [T] {
+    result: [T] = [];
+    for index = 0; index < count; index = index + 1 {
+        result.push(value);
+    }
+
+    return result;
+}
+
+export zeros<T is numeric>(count: int): [T] {
+    result: [T] = [];
+    for index = 0; index < count; index = index + 1 {
+        result.push(0);
+    }
+
+    return result;
+}
+
+export ones<T is numeric>(count: int): [T] {
+    result: [T] = [];
+    for index = 0; index < count; index = index + 1 {
+        result.push(1);
+    }
+
+    return result;
+}
+
+export full<T>(count: int, value: T): [T] {
+    return repeat(value, count);
+}
+
 export sum(values: [int]): int {
     result = 0;
     for index = 0; index < values.len(); index = index + 1 {
@@ -62,6 +184,88 @@ export sum(values: [int]): int {
     }
 
     return result;
+}
+
+export method<T is numeric> [T].sum(): T {
+    result: T = 0;
+    for index = 0; index < this.len(); index = index + 1 {
+        result = result + this[index];
+    }
+
+    return result;
+}
+
+export method<T is numeric> [T].product(): T {
+    result: T = 1;
+    for index = 0; index < this.len(); index = index + 1 {
+        result = result * this[index];
+    }
+
+    return result;
+}
+
+export method<T is numeric> [T].min(): T {
+    result: T = this[0];
+    for index = 1; index < this.len(); index = index + 1 {
+        if this[index] < result {
+            result = this[index];
+        }
+    }
+
+    return result;
+}
+
+export method<T is numeric> [T].max(): T {
+    result: T = this[0];
+    for index = 1; index < this.len(); index = index + 1 {
+        if this[index] > result {
+            result = this[index];
+        }
+    }
+
+    return result;
+}
+
+export method<T is numeric> [T].argmin(): int {
+    result = 0;
+    for index = 1; index < this.len(); index = index + 1 {
+        if this[index] < this[result] {
+            result = index;
+        }
+    }
+
+    return result;
+}
+
+export method<T is numeric> [T].argmax(): int {
+    result = 0;
+    for index = 1; index < this.len(); index = index + 1 {
+        if this[index] > this[result] {
+            result = index;
+        }
+    }
+
+    return result;
+}
+
+export method [bool].all(): bool {
+    for index = 0; index < this.len(); index = index + 1 {
+        if !this[index] {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+export method [bool].any(): bool {
+    for index = 0; index < this.len(); index = index + 1 {
+        if this[index] {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 export sum(values: [real64]): real64 {

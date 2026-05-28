@@ -187,7 +187,11 @@ The `math` module currently provides constants and generic numeric functions:
 The `matrix` module provides a small NumPy-style foundation for homogeneous
 numeric vectors and matrices. Values are generic over Dune numeric types:
 `Vector<T is numeric>` and `Matrix<T is numeric>`. Operations currently keep the
-same element type; mixed-type promotion is not implemented yet.
+same element type; mixed-type promotion and broadcasting are not implemented
+yet, so elementwise and matrix operations expect compatible shapes. Generic
+builders whose element type does not appear in the argument list, such as
+`zeros`, `ones`, `identity`, and `eye`, need an assignment or parameter type
+annotation to select the element type.
 
 ```dn
 import matrix;
@@ -210,22 +214,35 @@ Core helpers:
 - `vector(data)`
 - `from_flat(rows, cols, data)`
 - `zeros(size)`, `zeros(rows, cols)`
+- `ones(size)`, `ones(rows, cols)`
 - `full(size, value)`, `full(rows, cols, value)`
-- `identity(size)`
+- `arange(end)`, `arange(start, end)`, `arange(start, end, step)`
+- `identity(size)`, `eye(size)`
+- `diagonal(vector)`
 
 Vector methods:
 
-- `len()`, `get(index)`, `set(index, value)`, `copy()`
-- `add(other)`, `sub(other)`, `scale(factor)`
-- `dot(other)`, `sum()`
+- `len()`, `shape()`, `is_empty()`, `get(index)`, `set(index, value)`
+- `to_array()`, `copy()`, `equals(other)`, `same_shape(other)`
+- `slice(start, end)`, `concat(other)`, `fill(value)`
+- `add(other)`, `add(value)`, `sub(other)`, `sub(value)`, `rsub(value)`
+- `mul(other)`, `mul(value)`, `div(other)`, `div(value)`, `rdiv(value)`
+- `scale(factor)`, `neg()`, `abs()`, `clip(lower, upper)`
+- `dot(other)`, `sum()`, `product()`, `min()`, `max()`, `argmin()`, `argmax()`
 - `to_row_matrix()`, `to_column_matrix()`
 
 Matrix methods:
 
-- `rows()`, `cols()`, `len()`, `get(row, col)`, `set(row, col, value)`, `copy()`
-- `row(index)`, `column(index)`
-- `add(other)`, `sub(other)`, `scale(factor)`
-- `transpose()`, `matmul(other)`, `mul_vector(vector)`, `sum()`
+- `rows()`, `cols()`, `shape()`, `is_empty()`, `is_square()`, `len()`
+- `get(row, col)`, `set(row, col, value)`, `to_array()`, `copy()`
+- `equals(other)`, `same_shape(other)`, `can_matmul(other)`, `fill(value)`
+- `row(index)`, `column(index)`, `flatten()`, `reshape(rows, cols)`
+- `diagonal()`, `trace()`
+- `add(other)`, `add(value)`, `sub(other)`, `sub(value)`, `rsub(value)`
+- `mul(other)`, `mul(value)`, `div(other)`, `div(value)`, `rdiv(value)`
+- `scale(factor)`, `neg()`, `abs()`, `clip(lower, upper)`
+- `transpose()`, `matmul(other)`, `mul_vector(vector)`
+- `sum()`, `product()`, `min()`, `max()`, `argmin()`, `argmax()`
 
 The `autograd` module provides scalar reverse-mode automatic differentiation.
 It is implemented in Dune itself with records, arrays, methods, and mutation;
@@ -275,8 +292,20 @@ The `array` module provides generic helpers for common element types:
 - `first(values)` or `values.first()`
 - `last(values)` or `values.last()`
 - `append(values, value)` or `values.append(value)`
-- `range(start, end)`
-- `sum(values)`
+- `prepend(values, value)` or `values.prepend(value)`
+- `concat(values, other)` or `values.concat(other)`
+- `slice(values, start, end)` or `values.slice(start, end)`
+- `take(values, count)` or `values.take(count)`
+- `drop(values, count)` or `values.drop(count)`
+- `count_value(values, needle)` or `values.count_value(needle)`
+- `equals(values, other)` or `values.equals(other)`
+- `fill(values, value)` or `values.fill(value)`
+- `range(end)`, `range(start, end)`, `range(start, end, step)`
+- `repeat(value, count)`, `zeros(count)`, `ones(count)`, `full(count, value)`
+- numeric methods: `values.sum()`, `values.product()`, `values.min()`,
+  `values.max()`, `values.argmin()`, `values.argmax()`
+- boolean methods: `values.all()`, `values.any()`
+- legacy overloads: `sum(values)` for `[int]` and `[real64]`
 
 The `text` module provides text and glyph helpers:
 

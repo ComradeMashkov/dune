@@ -9,6 +9,14 @@ export record Vector<T is numeric> {
         return this.data.len();
     }
 
+    export shape(): [int] {
+        return [this.data.len()];
+    }
+
+    export is_empty(): bool {
+        return this.data.is_empty();
+    }
+
     export get(index: int): T {
         return this.data[index];
     }
@@ -17,19 +25,74 @@ export record Vector<T is numeric> {
         this.data[index] = value;
     }
 
-    export copy(): Vector<T> {
+    export to_array(): [T] {
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
+            values.push(this.data[index]);
+        }
+
+        return values;
+    }
+
+    export copy(): Vector<T> {
+        return Vector.new(this.to_array());
+    }
+
+    export equals(other: Vector<T>): bool {
+        if this.data.len() != other.data.len() {
+            return false;
+        }
+
+        for index = 0; index < this.data.len(); index = index + 1 {
+            if this.data[index] != other.data[index] {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    export same_shape(other: Vector<T>): bool {
+        return this.data.len() == other.data.len();
+    }
+
+    export slice(start: int, end: int): Vector<T> {
+        values: [T] = [];
+        for index = start; index < end; index = index + 1 {
             values.push(this.data[index]);
         }
 
         return Vector.new(values);
     }
 
+    export concat(other: Vector<T>): Vector<T> {
+        values: [T] = this.to_array();
+        for index = 0; index < other.data.len(); index = index + 1 {
+            values.push(other.data[index]);
+        }
+
+        return Vector.new(values);
+    }
+
+    export fill(value: T): unit {
+        for index = 0; index < this.data.len(); index = index + 1 {
+            this.data[index] = value;
+        }
+    }
+
     export add(other: Vector<T>): Vector<T> {
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
             values.push(this.data[index] + other.data[index]);
+        }
+
+        return Vector.new(values);
+    }
+
+    export add(value: T): Vector<T> {
+        values: [T] = [];
+        for index = 0; index < this.data.len(); index = index + 1 {
+            values.push(this.data[index] + value);
         }
 
         return Vector.new(values);
@@ -44,10 +107,109 @@ export record Vector<T is numeric> {
         return Vector.new(values);
     }
 
+    export sub(value: T): Vector<T> {
+        values: [T] = [];
+        for index = 0; index < this.data.len(); index = index + 1 {
+            values.push(this.data[index] - value);
+        }
+
+        return Vector.new(values);
+    }
+
+    export rsub(value: T): Vector<T> {
+        values: [T] = [];
+        for index = 0; index < this.data.len(); index = index + 1 {
+            values.push(value - this.data[index]);
+        }
+
+        return Vector.new(values);
+    }
+
+    export mul(other: Vector<T>): Vector<T> {
+        values: [T] = [];
+        for index = 0; index < this.data.len(); index = index + 1 {
+            values.push(this.data[index] * other.data[index]);
+        }
+
+        return Vector.new(values);
+    }
+
+    export mul(value: T): Vector<T> {
+        return this.scale(value);
+    }
+
+    export div(other: Vector<T>): Vector<T> {
+        values: [T] = [];
+        for index = 0; index < this.data.len(); index = index + 1 {
+            values.push(this.data[index] / other.data[index]);
+        }
+
+        return Vector.new(values);
+    }
+
+    export div(value: T): Vector<T> {
+        values: [T] = [];
+        for index = 0; index < this.data.len(); index = index + 1 {
+            values.push(this.data[index] / value);
+        }
+
+        return Vector.new(values);
+    }
+
+    export rdiv(value: T): Vector<T> {
+        values: [T] = [];
+        for index = 0; index < this.data.len(); index = index + 1 {
+            values.push(value / this.data[index]);
+        }
+
+        return Vector.new(values);
+    }
+
     export scale(factor: T): Vector<T> {
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
             values.push(this.data[index] * factor);
+        }
+
+        return Vector.new(values);
+    }
+
+    export neg(): Vector<T> {
+        values: [T] = [];
+        for index = 0; index < this.data.len(); index = index + 1 {
+            values.push(0 - this.data[index]);
+        }
+
+        return Vector.new(values);
+    }
+
+    export abs(): Vector<T> {
+        values: [T] = [];
+        for index = 0; index < this.data.len(); index = index + 1 {
+            value: T = this.data[index];
+            if value < 0 {
+                value = 0 - value;
+            }
+
+            values.push(value);
+        }
+
+        return Vector.new(values);
+    }
+
+    export clip(lower: T, upper: T): Vector<T> {
+        values: [T] = [];
+        for index = 0; index < this.data.len(); index = index + 1 {
+            value: T = this.data[index];
+            if value < lower {
+                value = lower;
+            }
+
+            if value > upper {
+                value = upper;
+            }
+
+            values.push(value);
         }
 
         return Vector.new(values);
@@ -71,22 +233,65 @@ export record Vector<T is numeric> {
         return total;
     }
 
-    export to_row_matrix(): Matrix<T> {
-        values: [T] = [];
+    export product(): T {
+        total: T = 1;
         for index = 0; index < this.data.len(); index = index + 1 {
-            values.push(this.data[index]);
+            total = total * this.data[index];
         }
 
-        return Matrix.new(1, this.data.len(), values);
+        return total;
+    }
+
+    export min(): T {
+        result: T = this.data[0];
+        for index = 1; index < this.data.len(); index = index + 1 {
+            if this.data[index] < result {
+                result = this.data[index];
+            }
+        }
+
+        return result;
+    }
+
+    export max(): T {
+        result: T = this.data[0];
+        for index = 1; index < this.data.len(); index = index + 1 {
+            if this.data[index] > result {
+                result = this.data[index];
+            }
+        }
+
+        return result;
+    }
+
+    export argmin(): int {
+        result = 0;
+        for index = 1; index < this.data.len(); index = index + 1 {
+            if this.data[index] < this.data[result] {
+                result = index;
+            }
+        }
+
+        return result;
+    }
+
+    export argmax(): int {
+        result = 0;
+        for index = 1; index < this.data.len(); index = index + 1 {
+            if this.data[index] > this.data[result] {
+                result = index;
+            }
+        }
+
+        return result;
+    }
+
+    export to_row_matrix(): Matrix<T> {
+        return Matrix.new(1, this.data.len(), this.to_array());
     }
 
     export to_column_matrix(): Matrix<T> {
-        values: [T] = [];
-        for index = 0; index < this.data.len(); index = index + 1 {
-            values.push(this.data[index]);
-        }
-
-        return Matrix.new(this.data.len(), 1, values);
+        return Matrix.new(this.data.len(), 1, this.to_array());
     }
 }
 
@@ -111,6 +316,18 @@ export record Matrix<T is numeric> {
         return this.cols;
     }
 
+    export shape(): [int] {
+        return [this.rows, this.cols];
+    }
+
+    export is_empty(): bool {
+        return this.data.is_empty();
+    }
+
+    export is_square(): bool {
+        return this.rows == this.cols;
+    }
+
     export len(): int {
         return this.data.len();
     }
@@ -123,13 +340,45 @@ export record Matrix<T is numeric> {
         this.data[this.index(row, col)] = value;
     }
 
-    export copy(): Matrix<T> {
+    export to_array(): [T] {
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
             values.push(this.data[index]);
         }
 
-        return Matrix.new(this.rows, this.cols, values);
+        return values;
+    }
+
+    export copy(): Matrix<T> {
+        return Matrix.new(this.rows, this.cols, this.to_array());
+    }
+
+    export equals(other: Matrix<T>): bool {
+        if this.rows != other.rows || this.cols != other.cols {
+            return false;
+        }
+
+        for index = 0; index < this.data.len(); index = index + 1 {
+            if this.data[index] != other.data[index] {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    export same_shape(other: Matrix<T>): bool {
+        return this.rows == other.rows && this.cols == other.cols;
+    }
+
+    export can_matmul(other: Matrix<T>): bool {
+        return this.cols == other.rows;
+    }
+
+    export fill(value: T): unit {
+        for index = 0; index < this.data.len(); index = index + 1 {
+            this.data[index] = value;
+        }
     }
 
     export row(row: int): Vector<T> {
@@ -150,10 +399,45 @@ export record Matrix<T is numeric> {
         return Vector.new(values);
     }
 
+    export flatten(): Vector<T> {
+        return Vector.new(this.to_array());
+    }
+
+    export reshape(rows: int, cols: int): Matrix<T> {
+        return Matrix.new(rows, cols, this.to_array());
+    }
+
+    export diagonal(): Vector<T> {
+        values: [T] = [];
+        size = this.rows;
+        if this.cols < size {
+            size = this.cols;
+        }
+
+        for index = 0; index < size; index = index + 1 {
+            values.push(this.get(index, index));
+        }
+
+        return Vector.new(values);
+    }
+
+    export trace(): T {
+        return this.diagonal().sum();
+    }
+
     export add(other: Matrix<T>): Matrix<T> {
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
             values.push(this.data[index] + other.data[index]);
+        }
+
+        return Matrix.new(this.rows, this.cols, values);
+    }
+
+    export add(value: T): Matrix<T> {
+        values: [T] = [];
+        for index = 0; index < this.data.len(); index = index + 1 {
+            values.push(this.data[index] + value);
         }
 
         return Matrix.new(this.rows, this.cols, values);
@@ -168,10 +452,109 @@ export record Matrix<T is numeric> {
         return Matrix.new(this.rows, this.cols, values);
     }
 
+    export sub(value: T): Matrix<T> {
+        values: [T] = [];
+        for index = 0; index < this.data.len(); index = index + 1 {
+            values.push(this.data[index] - value);
+        }
+
+        return Matrix.new(this.rows, this.cols, values);
+    }
+
+    export rsub(value: T): Matrix<T> {
+        values: [T] = [];
+        for index = 0; index < this.data.len(); index = index + 1 {
+            values.push(value - this.data[index]);
+        }
+
+        return Matrix.new(this.rows, this.cols, values);
+    }
+
+    export mul(other: Matrix<T>): Matrix<T> {
+        values: [T] = [];
+        for index = 0; index < this.data.len(); index = index + 1 {
+            values.push(this.data[index] * other.data[index]);
+        }
+
+        return Matrix.new(this.rows, this.cols, values);
+    }
+
+    export mul(value: T): Matrix<T> {
+        return this.scale(value);
+    }
+
+    export div(other: Matrix<T>): Matrix<T> {
+        values: [T] = [];
+        for index = 0; index < this.data.len(); index = index + 1 {
+            values.push(this.data[index] / other.data[index]);
+        }
+
+        return Matrix.new(this.rows, this.cols, values);
+    }
+
+    export div(value: T): Matrix<T> {
+        values: [T] = [];
+        for index = 0; index < this.data.len(); index = index + 1 {
+            values.push(this.data[index] / value);
+        }
+
+        return Matrix.new(this.rows, this.cols, values);
+    }
+
+    export rdiv(value: T): Matrix<T> {
+        values: [T] = [];
+        for index = 0; index < this.data.len(); index = index + 1 {
+            values.push(value / this.data[index]);
+        }
+
+        return Matrix.new(this.rows, this.cols, values);
+    }
+
     export scale(factor: T): Matrix<T> {
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
             values.push(this.data[index] * factor);
+        }
+
+        return Matrix.new(this.rows, this.cols, values);
+    }
+
+    export neg(): Matrix<T> {
+        values: [T] = [];
+        for index = 0; index < this.data.len(); index = index + 1 {
+            values.push(0 - this.data[index]);
+        }
+
+        return Matrix.new(this.rows, this.cols, values);
+    }
+
+    export abs(): Matrix<T> {
+        values: [T] = [];
+        for index = 0; index < this.data.len(); index = index + 1 {
+            value: T = this.data[index];
+            if value < 0 {
+                value = 0 - value;
+            }
+
+            values.push(value);
+        }
+
+        return Matrix.new(this.rows, this.cols, values);
+    }
+
+    export clip(lower: T, upper: T): Matrix<T> {
+        values: [T] = [];
+        for index = 0; index < this.data.len(); index = index + 1 {
+            value: T = this.data[index];
+            if value < lower {
+                value = lower;
+            }
+
+            if value > upper {
+                value = upper;
+            }
+
+            values.push(value);
         }
 
         return Matrix.new(this.rows, this.cols, values);
@@ -226,6 +609,31 @@ export record Matrix<T is numeric> {
 
         return total;
     }
+
+    export product(): T {
+        total: T = 1;
+        for index = 0; index < this.data.len(); index = index + 1 {
+            total = total * this.data[index];
+        }
+
+        return total;
+    }
+
+    export min(): T {
+        return this.flatten().min();
+    }
+
+    export max(): T {
+        return this.flatten().max();
+    }
+
+    export argmin(): int {
+        return this.flatten().argmin();
+    }
+
+    export argmax(): int {
+        return this.flatten().argmax();
+    }
 }
 
 export vector<T is numeric>(data: [T]): Vector<T> {
@@ -254,6 +662,24 @@ export zeros<T is numeric>(rows: int, cols: int): Matrix<T> {
     return Matrix.new(rows, cols, values);
 }
 
+export ones<T is numeric>(size: int): Vector<T> {
+    values: [T] = [];
+    for index = 0; index < size; index = index + 1 {
+        values.push(1);
+    }
+
+    return Vector.new(values);
+}
+
+export ones<T is numeric>(rows: int, cols: int): Matrix<T> {
+    values: [T] = [];
+    for index = 0; index < rows * cols; index = index + 1 {
+        values.push(1);
+    }
+
+    return Matrix.new(rows, cols, values);
+}
+
 export full<T is numeric>(size: int, value: T): Vector<T> {
     values: [T] = [];
     for index = 0; index < size; index = index + 1 {
@@ -272,6 +698,35 @@ export full<T is numeric>(rows: int, cols: int, value: T): Matrix<T> {
     return Matrix.new(rows, cols, values);
 }
 
+export arange<T is numeric>(end: T): Vector<T> {
+    return arange(0, end, 1);
+}
+
+export arange<T is numeric>(start: T, end: T): Vector<T> {
+    return arange(start, end, 1);
+}
+
+export arange<T is numeric>(start: T, end: T, step: T): Vector<T> {
+    values: [T] = [];
+    if step > 0 {
+        value: T = start;
+        while value < end {
+            values.push(value);
+            value = value + step;
+        }
+
+        return Vector.new(values);
+    }
+
+    value: T = start;
+    while value > end {
+        values.push(value);
+        value = value + step;
+    }
+
+    return Vector.new(values);
+}
+
 export identity<T is numeric>(size: int): Matrix<T> {
     values: [T] = [];
     for row = 0; row < size; row = row + 1 {
@@ -285,4 +740,23 @@ export identity<T is numeric>(size: int): Matrix<T> {
     }
 
     return Matrix.new(size, size, values);
+}
+
+export eye<T is numeric>(size: int): Matrix<T> {
+    return identity(size);
+}
+
+export diagonal<T is numeric>(values: Vector<T>): Matrix<T> {
+    data: [T] = [];
+    for row = 0; row < values.len(); row = row + 1 {
+        for col = 0; col < values.len(); col = col + 1 {
+            if row == col {
+                data.push(values.get(row));
+            } else {
+                data.push(0);
+            }
+        }
+    }
+
+    return Matrix.new(values.len(), values.len(), data);
 }

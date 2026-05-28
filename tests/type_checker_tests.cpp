@@ -250,8 +250,23 @@ int main() {
                           "left: matrix.Matrix<int> = matrix.from_flat(2, 3, [1, 2, 3, 4, 5, 6]); "
                           "right: matrix.Matrix<int> = matrix.from_flat(3, 2, [7, 8, 9, 10, 11, 12]); "
                           "product: matrix.Matrix<int> = left.matmul(right); "
-                          "cell: int = product.get(1, 1); total: real64 = filled.sum();",
+                          "cell: int = product.get(1, 1); total: real64 = filled.sum(); "
+                          "shape: [int] = product.shape(); flat: matrix.Vector<int> = product.flatten(); "
+                          "clipped: matrix.Vector<int> = vi.rsub(10).clip(0, 9); "
+                          "diag: matrix.Matrix<int> = matrix.diagonal(matrix.vector([1, 2, 3])); "
+                          "sequence: matrix.Vector<int> = matrix.arange(1, 5); ok: bool = left.can_matmul(right);",
                           "expected generic matrix stdlib module to validate") &&
+             passed;
+    passed = expect_valid("import array; "
+                          "values: [int] = [1, 2, 3]; total: int = values.sum(); "
+                          "prod: int = values.product(); low: int = values.min(); high: int = values.max(); "
+                          "first: int = values.prepend(0).first(); last: int = values.append(4).last(); "
+                          "middle: [int] = values.concat([4, 5]).slice(1, 4); "
+                          "zeros: [u16] = array.zeros(3); ones: [real64] = array.ones(2); "
+                          "full: [text] = array.full(2, \"x\"); "
+                          "same: bool = middle.equals([2, 3, 4]); flags: [bool] = [true, false]; "
+                          "has_any: bool = flags.any(); all_true: bool = flags.all();",
+                          "expected expanded array stdlib API to validate") &&
              passed;
     passed = expect_fixture_valid("import feature_exports; answer: int = feature_exports.ANSWER; "
                                   "value: int = feature_exports.public();",

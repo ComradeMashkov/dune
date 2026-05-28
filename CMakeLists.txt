@@ -369,7 +369,17 @@ add_test(
         ${CMAKE_COMMAND}
         -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/matrix_demo.dn
-        -D EXPECTED_OUTPUT="5\n9\n32\n6\n2\n3\n6\n3\n2\n6\n58\n154\n6\n15\n0\n1\n0\n4"
+        -D EXPECTED_OUTPUT="5\n9\n32\n3\n1\n6\n13\n9\n10\n2\n6\n5\n3\n5\n-3\n7\n0\n2\n-42\n10\n3\n2\n3\n6\n2\n3\n5\n5\n6\n6\n3\n2\n6\n58\n154\n1\n0\n4\n9\n16\n3\n2\n5\n6\n15\n0\n4\n1\n0\n2\n3\n5\n7\n1\n4"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
+    NAME cli_array_api
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/array_api.dn
+        -D EXPECTED_OUTPUT="6\n6\n1\n3\n0\n2\n4\n15\n3\n3\nx\n21\n0\n3\n6\n0\n5\n9\n3\n4\n1\n1\n27\n0\n1\n4"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
 )
 
@@ -545,7 +555,18 @@ add_test(
         -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/matrix_demo.dn
         -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/matrix_native
-        -D EXPECTED_OUTPUT="5\n9\n32\n6\n2\n3\n6\n3\n2\n6\n58\n154\n6\n15\n0\n1\n0\n4"
+        -D EXPECTED_OUTPUT="5\n9\n32\n3\n1\n6\n13\n9\n10\n2\n6\n5\n3\n5\n-3\n7\n0\n2\n-42\n10\n3\n2\n3\n6\n2\n3\n5\n5\n6\n6\n3\n2\n6\n58\n154\n1\n0\n4\n9\n16\n3\n2\n5\n6\n15\n0\n4\n1\n0\n2\n3\n5\n7\n1\n4"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
+)
+
+add_test(
+    NAME cli_build_native_array_api
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/array_api.dn
+        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/array_api_native
+        -D EXPECTED_OUTPUT="6\n6\n1\n3\n0\n2\n4\n15\n3\n3\nx\n21\n0\n3\n6\n0\n5\n9\n3\n4\n1\n1\n27\n0\n1\n4"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
 )
 

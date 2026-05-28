@@ -268,13 +268,24 @@ int main() {
              passed;
     passed = expect_eq(run_source("import matrix; "
                                   "v = matrix.vector([1, 2, 3]); w = matrix.vector([4, 5, 6]); "
-                                  "print(v.add(w).get(0)); print(v.dot(w)); "
+                                  "print(v.add(w).get(0)); print(v.dot(w)); print(v.rsub(10).get(0)); "
+                                  "print(v.mul(w).get(1)); print(v.concat(w).len()); "
                                   "m = matrix.from_flat(2, 3, [1, 2, 3, 4, 5, 6]); "
                                   "n = matrix.from_flat(3, 2, [7, 8, 9, 10, 11, 12]); "
                                   "product = m.matmul(n); print(product.get(0, 0)); print(product.get(1, 1)); "
+                                  "print(m.trace()); print(m.flatten().get(4)); "
                                   "z: matrix.Matrix<int> = matrix.zeros(2, 2); print(z.sum()); "
+                                  "eye: matrix.Matrix<int> = matrix.eye(2); print(eye.trace()); "
                                   "r = matrix.vector([1.5, 2.5]); print(r.sum());"),
-                       "5\n32\n58\n154\n0\n4\n", "expected generic matrix stdlib output") &&
+                       "5\n32\n9\n10\n6\n58\n154\n6\n5\n0\n2\n4\n", "expected generic matrix stdlib output") &&
+             passed;
+    passed = expect_eq(run_source("import array; "
+                                  "values = [1, 2, 3]; print(values.sum()); print(values.product()); "
+                                  "print(values.min()); print(values.max()); print(array.range(2, 9, 3).sum()); "
+                                  "combined = values.concat([4]).prepend(0); print(combined.first()); "
+                                  "print(combined.last()); print(combined.slice(1, 3).sum()); "
+                                  "flags = [true, false]; print(flags.all()); print(flags.any());"),
+                       "6\n6\n1\n3\n15\n0\n4\n3\n0\n1\n", "expected expanded array stdlib output") &&
              passed;
     passed = expect_throws("print(missing);", "expected undefined variable to throw") && passed;
     passed =
