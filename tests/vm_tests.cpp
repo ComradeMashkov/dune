@@ -255,6 +255,17 @@ int main() {
                                   "print(assert.equals_int(repeated[0], 3));"),
                        "42\n7\nbad\n4\n1\n", "expected record stdlib module output") &&
              passed;
+    passed = expect_eq(run_source("import autograd; "
+                                  "x = autograd.variable(2.0); y = autograd.variable(3.0); "
+                                  "loss = x.mul(y).add(x.pow(2.0)).add(1.0); loss.backward(); "
+                                  "print(loss.data); print(x.grad); print(y.grad); "
+                                  "a = autograd.variable(3.0); shared = a.mul(a); doubled = shared.add(shared); "
+                                  "doubled.backward(); print(doubled.data); print(a.grad); "
+                                  "doubled.backward(); print(a.grad); "
+                                  "negative = autograd.variable(0.0 - 2.0); clipped = negative.relu(); "
+                                  "clipped.backward(); print(clipped.data); print(negative.grad);"),
+                       "11\n7\n2\n18\n12\n12\n0\n0\n", "expected scalar autograd output") &&
+             passed;
     passed = expect_throws("print(missing);", "expected undefined variable to throw") && passed;
     passed =
         expect_eq(run_source("missing = 1; print(missing);"), "1\n", "expected first assignment to bind") && passed;

@@ -380,6 +380,48 @@ bool compiles_choice_variants_and_when() {
     return passed;
 }
 
+bool compiles_autograd_module_as_dune_code() {
+    const dune::Bytecode bytecode = compile_source("import autograd; "
+                                                   "x = autograd.variable(2.0); "
+                                                   "loss = x.mul(3.0).add(x.pow(2.0)); "
+                                                   "loss.backward(); print(loss.data);");
+
+    bool saw_variable = false;
+    bool saw_backward = false;
+    bool saw_call = false;
+    bool saw_field_load = false;
+    bool saw_make_record = false;
+    bool saw_autograd_extern = false;
+    for (const dune::Bytecode::Function& function : bytecode.functions) {
+        if (function.name.rfind("autograd.", 0) == 0 && function.is_extern) {
+            saw_autograd_extern = true;
+        }
+
+        saw_variable = saw_variable || (function.name == "autograd.variable" && !function.is_extern);
+        saw_backward = saw_backward || (function.name == "autograd.backward" && !function.is_extern);
+
+        for (const dune::Instruction& instruction : function.instructions) {
+            saw_field_load = saw_field_load || instruction.op == dune::OpCode::load_field;
+            saw_make_record = saw_make_record || instruction.op == dune::OpCode::make_record;
+        }
+    }
+
+    for (const dune::Instruction& instruction : bytecode.instructions) {
+        saw_call = saw_call || instruction.op == dune::OpCode::call;
+        saw_field_load = saw_field_load || instruction.op == dune::OpCode::load_field;
+        saw_make_record = saw_make_record || instruction.op == dune::OpCode::make_record;
+    }
+
+    bool passed = true;
+    passed = expect(saw_variable, "expected autograd.variable Dune function") && passed;
+    passed = expect(saw_backward, "expected autograd.backward Dune function") && passed;
+    passed = expect(!saw_autograd_extern, "expected no autograd foreign functions") && passed;
+    passed = expect(saw_call, "expected autograd call instructions") && passed;
+    passed = expect(saw_field_load, "expected autograd field access") && passed;
+    passed = expect(saw_make_record, "expected autograd record construction") && passed;
+    return passed;
+}
+
 } // namespace
 
 int main() {
@@ -397,6 +439,7 @@ int main() {
     passed = compiles_assignment_targets() && passed;
     passed = compiles_when_expression() && passed;
     passed = compiles_choice_variants_and_when() && passed;
+    passed = compiles_autograd_module_as_dune_code() && passed;
 
     return passed ? 0 : 1;
 }

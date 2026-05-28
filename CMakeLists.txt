@@ -354,6 +354,16 @@ add_test(
 )
 
 add_test(
+    NAME cli_autograd
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/autograd_demo.dn
+        -D EXPECTED_OUTPUT="11\n7\n2\n18\n12\n12\n0\n0"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
     NAME cli_build_native_hello
     COMMAND
         ${CMAKE_COMMAND}
@@ -504,6 +514,17 @@ add_test(
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/object_model.dn
         -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/object_model_native
         -D EXPECTED_OUTPUT="2\n12\n12\n42"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
+)
+
+add_test(
+    NAME cli_build_native_autograd
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/autograd_demo.dn
+        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/autograd_native
+        -D EXPECTED_OUTPUT="11\n7\n2\n18\n12\n12\n0\n0"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
 )
 
