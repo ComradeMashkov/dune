@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <fstream>
 #include <istream>
+#include <memory>
 #include <optional>
 #include <ostream>
 #include <regex>
@@ -50,6 +51,7 @@ struct SourcePosition {
 struct CheckedProgram {
     Program program;
     std::unordered_map<const Expression*, Type> expression_types;
+    std::unordered_map<std::string, TypeChecker::StructDefinition> structs;
 };
 
 std::string json_escape(const std::string& value) {
@@ -575,7 +577,7 @@ std::optional<CheckedProgram> check_program_best_effort(const std::string& sourc
         TypeChecker checker;
         Program program = loader.resolve(parser.parse(), source_directory);
         checker.check(program);
-        return CheckedProgram{std::move(program), checker.expression_types()};
+        return CheckedProgram{std::move(program), checker.expression_types(), checker.structs()};
     } catch (const std::exception&) {
         return std::nullopt;
     }
@@ -659,13 +661,103 @@ void add_imported_module_completions(const std::vector<std::string>& imports,
     }
 }
 
-void add_receiver_method_completions(std::vector<CompletionItem>& completions) {
+void add_common_receiver_method_completions(std::vector<CompletionItem>& completions) {
     for (const std::string_view method :
          {"len",     "push",  "pop",    "clear",  "is_empty", "contains",   "starts_with", "ends_with",
           "char_at", "slice", "prefix", "suffix", "trim",     "trim_start", "trim_end",    "copy",
           "reverse", "first", "last",   "append", "index_of", "count"}) {
         add_completion(completions, std::string(method), "method", completion_kind_method);
     }
+}
+
+Type substitute_generic_arguments(const Type& type, const std::vector<GenericParameter>& parameters,
+                                  const std::vector<Type>& arguments) {
+    if (type.kind == ValueType::generic_type) {
+        for (std::size_t index = 0; index < parameters.size() && index < arguments.size(); ++index) {
+            if (parameters[index].name == type.name) {
+                return arguments[index];
+            }
+        }
+    }
+
+    Type result{type.kind, nullptr};
+    result.name = type.name;
+    if (type.element != nullptr) {
+        result.element = std::make_shared<Type>(substitute_generic_arguments(*type.element, parameters, arguments));
+    }
+
+    result.arguments.reserve(type.arguments.size());
+    for (const Type& argument : type.arguments) {
+        result.arguments.push_back(substitute_generic_arguments(argument, parameters, arguments));
+    }
+
+    return result;
+}
+
+std::string struct_method_signature(const TypeChecker::StructMethod& method,
+                                    const TypeChecker::StructDefinition& record, const Type& receiver) {
+    std::string signature = method.name + "(";
+    for (std::size_t index = 0; index < method.parameters.size(); ++index) {
+        if (index > 0) {
+            signature += ", ";
+        }
+
+        signature += "arg" + std::to_string(index + 1) + ": " +
+                     type_name(substitute_generic_arguments(method.parameters[index], record.generic_parameters,
+                                                            receiver.arguments));
+    }
+
+    signature += "): " + type_name(substitute_generic_arguments(method.return_type, record.generic_parameters,
+                                                                receiver.arguments));
+    return signature;
+}
+
+bool is_external_record_type(const Type& type) {
+    return type.kind == ValueType::struct_type && type.name.find('.') != std::string::npos;
+}
+
+void add_struct_method_completions(const Type& receiver,
+                                   const std::unordered_map<std::string, TypeChecker::StructDefinition>& structs,
+                                   std::vector<CompletionItem>& completions) {
+    if (receiver.kind != ValueType::struct_type) {
+        return;
+    }
+
+    const auto record = structs.find(receiver.name);
+    if (record == structs.end()) {
+        return;
+    }
+
+    for (const TypeChecker::StructMethod& method : record->second.methods) {
+        if (method.is_constructor) {
+            continue;
+        }
+
+        if (is_external_record_type(receiver) && !method.exported) {
+            continue;
+        }
+
+        add_completion(completions, method.name, struct_method_signature(method, record->second, receiver),
+                       completion_kind_method);
+    }
+}
+
+void add_typed_receiver_method_completions(
+    const Type& receiver, const std::unordered_map<std::string, TypeChecker::StructDefinition>& structs,
+    std::vector<CompletionItem>& completions) {
+    if (receiver.kind == ValueType::array_type) {
+        for (const std::string_view method : {"len", "push", "pop", "clear", "is_empty"}) {
+            add_completion(completions, std::string(method), "array method", completion_kind_method);
+        }
+    }
+
+    if (receiver.kind == ValueType::text_type) {
+        for (const std::string_view method : {"len", "is_empty", "contains", "starts_with"}) {
+            add_completion(completions, std::string(method), "text method", completion_kind_method);
+        }
+    }
+
+    add_struct_method_completions(receiver, structs, completions);
 }
 
 bool is_identifier_character(char value) {
@@ -836,6 +928,101 @@ std::string variable_type_text(const Statement& statement) {
     }
 
     return "unknown";
+}
+
+std::optional<Type> statement_value_type(const Statement& statement,
+                                         const std::unordered_map<const Expression*, Type>& expression_types) {
+    if (statement.type.has_type) {
+        return statement.type.type;
+    }
+
+    if (statement.expression == nullptr) {
+        return std::nullopt;
+    }
+
+    const auto type = expression_types.find(statement.expression.get());
+    if (type == expression_types.end()) {
+        return std::nullopt;
+    }
+
+    return type->second;
+}
+
+std::optional<Type> symbol_type_in_statement(const Statement& statement, const std::string& name,
+                                             const std::unordered_map<const Expression*, Type>& expression_types) {
+    for (const Parameter& parameter : statement.parameters) {
+        if (parameter.name == name && parameter.type.has_type) {
+            return parameter.type.type;
+        }
+    }
+
+    if ((statement.kind == StatementKind::binding || statement.kind == StatementKind::const_statement) &&
+        statement.name == name) {
+        if (std::optional<Type> type = statement_value_type(statement, expression_types)) {
+            return type;
+        }
+    }
+
+    if (statement.kind == StatementKind::assign && statement.target != nullptr &&
+        statement.target->kind == ExpressionKind::identifier && statement.target->lexeme == name) {
+        if (std::optional<Type> type = statement_value_type(statement, expression_types)) {
+            return type;
+        }
+    }
+
+    if (statement.initializer != nullptr) {
+        if (std::optional<Type> type = symbol_type_in_statement(*statement.initializer, name, expression_types)) {
+            return type;
+        }
+    }
+
+    if (statement.increment != nullptr) {
+        if (std::optional<Type> type = symbol_type_in_statement(*statement.increment, name, expression_types)) {
+            return type;
+        }
+    }
+
+    for (auto child = statement.body.rbegin(); child != statement.body.rend(); ++child) {
+        if (std::optional<Type> type = symbol_type_in_statement(*child, name, expression_types)) {
+            return type;
+        }
+    }
+
+    for (auto child = statement.else_body.rbegin(); child != statement.else_body.rend(); ++child) {
+        if (std::optional<Type> type = symbol_type_in_statement(*child, name, expression_types)) {
+            return type;
+        }
+    }
+
+    return std::nullopt;
+}
+
+std::optional<Type> symbol_type_in_program(const CheckedProgram& checked, const std::string& name) {
+    for (auto statement = checked.program.statements.rbegin(); statement != checked.program.statements.rend();
+         ++statement) {
+        if (statement->kind == StatementKind::import_statement) {
+            break;
+        }
+
+        if (std::optional<Type> type = symbol_type_in_statement(*statement, name, checked.expression_types)) {
+            return type;
+        }
+    }
+
+    return std::nullopt;
+}
+
+std::optional<CheckedProgram> check_program_prefix_before(const std::string& source,
+                                                          const std::filesystem::path& source_directory,
+                                                          SourcePosition position) {
+    const std::size_t offset = offset_at_position(source, position);
+    const std::size_t line_start = source.rfind('\n', offset == 0 ? 0 : offset - 1);
+    const std::size_t prefix_end = line_start == std::string::npos ? 0 : line_start + 1;
+    if (prefix_end == 0) {
+        return std::nullopt;
+    }
+
+    return check_program_best_effort(source.substr(0, prefix_end), source_directory);
 }
 
 std::string code_hover(std::string declaration) {
@@ -1118,6 +1305,84 @@ std::optional<std::string> module_member_hover(const Program& program, const std
     return std::nullopt;
 }
 
+std::optional<std::string> builtin_receiver_method_hover(const Type& receiver, const std::string& method) {
+    if (receiver.kind == ValueType::array_type) {
+        if (method == "len") {
+            return code_hover("len(): int");
+        }
+        if (method == "push") {
+            const std::string element = receiver.element == nullptr ? "unknown" : type_name(*receiver.element);
+            return code_hover("push(value: " + element + "): unit");
+        }
+        if (method == "pop") {
+            const std::string element = receiver.element == nullptr ? "unknown" : type_name(*receiver.element);
+            return code_hover("pop(): " + element);
+        }
+        if (method == "clear") {
+            return code_hover("clear(): unit");
+        }
+        if (method == "is_empty") {
+            return code_hover("is_empty(): bool");
+        }
+    }
+
+    if (receiver.kind == ValueType::text_type) {
+        if (method == "len") {
+            return code_hover("len(): int");
+        }
+        if (method == "is_empty") {
+            return code_hover("is_empty(): bool");
+        }
+        if (method == "contains") {
+            return code_hover("contains(needle: text): bool");
+        }
+        if (method == "starts_with") {
+            return code_hover("starts_with(prefix: text): bool");
+        }
+    }
+
+    return std::nullopt;
+}
+
+std::optional<std::string>
+receiver_method_hover(const Type& receiver, const std::string& method,
+                      const std::unordered_map<std::string, TypeChecker::StructDefinition>& structs) {
+    if (std::optional<std::string> hover = builtin_receiver_method_hover(receiver, method)) {
+        return hover;
+    }
+
+    if (receiver.kind != ValueType::struct_type) {
+        return std::nullopt;
+    }
+
+    const auto record = structs.find(receiver.name);
+    if (record == structs.end()) {
+        return std::nullopt;
+    }
+
+    std::string signatures;
+    for (const TypeChecker::StructMethod& candidate : record->second.methods) {
+        if (candidate.is_constructor || candidate.name != method) {
+            continue;
+        }
+
+        if (is_external_record_type(receiver) && !candidate.exported) {
+            continue;
+        }
+
+        if (!signatures.empty()) {
+            signatures += "\n";
+        }
+        signatures += struct_method_signature(candidate, record->second, receiver);
+    }
+
+    if (signatures.empty()) {
+        return std::nullopt;
+    }
+
+    return code_hover(signatures);
+}
+
 std::optional<std::string> module_hover(const std::string& module_name, const std::filesystem::path& source_directory) {
     if (!find_module_file(module_name, source_directory).has_value()) {
         return std::nullopt;
@@ -1327,7 +1592,20 @@ std::vector<CompletionItem> complete_source(const std::string& source, const std
             return completions;
         }
 
-        add_receiver_method_completions(completions);
+        std::optional<CheckedProgram> checked = check_program_best_effort(source, directory);
+        if (!checked.has_value()) {
+            checked = check_program_prefix_before(source, directory, position);
+        }
+
+        if (checked.has_value()) {
+            if (std::optional<Type> receiver = symbol_type_in_program(*checked, *qualifier)) {
+                add_typed_receiver_method_completions(*receiver, checked->structs, completions);
+            }
+        }
+
+        if (completions.empty()) {
+            add_common_receiver_method_completions(completions);
+        }
         return completions;
     }
 
@@ -1356,9 +1634,19 @@ std::optional<Hover> hover_source(const std::string& source, const std::string& 
     const Token& token = tokens[*token_index];
     if (*token_index >= 2 && tokens[*token_index - 1].type == TokenType::dot &&
         is_identifier_like(tokens[*token_index - 2])) {
-        if (std::optional<std::string> contents =
-                lookup_module_member_hover(tokens[*token_index - 2].lexeme, token.lexeme, directory)) {
-            return Hover{*contents};
+        const std::string qualifier = tokens[*token_index - 2].lexeme;
+        const std::vector<std::string> imports = imports_in_source(source);
+        if (std::ranges::find(imports, qualifier) != imports.end()) {
+            if (std::optional<std::string> contents = lookup_module_member_hover(qualifier, token.lexeme, directory)) {
+                return Hover{*contents};
+            }
+        } else if (std::optional<CheckedProgram> checked = check_program_best_effort(source, directory)) {
+            if (std::optional<Type> receiver = symbol_type_in_program(*checked, qualifier)) {
+                if (std::optional<std::string> contents =
+                        receiver_method_hover(*receiver, token.lexeme, checked->structs)) {
+                    return Hover{*contents};
+                }
+            }
         }
     }
 

@@ -204,11 +204,11 @@ import matrix;
 v = matrix.vector([1, 2, 3]);
 w = matrix.vector([4, 5, 6]);
 
-print(v.dot(w));
+print(matrix.dot(v, w));
 
 m = matrix.from_flat(2, 3, [1, 2, 3, 4, 5, 6]);
 n = matrix.from_flat(3, 2, [7, 8, 9, 10, 11, 12]);
-product = m.matmul(n);
+product = matrix.dot(m, n);
 
 print(product.get(0, 0));
 print(product.get(1, 1));
@@ -224,7 +224,8 @@ Core helpers:
 - `full(size, value)`, `full(rows, cols, value)`
 - `arange(end)`, `arange(start, end)`, `arange(start, end, step)`
 - `identity(size)`, `eye(size)`
-- `diagonal(vector)`
+- `diagonal(vector)`, `diag(vector)`
+- `dot(left, right)`, `matmul(left, right)`
 - `outer(left, right)`
 
 Vector methods:
@@ -237,8 +238,8 @@ Vector methods:
 - `scale(factor)`, `neg()`, `abs()`, `clip(lower, upper)`
 - `dot(other)`, `norm_squared()`, `norm()`, `distance_squared(other)`, `distance(other)`
 - `sum()`, `product()`, `mean()`, `min()`, `max()`, `argmin()`, `argmax()`
-- `to_row_matrix()`, `to_column_matrix()`
-- `matmul(matrix)`, `outer(other)`
+- `to_row_matrix()`, `to_column_matrix()`, `reshape(rows, cols)`
+- `dot(matrix)`, `matmul(matrix)`, `outer(other)`
 
 Matrix methods:
 
@@ -246,16 +247,24 @@ Matrix methods:
 - `get(row, col)`, `set(row, col, value)`, `to_array()`, `copy()`
 - `equals(other)`, `same_shape(other)`, `can_matmul(other)`, `fill(value)`
 - `row(index)`, `column(index)`, `flatten()`, `reshape(rows, cols)`
-- `diagonal()`, `trace()`
+- `diagonal()`, `diag()`, `trace()`
 - `add(other)`, `add(value)`, `sub(other)`, `sub(value)`, `rsub(value)`
 - `mul(other)`, `mul(value)`, `div(other)`, `div(value)`, `rdiv(value)`
 - `hadamard(other)`
 - `scale(factor)`, `neg()`, `abs()`, `clip(lower, upper)`
-- `transpose()`, `matmul(other)`, `mul_vector(vector)`
+- `transpose()`, `dot(other)`, `matmul(other)`, `mul_vector(vector)`
 - `sum_rows()`, `sum_columns()`, `mean_rows()`, `mean_columns()`
 - `sum()`, `product()`, `mean()`, `norm_squared()`, `norm()`
 - `min()`, `max()`, `argmin()`, `argmax()`
 - `det2()`, `det3()`
+
+Runnable examples live in `examples/`:
+
+- `matrix_basics.dn`
+- `vector_stats.dn`
+- `linear_regression.dn`
+
+Those examples are also covered by VM and native CLI golden tests.
 
 The `runtime` module exposes `panic(message)`, which aborts execution with a
 message. It is mainly intended for standard library checks and tests.

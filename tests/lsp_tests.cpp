@@ -79,6 +79,17 @@ bool completes_imported_module_members() {
     return passed;
 }
 
+bool completes_typed_record_methods() {
+    const std::vector<dune::lsp::CompletionItem> completions = dune::lsp::complete_source(
+        "import matrix;\nvalues = matrix.vector([1, 2, 3]);\nprint(values.);", {}, {}, 2, 13);
+
+    bool passed = true;
+    passed = expect(has_completion(completions, "dot"), "expected vector method completion") && passed;
+    passed = expect(has_completion(completions, "mean"), "expected reduction method completion") && passed;
+    passed = expect(has_completion(completions, "reshape"), "expected new vector method completion") && passed;
+    return passed;
+}
+
 bool hovers_local_symbols() {
     const std::optional<dune::lsp::Hover> hover =
         dune::lsp::hover_source("total: int = 42;\nprint(total);", {}, {}, 1, 7);
@@ -87,6 +98,20 @@ bool hovers_local_symbols() {
     passed = expect(hover.has_value(), "expected hover") && passed;
     if (hover.has_value()) {
         passed = expect(hover->contents.find("total: int") != std::string::npos, "expected variable hover") && passed;
+    }
+    return passed;
+}
+
+bool hovers_typed_record_methods() {
+    const std::optional<dune::lsp::Hover> hover = dune::lsp::hover_source(
+        "import matrix;\nvalues = matrix.vector([1, 2, 3]);\nprint(values.mean());", {}, {}, 2, 14);
+
+    bool passed = true;
+    passed = expect(hover.has_value(), "expected receiver method hover") && passed;
+    if (hover.has_value()) {
+        passed =
+            expect(hover->contents.find("mean(): real") != std::string::npos, "expected typed receiver method hover") &&
+            passed;
     }
     return passed;
 }
@@ -184,7 +209,9 @@ int main() {
     passed = diagnoses_type_errors_with_range() && passed;
     passed = completes_keywords_and_local_symbols() && passed;
     passed = completes_imported_module_members() && passed;
+    passed = completes_typed_record_methods() && passed;
     passed = hovers_local_symbols() && passed;
+    passed = hovers_typed_record_methods() && passed;
     passed = hovers_imported_module_members() && passed;
     passed = hovers_inferred_call_assignments() && passed;
     passed = publishes_lsp_diagnostics() && passed;
