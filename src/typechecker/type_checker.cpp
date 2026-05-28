@@ -40,6 +40,33 @@ std::string expression_type_name(const Expression& expression) {
     return {};
 }
 
+bool is_printable_type(const Type& type) {
+    return type.kind != ValueType::unit_type && type.kind != ValueType::array_type &&
+           type.kind != ValueType::struct_type && type.kind != ValueType::enum_type;
+}
+
+std::pair<std::size_t, bool> count_format_placeholders(const std::string& lexeme) {
+    std::size_t placeholders = 0;
+    for (std::size_t index = 1; index + 1 < lexeme.size(); ++index) {
+        const char current = lexeme[index];
+        if (current == '{') {
+            if (index + 1 < lexeme.size() && lexeme[index + 1] == '}') {
+                ++placeholders;
+                ++index;
+                continue;
+            }
+
+            return {0, false};
+        }
+
+        if (current == '}') {
+            return {0, false};
+        }
+    }
+
+    return {placeholders, true};
+}
+
 Type clone_type(const Type& type) {
     Type result{type.kind, nullptr};
     result.name = type.name;
@@ -968,10 +995,38 @@ void TypeChecker::check_statement(const Statement& statement) {
     }
     case StatementKind::print: {
         const Type type = check_expression(*statement.expression);
-        if (type.kind == ValueType::unit_type || type.kind == ValueType::array_type ||
-            type.kind == ValueType::struct_type || type.kind == ValueType::enum_type) {
+        if (!is_printable_type(type)) {
             throw std::runtime_error(
                 diagnostic(statement.expression->location, "cannot print type '" + type_name(type) + "'"));
+        }
+
+        if (statement.arguments.empty()) {
+            return;
+        }
+
+        if (statement.expression->kind != ExpressionKind::string) {
+            throw std::runtime_error(
+                diagnostic(statement.expression->location, "print format string must be a string literal"));
+        }
+
+        const auto [placeholders, valid_format] = count_format_placeholders(statement.expression->lexeme);
+        if (!valid_format) {
+            throw std::runtime_error(diagnostic(statement.expression->location, "invalid print format placeholder"));
+        }
+
+        if (placeholders != statement.arguments.size()) {
+            throw std::runtime_error(
+                diagnostic(statement.expression->location, "print format string expects " +
+                                                               std::to_string(placeholders) + " arguments but got " +
+                                                               std::to_string(statement.arguments.size())));
+        }
+
+        for (const std::unique_ptr<Expression>& argument : statement.arguments) {
+            const Type argument_type = check_expression(*argument);
+            if (!is_printable_type(argument_type)) {
+                throw std::runtime_error(
+                    diagnostic(argument->location, "cannot print type '" + type_name(argument_type) + "'"));
+            }
         }
 
         return;

@@ -112,6 +112,12 @@ void LlvmIrGenerator::generate(const Program& program, std::ostream& output) {
     output << "@.dune_fmt_real = private unnamed_addr constant [7 x i8] c\"%.15g\\0A\\00\"\n";
     output << "@.dune_fmt_glyph = private unnamed_addr constant [4 x i8] c\"%c\\0A\\00\"\n";
     output << "@.dune_fmt_text = private unnamed_addr constant [4 x i8] c\"%s\\0A\\00\"\n";
+    output << "@.dune_fmt_sint_raw = private unnamed_addr constant [5 x i8] c\"%lld\\00\"\n";
+    output << "@.dune_fmt_uint_raw = private unnamed_addr constant [5 x i8] c\"%llu\\00\"\n";
+    output << "@.dune_fmt_real_raw = private unnamed_addr constant [6 x i8] c\"%.15g\\00\"\n";
+    output << "@.dune_fmt_glyph_raw = private unnamed_addr constant [3 x i8] c\"%c\\00\"\n";
+    output << "@.dune_fmt_text_raw = private unnamed_addr constant [3 x i8] c\"%s\\00\"\n";
+    output << "@.dune_fmt_newline = private unnamed_addr constant [2 x i8] c\"\\0A\\00\"\n";
     output << "@.dune_panic_array_index = private unnamed_addr constant [27 x i8] c\"array index out of "
               "bounds\\0A\\00\"\n";
     output
@@ -462,7 +468,11 @@ bool LlvmIrGenerator::emit_statement(const Statement& statement, std::ostream& o
         return false;
     }
     case StatementKind::print:
-        emit_print(emit_expression(*statement.expression, output), output);
+        if (statement.arguments.empty()) {
+            emit_print(emit_expression(*statement.expression, output), output);
+        } else {
+            emit_format_print(statement, output);
+        }
         return false;
     case StatementKind::block:
         push_scope();
@@ -1395,6 +1405,12 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_slice_expression(const Express
 
 LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_text_literal(const std::string& lexeme) {
     const std::string value = decode_text_literal(lexeme);
+    const std::string pointer = emit_c_string_literal(value);
+
+    return TypedValue{pointer, make_type(ValueType::text_type)};
+}
+
+std::string LlvmIrGenerator::emit_c_string_literal(const std::string& value) {
     const std::string name = "@.dune_text_" + std::to_string(string_literal_count_++);
     const std::size_t size = value.size() + 1;
 
@@ -1403,8 +1419,7 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_text_literal(const std::string
            << "\\00\"\n";
     string_globals_.push_back(global.str());
 
-    return TypedValue{"getelementptr inbounds ([" + std::to_string(size) + " x i8], ptr " + name + ", i64 0, i64 0)",
-                      make_type(ValueType::text_type)};
+    return "getelementptr inbounds ([" + std::to_string(size) + " x i8], ptr " + name + ", i64 0, i64 0)";
 }
 
 LlvmIrGenerator::TypedPointer LlvmIrGenerator::emit_lvalue_pointer(const Expression& expression, std::ostream& output) {
@@ -1490,6 +1505,49 @@ void LlvmIrGenerator::emit_print(const TypedValue& value, std::ostream& output) 
     output << "  " << format << " = getelementptr inbounds " << printf_format_name(value.type) << '\n';
     output << "  call i32 (ptr, ...) @printf(ptr " << format << ", " << llvm_type(printable.type) << ' '
            << printable.name << ")\n";
+}
+
+void LlvmIrGenerator::emit_format_print(const Statement& statement, std::ostream& output) {
+    const std::string format_text = decode_text_literal(statement.expression->lexeme);
+    std::size_t argument_index = 0;
+    std::string segment;
+    for (std::size_t index = 0; index < format_text.size(); ++index) {
+        if (format_text[index] == '{' && index + 1 < format_text.size() && format_text[index + 1] == '}') {
+            emit_print_text_segment(segment, output);
+            segment.clear();
+            emit_print_fragment(emit_expression(*statement.arguments[argument_index++], output), output);
+            ++index;
+            continue;
+        }
+
+        segment += format_text[index];
+    }
+
+    emit_print_text_segment(segment, output);
+    emit_print_newline(output);
+}
+
+void LlvmIrGenerator::emit_print_fragment(const TypedValue& value, std::ostream& output) {
+    const TypedValue printable = cast_for_print(value, output);
+    const std::string format = next_register();
+    output << "  " << format << " = getelementptr inbounds " << printf_fragment_format_name(value.type) << '\n';
+    output << "  call i32 (ptr, ...) @printf(ptr " << format << ", " << llvm_type(printable.type) << ' '
+           << printable.name << ")\n";
+}
+
+void LlvmIrGenerator::emit_print_text_segment(const std::string& value, std::ostream& output) {
+    if (value.empty()) {
+        return;
+    }
+
+    const std::string segment = emit_c_string_literal(value);
+    const std::string format = next_register();
+    output << "  " << format << " = getelementptr inbounds [3 x i8], ptr @.dune_fmt_text_raw, i64 0, i64 0\n";
+    output << "  call i32 (ptr, ...) @printf(ptr " << format << ", ptr " << segment << ")\n";
+}
+
+void LlvmIrGenerator::emit_print_newline(std::ostream& output) {
+    output << "  call i32 (ptr, ...) @printf(ptr @.dune_fmt_newline)\n";
 }
 
 void LlvmIrGenerator::emit_bounds_check(const std::string& index, const std::string& length, std::string_view message,
@@ -1819,6 +1877,40 @@ std::string LlvmIrGenerator::printf_format_name(const Type& type) const {
         return "[4 x i8], ptr @.dune_fmt_glyph, i64 0, i64 0";
     case ValueType::text_type:
         return "[4 x i8], ptr @.dune_fmt_text, i64 0, i64 0";
+    case ValueType::unit_type:
+    case ValueType::array_type:
+    case ValueType::generic_type:
+    case ValueType::struct_type:
+    case ValueType::enum_type:
+        break;
+    }
+
+    throw std::runtime_error("unknown type");
+}
+
+std::string LlvmIrGenerator::printf_fragment_format_name(const Type& type) const {
+    switch (type.kind) {
+    case ValueType::int_type:
+    case ValueType::i8_type:
+    case ValueType::i16_type:
+    case ValueType::i32_type:
+    case ValueType::i64_type:
+    case ValueType::isize_type:
+    case ValueType::bool_type:
+        return "[5 x i8], ptr @.dune_fmt_sint_raw, i64 0, i64 0";
+    case ValueType::u16_type:
+    case ValueType::u8_type:
+    case ValueType::u32_type:
+    case ValueType::u64_type:
+    case ValueType::usize_type:
+        return "[5 x i8], ptr @.dune_fmt_uint_raw, i64 0, i64 0";
+    case ValueType::real32_type:
+    case ValueType::real_type:
+        return "[6 x i8], ptr @.dune_fmt_real_raw, i64 0, i64 0";
+    case ValueType::glyph_type:
+        return "[3 x i8], ptr @.dune_fmt_glyph_raw, i64 0, i64 0";
+    case ValueType::text_type:
+        return "[3 x i8], ptr @.dune_fmt_text_raw, i64 0, i64 0";
     case ValueType::unit_type:
     case ValueType::array_type:
     case ValueType::generic_type:

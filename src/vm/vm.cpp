@@ -5,6 +5,7 @@
 #include <iomanip>
 #include <memory>
 #include <ostream>
+#include <sstream>
 #include <stdexcept>
 #include <utility>
 
@@ -331,6 +332,64 @@ void print_value(const Value& value, std::ostream& output) {
     case ValueKind::variant:
         throw std::runtime_error("cannot print choice value");
     }
+
+    throw std::runtime_error("cannot print unknown value");
+}
+
+std::string value_to_text(const Value& value) {
+    std::ostringstream output;
+    switch (value.kind) {
+    case ValueKind::signed_integer:
+        output << value.signed_value;
+        return output.str();
+    case ValueKind::unsigned_integer:
+        output << value.unsigned_value;
+        return output.str();
+    case ValueKind::real:
+        output << std::setprecision(15) << value.real_value;
+        return output.str();
+    case ValueKind::boolean:
+        output << (value.bool_value ? 1 : 0);
+        return output.str();
+    case ValueKind::glyph:
+        output << value.glyph_value;
+        return output.str();
+    case ValueKind::text:
+        return value.text_value;
+    case ValueKind::unit:
+        throw std::runtime_error("cannot print unit value");
+    case ValueKind::array:
+        throw std::runtime_error("cannot print array value");
+    case ValueKind::record:
+        throw std::runtime_error("cannot print record value");
+    case ValueKind::variant:
+        throw std::runtime_error("cannot print choice value");
+    }
+
+    throw std::runtime_error("cannot print unknown value");
+}
+
+void print_formatted_value(const std::string& format, const std::vector<Value>& arguments, std::ostream& output) {
+    std::size_t argument_index = 0;
+    for (std::size_t index = 0; index < format.size(); ++index) {
+        if (format[index] == '{' && index + 1 < format.size() && format[index + 1] == '}') {
+            if (argument_index >= arguments.size()) {
+                throw std::runtime_error("not enough print format arguments");
+            }
+
+            output << value_to_text(arguments[argument_index++]);
+            ++index;
+            continue;
+        }
+
+        output << format[index];
+    }
+
+    if (argument_index != arguments.size()) {
+        throw std::runtime_error("too many print format arguments");
+    }
+
+    output << '\n';
 }
 
 std::size_t index_value(const Value& value) {
@@ -926,6 +985,21 @@ void VirtualMachine::run(std::ostream& output) {
             print_value(pop(), output);
             ++frame.ip;
             break;
+        case OpCode::print_format: {
+            std::vector<Value> arguments(instruction.operand);
+            for (std::size_t index = instruction.operand; index > 0; --index) {
+                arguments[index - 1] = pop();
+            }
+
+            const Value format = pop();
+            if (format.kind != ValueKind::text) {
+                throw std::runtime_error("print format string must be text");
+            }
+
+            print_formatted_value(format.text_value, arguments, output);
+            ++frame.ip;
+            break;
+        }
         case OpCode::halt:
             return;
         }

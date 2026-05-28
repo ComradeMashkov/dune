@@ -104,6 +104,11 @@ int main() {
     passed =
         expect_eq(run_source("ratio: real = 1 + 2.5; print(ratio / 2.0);"), "1.75\n", "expected real output") && passed;
     passed = expect_eq(run_source("mark: glyph = 'Z'; print(mark);"), "Z\n", "expected glyph output") && passed;
+    passed = expect_eq(run_source("name: text = \"Dune\"; version: int = 1; "
+                                  "print(\"{} v{}\", name, version); "
+                                  "print(\"bool={}, glyph={}, real={}\", true, 'x', 2.5);"),
+                       "Dune v1\nbool=1, glyph=x, real=2.5\n", "expected formatted print output") &&
+             passed;
     passed = expect_eq(run_source("log(message: text): unit { print(message); return; } "
                                   "noop(): unit { } "
                                   "tiny: i8 = 127; small: i16 = 32767; mid: i32 = 2147483647; "

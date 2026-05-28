@@ -56,6 +56,28 @@ bool parses_binding_and_print() {
     return passed;
 }
 
+bool parses_formatted_print() {
+    const dune::Program program = parse_source("name: text = \"Dune\";\nversion: int = 1;\n"
+                                               "print(\"{} v{}\", name, version);");
+
+    if (!expect(program.statements.size() == 3, "expected three statements")) {
+        return false;
+    }
+
+    bool passed = true;
+    const dune::Statement& print_statement = program.statements[2];
+    passed = expect(print_statement.kind == dune::StatementKind::print, "expected print statement") && passed;
+    passed =
+        expect(print_statement.expression->kind == dune::ExpressionKind::string, "expected format literal") && passed;
+    passed = expect(print_statement.arguments.size() == 2, "expected two print format arguments") && passed;
+    passed = expect(print_statement.arguments[0]->kind == dune::ExpressionKind::identifier,
+                    "expected first format argument") &&
+             passed;
+    passed = expect(print_statement.arguments[0]->lexeme == "name", "expected name argument") && passed;
+    passed = expect(print_statement.arguments[1]->lexeme == "version", "expected version argument") && passed;
+    return passed;
+}
+
 bool parses_operator_precedence() {
     const dune::Program program = parse_source("value = 1 + 2 * 3;");
 
@@ -659,6 +681,7 @@ bool parses_choices_and_variant_when() {
 int main() {
     bool passed = true;
     passed = parses_binding_and_print() && passed;
+    passed = parses_formatted_print() && passed;
     passed = parses_operator_precedence() && passed;
     passed = parses_control_flow() && passed;
     passed = parses_assignment_targets() && passed;

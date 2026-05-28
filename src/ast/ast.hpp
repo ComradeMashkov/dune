@@ -134,6 +134,7 @@ struct Statement {
     std::string extern_symbol;
     std::string owner_record;
     std::unique_ptr<Expression> target;
+    std::vector<std::unique_ptr<Expression>> arguments;
 };
 
 struct Program {

@@ -409,6 +409,13 @@ void Compiler::compile_statement(const Statement& statement) {
     }
     case StatementKind::print:
         compile_expression(*statement.expression);
+        for (const std::unique_ptr<Expression>& argument : statement.arguments) {
+            compile_expression(*argument);
+        }
+        if (!statement.arguments.empty()) {
+            emit(OpCode::print_format, statement.arguments.size());
+            return;
+        }
         emit(OpCode::print);
         return;
     case StatementKind::block:

@@ -75,6 +75,20 @@ bool compiles_unit_call_statement() {
     return passed;
 }
 
+bool compiles_formatted_print() {
+    const dune::Bytecode bytecode = compile_source("name: text = \"Dune\"; version: int = 1; "
+                                                   "print(\"{} v{}\", name, version);");
+
+    bool saw_print_format = false;
+    for (const dune::Instruction& instruction : bytecode.instructions) {
+        if (instruction.op == dune::OpCode::print_format && instruction.operand == 2) {
+            saw_print_format = true;
+        }
+    }
+
+    return expect(saw_print_format, "expected print_format instruction");
+}
+
 bool compiles_arrays_and_module_calls() {
     const dune::Bytecode bytecode = compile_source("import math; "
                                                    "values: [int] = [1, 2]; "
@@ -467,6 +481,7 @@ int main() {
     bool passed = true;
     passed = compiles_function_table_and_call() && passed;
     passed = compiles_unit_call_statement() && passed;
+    passed = compiles_formatted_print() && passed;
     passed = compiles_arrays_and_module_calls() && passed;
     passed = compiles_module_constants() && passed;
     passed = compiles_operators_casts_and_methods() && passed;
