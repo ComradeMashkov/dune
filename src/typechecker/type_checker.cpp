@@ -710,7 +710,10 @@ void TypeChecker::check_statement(const Statement& statement) {
             return;
         }
 
-        const std::string name = statement.target != nullptr ? statement.target->lexeme : statement.name;
+        std::string name = statement.name;
+        if (statement.target != nullptr) {
+            name = statement.target->lexeme;
+        }
         VariableBinding* variable = find_binding(name);
         if (variable == nullptr) {
             if (global_constants_.contains(name)) {

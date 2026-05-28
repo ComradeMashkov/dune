@@ -431,7 +431,10 @@ bool LlvmIrGenerator::emit_statement(const Statement& statement, std::ostream& o
             return false;
         }
 
-        const std::string name = statement.target != nullptr ? statement.target->lexeme : statement.name;
+        std::string name = statement.name;
+        if (statement.target != nullptr) {
+            name = statement.target->lexeme;
+        }
         const TypedValue value = emit_expression(*statement.expression, output);
         auto local = locals_.find(name);
         if (local == locals_.end()) {

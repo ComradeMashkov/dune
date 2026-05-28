@@ -395,7 +395,10 @@ void Compiler::compile_statement(const Statement& statement) {
             return;
         }
 
-        const std::string name = statement.target != nullptr ? statement.target->lexeme : statement.name;
+        std::string name = statement.name;
+        if (statement.target != nullptr) {
+            name = statement.target->lexeme;
+        }
         compile_expression(*statement.expression);
         if (const auto local = locals_.find(name); local != locals_.end()) {
             emit(OpCode::store_local, local->second);
