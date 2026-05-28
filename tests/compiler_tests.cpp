@@ -280,6 +280,25 @@ bool compiles_record_literals_fields_and_methods() {
     return passed;
 }
 
+bool compiles_assignment_targets() {
+    const dune::Bytecode bytecode = compile_source("record Point { x: int, y: int } "
+                                                   "values: [int] = [1, 2]; values[1] = 9; "
+                                                   "point: Point = Point { x: 1, y: 2 }; point.x = 7; "
+                                                   "points: [Point] = [Point { x: 3, y: 4 }]; points[0].y = 11;");
+
+    bool saw_store_index = false;
+    bool saw_store_field = false;
+    for (const dune::Instruction& instruction : bytecode.instructions) {
+        saw_store_index = saw_store_index || instruction.op == dune::OpCode::store_index;
+        saw_store_field = saw_store_field || instruction.op == dune::OpCode::store_field;
+    }
+
+    bool passed = true;
+    passed = expect(saw_store_index, "expected store_index instruction") && passed;
+    passed = expect(saw_store_field, "expected store_field instruction") && passed;
+    return passed;
+}
+
 bool compiles_when_expression() {
     const dune::Bytecode bytecode = compile_source("value = 2; chosen = when value { "
                                                    "is 1 { 10 } is 2 { 20 } is _ { 30 } }; print(chosen);");
@@ -343,6 +362,7 @@ int main() {
     passed = compiles_generic_functions() && passed;
     passed = compiles_stdlib_receiver_methods() && passed;
     passed = compiles_record_literals_fields_and_methods() && passed;
+    passed = compiles_assignment_targets() && passed;
     passed = compiles_when_expression() && passed;
     passed = compiles_choice_variants_and_when() && passed;
 

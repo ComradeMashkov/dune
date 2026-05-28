@@ -214,6 +214,19 @@ int main() {
     passed = expect_valid("const HIDDEN: int = 7; hidden(): int { return HIDDEN; } value: int = hidden();",
                           "expected top-level constants to be visible inside functions") &&
              passed;
+    passed = expect_valid("x = 1; { x: int = 2; y = x + 1; } print(x); "
+                          "total = 0; for i = 0; i < 3; i = i + 1 { total = total + i; } "
+                          "choice Maybe { Present(int), Absent, } value: Maybe = Present(5); "
+                          "chosen: int = when value { is Present(x) { x } is Absent { 0 } };",
+                          "expected lexical scopes and shadowing to validate") &&
+             passed;
+    passed = expect_valid("record Point { x: int, y: int } "
+                          "values: [int] = [1, 2]; values[1] = 9; "
+                          "grid: [[int]] = [[1, 2], [3, 4]]; grid[1][0] = 8; "
+                          "point: Point = Point { x: 1, y: 2 }; point.x = 7; "
+                          "points: [Point] = [Point { x: 3, y: 4 }]; points[0].y = 11;",
+                          "expected array, record, and nested assignment targets to validate") &&
+             passed;
     passed = expect_valid("values: [int] = [];", "expected typed empty array to validate") && passed;
     passed = expect_error_contains("x: int = true;", "expected type 'int' but got 'bool'",
                                    "expected binding type mismatch") &&
@@ -224,6 +237,20 @@ int main() {
     passed = expect_error_contains("const x: int = 1; x = 2;", "cannot assign to constant 'x'",
                                    "expected const assignment error") &&
              passed;
+    passed = expect_error_contains("const x: int = 1; { x: int = 2; }", "cannot shadow constant 'x'",
+                                   "expected const shadowing error") &&
+             passed;
+    passed = expect_error_contains("for i = 0; i < 1; i = i + 1 { } print(i);", "undefined variable 'i'",
+                                   "expected for variable scope error") &&
+             passed;
+    passed = expect_error_contains("choice Maybe { Present(int), Absent, } value: Maybe = Present(1); "
+                                   "chosen: int = when value { is Present(x) { x } is Absent { 0 } }; print(x);",
+                                   "undefined variable 'x'", "expected when payload scope error") &&
+             passed;
+    passed =
+        expect_error_contains("const values: [int] = [1]; values[0] = 2;", "cannot assign through constant 'values'",
+                              "expected const indexed assignment error") &&
+        passed;
     passed = expect_error_contains("print(true + 1);", "expected numeric type but got 'bool'",
                                    "expected invalid binary operation") &&
              passed;
@@ -273,6 +300,12 @@ int main() {
              passed;
     passed = expect_error_contains("values: [int] = [1]; values.push(true);", "expected type 'int' but got 'bool'",
                                    "expected array push type mismatch") &&
+             passed;
+    passed = expect_error_contains("values: [int] = [1]; values[0] = true;", "expected type 'int' but got 'bool'",
+                                   "expected indexed assignment type mismatch") &&
+             passed;
+    passed = expect_error_contains("message: text = \"a\"; message[0] = 'b';", "cannot assign to text index",
+                                   "expected text index assignment error") &&
              passed;
     passed = expect_error_contains("values: [int] = [1]; values.contains(1);", "type '[int]' has no method 'contains'",
                                    "expected missing array module method") &&

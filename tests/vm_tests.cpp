@@ -210,6 +210,19 @@ int main() {
                                   "print(when missing { is Present(x) { x } is Absent { 7 } }); print(x);"),
                        "31\n7\n99\n", "expected choice variants and scoped when bindings") &&
              passed;
+    passed = expect_eq(run_source("x = 1; { x: int = 2; print(x); } print(x); "
+                                  "total = 0; for i = 0; i < 3; i = i + 1 { total = total + i; } print(total); "
+                                  "choice Maybe { Present(int), Absent, } value: Maybe = Present(5); "
+                                  "print(when value { is Present(x) { x } is Absent { 0 } }); print(x);"),
+                       "2\n1\n3\n5\n1\n", "expected lexical scope output") &&
+             passed;
+    passed = expect_eq(run_source("record Point { x: int, y: int } "
+                                  "values: [int] = [1, 2]; values[1] = 9; print(values[1]); "
+                                  "grid: [[int]] = [[1, 2], [3, 4]]; grid[1][0] = 8; print(grid[1][0]); "
+                                  "point: Point = Point { x: 1, y: 2 }; point.x = 7; print(point.x); "
+                                  "points: [Point] = [Point { x: 3, y: 4 }]; points[0].y = 11; print(points[0].y);"),
+                       "9\n8\n7\n11\n", "expected assignment target output") &&
+             passed;
     passed = expect_eq(run_source("import maybe; import outcome; import assert; import collections; "
                                   "maybe_value: maybe.Maybe<int> = maybe.present(42); "
                                   "missing: maybe.Maybe<int> = maybe.absent(0); "
