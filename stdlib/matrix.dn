@@ -1,0 +1,288 @@
+export record Vector<T is numeric> {
+    data: [T],
+
+    export new(data: [T]): Vector<T> {
+        return Vector { data: data };
+    }
+
+    export len(): int {
+        return this.data.len();
+    }
+
+    export get(index: int): T {
+        return this.data[index];
+    }
+
+    export set(index: int, value: T): unit {
+        this.data[index] = value;
+    }
+
+    export copy(): Vector<T> {
+        values: [T] = [];
+        for index = 0; index < this.data.len(); index = index + 1 {
+            values.push(this.data[index]);
+        }
+
+        return Vector.new(values);
+    }
+
+    export add(other: Vector<T>): Vector<T> {
+        values: [T] = [];
+        for index = 0; index < this.data.len(); index = index + 1 {
+            values.push(this.data[index] + other.data[index]);
+        }
+
+        return Vector.new(values);
+    }
+
+    export sub(other: Vector<T>): Vector<T> {
+        values: [T] = [];
+        for index = 0; index < this.data.len(); index = index + 1 {
+            values.push(this.data[index] - other.data[index]);
+        }
+
+        return Vector.new(values);
+    }
+
+    export scale(factor: T): Vector<T> {
+        values: [T] = [];
+        for index = 0; index < this.data.len(); index = index + 1 {
+            values.push(this.data[index] * factor);
+        }
+
+        return Vector.new(values);
+    }
+
+    export dot(other: Vector<T>): T {
+        total: T = 0;
+        for index = 0; index < this.data.len(); index = index + 1 {
+            total = total + this.data[index] * other.data[index];
+        }
+
+        return total;
+    }
+
+    export sum(): T {
+        total: T = 0;
+        for index = 0; index < this.data.len(); index = index + 1 {
+            total = total + this.data[index];
+        }
+
+        return total;
+    }
+
+    export to_row_matrix(): Matrix<T> {
+        values: [T] = [];
+        for index = 0; index < this.data.len(); index = index + 1 {
+            values.push(this.data[index]);
+        }
+
+        return Matrix.new(1, this.data.len(), values);
+    }
+
+    export to_column_matrix(): Matrix<T> {
+        values: [T] = [];
+        for index = 0; index < this.data.len(); index = index + 1 {
+            values.push(this.data[index]);
+        }
+
+        return Matrix.new(this.data.len(), 1, values);
+    }
+}
+
+export record Matrix<T is numeric> {
+    rows: int,
+    cols: int,
+    data: [T],
+
+    export new(rows: int, cols: int, data: [T]): Matrix<T> {
+        return Matrix { rows: rows, cols: cols, data: data };
+    }
+
+    index(row: int, col: int): int {
+        return row * this.cols + col;
+    }
+
+    export rows(): int {
+        return this.rows;
+    }
+
+    export cols(): int {
+        return this.cols;
+    }
+
+    export len(): int {
+        return this.data.len();
+    }
+
+    export get(row: int, col: int): T {
+        return this.data[this.index(row, col)];
+    }
+
+    export set(row: int, col: int, value: T): unit {
+        this.data[this.index(row, col)] = value;
+    }
+
+    export copy(): Matrix<T> {
+        values: [T] = [];
+        for index = 0; index < this.data.len(); index = index + 1 {
+            values.push(this.data[index]);
+        }
+
+        return Matrix.new(this.rows, this.cols, values);
+    }
+
+    export row(row: int): Vector<T> {
+        values: [T] = [];
+        for col = 0; col < this.cols; col = col + 1 {
+            values.push(this.get(row, col));
+        }
+
+        return Vector.new(values);
+    }
+
+    export column(col: int): Vector<T> {
+        values: [T] = [];
+        for row = 0; row < this.rows; row = row + 1 {
+            values.push(this.get(row, col));
+        }
+
+        return Vector.new(values);
+    }
+
+    export add(other: Matrix<T>): Matrix<T> {
+        values: [T] = [];
+        for index = 0; index < this.data.len(); index = index + 1 {
+            values.push(this.data[index] + other.data[index]);
+        }
+
+        return Matrix.new(this.rows, this.cols, values);
+    }
+
+    export sub(other: Matrix<T>): Matrix<T> {
+        values: [T] = [];
+        for index = 0; index < this.data.len(); index = index + 1 {
+            values.push(this.data[index] - other.data[index]);
+        }
+
+        return Matrix.new(this.rows, this.cols, values);
+    }
+
+    export scale(factor: T): Matrix<T> {
+        values: [T] = [];
+        for index = 0; index < this.data.len(); index = index + 1 {
+            values.push(this.data[index] * factor);
+        }
+
+        return Matrix.new(this.rows, this.cols, values);
+    }
+
+    export transpose(): Matrix<T> {
+        values: [T] = [];
+        for col = 0; col < this.cols; col = col + 1 {
+            for row = 0; row < this.rows; row = row + 1 {
+                values.push(this.get(row, col));
+            }
+        }
+
+        return Matrix.new(this.cols, this.rows, values);
+    }
+
+    export matmul(other: Matrix<T>): Matrix<T> {
+        values: [T] = [];
+        for row = 0; row < this.rows; row = row + 1 {
+            for col = 0; col < other.cols; col = col + 1 {
+                total: T = 0;
+                for inner = 0; inner < this.cols; inner = inner + 1 {
+                    total = total + this.get(row, inner) * other.get(inner, col);
+                }
+
+                values.push(total);
+            }
+        }
+
+        return Matrix.new(this.rows, other.cols, values);
+    }
+
+    export mul_vector(vector: Vector<T>): Vector<T> {
+        values: [T] = [];
+        for row = 0; row < this.rows; row = row + 1 {
+            total: T = 0;
+            for col = 0; col < this.cols; col = col + 1 {
+                total = total + this.get(row, col) * vector.get(col);
+            }
+
+            values.push(total);
+        }
+
+        return Vector.new(values);
+    }
+
+    export sum(): T {
+        total: T = 0;
+        for index = 0; index < this.data.len(); index = index + 1 {
+            total = total + this.data[index];
+        }
+
+        return total;
+    }
+}
+
+export vector<T is numeric>(data: [T]): Vector<T> {
+    return Vector.new(data);
+}
+
+export from_flat<T is numeric>(rows: int, cols: int, data: [T]): Matrix<T> {
+    return Matrix.new(rows, cols, data);
+}
+
+export zeros<T is numeric>(size: int): Vector<T> {
+    values: [T] = [];
+    for index = 0; index < size; index = index + 1 {
+        values.push(0);
+    }
+
+    return Vector.new(values);
+}
+
+export zeros<T is numeric>(rows: int, cols: int): Matrix<T> {
+    values: [T] = [];
+    for index = 0; index < rows * cols; index = index + 1 {
+        values.push(0);
+    }
+
+    return Matrix.new(rows, cols, values);
+}
+
+export full<T is numeric>(size: int, value: T): Vector<T> {
+    values: [T] = [];
+    for index = 0; index < size; index = index + 1 {
+        values.push(value);
+    }
+
+    return Vector.new(values);
+}
+
+export full<T is numeric>(rows: int, cols: int, value: T): Matrix<T> {
+    values: [T] = [];
+    for index = 0; index < rows * cols; index = index + 1 {
+        values.push(value);
+    }
+
+    return Matrix.new(rows, cols, values);
+}
+
+export identity<T is numeric>(size: int): Matrix<T> {
+    values: [T] = [];
+    for row = 0; row < size; row = row + 1 {
+        for col = 0; col < size; col = col + 1 {
+            if row == col {
+                values.push(1);
+            } else {
+                values.push(0);
+            }
+        }
+    }
+
+    return Matrix.new(size, size, values);
+}

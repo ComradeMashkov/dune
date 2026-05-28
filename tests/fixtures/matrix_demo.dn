@@ -1,0 +1,40 @@
+import matrix;
+
+v = matrix.vector([1, 2, 3]);
+w = matrix.vector([4, 5, 6]);
+sum = v.add(w);
+print(sum.get(0));
+print(sum.get(2));
+print(v.dot(w));
+
+scaled = v.scale(3);
+print(scaled.get(1));
+
+m = matrix.from_flat(2, 3, [1, 2, 3, 4, 5, 6]);
+print(m.rows());
+print(m.cols());
+print(m.get(1, 2));
+
+t = m.transpose();
+print(t.rows());
+print(t.cols());
+print(t.get(2, 1));
+
+n = matrix.from_flat(3, 2, [7, 8, 9, 10, 11, 12]);
+product = m.matmul(n);
+print(product.get(0, 0));
+print(product.get(1, 1));
+
+mv = m.mul_vector(matrix.vector([1, 1, 1]));
+print(mv.get(0));
+print(mv.get(1));
+
+z: matrix.Matrix<int> = matrix.zeros(2, 2);
+print(z.sum());
+
+id: matrix.Matrix<int> = matrix.identity(3);
+print(id.get(0, 0));
+print(id.get(0, 1));
+
+r = matrix.vector([1.5, 2.5]);
+print(r.sum());

@@ -241,6 +241,18 @@ int main() {
                           "active: bool = x.requires_grad;",
                           "expected autograd stdlib module to validate") &&
              passed;
+    passed = expect_valid("import matrix; "
+                          "vi: matrix.Vector<int> = matrix.vector([1, 2, 3]); "
+                          "wi: matrix.Vector<int> = matrix.full(3, 2); "
+                          "dot: int = vi.dot(wi); "
+                          "zeros: matrix.Vector<u16> = matrix.zeros(3); "
+                          "filled: matrix.Matrix<real64> = matrix.full(2, 2, 1.5); "
+                          "left: matrix.Matrix<int> = matrix.from_flat(2, 3, [1, 2, 3, 4, 5, 6]); "
+                          "right: matrix.Matrix<int> = matrix.from_flat(3, 2, [7, 8, 9, 10, 11, 12]); "
+                          "product: matrix.Matrix<int> = left.matmul(right); "
+                          "cell: int = product.get(1, 1); total: real64 = filled.sum();",
+                          "expected generic matrix stdlib module to validate") &&
+             passed;
     passed = expect_fixture_valid("import feature_exports; answer: int = feature_exports.ANSWER; "
                                   "value: int = feature_exports.public();",
                                   "expected exported module members to validate") &&
@@ -390,6 +402,14 @@ int main() {
              passed;
     passed = expect_error_contains("import text; print(text.nope(\"x\"));", "module 'text' does not export 'nope'",
                                    "expected missing text module export") &&
+             passed;
+    passed = expect_error_contains("import matrix; bad = matrix.vector([\"x\"]);",
+                                   "no overload for function 'matrix.vector' with argument types ([text])",
+                                   "expected matrix numeric bound error") &&
+             passed;
+    passed = expect_error_contains("import matrix; v = matrix.vector([1, 2]); print(v.data);",
+                                   "field 'data' of record 'Vector' is private",
+                                   "expected private vector data field error") &&
              passed;
     passed = expect_error_contains("import math; print(math.square(true));",
                                    "no overload for function 'math.square' with argument types (bool)",

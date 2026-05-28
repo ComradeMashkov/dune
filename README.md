@@ -85,8 +85,8 @@ print(values.first());
 
 Modules are loaded from `.dn` files. The standard library currently includes
 `stdlib/math.dn`, `stdlib/array.dn`, `stdlib/text.dn`, `stdlib/maybe.dn`,
-`stdlib/outcome.dn`, `stdlib/assert.dn`, `stdlib/collections.dn`, and
-`stdlib/autograd.dn`. Low-level
+`stdlib/outcome.dn`, `stdlib/assert.dn`, `stdlib/collections.dn`,
+`stdlib/autograd.dn`, and `stdlib/matrix.dn`. Low-level
 array and text operations such as `len`, `push`, indexing, and slicing remain
 runtime primitives; higher-level helpers are ordinary Dune functions in the
 standard library.
@@ -183,6 +183,49 @@ The `math` module currently provides constants and generic numeric functions:
 - `floor(value)`
 - `ceil(value)`
 - `round(value)`
+
+The `matrix` module provides a small NumPy-style foundation for homogeneous
+numeric vectors and matrices. Values are generic over Dune numeric types:
+`Vector<T is numeric>` and `Matrix<T is numeric>`. Operations currently keep the
+same element type; mixed-type promotion is not implemented yet.
+
+```dn
+import matrix;
+
+v = matrix.vector([1, 2, 3]);
+w = matrix.vector([4, 5, 6]);
+
+print(v.dot(w));
+
+m = matrix.from_flat(2, 3, [1, 2, 3, 4, 5, 6]);
+n = matrix.from_flat(3, 2, [7, 8, 9, 10, 11, 12]);
+product = m.matmul(n);
+
+print(product.get(0, 0));
+print(product.get(1, 1));
+```
+
+Core helpers:
+
+- `vector(data)`
+- `from_flat(rows, cols, data)`
+- `zeros(size)`, `zeros(rows, cols)`
+- `full(size, value)`, `full(rows, cols, value)`
+- `identity(size)`
+
+Vector methods:
+
+- `len()`, `get(index)`, `set(index, value)`, `copy()`
+- `add(other)`, `sub(other)`, `scale(factor)`
+- `dot(other)`, `sum()`
+- `to_row_matrix()`, `to_column_matrix()`
+
+Matrix methods:
+
+- `rows()`, `cols()`, `len()`, `get(row, col)`, `set(row, col, value)`, `copy()`
+- `row(index)`, `column(index)`
+- `add(other)`, `sub(other)`, `scale(factor)`
+- `transpose()`, `matmul(other)`, `mul_vector(vector)`, `sum()`
 
 The `autograd` module provides scalar reverse-mode automatic differentiation.
 It is implemented in Dune itself with records, arrays, methods, and mutation;

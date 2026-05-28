@@ -266,6 +266,16 @@ int main() {
                                   "clipped.backward(); print(clipped.data); print(negative.grad);"),
                        "11\n7\n2\n18\n12\n12\n0\n0\n", "expected scalar autograd output") &&
              passed;
+    passed = expect_eq(run_source("import matrix; "
+                                  "v = matrix.vector([1, 2, 3]); w = matrix.vector([4, 5, 6]); "
+                                  "print(v.add(w).get(0)); print(v.dot(w)); "
+                                  "m = matrix.from_flat(2, 3, [1, 2, 3, 4, 5, 6]); "
+                                  "n = matrix.from_flat(3, 2, [7, 8, 9, 10, 11, 12]); "
+                                  "product = m.matmul(n); print(product.get(0, 0)); print(product.get(1, 1)); "
+                                  "z: matrix.Matrix<int> = matrix.zeros(2, 2); print(z.sum()); "
+                                  "r = matrix.vector([1.5, 2.5]); print(r.sum());"),
+                       "5\n32\n58\n154\n0\n4\n", "expected generic matrix stdlib output") &&
+             passed;
     passed = expect_throws("print(missing);", "expected undefined variable to throw") && passed;
     passed =
         expect_eq(run_source("missing = 1; print(missing);"), "1\n", "expected first assignment to bind") && passed;

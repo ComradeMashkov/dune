@@ -364,6 +364,16 @@ add_test(
 )
 
 add_test(
+    NAME cli_matrix
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/matrix_demo.dn
+        -D EXPECTED_OUTPUT="5\n9\n32\n6\n2\n3\n6\n3\n2\n6\n58\n154\n6\n15\n0\n1\n0\n4"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
     NAME cli_build_native_hello
     COMMAND
         ${CMAKE_COMMAND}
@@ -525,6 +535,17 @@ add_test(
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/autograd_demo.dn
         -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/autograd_native
         -D EXPECTED_OUTPUT="11\n7\n2\n18\n12\n12\n0\n0"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
+)
+
+add_test(
+    NAME cli_build_native_matrix
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/matrix_demo.dn
+        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/matrix_native
+        -D EXPECTED_OUTPUT="5\n9\n32\n6\n2\n3\n6\n3\n2\n6\n58\n154\n6\n15\n0\n1\n0\n4"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
 )
 
