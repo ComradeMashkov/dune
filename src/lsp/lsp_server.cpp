@@ -33,6 +33,7 @@ namespace {
 constexpr std::size_t completion_kind_method = 2;
 constexpr std::size_t completion_kind_function = 3;
 constexpr std::size_t completion_kind_variable = 6;
+constexpr std::size_t completion_kind_interface = 8;
 constexpr std::size_t completion_kind_module = 9;
 constexpr std::size_t completion_kind_enum = 13;
 constexpr std::size_t completion_kind_keyword = 14;
@@ -386,8 +387,8 @@ void add_completion(std::vector<CompletionItem>& completions, std::string label,
 
 void add_static_completions(std::vector<CompletionItem>& completions) {
     for (const std::string_view keyword :
-         {"break", "choice", "const", "continue", "else",   "export", "foreign", "for",   "if",   "import",
-          "is",    "method", "print", "record",   "return", "to",     "when",    "while", "true", "false"}) {
+         {"break", "choice", "const", "continue", "contract", "else", "export", "foreign", "for",  "if",   "import",
+          "is",    "method", "print", "record",   "return",   "to",   "when",   "while",   "with", "true", "false"}) {
         add_completion(completions, std::string(keyword), "keyword", completion_kind_keyword);
     }
 
@@ -473,6 +474,10 @@ void add_token_symbols(const std::string& source, std::vector<CompletionItem>& c
 
         if (tokens[index].type == TokenType::record_keyword && tokens[index + 1].type == TokenType::identifier) {
             add_completion(completions, tokens[index + 1].lexeme, "record", completion_kind_struct);
+        }
+
+        if (tokens[index].type == TokenType::contract_keyword && tokens[index + 1].type == TokenType::identifier) {
+            add_completion(completions, tokens[index + 1].lexeme, "contract", completion_kind_interface);
         }
 
         if (tokens[index].type == TokenType::choice_keyword && tokens[index + 1].type == TokenType::identifier) {
@@ -561,7 +566,7 @@ bool module_has_explicit_exports(const Program& program) {
         return statement.exported &&
                (statement.kind == StatementKind::function || statement.kind == StatementKind::const_statement ||
                 statement.kind == StatementKind::struct_statement || statement.kind == StatementKind::enum_statement ||
-                statement.kind == StatementKind::method_block);
+                statement.kind == StatementKind::contract_statement || statement.kind == StatementKind::method_block);
     });
 }
 
@@ -594,6 +599,10 @@ void add_module_members(const Program& program, std::vector<CompletionItem>& com
         if (statement.kind == StatementKind::enum_statement && visible) {
             add_completion(completions, statement.name, "choice", completion_kind_enum);
             add_enum_variants(statement, true, completions);
+        }
+
+        if (statement.kind == StatementKind::contract_statement && visible) {
+            add_completion(completions, statement.name, "contract", completion_kind_interface);
         }
 
         if (statement.kind == StatementKind::method_block) {
@@ -825,6 +834,8 @@ std::string declaration_hover(const Statement& statement) {
         return code_hover("record " + statement.name + generic_parameters_text(statement.generic_parameters));
     case StatementKind::enum_statement:
         return code_hover("choice " + statement.name + generic_parameters_text(statement.generic_parameters));
+    case StatementKind::contract_statement:
+        return code_hover("contract " + statement.name);
     case StatementKind::method_block:
     case StatementKind::assign:
     case StatementKind::print:
@@ -952,6 +963,10 @@ std::optional<std::string> token_symbol_hover(const std::vector<Token>& tokens, 
             return code_hover("record " + name);
         }
 
+        if (tokens[index].type == TokenType::contract_keyword && tokens[index + 1].lexeme == name) {
+            return code_hover("contract " + name);
+        }
+
         if (tokens[index].type == TokenType::choice_keyword && tokens[index + 1].lexeme == name) {
             return code_hover("choice " + name);
         }
@@ -1067,6 +1082,8 @@ std::optional<std::string> builtin_hover(const Token& token) {
     case TokenType::foreign_keyword:
     case TokenType::method_keyword:
     case TokenType::record_keyword:
+    case TokenType::contract_keyword:
+    case TokenType::with_keyword:
     case TokenType::choice_keyword:
     case TokenType::import_keyword:
     case TokenType::when_keyword:

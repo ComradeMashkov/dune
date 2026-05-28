@@ -210,6 +210,14 @@ Token Lexer::identifier(std::size_t start, std::size_t line, std::size_t column)
         return Token{TokenType::record_keyword, lexeme, line, column};
     }
 
+    if (lexeme == "contract") {
+        return Token{TokenType::contract_keyword, lexeme, line, column};
+    }
+
+    if (lexeme == "with") {
+        return Token{TokenType::with_keyword, lexeme, line, column};
+    }
+
     if (lexeme == "choice") {
         return Token{TokenType::choice_keyword, lexeme, line, column};
     }

@@ -36,6 +36,7 @@ module.exports = grammar({
       $.function_declaration,
       $.foreign_function_declaration,
       $.record_declaration,
+      $.contract_declaration,
       $.choice_declaration,
       $.method_declaration,
       $.binding_statement,
@@ -58,6 +59,7 @@ module.exports = grammar({
         $.function_declaration,
         $.foreign_function_declaration,
         $.record_declaration,
+        $.contract_declaration,
         $.choice_declaration,
         $.method_declaration,
         $.const_statement,
@@ -88,8 +90,9 @@ module.exports = grammar({
       "record",
       field("name", $.identifier),
       optional($.generic_parameters),
+      optional(seq("with", commaSep1($.qualified_name))),
       "{",
-      optional(commaSep(choice($.record_field, $.record_method))),
+      optional(commaSep(choice($.record_field, $.record_method, $.exported_record_field, $.exported_record_method))),
       optional(","),
       "}",
     ),
@@ -97,6 +100,25 @@ module.exports = grammar({
     record_field: $ => seq(field("name", $.identifier), ":", field("type", $._type)),
 
     record_method: $ => $.function_declaration,
+
+    exported_record_field: $ => seq("export", $.record_field),
+
+    exported_record_method: $ => seq("export", $.record_method),
+
+    contract_declaration: $ => seq(
+      "contract",
+      field("name", $.identifier),
+      "{",
+      repeat($.contract_method),
+      "}",
+    ),
+
+    contract_method: $ => seq(
+      field("name", $.identifier),
+      field("parameters", $.parameter_list),
+      optional(seq(":", field("return_type", $._type))),
+      ";",
+    ),
 
     choice_declaration: $ => seq(
       "choice",
@@ -129,8 +151,10 @@ module.exports = grammar({
 
     generic_parameter: $ => seq(
       field("name", $.identifier),
-      optional(seq("is", field("bound", $.identifier))),
+      optional(seq("is", field("bound", $.qualified_name))),
     ),
+
+    qualified_name: $ => seq($.identifier, repeat(seq(".", $.identifier))),
 
     parameter_list: $ => seq("(", optional(commaSep($.parameter)), optional(","), ")"),
 

@@ -502,6 +502,7 @@ void Compiler::compile_statement(const Statement& statement) {
     case StatementKind::method_block:
     case StatementKind::struct_statement:
     case StatementKind::enum_statement:
+    case StatementKind::contract_statement:
         return;
     case StatementKind::return_statement:
         if (statement.expression == nullptr) {

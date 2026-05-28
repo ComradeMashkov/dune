@@ -3,6 +3,7 @@
   "choice"
   "const"
   "continue"
+  "contract"
   "else"
   "export"
   "foreign"
@@ -17,6 +18,7 @@
   "to"
   "when"
   "while"
+  "with"
 ] @keyword
 
 [
@@ -60,6 +62,12 @@
 
 (foreign_function_declaration
   name: (identifier) @function)
+
+(contract_declaration
+  name: (identifier) @type)
+
+(contract_method
+  name: (identifier) @function.method)
 
 (method_declaration
   name: (identifier) @function.method)

@@ -18,6 +18,28 @@ std::string base_name(const std::string& name) {
     return separator == std::string::npos ? name : name.substr(separator + 1);
 }
 
+std::string module_name(const std::string& name) {
+    const std::size_t separator = name.find('.');
+    return separator == std::string::npos ? "" : name.substr(0, separator);
+}
+
+std::string module_member_name(const std::string& name) {
+    const std::size_t separator = name.find('.');
+    return separator == std::string::npos ? name : name.substr(separator + 1);
+}
+
+std::string expression_type_name(const Expression& expression) {
+    if (expression.kind == ExpressionKind::identifier) {
+        return expression.lexeme;
+    }
+
+    if (expression.kind == ExpressionKind::member && expression.left != nullptr) {
+        return expression_type_name(*expression.left) + "." + expression.lexeme;
+    }
+
+    return {};
+}
+
 Type clone_type(const Type& type) {
     Type result{type.kind, nullptr};
     result.name = type.name;
@@ -119,16 +141,23 @@ Statement clone_statement(const Statement& statement) {
     result.parameters.reserve(statement.parameters.size());
     for (const Parameter& parameter : statement.parameters) {
         result.parameters.push_back(
-            Parameter{parameter.name, clone_type_annotation(parameter.type), parameter.location});
+            Parameter{parameter.name, clone_type_annotation(parameter.type), parameter.location, parameter.exported});
     }
 
     result.generic_parameters = statement.generic_parameters;
+    result.contracts.reserve(statement.contracts.size());
+    for (const Type& contract : statement.contracts) {
+        result.contracts.push_back(clone_type(contract));
+    }
     result.location = statement.location;
     result.initializer = clone_statement_pointer(statement.initializer);
     result.increment = clone_statement_pointer(statement.increment);
     result.exported = statement.exported;
     result.is_extern = statement.is_extern;
+    result.is_record_member = statement.is_record_member;
+    result.is_constructor = statement.is_constructor;
     result.extern_symbol = statement.extern_symbol;
+    result.owner_record = statement.owner_record;
     result.target = clone_expression_pointer(statement.target);
     return result;
 }
@@ -374,6 +403,7 @@ std::string function_key(const std::string& name, const std::vector<Type>& param
 void TypeChecker::check(const Program& program) {
     structs_.clear();
     enums_.clear();
+    contracts_.clear();
     functions_.clear();
     overloads_.clear();
     generic_overloads_.clear();
@@ -387,6 +417,7 @@ void TypeChecker::check(const Program& program) {
     instantiated_function_keys_.clear();
     instantiated_functions_.clear();
     instantiated_function_traces_.clear();
+    current_module_.clear();
     loop_depth_ = 0;
 
     for (const Statement& statement : program.statements) {
@@ -397,6 +428,10 @@ void TypeChecker::check(const Program& program) {
         if (statement.kind == StatementKind::enum_statement) {
             declare_enum(statement);
         }
+
+        if (statement.kind == StatementKind::contract_statement) {
+            declare_contract(statement);
+        }
     }
 
     for (const Statement& statement : program.statements) {
@@ -406,6 +441,10 @@ void TypeChecker::check(const Program& program) {
 
         if (statement.kind == StatementKind::enum_statement) {
             define_enum(statement);
+        }
+
+        if (statement.kind == StatementKind::contract_statement) {
+            define_contract(statement);
         }
 
         if (statement.kind == StatementKind::function) {
@@ -424,6 +463,12 @@ void TypeChecker::check(const Program& program) {
     }
 
     for (const Statement& statement : program.statements) {
+        if (statement.kind == StatementKind::struct_statement) {
+            validate_contract_implementations(statement);
+        }
+    }
+
+    for (const Statement& statement : program.statements) {
         if (statement.kind == StatementKind::import_statement) {
             if (!is_known_module(statement.name)) {
                 throw std::runtime_error(diagnostic(statement.location, "unknown module '" + statement.name + "'"));
@@ -438,8 +483,12 @@ void TypeChecker::check(const Program& program) {
     loop_depth_ = 0;
     for (const Statement& statement : program.statements) {
         if (statement.kind != StatementKind::function && statement.kind != StatementKind::import_statement &&
-            statement.kind != StatementKind::struct_statement && statement.kind != StatementKind::enum_statement) {
+            statement.kind != StatementKind::struct_statement && statement.kind != StatementKind::enum_statement &&
+            statement.kind != StatementKind::contract_statement) {
+            const std::string previous_module = current_module_;
+            current_module_ = module_name(statement.name);
             check_statement(statement);
+            current_module_ = previous_module;
         }
     }
 
@@ -512,8 +561,9 @@ void TypeChecker::declare_struct(const Statement& statement) {
     }
 
     collect_known_module(statement.name);
-    structs_.emplace(statement.name,
-                     StructDefinition{statement.name, statement.generic_parameters, {}, {}, statement.location});
+    structs_.emplace(
+        statement.name,
+        StructDefinition{statement.name, statement.generic_parameters, {}, {}, {}, {}, statement.location});
 }
 
 void TypeChecker::declare_enum(const Statement& statement) {
@@ -537,6 +587,8 @@ void TypeChecker::define_struct(const Statement& statement) {
     }
 
     definition->second.fields.clear();
+    definition->second.contracts.clear();
+    definition->second.methods.clear();
     definition->second.field_indices.clear();
     std::unordered_set<std::string> generic_names;
     for (const GenericParameter& parameter : statement.generic_parameters) {
@@ -556,7 +608,36 @@ void TypeChecker::define_struct(const Statement& statement) {
 
         const std::size_t index = definition->second.fields.size();
         definition->second.field_indices.emplace(field.name, index);
-        definition->second.fields.push_back(StructField{field.name, field_type, field.location});
+        definition->second.fields.push_back(StructField{field.name, field_type, field.location, field.exported});
+    }
+
+    for (const Type& contract : statement.contracts) {
+        Type normalized = normalize_type(contract, generic_names);
+        if (normalized.kind != ValueType::generic_type) {
+            throw std::runtime_error(diagnostic(statement.location, "expected contract name"));
+        }
+        definition->second.contracts.push_back(std::move(normalized));
+    }
+
+    for (const Statement& method : statement.body) {
+        if (method.kind != StatementKind::function) {
+            throw std::runtime_error(diagnostic(method.location, "record method must be a function"));
+        }
+
+        if (method.name == "new") {
+            validate_constructor(statement, method, generic_names);
+        }
+
+        StructMethod signature;
+        signature.name = method.name;
+        signature.return_type = annotation_or_default(method.type, generic_names);
+        signature.location = method.location;
+        signature.exported = method.exported;
+        signature.is_constructor = method.name == "new";
+        for (const Parameter& parameter : method.parameters) {
+            signature.parameters.push_back(annotation_or_default(parameter.type, generic_names));
+        }
+        definition->second.methods.push_back(std::move(signature));
     }
 }
 
@@ -593,6 +674,149 @@ void TypeChecker::define_enum(const Statement& statement) {
     }
 }
 
+void TypeChecker::declare_contract(const Statement& statement) {
+    if (statement.name.empty()) {
+        throw std::runtime_error(diagnostic(statement.location, "contract needs a name"));
+    }
+
+    if (contracts_.contains(statement.name)) {
+        throw std::runtime_error(diagnostic(statement.location, "duplicate contract '" + statement.name + "'"));
+    }
+
+    collect_known_module(statement.name);
+    contracts_.emplace(statement.name, ContractDefinition{statement.name, {}, statement.location});
+}
+
+void TypeChecker::define_contract(const Statement& statement) {
+    auto definition = contracts_.find(statement.name);
+    if (definition == contracts_.end()) {
+        throw std::runtime_error(diagnostic(statement.location, "undefined contract '" + statement.name + "'"));
+    }
+
+    definition->second.methods.clear();
+    for (const Statement& method : statement.body) {
+        if (method.kind != StatementKind::function) {
+            throw std::runtime_error(diagnostic(method.location, "contract members must be method signatures"));
+        }
+
+        ContractMethod signature;
+        signature.name = method.name;
+        signature.return_type = annotation_or_default(method.type);
+        signature.location = method.location;
+        for (const Parameter& parameter : method.parameters) {
+            signature.parameters.push_back(annotation_or_default(parameter.type));
+        }
+        definition->second.methods.push_back(std::move(signature));
+    }
+}
+
+void TypeChecker::validate_constructor(const Statement& record, const Statement& method,
+                                       const std::unordered_set<std::string>& generic_names) const {
+    Type expected = make_struct_type(record.name);
+    expected.arguments.reserve(record.generic_parameters.size());
+    for (const GenericParameter& parameter : record.generic_parameters) {
+        expected.arguments.push_back(Type{ValueType::generic_type, nullptr, parameter.name});
+    }
+
+    const Type actual = annotation_or_default(method.type, generic_names);
+    if (!same_type(expected, actual)) {
+        throw std::runtime_error(diagnostic(method.location, "constructor for record '" + base_name(record.name) +
+                                                                 "' must return '" + type_name(expected) + "'"));
+    }
+}
+
+std::string contract_type_name(const Type& type) {
+    if (type.kind == ValueType::real_type) {
+        return "real64";
+    }
+
+    if (type.kind == ValueType::array_type) {
+        if (type.element == nullptr) {
+            return "[unknown]";
+        }
+
+        return "[" + contract_type_name(*type.element) + "]";
+    }
+
+    if ((type.kind == ValueType::generic_type || type.kind == ValueType::struct_type ||
+         type.kind == ValueType::enum_type) &&
+        !type.arguments.empty()) {
+        std::string name = type.name + "<";
+        for (std::size_t index = 0; index < type.arguments.size(); ++index) {
+            if (index > 0) {
+                name += ", ";
+            }
+            name += contract_type_name(type.arguments[index]);
+        }
+        name += ">";
+        return name;
+    }
+
+    return type_name(type);
+}
+
+std::string contract_method_signature(const TypeChecker::ContractMethod& method) {
+    std::string signature = method.name + "(";
+    for (std::size_t index = 0; index < method.parameters.size(); ++index) {
+        if (index > 0) {
+            signature += ", ";
+        }
+        signature += contract_type_name(method.parameters[index]);
+    }
+    signature += "): " + contract_type_name(method.return_type);
+    return signature;
+}
+
+void TypeChecker::validate_contract_implementations(const Statement& statement) const {
+    const auto record = structs_.find(statement.name);
+    if (record == structs_.end()) {
+        return;
+    }
+
+    for (const Type& contract_type : record->second.contracts) {
+        const auto contract = contracts_.find(contract_type.name);
+        if (contract == contracts_.end()) {
+            throw std::runtime_error(diagnostic(statement.location, "unknown contract '" + contract_type.name + "'"));
+        }
+
+        for (const ContractMethod& expected : contract->second.methods) {
+            const StructMethod* actual = nullptr;
+            for (const StructMethod& method : record->second.methods) {
+                if (!method.is_constructor && method.name == expected.name &&
+                    method.parameters.size() == expected.parameters.size()) {
+                    actual = &method;
+                    break;
+                }
+            }
+
+            if (actual == nullptr) {
+                throw std::runtime_error(
+                    diagnostic(statement.location, "record '" + base_name(statement.name) + "' declares contract '" +
+                                                       base_name(contract_type.name) + "' but is missing method '" +
+                                                       contract_method_signature(expected) + "'"));
+            }
+
+            if (!same_type(expected.return_type, actual->return_type)) {
+                throw std::runtime_error(diagnostic(
+                    actual->location, "method '" + actual->name + "' for contract '" + base_name(contract_type.name) +
+                                          "' expected return type '" + contract_type_name(expected.return_type) +
+                                          "' but got '" + contract_type_name(actual->return_type) + "'"));
+            }
+
+            for (std::size_t index = 0; index < expected.parameters.size(); ++index) {
+                if (!same_type(expected.parameters[index], actual->parameters[index])) {
+                    throw std::runtime_error(
+                        diagnostic(actual->location,
+                                   "method '" + actual->name + "' for contract '" + base_name(contract_type.name) +
+                                       "' expected parameter " + std::to_string(index + 1) + " type '" +
+                                       contract_type_name(expected.parameters[index]) + "' but got '" +
+                                       contract_type_name(actual->parameters[index]) + "'"));
+                }
+            }
+        }
+    }
+}
+
 void TypeChecker::collect_function(const Statement& statement) {
     FunctionSignature signature;
     signature.name = statement.name;
@@ -615,7 +839,9 @@ void TypeChecker::collect_function(const Statement& statement) {
             diagnostic(statement.location, "duplicate overload for function '" + statement.name + "'"));
     }
 
-    collect_known_module(signature.name);
+    if (!statement.is_record_member || !module_name(statement.owner_record).empty()) {
+        collect_known_module(signature.name);
+    }
     overloads_[signature.name].push_back(signature.key);
     functions_.emplace(signature.key, std::move(signature));
 }
@@ -637,7 +863,9 @@ void TypeChecker::collect_generic_function(const Statement& statement) {
 
     signature.key = function_key(signature.name, signature.parameters);
     generic_overloads_[signature.name].push_back(&statement);
-    collect_known_module(signature.name);
+    if (!statement.is_record_member || !module_name(statement.owner_record).empty()) {
+        collect_known_module(signature.name);
+    }
 }
 
 void TypeChecker::check_function(const Statement& statement) {
@@ -660,6 +888,8 @@ void TypeChecker::check_function(const Statement& statement) {
         declare_binding(parameter.name, function.parameters[index], false, parameter.location);
     }
 
+    const std::string previous_module = current_module_;
+    current_module_ = module_name(statement.name);
     current_function_ = &function;
     check_statements(statement.body);
     const bool has_tail_expression = !statement.body.empty() &&
@@ -678,6 +908,7 @@ void TypeChecker::check_function(const Statement& statement) {
     }
 
     current_function_ = nullptr;
+    current_module_ = previous_module;
 }
 
 void TypeChecker::check_statement(const Statement& statement) {
@@ -805,6 +1036,8 @@ void TypeChecker::check_statement(const Statement& statement) {
         throw std::runtime_error(diagnostic(statement.location, "record declarations are only allowed at top level"));
     case StatementKind::enum_statement:
         throw std::runtime_error(diagnostic(statement.location, "choice declarations are only allowed at top level"));
+    case StatementKind::contract_statement:
+        throw std::runtime_error(diagnostic(statement.location, "contract declarations are only allowed at top level"));
     case StatementKind::return_statement:
         if (current_function_ == nullptr) {
             throw std::runtime_error(diagnostic(statement.location, "return statement outside function"));
@@ -945,7 +1178,9 @@ Type TypeChecker::check_member_assignment_target(const Expression& target, Sourc
         substitutions.emplace(definition->second.generic_parameters[index].name, receiver.arguments[index]);
     }
 
-    return substitute_type(definition->second.fields[field->second].type, substitutions);
+    const StructField& field_definition = definition->second.fields[field->second];
+    expect_public_field(receiver, field_definition, target.location);
+    return substitute_type(field_definition.type, substitutions);
 }
 
 Type TypeChecker::check_expression(const Expression& expression, const TypeAnnotation& expected) {
@@ -1212,6 +1447,13 @@ Type TypeChecker::check_variant_constructor(const Expression& expression, const 
 }
 
 Type TypeChecker::check_method_call_expression(const Expression& expression, const TypeAnnotation& expected) {
+    if (expression.left != nullptr && expression.lexeme == "new") {
+        const std::string record_name = expression_type_name(*expression.left);
+        if (!record_name.empty() && structs_.contains(record_name)) {
+            return check_constructor_call_expression(expression, record_name, expected);
+        }
+    }
+
     if (expression.left != nullptr && expression.left->kind == ExpressionKind::identifier) {
         const std::string module_name = expression.left->lexeme;
         if (is_known_module(module_name)) {
@@ -1253,6 +1495,24 @@ Type TypeChecker::check_method_call_expression(const Expression& expression, con
     return check_receiver_method_call(expression, expected);
 }
 
+Type TypeChecker::check_constructor_call_expression(const Expression& expression, const std::string& record_name,
+                                                    const TypeAnnotation& expected) {
+    const auto record = structs_.find(record_name);
+    if (record == structs_.end()) {
+        throw std::runtime_error(diagnostic(expression.location, "unknown record '" + record_name + "'"));
+    }
+
+    if (is_external_record_access(record_name)) {
+        const std::string module = module_name(record_name);
+        expect_imported_module(module, expression.location);
+        expect_exported_member(module, module_member_name(record_name), expression.location);
+        expect_public_method(make_struct_type(record_name), "new", expression.location);
+        expect_exported_member(module, module_member_name(record_name) + ".new", expression.location);
+    }
+
+    return check_function_call(expression, record_name + ".new", expression.arguments, expression.location, expected);
+}
+
 Type TypeChecker::check_receiver_method_call(const Expression& expression, const TypeAnnotation& expected) {
     std::vector<const Expression*> arguments;
     arguments.reserve(expression.arguments.size() + 1);
@@ -1263,6 +1523,18 @@ Type TypeChecker::check_receiver_method_call(const Expression& expression, const
 
     const FunctionSignature* best_match =
         try_resolve_overload(expression.lexeme, arguments, expression.location, expected);
+    const Type receiver = expression_types_.contains(expression.left.get())
+                              ? expression_types_.at(expression.left.get())
+                              : check_expression(*expression.left);
+    if (receiver.kind == ValueType::struct_type && !module_name(receiver.name).empty() &&
+        module_name(receiver.name) == current_access_module()) {
+        const FunctionSignature* match = try_resolve_overload(module_name(receiver.name) + "." + expression.lexeme,
+                                                              arguments, expression.location, expected);
+        if (match != nullptr) {
+            best_match = match;
+        }
+    }
+
     for (const std::string& module : imports_) {
         const auto exports = module_exports_.find(module);
         if (exports == module_exports_.end() || !exports->second.contains(expression.lexeme)) {
@@ -1293,9 +1565,10 @@ Type TypeChecker::check_receiver_method_call(const Expression& expression, const
         return best_match->return_type;
     }
 
-    const Type receiver = expression_types_.contains(expression.left.get())
-                              ? expression_types_.at(expression.left.get())
-                              : check_expression(*expression.left);
+    if (receiver.kind == ValueType::struct_type) {
+        expect_public_method(receiver, expression.lexeme, expression.location);
+    }
+
     throw std::runtime_error(diagnostic(expression.location, "type '" + type_name(receiver) + "' has no method '" +
                                                                  expression.lexeme + "'"));
 }
@@ -1396,7 +1669,9 @@ Type TypeChecker::check_member_expression(const Expression& expression, const Ty
             substitutions.emplace(definition->second.generic_parameters[index].name, receiver.arguments[index]);
         }
 
-        return substitute_type(definition->second.fields[field->second].type, substitutions);
+        const StructField& field_definition = definition->second.fields[field->second];
+        expect_public_field(receiver, field_definition, expression.location);
+        return substitute_type(field_definition.type, substitutions);
     }
 
     throw std::runtime_error(diagnostic(expression.location, "type '" + type_name(receiver) + "' has no member '" +
@@ -1805,7 +2080,35 @@ bool TypeChecker::type_satisfies_bound(const Type& type, const std::string& boun
         return is_ordered_type(type);
     }
 
+    if (contracts_.contains(bound)) {
+        const std::string module = module_name(bound);
+        if (!module.empty() && module != current_access_module()) {
+            expect_imported_module(module, location);
+            expect_exported_member(module, module_member_name(bound), location);
+        }
+        return type_satisfies_contract_bound(type, bound);
+    }
+
     throw std::runtime_error(diagnostic(location, "unknown generic bound '" + bound + "'"));
+}
+
+bool TypeChecker::type_satisfies_contract_bound(const Type& type, const std::string& bound) const {
+    if (type.kind != ValueType::struct_type) {
+        return false;
+    }
+
+    const auto record = structs_.find(type.name);
+    if (record == structs_.end()) {
+        return false;
+    }
+
+    for (const Type& contract : record->second.contracts) {
+        if (contract.name == bound) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 const TypeChecker::EnumVariant* TypeChecker::find_enum_variant(const EnumDefinition& definition,
@@ -2088,6 +2391,8 @@ Type TypeChecker::check_struct_literal(const Expression& expression, const TypeA
         }
 
         const Type field_type = substitute_type(definition->second.fields[field->second].type, substitutions);
+        expect_public_field(result_type, definition->second.fields[field->second],
+                            expression.arguments[index]->location);
         expect_type(field_type, check_expression(*expression.arguments[index], expected_type(field_type)),
                     expression.arguments[index]->location);
     }
@@ -2173,6 +2478,7 @@ bool TypeChecker::statement_returns(const Statement& statement) const {
     case StatementKind::method_block:
     case StatementKind::struct_statement:
     case StatementKind::enum_statement:
+    case StatementKind::contract_statement:
     case StatementKind::break_statement:
     case StatementKind::continue_statement:
     case StatementKind::expression_statement:
@@ -2465,6 +2771,49 @@ void TypeChecker::expect_exported_member(const std::string& module, const std::s
     }
 }
 
+bool TypeChecker::is_external_record_access(const std::string& record_name) const {
+    const std::string record_module = module_name(record_name);
+    return !record_module.empty() && record_module != current_access_module();
+}
+
+std::string TypeChecker::current_access_module() const {
+    return current_module_;
+}
+
+void TypeChecker::expect_public_field(const Type& receiver, const StructField& field, SourceLocation location) const {
+    if (!field.exported && is_external_record_access(receiver.name)) {
+        throw std::runtime_error(
+            diagnostic(location, "field '" + field.name + "' of record '" + base_name(receiver.name) + "' is private"));
+    }
+}
+
+void TypeChecker::expect_public_method(const Type& receiver, const std::string& method, SourceLocation location) const {
+    if (!is_external_record_access(receiver.name)) {
+        return;
+    }
+
+    const auto record = structs_.find(receiver.name);
+    if (record == structs_.end()) {
+        return;
+    }
+
+    bool has_private = false;
+    bool has_public = false;
+    for (const StructMethod& candidate : record->second.methods) {
+        if (candidate.name != method) {
+            continue;
+        }
+
+        has_private = has_private || !candidate.exported;
+        has_public = has_public || candidate.exported;
+    }
+
+    if (has_private && !has_public) {
+        throw std::runtime_error(
+            diagnostic(location, "method '" + method + "' of record '" + base_name(receiver.name) + "' is private"));
+    }
+}
+
 void TypeChecker::collect_known_module(const std::string& name) {
     const std::size_t separator = name.find('.');
     if (separator == std::string::npos || separator == 0) {
@@ -2477,7 +2826,8 @@ void TypeChecker::collect_known_module(const std::string& name) {
 void TypeChecker::collect_module_export(const Statement& statement) {
     if (!statement.exported ||
         (statement.kind != StatementKind::function && statement.kind != StatementKind::const_statement &&
-         statement.kind != StatementKind::struct_statement && statement.kind != StatementKind::enum_statement)) {
+         statement.kind != StatementKind::struct_statement && statement.kind != StatementKind::enum_statement &&
+         statement.kind != StatementKind::contract_statement)) {
         return;
     }
 
@@ -2521,6 +2871,13 @@ bool TypeChecker::is_known_module(const std::string& module) const {
     }
 
     for (const auto& [name, definition] : enums_) {
+        (void)definition;
+        if (name.starts_with(prefix)) {
+            return true;
+        }
+    }
+
+    for (const auto& [name, definition] : contracts_) {
         (void)definition;
         if (name.starts_with(prefix)) {
             return true;

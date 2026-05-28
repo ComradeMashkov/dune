@@ -457,6 +457,10 @@ Statement Parser::statement() {
         return struct_statement();
     }
 
+    if (match(TokenType::contract_keyword)) {
+        return contract_statement();
+    }
+
     if (match(TokenType::choice_keyword)) {
         return enum_statement();
     }
@@ -592,6 +596,12 @@ Statement Parser::export_statement() {
         return statement;
     }
 
+    if (match(TokenType::contract_keyword)) {
+        Statement statement = contract_statement();
+        statement.exported = true;
+        return statement;
+    }
+
     if (match(TokenType::choice_keyword)) {
         Statement statement = enum_statement();
         statement.exported = true;
@@ -604,7 +614,8 @@ Statement Parser::export_statement() {
         return statement;
     }
 
-    throw std::runtime_error("expected function, foreign function, record, choice, method, or constant after export");
+    throw std::runtime_error(
+        "expected function, foreign function, record, contract, choice, method, or constant after export");
 }
 
 Statement Parser::extern_statement() {
@@ -737,6 +748,44 @@ Statement Parser::const_statement() {
     return statement;
 }
 
+Statement Parser::contract_method_signature() {
+    const Token name = consume_identifier_like("expected contract method name");
+    consume(TokenType::left_paren, "expected '(' after contract method name");
+    std::vector<Parameter> parsed_parameters = parameters();
+    consume(TokenType::right_paren, "expected ')' after contract method parameters");
+
+    TypeAnnotation return_type;
+    if (match(TokenType::colon)) {
+        return_type = type_annotation();
+    }
+
+    consume(TokenType::semicolon, "expected ';' after contract method signature");
+
+    Statement method{StatementKind::function, name.lexeme, nullptr, {}, {}};
+    method.type = std::move(return_type);
+    method.parameters = std::move(parsed_parameters);
+    method.location = location_from_token(name);
+    return method;
+}
+
+Statement Parser::contract_statement() {
+    const Token& keyword = previous();
+    const Token& name = consume(TokenType::identifier, "expected contract name after contract");
+    consume(TokenType::left_brace, "expected '{' before contract methods");
+
+    std::vector<Statement> methods;
+    while (!check(TokenType::right_brace) && !is_at_end()) {
+        methods.push_back(contract_method_signature());
+    }
+
+    consume(TokenType::right_brace, "expected '}' after contract methods");
+
+    Statement statement{StatementKind::contract_statement, name.lexeme, nullptr, {}, {}};
+    statement.body = std::move(methods);
+    statement.location = location_from_token(keyword);
+    return statement;
+}
+
 Statement Parser::import_statement() {
     const Token& keyword = previous();
     const Token name = consume_identifier_like("expected module name after import");
@@ -814,19 +863,33 @@ Statement Parser::struct_statement() {
         consume(TokenType::greater, "expected '>' after record generic parameters");
     }
 
+    std::vector<Type> contracts;
+    if (match(TokenType::with_keyword)) {
+        while (true) {
+            contracts.push_back(make_generic_type(qualified_name()));
+            if (!match(TokenType::comma)) {
+                break;
+            }
+        }
+    }
+
     consume(TokenType::left_brace, "expected '{' before record fields");
 
     std::vector<Parameter> fields;
     std::vector<Statement> methods;
     while (!check(TokenType::right_brace) && !is_at_end()) {
+        const bool member_exported = match(TokenType::export_keyword);
         if (looks_like_function_declaration()) {
-            methods.push_back(function_statement());
+            Statement method = function_statement();
+            method.exported = member_exported;
+            methods.push_back(std::move(method));
+            match(TokenType::comma);
             continue;
         }
 
         const Token& field = consume_identifier_like("expected record field name");
         consume(TokenType::colon, "expected ':' after record field name");
-        fields.push_back(Parameter{field.lexeme, type_annotation(), location_from_token(field)});
+        fields.push_back(Parameter{field.lexeme, type_annotation(), location_from_token(field), member_exported});
 
         if (check(TokenType::right_brace)) {
             break;
@@ -841,6 +904,7 @@ Statement Parser::struct_statement() {
     statement.body = std::move(methods);
     statement.parameters = std::move(fields);
     statement.generic_parameters = std::move(parsed_generics);
+    statement.contracts = std::move(contracts);
     statement.location = location_from_token(keyword);
     return statement;
 }
@@ -907,6 +971,20 @@ std::vector<Statement> Parser::block() {
     return statements;
 }
 
+std::string Parser::qualified_name() {
+    if (!check_identifier_like() && !check(TokenType::int_keyword) && !check(TokenType::real_keyword)) {
+        throw std::runtime_error("expected name");
+    }
+
+    std::string name = advance().lexeme;
+    while (match(TokenType::dot)) {
+        const Token member = consume_identifier_like("expected name after '.'");
+        name += "." + member.lexeme;
+    }
+
+    return name;
+}
+
 std::vector<Parameter> Parser::parameters() {
     std::vector<Parameter> parsed_parameters;
 
@@ -933,12 +1011,7 @@ std::vector<GenericParameter> Parser::generic_parameters() {
         const Token& name = consume(TokenType::identifier, "expected generic parameter name");
         std::string bound;
         if (match(TokenType::is_keyword)) {
-            if (!check(TokenType::identifier) && !check(TokenType::int_keyword) && !check(TokenType::real_keyword)) {
-                throw std::runtime_error("expected generic bound name");
-            }
-
-            const Token& bound_name = advance();
-            bound = bound_name.lexeme;
+            bound = qualified_name();
         }
 
         parsed_parameters.push_back(GenericParameter{name.lexeme, std::move(bound), location_from_token(name)});

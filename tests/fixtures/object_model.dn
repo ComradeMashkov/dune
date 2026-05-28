@@ -1,0 +1,29 @@
+import object_model_api;
+
+area_of<T is object_model_api.Shape>(shape: T): real64 {
+    return shape.area();
+}
+
+counter: object_model_api.Counter = object_model_api.Counter.new();
+counter.inc();
+counter.inc();
+print(counter.current());
+
+circle: object_model_api.Circle = object_model_api.Circle.new(2.0);
+print(circle.area());
+print(area_of(circle));
+
+record Box<T> {
+    value: T,
+
+    new(value: T): Box<T> {
+        return Box { value: value };
+    }
+
+    get(): T {
+        return this.value;
+    }
+}
+
+boxed: Box<int> = Box.new(42);
+print(boxed.get());

@@ -96,8 +96,10 @@ available. Importing `text` similarly enables helpers such as
 `message.trim().ends_with("x")`.
 
 Module files can mark their public API with `export`. If a module contains any
-explicit exports, only exported functions and constants can be accessed through
-`module.name`; private helpers remain callable inside the module.
+explicit exports, only exported functions, constants, records, choices, and
+contracts can be accessed through `module.name`; private helpers remain callable
+inside the module. Record fields and record methods are private across module
+boundaries unless that member is marked `export`.
 
 ```dn
 export const ANSWER: int = 42;
@@ -270,6 +272,64 @@ boxed<T>(value: T): Box<T> {
 answer: Box<int> = boxed(42);
 ```
 
+Records can declare lightweight constructors and explicitly implement contracts.
+Constructors are statically checked functions associated with the record type;
+they must return the enclosing record type and are called with `Record.new(...)`.
+Contracts declare method requirements only. A record satisfies a contract bound
+only when its declaration lists that contract in a `with` clause.
+
+```dn
+contract Shape {
+  area(): real64;
+}
+
+record Circle with Shape {
+  radius: real64,
+
+  new(radius: real64): Circle {
+    return Circle { radius: radius };
+  }
+
+  area(): real64 {
+    return 3.0 * this.radius * this.radius;
+  }
+}
+
+area_of<T is Shape>(shape: T): real64 {
+  return shape.area();
+}
+
+circle: Circle = Circle.new(2.0);
+print(area_of(circle));
+```
+
+When records come from modules, member visibility is explicit:
+
+```dn
+export record Counter {
+  value: int,
+
+  export new(): Counter {
+    return Counter { value: 0 };
+  }
+
+  export inc(): unit {
+    this.value = this.value + 1;
+  }
+
+  export current(): int {
+    return this.value;
+  }
+}
+```
+
+After `import counters;`, callers can use `counters.Counter.new()`,
+`counter.inc()`, and `counter.current()`, but `counter.value` is rejected unless
+the field is exported. Contracts can also be exported and used as qualified
+generic bounds, for example `T is geometry.Shape`. Contract-bound calls are still
+statically dispatched through generic instantiation; there is no `dyn`, vtable,
+inheritance, or heterogeneous contract-object array support yet.
+
 Blocks, loop initializers, and `when` payloads have lexical scopes. A typed
 binding such as `x: int = 2` creates a new binding in the current scope and can
 shadow a mutable outer binding. Plain `x = 2` updates the nearest visible `x`, or
@@ -366,6 +426,7 @@ Supported compound types:
 - `[T]` dynamic arrays, for example `[int]` or `[text]`
 - `record` records with named fields, for example `Point { x: 1, y: 2 }`
 - generic records, for example `Box<int>`
+- contracts, for example `Shape` as a generic bound
 - generic choices, for example `Maybe<int>` or `Outcome<int, text>`
 - choice variants, for example `Present(42)` or `Absent`
 
@@ -484,8 +545,12 @@ The current release implements a small compiled language with:
 - typed functions
 - overloaded functions
 - generic functions with basic bounds
+- generic functions with explicit contract bounds
 - call-site generic instantiation
 - generic records
+- record constructors
+- record member visibility
+- contracts and explicit record `with` declarations
 - choices
 - receiver methods
 - static scalar types

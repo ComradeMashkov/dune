@@ -1,0 +1,35 @@
+export contract Shape {
+    area(): real64;
+}
+
+export record Counter {
+    value: int,
+
+    export new(): Counter {
+        return Counter { value: 0 };
+    }
+
+    export inc(): unit {
+        this.value = this.value + 1;
+    }
+
+    reset(): unit {
+        this.value = 0;
+    }
+
+    export current(): int {
+        return this.value;
+    }
+}
+
+export record Circle with Shape {
+    radius: real64,
+
+    export new(radius: real64): Circle {
+        return Circle { radius: radius };
+    }
+
+    export area(): real64 {
+        return 3.0 * this.radius * this.radius;
+    }
+}

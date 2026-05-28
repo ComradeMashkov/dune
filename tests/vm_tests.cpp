@@ -204,6 +204,15 @@ int main() {
                                   "print(when \"dune\" { is \"lang\" { 1 } is _ { 2 } });"),
                        "7\ndone\n70\n2\n", "expected generic records and when output") &&
              passed;
+    passed = expect_eq(run_source("contract Shape { area(): real64; } "
+                                  "record Circle with Shape { radius: real64, "
+                                  "new(radius: real64): Circle { return Circle { radius: radius }; } "
+                                  "area(): real64 { return 3.0 * this.radius * this.radius; } } "
+                                  "area_of<T is Shape>(shape: T): real64 { return shape.area(); } "
+                                  "circle: Circle = Circle.new(2.0); "
+                                  "print(circle.area()); print(area_of(circle));"),
+                       "12\n12\n", "expected constructors, contracts, and static contract-bound calls") &&
+             passed;
     passed = expect_eq(run_source("choice Maybe { Present(int), Absent, } "
                                   "x = 99; value: Maybe = Present(30); missing: Maybe = Absent; "
                                   "print(when value { is Present(x) { x + 1 } is Absent { 0 } }); "

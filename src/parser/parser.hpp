@@ -39,6 +39,7 @@ private:
     Statement block_statement();
     Statement break_statement();
     Statement continue_statement();
+    Statement contract_statement();
     Statement const_statement();
     Statement export_statement();
     Statement extern_statement();
@@ -57,6 +58,8 @@ private:
     Statement while_statement();
 
     std::vector<Statement> block();
+    Statement contract_method_signature();
+    std::string qualified_name();
     std::vector<Parameter> parameters();
     std::vector<GenericParameter> generic_parameters();
     std::vector<std::unique_ptr<Expression>> arguments();
