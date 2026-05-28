@@ -654,9 +654,10 @@ cmake --build build -j
 2. In Zed, use `Extensions: Install Dev Extension` and select the
    `editors/zed` directory, not the repository root.
 
-The extension uses `dune` from `PATH` when available. Otherwise it falls back to
-`build/dune` inside the opened worktree and sets `DUNE_STDLIB_PATH` to the
-worktree `stdlib` directory, so diagnostics can resolve standard modules.
+The dev extension runs `build/dune` inside the opened worktree and sets
+`DUNE_STDLIB_PATH` to the worktree `stdlib` directory, so diagnostics can
+resolve standard modules. After pulling LSP fixes, rebuild Dune and reload Zed
+so the extension starts the updated `build/dune` binary.
 
 If a `.dn` file still appears as `Unknown`, reload Zed and confirm the Dune
 extension is installed from `editors/zed`. That status means Zed has not loaded
