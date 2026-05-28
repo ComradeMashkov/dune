@@ -105,6 +105,22 @@ bool hovers_imported_module_members() {
     return passed;
 }
 
+bool hovers_inferred_call_assignments() {
+    const std::optional<dune::lsp::Hover> hover =
+        dune::lsp::hover_source("import matrix;\nleft = matrix.vector([1, 2]);\n"
+                                "right = matrix.vector([1, 2, 3]);\nprint(left.dot(right));",
+                                {}, {}, 3, 7);
+
+    bool passed = true;
+    passed = expect(hover.has_value(), "expected inferred assignment hover") && passed;
+    if (hover.has_value()) {
+        passed = expect(hover->contents.find("left: matrix.Vector<int>") != std::string::npos,
+                        "expected inferred matrix vector hover") &&
+                 passed;
+    }
+    return passed;
+}
+
 bool publishes_lsp_diagnostics() {
     const std::string uri = "file:///tmp/bad.dn";
     const std::string initialize = R"({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}})";
@@ -170,6 +186,7 @@ int main() {
     passed = completes_imported_module_members() && passed;
     passed = hovers_local_symbols() && passed;
     passed = hovers_imported_module_members() && passed;
+    passed = hovers_inferred_call_assignments() && passed;
     passed = publishes_lsp_diagnostics() && passed;
     passed = serves_lsp_completions_and_hover() && passed;
     return passed ? 0 : 1;
