@@ -626,6 +626,11 @@ Compile to a native output file through generated LLVM IR:
 ./hello
 ```
 
+`build`, `llvm`, and `check` print a short status trace to stderr for the
+pipeline stages they run. Color is enabled automatically on terminals. Set
+`DUNE_COLOR=always` to force color, or set `DUNE_COLOR=never` / `NO_COLOR=1` to
+disable it.
+
 Emit only LLVM IR:
 
 ```bash

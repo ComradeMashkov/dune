@@ -184,6 +184,26 @@ add_test(NAME cli_check_type_error COMMAND dune check ${CMAKE_CURRENT_SOURCE_DIR
 set_tests_properties(cli_check_type_error PROPERTIES WILL_FAIL TRUE)
 
 add_test(
+    NAME cli_build_status
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/hello.dn
+        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/status_hello_native
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_status_case.cmake
+)
+
+add_test(
+    NAME cli_check_status_error
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/type_error.dn
+        -D EXPECTED_ERROR="expected type 'int' but got 'bool'"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_status_failure_case.cmake
+)
+
+add_test(
     NAME cli_hello
     COMMAND
         ${CMAKE_COMMAND}
