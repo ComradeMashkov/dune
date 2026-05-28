@@ -343,6 +343,18 @@ export record Vector<T is numeric> {
         return Matrix.new(this.data.len(), 1, this.to_array());
     }
 
+    export reshape(rows: int, cols: int): Matrix<T> {
+        if rows * cols != this.data.len() {
+            runtime.panic("vector reshape size mismatch");
+        }
+
+        return Matrix.new(rows, cols, this.to_array());
+    }
+
+    export dot(other: Matrix<T>): Vector<T> {
+        return this.matmul(other);
+    }
+
     export matmul(other: Matrix<T>): Vector<T> {
         if this.data.len() != other.rows {
             runtime.panic("vector-matrix shape mismatch");
@@ -535,6 +547,10 @@ export record Matrix<T is numeric> {
         return Vector.new(values);
     }
 
+    export diag(): Vector<T> {
+        return this.diagonal();
+    }
+
     export trace(): T {
         return this.diagonal().sum();
     }
@@ -708,6 +724,14 @@ export record Matrix<T is numeric> {
         }
 
         return Matrix.new(this.rows, other.cols, values);
+    }
+
+    export dot(other: Matrix<T>): Matrix<T> {
+        return this.matmul(other);
+    }
+
+    export dot(vector: Vector<T>): Vector<T> {
+        return this.mul_vector(vector);
     }
 
     export mul_vector(vector: Vector<T>): Vector<T> {
@@ -994,6 +1018,26 @@ export diagonal<T is numeric>(values: Vector<T>): Matrix<T> {
     }
 
     return Matrix.new(values.len(), values.len(), data);
+}
+
+export diag<T is numeric>(values: Vector<T>): Matrix<T> {
+    return diagonal(values);
+}
+
+export dot<T is numeric>(left: Vector<T>, right: Vector<T>): T {
+    return left.dot(right);
+}
+
+export dot<T is numeric>(left: Matrix<T>, right: Matrix<T>): Matrix<T> {
+    return left.matmul(right);
+}
+
+export dot<T is numeric>(left: Matrix<T>, right: Vector<T>): Vector<T> {
+    return left.mul_vector(right);
+}
+
+export matmul<T is numeric>(left: Matrix<T>, right: Matrix<T>): Matrix<T> {
+    return left.matmul(right);
 }
 
 export outer<T is numeric>(left: Vector<T>, right: Vector<T>): Matrix<T> {

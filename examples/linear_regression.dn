@@ -1,0 +1,21 @@
+import matrix;
+
+xs = matrix.vector([1.0, 2.0, 3.0, 4.0, 5.0]);
+ys = matrix.vector([3.0, 5.0, 7.0, 9.0, 11.0]);
+
+x_mean = xs.mean();
+y_mean = ys.mean();
+centered_x = xs.sub(x_mean);
+centered_y = ys.sub(y_mean);
+
+slope = centered_x.dot(centered_y) / centered_x.dot(centered_x);
+intercept = y_mean - slope * x_mean;
+prediction = slope * 6.0 + intercept;
+
+print("linear regression");
+print(slope);
+print(intercept);
+print(prediction);
+
+residuals = ys.sub(xs.mul(slope).add(intercept));
+print(residuals.norm_squared());

@@ -1,0 +1,28 @@
+import matrix;
+
+left = matrix.from_rows([[1, 2, 3], [4, 5, 6]]);
+right = matrix.from_rows([[7, 8], [9, 10], [11, 12]]);
+product = matrix.dot(left, right);
+
+print("matrix product");
+print(product.rows());
+print(product.cols());
+print(product.get(0, 0));
+print(product.get(1, 1));
+
+print("transpose");
+transposed = left.transpose();
+print(transposed.rows());
+print(transposed.cols());
+print(transposed.get(2, 1));
+
+print("identity");
+id: matrix.Matrix<int> = matrix.identity(3);
+print(id.trace());
+print(id.get(0, 1));
+
+print("diagonal");
+print(left.diag().sum());
+diag = matrix.diag(matrix.vector([2, 4, 6]));
+print(diag.trace());
+print(diag.sum());
