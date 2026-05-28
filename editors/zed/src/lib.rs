@@ -27,9 +27,7 @@ impl zed::Extension for DuneExtension {
         _language_server_id: &LanguageServerId,
         worktree: &Worktree,
     ) -> Result<zed::Command> {
-        let command = worktree
-            .which("dune")
-            .unwrap_or_else(|| Self::local_binary(worktree));
+        let command = Self::local_binary(worktree);
         let root = worktree.root_path();
 
         Ok(zed::Command {
