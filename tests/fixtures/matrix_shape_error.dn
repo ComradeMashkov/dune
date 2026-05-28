@@ -1,0 +1,6 @@
+import matrix;
+
+left = matrix.vector([1, 2]);
+right = matrix.vector([1, 2, 3]);
+
+print(left.dot(right));

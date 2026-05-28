@@ -85,8 +85,8 @@ print(values.first());
 
 Modules are loaded from `.dn` files. The standard library currently includes
 `stdlib/math.dn`, `stdlib/array.dn`, `stdlib/text.dn`, `stdlib/maybe.dn`,
-`stdlib/outcome.dn`, `stdlib/assert.dn`, `stdlib/collections.dn`, and
-`stdlib/autograd.dn`. Low-level
+`stdlib/outcome.dn`, `stdlib/assert.dn`, `stdlib/collections.dn`,
+`stdlib/runtime.dn`, `stdlib/autograd.dn`, and `stdlib/matrix.dn`. Low-level
 array and text operations such as `len`, `push`, indexing, and slicing remain
 runtime primitives; higher-level helpers are ordinary Dune functions in the
 standard library.
@@ -184,6 +184,82 @@ The `math` module currently provides constants and generic numeric functions:
 - `ceil(value)`
 - `round(value)`
 
+The `matrix` module provides a small NumPy-style foundation for homogeneous
+numeric vectors and matrices. Values are generic over Dune numeric types:
+`Vector<T is numeric>` and `Matrix<T is numeric>`. Operations currently keep the
+same element type; mixed-type promotion and broadcasting are not implemented
+yet, so elementwise and matrix operations expect compatible shapes. Generic
+builders whose element type does not appear in the argument list, such as
+`zeros`, `ones`, `identity`, and `eye`, need an assignment or parameter type
+annotation to select the element type.
+
+Shape-sensitive operations fail at runtime with explicit diagnostics such as
+`vector shape mismatch`, `matrix shape mismatch`,
+`matrix multiplication shape mismatch`, `matrix-vector shape mismatch`,
+`matrix data length mismatch`, or `matrix reshape size mismatch`.
+
+```dn
+import matrix;
+
+v = matrix.vector([1, 2, 3]);
+w = matrix.vector([4, 5, 6]);
+
+print(v.dot(w));
+
+m = matrix.from_flat(2, 3, [1, 2, 3, 4, 5, 6]);
+n = matrix.from_flat(3, 2, [7, 8, 9, 10, 11, 12]);
+product = m.matmul(n);
+
+print(product.get(0, 0));
+print(product.get(1, 1));
+```
+
+Core helpers:
+
+- `vector(data)`
+- `from_flat(rows, cols, data)`
+- `from_rows(rows)`
+- `zeros(size)`, `zeros(rows, cols)`
+- `ones(size)`, `ones(rows, cols)`
+- `full(size, value)`, `full(rows, cols, value)`
+- `arange(end)`, `arange(start, end)`, `arange(start, end, step)`
+- `identity(size)`, `eye(size)`
+- `diagonal(vector)`
+- `outer(left, right)`
+
+Vector methods:
+
+- `len()`, `shape()`, `is_empty()`, `get(index)`, `set(index, value)`
+- `to_array()`, `copy()`, `equals(other)`, `same_shape(other)`
+- `slice(start, end)`, `concat(other)`, `fill(value)`
+- `add(other)`, `add(value)`, `sub(other)`, `sub(value)`, `rsub(value)`
+- `mul(other)`, `mul(value)`, `div(other)`, `div(value)`, `rdiv(value)`
+- `scale(factor)`, `neg()`, `abs()`, `clip(lower, upper)`
+- `dot(other)`, `norm_squared()`, `norm()`, `distance_squared(other)`, `distance(other)`
+- `sum()`, `product()`, `mean()`, `min()`, `max()`, `argmin()`, `argmax()`
+- `to_row_matrix()`, `to_column_matrix()`
+- `matmul(matrix)`, `outer(other)`
+
+Matrix methods:
+
+- `rows()`, `cols()`, `shape()`, `is_empty()`, `is_square()`, `len()`
+- `get(row, col)`, `set(row, col, value)`, `to_array()`, `copy()`
+- `equals(other)`, `same_shape(other)`, `can_matmul(other)`, `fill(value)`
+- `row(index)`, `column(index)`, `flatten()`, `reshape(rows, cols)`
+- `diagonal()`, `trace()`
+- `add(other)`, `add(value)`, `sub(other)`, `sub(value)`, `rsub(value)`
+- `mul(other)`, `mul(value)`, `div(other)`, `div(value)`, `rdiv(value)`
+- `hadamard(other)`
+- `scale(factor)`, `neg()`, `abs()`, `clip(lower, upper)`
+- `transpose()`, `matmul(other)`, `mul_vector(vector)`
+- `sum_rows()`, `sum_columns()`, `mean_rows()`, `mean_columns()`
+- `sum()`, `product()`, `mean()`, `norm_squared()`, `norm()`
+- `min()`, `max()`, `argmin()`, `argmax()`
+- `det2()`, `det3()`
+
+The `runtime` module exposes `panic(message)`, which aborts execution with a
+message. It is mainly intended for standard library checks and tests.
+
 The `autograd` module provides scalar reverse-mode automatic differentiation.
 It is implemented in Dune itself with records, arrays, methods, and mutation;
 the VM does not contain autograd-specific primitives.
@@ -232,8 +308,20 @@ The `array` module provides generic helpers for common element types:
 - `first(values)` or `values.first()`
 - `last(values)` or `values.last()`
 - `append(values, value)` or `values.append(value)`
-- `range(start, end)`
-- `sum(values)`
+- `prepend(values, value)` or `values.prepend(value)`
+- `concat(values, other)` or `values.concat(other)`
+- `slice(values, start, end)` or `values.slice(start, end)`
+- `take(values, count)` or `values.take(count)`
+- `drop(values, count)` or `values.drop(count)`
+- `count_value(values, needle)` or `values.count_value(needle)`
+- `equals(values, other)` or `values.equals(other)`
+- `fill(values, value)` or `values.fill(value)`
+- `range(end)`, `range(start, end)`, `range(start, end, step)`
+- `repeat(value, count)`, `zeros(count)`, `ones(count)`, `full(count, value)`
+- numeric methods: `values.sum()`, `values.product()`, `values.min()`,
+  `values.max()`, `values.argmin()`, `values.argmax()`
+- boolean methods: `values.all()`, `values.any()`
+- legacy overloads: `sum(values)` for `[int]` and `[real64]`
 
 The `text` module provides text and glyph helpers:
 

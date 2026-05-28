@@ -422,6 +422,45 @@ bool compiles_autograd_module_as_dune_code() {
     return passed;
 }
 
+bool compiles_matrix_module_as_dune_code() {
+    const dune::Bytecode bytecode = compile_source("import matrix; "
+                                                   "v = matrix.vector([1, 2, 3]); "
+                                                   "w = matrix.vector([4, 5, 6]); "
+                                                   "print(v.dot(w)); "
+                                                   "m = matrix.from_flat(2, 2, [1, 2, 3, 4]); "
+                                                   "print(m.transpose().get(1, 0));");
+
+    bool saw_vector = false;
+    bool saw_from_flat = false;
+    bool saw_dot = false;
+    bool saw_make_record = false;
+    bool saw_field_load = false;
+    bool saw_matrix_extern = false;
+    for (const dune::Bytecode::Function& function : bytecode.functions) {
+        if (function.name.rfind("matrix.", 0) == 0 && function.is_extern) {
+            saw_matrix_extern = true;
+        }
+
+        saw_vector = saw_vector || (function.name == "matrix.vector" && !function.is_extern);
+        saw_from_flat = saw_from_flat || (function.name == "matrix.from_flat" && !function.is_extern);
+        saw_dot = saw_dot || (function.name == "matrix.dot" && !function.is_extern);
+
+        for (const dune::Instruction& instruction : function.instructions) {
+            saw_make_record = saw_make_record || instruction.op == dune::OpCode::make_record;
+            saw_field_load = saw_field_load || instruction.op == dune::OpCode::load_field;
+        }
+    }
+
+    bool passed = true;
+    passed = expect(saw_vector, "expected matrix.vector Dune function") && passed;
+    passed = expect(saw_from_flat, "expected matrix.from_flat Dune function") && passed;
+    passed = expect(saw_dot, "expected matrix.dot Dune method function") && passed;
+    passed = expect(!saw_matrix_extern, "expected no matrix foreign functions") && passed;
+    passed = expect(saw_make_record, "expected matrix record construction") && passed;
+    passed = expect(saw_field_load, "expected matrix field access") && passed;
+    return passed;
+}
+
 } // namespace
 
 int main() {
@@ -440,6 +479,7 @@ int main() {
     passed = compiles_when_expression() && passed;
     passed = compiles_choice_variants_and_when() && passed;
     passed = compiles_autograd_module_as_dune_code() && passed;
+    passed = compiles_matrix_module_as_dune_code() && passed;
 
     return passed ? 0 : 1;
 }

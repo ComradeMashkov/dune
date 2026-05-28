@@ -241,6 +241,44 @@ int main() {
                           "active: bool = x.requires_grad;",
                           "expected autograd stdlib module to validate") &&
              passed;
+    passed = expect_valid("import matrix; "
+                          "vi: matrix.Vector<int> = matrix.vector([1, 2, 3]); "
+                          "wi: matrix.Vector<int> = matrix.full(3, 2); "
+                          "dot: int = vi.dot(wi); "
+                          "zeros: matrix.Vector<u16> = matrix.zeros(3); "
+                          "filled: matrix.Matrix<real64> = matrix.full(2, 2, 1.5); "
+                          "left: matrix.Matrix<int> = matrix.from_flat(2, 3, [1, 2, 3, 4, 5, 6]); "
+                          "right: matrix.Matrix<int> = matrix.from_flat(3, 2, [7, 8, 9, 10, 11, 12]); "
+                          "product: matrix.Matrix<int> = left.matmul(right); "
+                          "cell: int = product.get(1, 1); total: real64 = filled.sum(); "
+                          "shape: [int] = product.shape(); flat: matrix.Vector<int> = product.flatten(); "
+                          "clipped: matrix.Vector<int> = vi.rsub(10).clip(0, 9); "
+                          "diag: matrix.Matrix<int> = matrix.diagonal(matrix.vector([1, 2, 3])); "
+                          "sequence: matrix.Vector<int> = matrix.arange(1, 5); ok: bool = left.can_matmul(right); "
+                          "rows: matrix.Matrix<int> = matrix.from_rows([[1, 2], [3, 4]]); "
+                          "row_sums: matrix.Vector<int> = rows.sum_rows(); "
+                          "column_means: matrix.Vector<real64> = rows.mean_columns(); "
+                          "mean: real64 = rows.mean(); det: int = rows.det2(); "
+                          "norm: real64 = vi.norm(); distance: real64 = vi.distance(wi); "
+                          "outer: matrix.Matrix<int> = vi.outer(wi); "
+                          "left_product: matrix.Vector<int> = vi.matmul(right); "
+                          "top_outer: matrix.Matrix<int> = matrix.outer(vi, wi);",
+                          "expected generic matrix stdlib module to validate") &&
+             passed;
+    passed = expect_valid("import runtime; fail(): unit { runtime.panic(\"boom\"); }",
+                          "expected runtime panic helper to validate") &&
+             passed;
+    passed = expect_valid("import array; "
+                          "values: [int] = [1, 2, 3]; total: int = values.sum(); "
+                          "prod: int = values.product(); low: int = values.min(); high: int = values.max(); "
+                          "first: int = values.prepend(0).first(); last: int = values.append(4).last(); "
+                          "middle: [int] = values.concat([4, 5]).slice(1, 4); "
+                          "zeros: [u16] = array.zeros(3); ones: [real64] = array.ones(2); "
+                          "full: [text] = array.full(2, \"x\"); "
+                          "same: bool = middle.equals([2, 3, 4]); flags: [bool] = [true, false]; "
+                          "has_any: bool = flags.any(); all_true: bool = flags.all();",
+                          "expected expanded array stdlib API to validate") &&
+             passed;
     passed = expect_fixture_valid("import feature_exports; answer: int = feature_exports.ANSWER; "
                                   "value: int = feature_exports.public();",
                                   "expected exported module members to validate") &&
@@ -390,6 +428,14 @@ int main() {
              passed;
     passed = expect_error_contains("import text; print(text.nope(\"x\"));", "module 'text' does not export 'nope'",
                                    "expected missing text module export") &&
+             passed;
+    passed = expect_error_contains("import matrix; bad = matrix.vector([\"x\"]);",
+                                   "no overload for function 'matrix.vector' with argument types ([text])",
+                                   "expected matrix numeric bound error") &&
+             passed;
+    passed = expect_error_contains("import matrix; v = matrix.vector([1, 2]); print(v.data);",
+                                   "field 'data' of record 'Vector' is private",
+                                   "expected private vector data field error") &&
              passed;
     passed = expect_error_contains("import math; print(math.square(true));",
                                    "no overload for function 'math.square' with argument types (bool)",

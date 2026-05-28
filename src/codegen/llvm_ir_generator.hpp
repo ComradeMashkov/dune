@@ -76,6 +76,7 @@ private:
     void emit_function(const Statement& statement, std::ostream& output);
     void emit_extern_declarations(std::ostream& output);
     void emit_memory_runtime(std::ostream& output);
+    void emit_panic_runtime(std::ostream& output);
     void emit_global_constants(std::ostream& output);
     void emit_print(const TypedValue& value, std::ostream& output);
     void emit_bounds_check(const std::string& index, const std::string& length, std::string_view message,

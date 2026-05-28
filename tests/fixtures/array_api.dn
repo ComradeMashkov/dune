@@ -1,0 +1,49 @@
+import array;
+
+values = [1, 2, 3];
+print(values.sum());
+print(values.product());
+print(values.min());
+print(values.max());
+print(values.argmin());
+print(values.argmax());
+
+print(array.range(5).last());
+stepped = array.range(2, 9, 3);
+print(stepped.sum());
+down = array.range(5, 0, 0 - 2);
+print(down[1]);
+
+repeated = array.repeat("x", 3);
+print(repeated.len());
+print(repeated[0]);
+
+full_values: [u16] = array.full(3, 7);
+print(full_values.sum());
+zeros: [int] = array.zeros(4);
+print(zeros.sum());
+ones: [real64] = array.ones(3);
+print(ones.sum());
+
+left = [1, 2];
+right = [3, 4];
+combined = left.concat(right).prepend(0).append(5);
+print(combined.len());
+print(combined.first());
+print(combined.last());
+print(combined.slice(2, 5).sum());
+print(combined.take(3).sum());
+print(combined.drop(4).first());
+print(combined.count_value(2));
+print(combined.equals([0, 1, 2, 3, 4, 5]));
+
+mutable = [1, 2, 3];
+mutable.fill(9);
+print(mutable.sum());
+
+flags = [true, true, false];
+print(flags.all());
+print(flags.any());
+
+real_values = [1.5, 2.5];
+print(real_values.sum());
