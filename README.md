@@ -638,6 +638,9 @@ cmake -S . -B build -D DUNE_ENABLE_LINT=OFF
 
 Dune has a Zed extension in `editors/zed`. It provides Tree-sitter syntax
 highlighting for `.dn` files and compiler diagnostics through `dune lsp`.
+Running or installing `dune lsp` by itself is not enough for Zed to recognize
+`.dn` files; the editor also needs this language extension so the file suffix,
+Tree-sitter grammar, queries, and LSP wiring are registered.
 
 To try it locally:
 
@@ -648,11 +651,17 @@ cmake -S . -B build
 cmake --build build -j
 ```
 
-2. In Zed, use `Extensions: Install Dev Extension` and select `editors/zed`.
+2. In Zed, use `Extensions: Install Dev Extension` and select the
+   `editors/zed` directory, not the repository root.
 
 The extension uses `dune` from `PATH` when available. Otherwise it falls back to
 `build/dune` inside the opened worktree and sets `DUNE_STDLIB_PATH` to the
 worktree `stdlib` directory, so diagnostics can resolve standard modules.
+
+If a `.dn` file still appears as `Unknown`, reload Zed and confirm the Dune
+extension is installed from `editors/zed`. That status means Zed has not loaded
+the language metadata yet; autocomplete and hover will not start until the file
+is recognized as `Dune`.
 
 ## Current Features
 

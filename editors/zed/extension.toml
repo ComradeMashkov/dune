@@ -1,14 +1,14 @@
 id = "dune"
 name = "Dune"
 description = "Dune language support: Tree-sitter highlighting, LSP diagnostics, completions, hover, and file icons."
-version = "0.2.0"
+version = "0.3.0"
 schema_version = 1
 authors = ["ComradeMashkov"]
 repository = "https://github.com/ComradeMashkov/dune"
 
 [grammars.dune]
 repository = "https://github.com/ComradeMashkov/dune"
-rev = "94f8e68ad97cf622d0da6e8b993782416a65856d"
+rev = "a5c7dc74277e9abc04330c5eb7c853b4fe77f135"
 
 [language_servers.dune-lsp]
 name = "Dune LSP"
