@@ -1,0 +1,1 @@
+export foreign panic(message: text): unit = "dune_panic";

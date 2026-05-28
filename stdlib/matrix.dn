@@ -1,8 +1,23 @@
+import math;
+import runtime;
+
 export record Vector<T is numeric> {
     data: [T],
 
     export new(data: [T]): Vector<T> {
         return Vector { data: data };
+    }
+
+    require_same_shape(other: Vector<T>): unit {
+        if this.data.len() != other.data.len() {
+            runtime.panic("vector shape mismatch");
+        }
+    }
+
+    require_non_empty(): unit {
+        if this.data.is_empty() {
+            runtime.panic("empty vector reduction");
+        }
     }
 
     export len(): int {
@@ -81,6 +96,7 @@ export record Vector<T is numeric> {
     }
 
     export add(other: Vector<T>): Vector<T> {
+        this.require_same_shape(other);
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
             values.push(this.data[index] + other.data[index]);
@@ -99,6 +115,7 @@ export record Vector<T is numeric> {
     }
 
     export sub(other: Vector<T>): Vector<T> {
+        this.require_same_shape(other);
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
             values.push(this.data[index] - other.data[index]);
@@ -126,6 +143,7 @@ export record Vector<T is numeric> {
     }
 
     export mul(other: Vector<T>): Vector<T> {
+        this.require_same_shape(other);
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
             values.push(this.data[index] * other.data[index]);
@@ -139,6 +157,7 @@ export record Vector<T is numeric> {
     }
 
     export div(other: Vector<T>): Vector<T> {
+        this.require_same_shape(other);
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
             values.push(this.data[index] / other.data[index]);
@@ -216,12 +235,31 @@ export record Vector<T is numeric> {
     }
 
     export dot(other: Vector<T>): T {
+        this.require_same_shape(other);
         total: T = 0;
         for index = 0; index < this.data.len(); index = index + 1 {
             total = total + this.data[index] * other.data[index];
         }
 
         return total;
+    }
+
+    export norm_squared(): T {
+        return this.dot(this);
+    }
+
+    export norm(): real64 {
+        squared: real64 = this.norm_squared() to real64;
+        return math.sqrt(squared);
+    }
+
+    export distance_squared(other: Vector<T>): T {
+        return this.sub(other).norm_squared();
+    }
+
+    export distance(other: Vector<T>): real64 {
+        squared: real64 = this.distance_squared(other) to real64;
+        return math.sqrt(squared);
     }
 
     export sum(): T {
@@ -242,7 +280,15 @@ export record Vector<T is numeric> {
         return total;
     }
 
+    export mean(): real64 {
+        this.require_non_empty();
+        total: real64 = this.sum() to real64;
+        count: real64 = this.data.len() to real64;
+        return total / count;
+    }
+
     export min(): T {
+        this.require_non_empty();
         result: T = this.data[0];
         for index = 1; index < this.data.len(); index = index + 1 {
             if this.data[index] < result {
@@ -254,6 +300,7 @@ export record Vector<T is numeric> {
     }
 
     export max(): T {
+        this.require_non_empty();
         result: T = this.data[0];
         for index = 1; index < this.data.len(); index = index + 1 {
             if this.data[index] > result {
@@ -265,6 +312,7 @@ export record Vector<T is numeric> {
     }
 
     export argmin(): int {
+        this.require_non_empty();
         result = 0;
         for index = 1; index < this.data.len(); index = index + 1 {
             if this.data[index] < this.data[result] {
@@ -276,6 +324,7 @@ export record Vector<T is numeric> {
     }
 
     export argmax(): int {
+        this.require_non_empty();
         result = 0;
         for index = 1; index < this.data.len(); index = index + 1 {
             if this.data[index] > this.data[result] {
@@ -293,6 +342,35 @@ export record Vector<T is numeric> {
     export to_column_matrix(): Matrix<T> {
         return Matrix.new(this.data.len(), 1, this.to_array());
     }
+
+    export matmul(other: Matrix<T>): Vector<T> {
+        if this.data.len() != other.rows {
+            runtime.panic("vector-matrix shape mismatch");
+        }
+
+        values: [T] = [];
+        for col = 0; col < other.cols; col = col + 1 {
+            total: T = 0;
+            for row = 0; row < other.rows; row = row + 1 {
+                total = total + this.data[row] * other.get(row, col);
+            }
+
+            values.push(total);
+        }
+
+        return Vector.new(values);
+    }
+
+    export outer(other: Vector<T>): Matrix<T> {
+        values: [T] = [];
+        for row = 0; row < this.data.len(); row = row + 1 {
+            for col = 0; col < other.data.len(); col = col + 1 {
+                values.push(this.data[row] * other.data[col]);
+            }
+        }
+
+        return Matrix.new(this.data.len(), other.data.len(), values);
+    }
 }
 
 export record Matrix<T is numeric> {
@@ -301,7 +379,39 @@ export record Matrix<T is numeric> {
     data: [T],
 
     export new(rows: int, cols: int, data: [T]): Matrix<T> {
+        if rows < 0 || cols < 0 {
+            runtime.panic("matrix dimensions cannot be negative");
+        }
+
+        if data.len() != rows * cols {
+            runtime.panic("matrix data length mismatch");
+        }
+
         return Matrix { rows: rows, cols: cols, data: data };
+    }
+
+    require_same_shape(other: Matrix<T>): unit {
+        if this.rows != other.rows || this.cols != other.cols {
+            runtime.panic("matrix shape mismatch");
+        }
+    }
+
+    require_can_matmul(other: Matrix<T>): unit {
+        if this.cols != other.rows {
+            runtime.panic("matrix multiplication shape mismatch");
+        }
+    }
+
+    require_vector_width(vector: Vector<T>): unit {
+        if this.cols != vector.len() {
+            runtime.panic("matrix-vector shape mismatch");
+        }
+    }
+
+    require_non_empty(): unit {
+        if this.data.is_empty() {
+            runtime.panic("empty matrix reduction");
+        }
     }
 
     index(row: int, col: int): int {
@@ -404,6 +514,10 @@ export record Matrix<T is numeric> {
     }
 
     export reshape(rows: int, cols: int): Matrix<T> {
+        if rows * cols != this.data.len() {
+            runtime.panic("matrix reshape size mismatch");
+        }
+
         return Matrix.new(rows, cols, this.to_array());
     }
 
@@ -426,6 +540,7 @@ export record Matrix<T is numeric> {
     }
 
     export add(other: Matrix<T>): Matrix<T> {
+        this.require_same_shape(other);
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
             values.push(this.data[index] + other.data[index]);
@@ -444,6 +559,7 @@ export record Matrix<T is numeric> {
     }
 
     export sub(other: Matrix<T>): Matrix<T> {
+        this.require_same_shape(other);
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
             values.push(this.data[index] - other.data[index]);
@@ -471,6 +587,7 @@ export record Matrix<T is numeric> {
     }
 
     export mul(other: Matrix<T>): Matrix<T> {
+        this.require_same_shape(other);
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
             values.push(this.data[index] * other.data[index]);
@@ -483,7 +600,12 @@ export record Matrix<T is numeric> {
         return this.scale(value);
     }
 
+    export hadamard(other: Matrix<T>): Matrix<T> {
+        return this.mul(other);
+    }
+
     export div(other: Matrix<T>): Matrix<T> {
+        this.require_same_shape(other);
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
             values.push(this.data[index] / other.data[index]);
@@ -572,6 +694,7 @@ export record Matrix<T is numeric> {
     }
 
     export matmul(other: Matrix<T>): Matrix<T> {
+        this.require_can_matmul(other);
         values: [T] = [];
         for row = 0; row < this.rows; row = row + 1 {
             for col = 0; col < other.cols; col = col + 1 {
@@ -588,6 +711,7 @@ export record Matrix<T is numeric> {
     }
 
     export mul_vector(vector: Vector<T>): Vector<T> {
+        this.require_vector_width(vector);
         values: [T] = [];
         for row = 0; row < this.rows; row = row + 1 {
             total: T = 0;
@@ -596,6 +720,54 @@ export record Matrix<T is numeric> {
             }
 
             values.push(total);
+        }
+
+        return Vector.new(values);
+    }
+
+    export sum_rows(): Vector<T> {
+        values: [T] = [];
+        for row = 0; row < this.rows; row = row + 1 {
+            values.push(this.row(row).sum());
+        }
+
+        return Vector.new(values);
+    }
+
+    export sum_columns(): Vector<T> {
+        values: [T] = [];
+        for col = 0; col < this.cols; col = col + 1 {
+            values.push(this.column(col).sum());
+        }
+
+        return Vector.new(values);
+    }
+
+    export mean_rows(): Vector<real64> {
+        if this.cols == 0 {
+            runtime.panic("matrix mean axis has empty dimension");
+        }
+
+        values: [real64] = [];
+        count: real64 = this.cols to real64;
+        for row = 0; row < this.rows; row = row + 1 {
+            total: real64 = this.row(row).sum() to real64;
+            values.push(total / count);
+        }
+
+        return Vector.new(values);
+    }
+
+    export mean_columns(): Vector<real64> {
+        if this.rows == 0 {
+            runtime.panic("matrix mean axis has empty dimension");
+        }
+
+        values: [real64] = [];
+        count: real64 = this.rows to real64;
+        for col = 0; col < this.cols; col = col + 1 {
+            total: real64 = this.column(col).sum() to real64;
+            values.push(total / count);
         }
 
         return Vector.new(values);
@@ -619,20 +791,63 @@ export record Matrix<T is numeric> {
         return total;
     }
 
+    export mean(): real64 {
+        this.require_non_empty();
+        total: real64 = this.sum() to real64;
+        count: real64 = this.data.len() to real64;
+        return total / count;
+    }
+
+    export norm_squared(): T {
+        total: T = 0;
+        for index = 0; index < this.data.len(); index = index + 1 {
+            total = total + this.data[index] * this.data[index];
+        }
+
+        return total;
+    }
+
+    export norm(): real64 {
+        squared: real64 = this.norm_squared() to real64;
+        return math.sqrt(squared);
+    }
+
     export min(): T {
+        this.require_non_empty();
         return this.flatten().min();
     }
 
     export max(): T {
+        this.require_non_empty();
         return this.flatten().max();
     }
 
     export argmin(): int {
+        this.require_non_empty();
         return this.flatten().argmin();
     }
 
     export argmax(): int {
+        this.require_non_empty();
         return this.flatten().argmax();
+    }
+
+    export det2(): T {
+        if this.rows != 2 || this.cols != 2 {
+            runtime.panic("matrix det2 requires 2x2 shape");
+        }
+
+        return this.get(0, 0) * this.get(1, 1) - this.get(0, 1) * this.get(1, 0);
+    }
+
+    export det3(): T {
+        if this.rows != 3 || this.cols != 3 {
+            runtime.panic("matrix det3 requires 3x3 shape");
+        }
+
+        return this.get(0, 0) * (this.get(1, 1) * this.get(2, 2) - this.get(1, 2) * this.get(2, 1)) -
+            this.get(0, 1) * (this.get(1, 0) * this.get(2, 2) - this.get(1, 2) * this.get(2, 0)) +
+            this.get(0, 2) * (this.get(1, 0) * this.get(2, 1) - this.get(1, 1) * this.get(2, 0));
     }
 }
 
@@ -642,6 +857,26 @@ export vector<T is numeric>(data: [T]): Vector<T> {
 
 export from_flat<T is numeric>(rows: int, cols: int, data: [T]): Matrix<T> {
     return Matrix.new(rows, cols, data);
+}
+
+export from_rows<T is numeric>(rows: [[T]]): Matrix<T> {
+    data: [T] = [];
+    if rows.len() == 0 {
+        return Matrix.new(0, 0, data);
+    }
+
+    cols = rows[0].len();
+    for row = 0; row < rows.len(); row = row + 1 {
+        if rows[row].len() != cols {
+            runtime.panic("matrix rows must have consistent length");
+        }
+
+        for col = 0; col < cols; col = col + 1 {
+            data.push(rows[row][col]);
+        }
+    }
+
+    return Matrix.new(rows.len(), cols, data);
 }
 
 export zeros<T is numeric>(size: int): Vector<T> {
@@ -759,4 +994,8 @@ export diagonal<T is numeric>(values: Vector<T>): Matrix<T> {
     }
 
     return Matrix.new(values.len(), values.len(), data);
+}
+
+export outer<T is numeric>(left: Vector<T>, right: Vector<T>): Matrix<T> {
+    return left.outer(right);
 }

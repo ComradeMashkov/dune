@@ -86,7 +86,7 @@ print(values.first());
 Modules are loaded from `.dn` files. The standard library currently includes
 `stdlib/math.dn`, `stdlib/array.dn`, `stdlib/text.dn`, `stdlib/maybe.dn`,
 `stdlib/outcome.dn`, `stdlib/assert.dn`, `stdlib/collections.dn`,
-`stdlib/autograd.dn`, and `stdlib/matrix.dn`. Low-level
+`stdlib/runtime.dn`, `stdlib/autograd.dn`, and `stdlib/matrix.dn`. Low-level
 array and text operations such as `len`, `push`, indexing, and slicing remain
 runtime primitives; higher-level helpers are ordinary Dune functions in the
 standard library.
@@ -193,6 +193,11 @@ builders whose element type does not appear in the argument list, such as
 `zeros`, `ones`, `identity`, and `eye`, need an assignment or parameter type
 annotation to select the element type.
 
+Shape-sensitive operations fail at runtime with explicit diagnostics such as
+`vector shape mismatch`, `matrix shape mismatch`,
+`matrix multiplication shape mismatch`, `matrix-vector shape mismatch`,
+`matrix data length mismatch`, or `matrix reshape size mismatch`.
+
 ```dn
 import matrix;
 
@@ -213,12 +218,14 @@ Core helpers:
 
 - `vector(data)`
 - `from_flat(rows, cols, data)`
+- `from_rows(rows)`
 - `zeros(size)`, `zeros(rows, cols)`
 - `ones(size)`, `ones(rows, cols)`
 - `full(size, value)`, `full(rows, cols, value)`
 - `arange(end)`, `arange(start, end)`, `arange(start, end, step)`
 - `identity(size)`, `eye(size)`
 - `diagonal(vector)`
+- `outer(left, right)`
 
 Vector methods:
 
@@ -228,8 +235,10 @@ Vector methods:
 - `add(other)`, `add(value)`, `sub(other)`, `sub(value)`, `rsub(value)`
 - `mul(other)`, `mul(value)`, `div(other)`, `div(value)`, `rdiv(value)`
 - `scale(factor)`, `neg()`, `abs()`, `clip(lower, upper)`
-- `dot(other)`, `sum()`, `product()`, `min()`, `max()`, `argmin()`, `argmax()`
+- `dot(other)`, `norm_squared()`, `norm()`, `distance_squared(other)`, `distance(other)`
+- `sum()`, `product()`, `mean()`, `min()`, `max()`, `argmin()`, `argmax()`
 - `to_row_matrix()`, `to_column_matrix()`
+- `matmul(matrix)`, `outer(other)`
 
 Matrix methods:
 
@@ -240,9 +249,16 @@ Matrix methods:
 - `diagonal()`, `trace()`
 - `add(other)`, `add(value)`, `sub(other)`, `sub(value)`, `rsub(value)`
 - `mul(other)`, `mul(value)`, `div(other)`, `div(value)`, `rdiv(value)`
+- `hadamard(other)`
 - `scale(factor)`, `neg()`, `abs()`, `clip(lower, upper)`
 - `transpose()`, `matmul(other)`, `mul_vector(vector)`
-- `sum()`, `product()`, `min()`, `max()`, `argmin()`, `argmax()`
+- `sum_rows()`, `sum_columns()`, `mean_rows()`, `mean_columns()`
+- `sum()`, `product()`, `mean()`, `norm_squared()`, `norm()`
+- `min()`, `max()`, `argmin()`, `argmax()`
+- `det2()`, `det3()`
+
+The `runtime` module exposes `panic(message)`, which aborts execution with a
+message. It is mainly intended for standard library checks and tests.
 
 The `autograd` module provides scalar reverse-mode automatic differentiation.
 It is implemented in Dune itself with records, arrays, methods, and mutation;

@@ -958,6 +958,10 @@ void VirtualMachine::call_function(std::size_t function_index) {
 
 Value VirtualMachine::call_extern_function(const Bytecode::Function& function, std::vector<Value> arguments) {
     const std::string& symbol = function.extern_symbol.empty() ? function.name : function.extern_symbol;
+    if (symbol == "dune_panic" && arguments.size() == 1 && arguments[0].kind == ValueKind::text) {
+        throw std::runtime_error(arguments[0].text_value);
+    }
+
     if (arguments.size() == 1) {
         const double value = numeric_argument(arguments[0]);
         if (symbol == "sqrt" || symbol == "sqrtf") {

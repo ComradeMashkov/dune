@@ -276,8 +276,23 @@ int main() {
                                   "print(m.trace()); print(m.flatten().get(4)); "
                                   "z: matrix.Matrix<int> = matrix.zeros(2, 2); print(z.sum()); "
                                   "eye: matrix.Matrix<int> = matrix.eye(2); print(eye.trace()); "
-                                  "r = matrix.vector([1.5, 2.5]); print(r.sum());"),
-                       "5\n32\n9\n10\n6\n58\n154\n6\n5\n0\n2\n4\n", "expected generic matrix stdlib output") &&
+                                  "r = matrix.vector([1.5, 2.5]); print(r.sum()); "
+                                  "print(v.norm_squared()); print(v.outer(w).get(2, 1)); "
+                                  "print(v.matmul(n).get(1)); rows = matrix.from_rows([[1, 2], [3, 4]]); "
+                                  "print(rows.det2()); print(rows.mean()); print(rows.sum_rows().get(1)); "
+                                  "print(rows.mean_columns().get(1));"),
+                       "5\n32\n9\n10\n6\n58\n154\n6\n5\n0\n2\n4\n14\n15\n64\n-2\n2.5\n7\n3\n",
+                       "expected generic matrix stdlib output") &&
+             passed;
+    passed = expect_error_contains("import matrix; left = matrix.vector([1, 2]); "
+                                   "right = matrix.vector([1, 2, 3]); print(left.dot(right));",
+                                   "vector shape mismatch", "expected vector shape diagnostic") &&
+             passed;
+    passed = expect_error_contains("import matrix; print(matrix.from_flat(2, 2, [1, 2, 3]).sum());",
+                                   "matrix data length mismatch", "expected matrix constructor shape diagnostic") &&
+             passed;
+    passed = expect_error_contains("import runtime; runtime.panic(\"boom\");", "boom",
+                                   "expected runtime panic diagnostic") &&
              passed;
     passed = expect_eq(run_source("import array; "
                                   "values = [1, 2, 3]; print(values.sum()); print(values.product()); "

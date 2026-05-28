@@ -85,3 +85,21 @@ print(filled.equals(matrix.full(2, 2, 7)));
 
 r = matrix.vector([1.5, 2.5]);
 print(r.sum());
+
+print(v.norm_squared());
+print(v.outer(w).get(2, 1));
+print(v.matmul(n).get(1));
+print(matrix.outer(v, w).get(1, 2));
+
+from_rows = matrix.from_rows([[1, 2], [3, 4]]);
+print(from_rows.det2());
+print(from_rows.mean());
+print(from_rows.sum_rows().get(1));
+print(from_rows.sum_columns().get(0));
+print(from_rows.mean_rows().get(0));
+print(from_rows.mean_columns().get(1));
+print(from_rows.hadamard(from_rows).get(1, 1));
+print(from_rows.norm_squared());
+
+three = matrix.from_rows([[1, 2, 3], [0, 1, 4], [5, 6, 0]]);
+print(three.det3());

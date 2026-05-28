@@ -138,6 +138,7 @@ void LlvmIrGenerator::generate(const Program& program, std::ostream& output) {
     output << "declare void @exit(i32)\n\n";
     emit_extern_declarations(output);
     emit_memory_runtime(output);
+    emit_panic_runtime(output);
     output << body.str();
 }
 
@@ -271,6 +272,9 @@ void LlvmIrGenerator::emit_extern_declarations(std::ostream& output) {
         if (!signature.is_extern) {
             continue;
         }
+        if (signature.extern_symbol == "dune_panic") {
+            continue;
+        }
 
         std::ostringstream declaration;
         declaration << "declare " << llvm_type(signature.return_type) << ' ' << extern_function_name(signature) << '(';
@@ -293,6 +297,16 @@ void LlvmIrGenerator::emit_extern_declarations(std::ostream& output) {
     if (!declarations.empty()) {
         output << '\n';
     }
+}
+
+void LlvmIrGenerator::emit_panic_runtime(std::ostream& output) {
+    output << "define i8 @dune_panic(ptr %message) {\n";
+    output << "entry:\n";
+    output << "  call i32 (ptr, ...) @printf(ptr @.dune_fmt_text, ptr %message)\n";
+    output << "  call void @dune_free_all()\n";
+    output << "  call void @exit(i32 1)\n";
+    output << "  unreachable\n";
+    output << "}\n\n";
 }
 
 void LlvmIrGenerator::emit_memory_runtime(std::ostream& output) {

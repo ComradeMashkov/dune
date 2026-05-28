@@ -254,8 +254,19 @@ int main() {
                           "shape: [int] = product.shape(); flat: matrix.Vector<int> = product.flatten(); "
                           "clipped: matrix.Vector<int> = vi.rsub(10).clip(0, 9); "
                           "diag: matrix.Matrix<int> = matrix.diagonal(matrix.vector([1, 2, 3])); "
-                          "sequence: matrix.Vector<int> = matrix.arange(1, 5); ok: bool = left.can_matmul(right);",
+                          "sequence: matrix.Vector<int> = matrix.arange(1, 5); ok: bool = left.can_matmul(right); "
+                          "rows: matrix.Matrix<int> = matrix.from_rows([[1, 2], [3, 4]]); "
+                          "row_sums: matrix.Vector<int> = rows.sum_rows(); "
+                          "column_means: matrix.Vector<real64> = rows.mean_columns(); "
+                          "mean: real64 = rows.mean(); det: int = rows.det2(); "
+                          "norm: real64 = vi.norm(); distance: real64 = vi.distance(wi); "
+                          "outer: matrix.Matrix<int> = vi.outer(wi); "
+                          "left_product: matrix.Vector<int> = vi.matmul(right); "
+                          "top_outer: matrix.Matrix<int> = matrix.outer(vi, wi);",
                           "expected generic matrix stdlib module to validate") &&
+             passed;
+    passed = expect_valid("import runtime; fail(): unit { runtime.panic(\"boom\"); }",
+                          "expected runtime panic helper to validate") &&
              passed;
     passed = expect_valid("import array; "
                           "values: [int] = [1, 2, 3]; total: int = values.sum(); "
