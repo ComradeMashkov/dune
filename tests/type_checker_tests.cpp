@@ -185,6 +185,33 @@ int main() {
                           "is 7 { label.value_or(\"bad\") } is _ { \"other\" } };",
                           "expected generic records and when expressions to validate") &&
              passed;
+    passed = expect_valid("record Point { x: real64, y: real64, "
+                          "new(x: real64, y: real64): Point { return Point { x: x, y: y }; } } "
+                          "p: Point = Point.new(1.5, 2.5); x: real64 = p.x;",
+                          "expected record constructors to validate") &&
+             passed;
+    passed = expect_valid("record Box<T> { value: T, "
+                          "new(value: T): Box<T> { return Box { value: value }; } "
+                          "get(): T { return this.value; } } "
+                          "boxed: Box<int> = Box.new(42); value: int = boxed.get();",
+                          "expected generic record constructors to validate") &&
+             passed;
+    passed = expect_valid("contract Shape { area(): real64; } "
+                          "record Circle with Shape { radius: real64, "
+                          "new(radius: real64): Circle { return Circle { radius: radius }; } "
+                          "area(): real64 { return 3.0 * this.radius * this.radius; } } "
+                          "area_of<T is Shape>(shape: T): real64 { return shape.area(); } "
+                          "circle: Circle = Circle.new(2.0); area: real64 = area_of(circle);",
+                          "expected local contracts and contract bounds to validate") &&
+             passed;
+    passed = expect_fixture_valid("import object_model_api; "
+                                  "counter: object_model_api.Counter = object_model_api.Counter.new(); "
+                                  "counter.inc(); value: int = counter.current(); "
+                                  "area_of<T is object_model_api.Shape>(shape: T): real64 { return shape.area(); } "
+                                  "circle: object_model_api.Circle = object_model_api.Circle.new(2.0); "
+                                  "area: real64 = area_of(circle);",
+                                  "expected exported object model module API to validate") &&
+             passed;
     passed = expect_valid("choice Maybe<T> { Present(T), Absent, } "
                           "value: Maybe<int> = Present(42); missing: Maybe<int> = Absent; "
                           "chosen: int = when value { is Present(x) { x } is Absent { 0 } }; "
@@ -407,6 +434,40 @@ int main() {
     passed = expect_error_contains("record Box<T> { value: T } value = Box { value: 1 };",
                                    "generic record literal 'Box' needs an expected type",
                                    "expected generic record inference error") &&
+             passed;
+    passed = expect_error_contains("record Point { x: int, new(): int { return 1; } }",
+                                   "constructor for record 'Point' must return 'Point'",
+                                   "expected constructor return type error") &&
+             passed;
+    passed = expect_fixture_error_contains("import object_model_api; "
+                                           "counter: object_model_api.Counter = object_model_api.Counter.new(); "
+                                           "print(counter.value);",
+                                           "field 'value' of record 'Counter' is private",
+                                           "expected private record field error") &&
+             passed;
+    passed = expect_fixture_error_contains("import object_model_api; "
+                                           "counter: object_model_api.Counter = object_model_api.Counter.new(); "
+                                           "counter.reset();",
+                                           "method 'reset' of record 'Counter' is private",
+                                           "expected private record method error") &&
+             passed;
+    passed = expect_error_contains("contract Shape { area(): real64; } record Circle with Shape { radius: real64 }",
+                                   "record 'Circle' declares contract 'Shape' but is missing method 'area(): real64'",
+                                   "expected missing contract method error") &&
+             passed;
+    passed = expect_error_contains("contract Shape { area(): real64; } "
+                                   "record Circle with Shape { area(): int { return 1; } }",
+                                   "method 'area' for contract 'Shape' expected return type 'real64' but got 'int'",
+                                   "expected contract return type error") &&
+             passed;
+    passed = expect_error_contains("record Canvas { } contract Drawable { draw(canvas: Canvas): unit; } "
+                                   "record Pen with Drawable { draw(canvas: text): unit { } }",
+                                   "method 'draw' for contract 'Drawable' expected parameter 1 type 'Canvas' but got "
+                                   "'text'",
+                                   "expected contract parameter type error") &&
+             passed;
+    passed = expect_error_contains("record Circle with Shape { }", "unknown contract 'Shape'",
+                                   "expected unknown contract error") &&
              passed;
     passed = expect_error_contains("import math; print(math.UNKNOWN);", "module 'math' does not export 'UNKNOWN'",
                                    "expected missing module value") &&

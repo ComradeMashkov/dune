@@ -51,6 +51,10 @@
         },
         {
           "type": "SYMBOL",
+          "name": "contract_declaration"
+        },
+        {
+          "type": "SYMBOL",
           "name": "choice_declaration"
         },
         {
@@ -128,6 +132,10 @@
             {
               "type": "SYMBOL",
               "name": "record_declaration"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "contract_declaration"
             },
             {
               "type": "SYMBOL",
@@ -363,6 +371,48 @@
           ]
         },
         {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "STRING",
+                  "value": "with"
+                },
+                {
+                  "type": "SEQ",
+                  "members": [
+                    {
+                      "type": "SYMBOL",
+                      "name": "qualified_name"
+                    },
+                    {
+                      "type": "REPEAT",
+                      "content": {
+                        "type": "SEQ",
+                        "members": [
+                          {
+                            "type": "STRING",
+                            "value": ","
+                          },
+                          {
+                            "type": "SYMBOL",
+                            "name": "qualified_name"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
+        },
+        {
           "type": "STRING",
           "value": "{"
         },
@@ -385,6 +435,14 @@
                         {
                           "type": "SYMBOL",
                           "name": "record_method"
+                        },
+                        {
+                          "type": "SYMBOL",
+                          "name": "exported_record_field"
+                        },
+                        {
+                          "type": "SYMBOL",
+                          "name": "exported_record_method"
                         }
                       ]
                     },
@@ -407,6 +465,14 @@
                               {
                                 "type": "SYMBOL",
                                 "name": "record_method"
+                              },
+                              {
+                                "type": "SYMBOL",
+                                "name": "exported_record_field"
+                              },
+                              {
+                                "type": "SYMBOL",
+                                "name": "exported_record_method"
                               }
                             ]
                           }
@@ -471,6 +537,114 @@
     "record_method": {
       "type": "SYMBOL",
       "name": "function_declaration"
+    },
+    "exported_record_field": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "export"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "record_field"
+        }
+      ]
+    },
+    "exported_record_method": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "export"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "record_method"
+        }
+      ]
+    },
+    "contract_declaration": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "contract"
+        },
+        {
+          "type": "FIELD",
+          "name": "name",
+          "content": {
+            "type": "SYMBOL",
+            "name": "identifier"
+          }
+        },
+        {
+          "type": "STRING",
+          "value": "{"
+        },
+        {
+          "type": "REPEAT",
+          "content": {
+            "type": "SYMBOL",
+            "name": "contract_method"
+          }
+        },
+        {
+          "type": "STRING",
+          "value": "}"
+        }
+      ]
+    },
+    "contract_method": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "FIELD",
+          "name": "name",
+          "content": {
+            "type": "SYMBOL",
+            "name": "identifier"
+          }
+        },
+        {
+          "type": "FIELD",
+          "name": "parameters",
+          "content": {
+            "type": "SYMBOL",
+            "name": "parameter_list"
+          }
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "STRING",
+                  "value": ":"
+                },
+                {
+                  "type": "FIELD",
+                  "name": "return_type",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "_type"
+                  }
+                }
+              ]
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
+        },
+        {
+          "type": "STRING",
+          "value": ";"
+        }
+      ]
     },
     "choice_declaration": {
       "type": "SEQ",
@@ -762,7 +936,7 @@
                   "name": "bound",
                   "content": {
                     "type": "SYMBOL",
-                    "name": "identifier"
+                    "name": "qualified_name"
                   }
                 }
               ]
@@ -771,6 +945,31 @@
               "type": "BLANK"
             }
           ]
+        }
+      ]
+    },
+    "qualified_name": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "identifier"
+        },
+        {
+          "type": "REPEAT",
+          "content": {
+            "type": "SEQ",
+            "members": [
+              {
+                "type": "STRING",
+                "value": "."
+              },
+              {
+                "type": "SYMBOL",
+                "name": "identifier"
+              }
+            ]
+          }
         }
       ]
     },

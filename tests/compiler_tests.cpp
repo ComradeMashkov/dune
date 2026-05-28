@@ -280,6 +280,37 @@ bool compiles_record_literals_fields_and_methods() {
     return passed;
 }
 
+bool compiles_record_constructors() {
+    const dune::Bytecode bytecode = compile_source("record Point { x: int, y: int, "
+                                                   "new(x: int, y: int): Point { return Point { x: x, y: y }; } } "
+                                                   "point: Point = Point.new(10, 20); print(point.x);");
+
+    bool saw_constructor = false;
+    bool saw_constructor_call = false;
+    bool saw_make_record = false;
+    for (std::size_t index = 0; index < bytecode.functions.size(); ++index) {
+        const dune::Bytecode::Function& function = bytecode.functions[index];
+        if (function.name == "Point.new" && function.arity == 2) {
+            saw_constructor = true;
+            for (const dune::Instruction& instruction : function.instructions) {
+                saw_make_record = saw_make_record || instruction.op == dune::OpCode::make_record;
+            }
+        }
+
+        for (const dune::Instruction& instruction : bytecode.instructions) {
+            if (instruction.op == dune::OpCode::call && instruction.operand == index) {
+                saw_constructor_call = saw_constructor_call || function.name == "Point.new";
+            }
+        }
+    }
+
+    bool passed = true;
+    passed = expect(saw_constructor, "expected constructor function") && passed;
+    passed = expect(saw_constructor_call, "expected constructor call") && passed;
+    passed = expect(saw_make_record, "expected constructor record literal") && passed;
+    return passed;
+}
+
 bool compiles_assignment_targets() {
     const dune::Bytecode bytecode = compile_source("record Point { x: int, y: int } "
                                                    "values: [int] = [1, 2]; values[1] = 9; "
@@ -362,6 +393,7 @@ int main() {
     passed = compiles_generic_functions() && passed;
     passed = compiles_stdlib_receiver_methods() && passed;
     passed = compiles_record_literals_fields_and_methods() && passed;
+    passed = compiles_record_constructors() && passed;
     passed = compiles_assignment_targets() && passed;
     passed = compiles_when_expression() && passed;
     passed = compiles_choice_variants_and_when() && passed;

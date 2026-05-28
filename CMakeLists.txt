@@ -344,6 +344,16 @@ add_test(
 )
 
 add_test(
+    NAME cli_object_model
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/object_model.dn
+        -D EXPECTED_OUTPUT="2\n12\n12\n42"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
     NAME cli_build_native_hello
     COMMAND
         ${CMAKE_COMMAND}
@@ -483,6 +493,17 @@ add_test(
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/mutability_aliasing.dn
         -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/mutability_aliasing_native
         -D EXPECTED_OUTPUT="2\n6\n4\n9\n1\n2"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
+)
+
+add_test(
+    NAME cli_build_native_object_model
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/object_model.dn
+        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/object_model_native
+        -D EXPECTED_OUTPUT="2\n12\n12\n42"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
 )
 

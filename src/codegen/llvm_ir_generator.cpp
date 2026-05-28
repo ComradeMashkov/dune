@@ -558,6 +558,7 @@ bool LlvmIrGenerator::emit_statement(const Statement& statement, std::ostream& o
     case StatementKind::method_block:
     case StatementKind::struct_statement:
     case StatementKind::enum_statement:
+    case StatementKind::contract_statement:
         return false;
     case StatementKind::return_statement: {
         if (statement.expression == nullptr) {

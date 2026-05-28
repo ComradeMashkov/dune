@@ -53,6 +53,7 @@ struct Parameter {
     std::string name;
     TypeAnnotation type;
     SourceLocation location;
+    bool exported = false;
 };
 
 struct GenericParameter {
@@ -107,6 +108,7 @@ enum class StatementKind {
     method_block,
     struct_statement,
     enum_statement,
+    contract_statement,
     return_statement,
     expression_statement,
     import_statement,
@@ -121,12 +123,16 @@ struct Statement {
     TypeAnnotation type;
     std::vector<Parameter> parameters;
     std::vector<GenericParameter> generic_parameters;
+    std::vector<Type> contracts;
     SourceLocation location;
     std::unique_ptr<Statement> initializer;
     std::unique_ptr<Statement> increment;
     bool exported = false;
     bool is_extern = false;
+    bool is_record_member = false;
+    bool is_constructor = false;
     std::string extern_symbol;
+    std::string owner_record;
     std::unique_ptr<Expression> target;
 };
 

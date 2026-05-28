@@ -439,6 +439,34 @@ int main() {
                            }) &&
              passed;
 
+    passed =
+        expect_tokens("export contract Shape { area(): real64; } record Circle with Shape { export radius: real64 }",
+                      {
+                          {export_keyword, "export"},
+                          {contract_keyword, "contract"},
+                          {identifier, "Shape"},
+                          {left_brace, "{"},
+                          {identifier, "area"},
+                          {left_paren, "("},
+                          {right_paren, ")"},
+                          {colon, ":"},
+                          {real64_keyword, "real64"},
+                          {semicolon, ";"},
+                          {right_brace, "}"},
+                          {record_keyword, "record"},
+                          {identifier, "Circle"},
+                          {with_keyword, "with"},
+                          {identifier, "Shape"},
+                          {left_brace, "{"},
+                          {export_keyword, "export"},
+                          {identifier, "radius"},
+                          {colon, ":"},
+                          {real64_keyword, "real64"},
+                          {right_brace, "}"},
+                          {eof, ""},
+                      }) &&
+        passed;
+
     passed = expect_tokens("out = when value { is 1 { 10 } is _ { 20 } };",
                            {
                                {identifier, "out"},

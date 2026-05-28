@@ -17,13 +17,38 @@ public:
         std::string name;
         Type type;
         SourceLocation location;
+        bool exported = false;
+    };
+
+    struct StructMethod {
+        std::string name;
+        std::vector<Type> parameters;
+        Type return_type;
+        SourceLocation location;
+        bool exported = false;
+        bool is_constructor = false;
     };
 
     struct StructDefinition {
         std::string name;
         std::vector<GenericParameter> generic_parameters;
         std::vector<StructField> fields;
+        std::vector<Type> contracts;
+        std::vector<StructMethod> methods;
         std::unordered_map<std::string, std::size_t> field_indices;
+        SourceLocation location;
+    };
+
+    struct ContractMethod {
+        std::string name;
+        std::vector<Type> parameters;
+        Type return_type;
+        SourceLocation location;
+    };
+
+    struct ContractDefinition {
+        std::string name;
+        std::vector<ContractMethod> methods;
         SourceLocation location;
     };
 
@@ -79,6 +104,11 @@ private:
     void define_struct(const Statement& statement);
     void declare_enum(const Statement& statement);
     void define_enum(const Statement& statement);
+    void declare_contract(const Statement& statement);
+    void define_contract(const Statement& statement);
+    void validate_constructor(const Statement& record, const Statement& method,
+                              const std::unordered_set<std::string>& generic_names) const;
+    void validate_contract_implementations(const Statement& statement) const;
     void collect_function(const Statement& statement);
     void collect_generic_function(const Statement& statement);
     void check_function(const Statement& statement);
@@ -91,6 +121,8 @@ private:
     Type check_when_expression(const Expression& expression, const TypeAnnotation& expected);
     Type check_call_expression(const Expression& expression, const TypeAnnotation& expected);
     Type check_method_call_expression(const Expression& expression, const TypeAnnotation& expected);
+    Type check_constructor_call_expression(const Expression& expression, const std::string& record_name,
+                                           const TypeAnnotation& expected);
     Type check_member_expression(const Expression& expression, const TypeAnnotation& expected);
     Type check_unary_expression(const Expression& expression);
     Type check_cast_expression(const Expression& expression);
@@ -127,6 +159,7 @@ private:
     bool can_coerce_integer_literal(const Expression& expression, const Type& target) const;
     bool is_numeric_literal(const Expression& expression) const;
     bool type_satisfies_bound(const Type& type, const std::string& bound, SourceLocation location) const;
+    bool type_satisfies_contract_bound(const Type& type, const std::string& bound) const;
     bool collect_generic_constraints(const Type& pattern, const Type& actual,
                                      std::unordered_map<std::string, std::vector<std::pair<Type, bool>>>& constraints,
                                      bool preferred) const;
@@ -143,10 +176,14 @@ private:
     void expect_type(const Type& expected, const Type& actual, SourceLocation location) const;
     void expect_imported_module(const std::string& module, SourceLocation location) const;
     void expect_exported_member(const std::string& module, const std::string& member, SourceLocation location) const;
+    void expect_public_field(const Type& receiver, const StructField& field, SourceLocation location) const;
+    void expect_public_method(const Type& receiver, const std::string& method, SourceLocation location) const;
     void collect_known_module(const std::string& name);
     void collect_module_export(const Statement& statement);
     bool is_qualified_module_name(const std::string& name) const;
     bool is_known_module(const std::string& module) const;
+    bool is_external_record_access(const std::string& record_name) const;
+    std::string current_access_module() const;
     std::string diagnostic(SourceLocation location, const std::string& message) const;
     void reset_scopes();
     void push_scope();
@@ -170,6 +207,7 @@ private:
 
     std::unordered_map<std::string, StructDefinition> structs_;
     std::unordered_map<std::string, EnumDefinition> enums_;
+    std::unordered_map<std::string, ContractDefinition> contracts_;
     std::unordered_map<std::string, FunctionSignature> functions_;
     std::unordered_map<std::string, std::vector<std::string>> overloads_;
     std::unordered_map<std::string, std::vector<const Statement*>> generic_overloads_;
@@ -185,6 +223,7 @@ private:
     std::unordered_map<const Expression*, VariantResolution> resolved_variants_;
     std::unordered_set<std::string> imports_;
     const FunctionSignature* current_function_ = nullptr;
+    std::string current_module_;
     std::size_t loop_depth_ = 0;
 };
 

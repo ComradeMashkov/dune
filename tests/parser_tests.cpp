@@ -558,6 +558,52 @@ bool parses_generic_records_and_when() {
     return passed;
 }
 
+bool parses_record_constructors_visibility_and_contracts() {
+    const dune::Program program =
+        parse_source("export contract Shape { area(): real64; } "
+                     "export record Circle with Shape { radius: real64, "
+                     "export new(radius: real64): Circle { return Circle { radius: radius }; } "
+                     "export area(): real64 { return this.radius; } } "
+                     "circle: Circle = Circle.new(2.0);");
+
+    if (!expect(program.statements.size() == 3, "expected contract, record, and constructor binding")) {
+        return false;
+    }
+
+    bool passed = true;
+    const dune::Statement& contract = program.statements[0];
+    passed = expect(contract.kind == dune::StatementKind::contract_statement, "expected contract statement") && passed;
+    passed = expect(contract.exported, "expected exported contract") && passed;
+    passed = expect(contract.name == "Shape", "expected contract name") && passed;
+    passed = expect(contract.body.size() == 1, "expected one contract method") && passed;
+    passed = expect(contract.body[0].name == "area", "expected contract method name") && passed;
+    passed = expect(contract.body[0].type.type.kind == dune::ValueType::real_type, "expected contract return type") &&
+             passed;
+
+    const dune::Statement& record = program.statements[1];
+    passed = expect(record.kind == dune::StatementKind::struct_statement, "expected record statement") && passed;
+    passed = expect(record.exported, "expected exported record") && passed;
+    passed = expect(record.contracts.size() == 1, "expected one contract implementation") && passed;
+    passed = expect(record.contracts[0].name == "Shape", "expected Shape contract") && passed;
+    passed = expect(record.parameters.size() == 1, "expected one field") && passed;
+    passed = expect(!record.parameters[0].exported, "expected private field by default") && passed;
+    passed = expect(record.body.size() == 2, "expected constructor and method") && passed;
+    passed = expect(record.body[0].name == "new", "expected constructor name") && passed;
+    passed = expect(record.body[0].exported, "expected exported constructor") && passed;
+    passed = expect(record.body[1].name == "area", "expected method name") && passed;
+    passed = expect(record.body[1].exported, "expected exported method") && passed;
+
+    const dune::Expression& constructor_call = *program.statements[2].expression;
+    passed = expect(constructor_call.kind == dune::ExpressionKind::method_call, "expected constructor method call") &&
+             passed;
+    passed = expect(constructor_call.lexeme == "new", "expected new call") && passed;
+    passed =
+        expect(constructor_call.left->kind == dune::ExpressionKind::identifier, "expected record receiver") && passed;
+    passed = expect(constructor_call.left->lexeme == "Circle", "expected Circle constructor receiver") && passed;
+
+    return passed;
+}
+
 bool parses_choices_and_variant_when() {
     const dune::Program program = parse_source("export choice Maybe<T> { Present(T), Absent, } "
                                                "value: Maybe<int> = Present(42); "
@@ -627,6 +673,7 @@ int main() {
     passed = parses_receiver_methods() && passed;
     passed = parses_records_and_record_literals() && passed;
     passed = parses_generic_records_and_when() && passed;
+    passed = parses_record_constructors_visibility_and_contracts() && passed;
     passed = parses_choices_and_variant_when() && passed;
 
     return passed ? 0 : 1;

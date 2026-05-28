@@ -12,6 +12,8 @@ enum class TokenType {
     foreign_keyword,
     method_keyword,
     record_keyword,
+    contract_keyword,
+    with_keyword,
     choice_keyword,
     import_keyword,
     when_keyword,
