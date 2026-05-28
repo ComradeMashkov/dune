@@ -103,6 +103,23 @@ int main() {
                           "same: bool = \"done\" == \"done\"; log(\"done\"); noop();",
                           "expected standard scalar types to validate") &&
              passed;
+    passed = expect_valid("name: text = \"Dune\"; version: int = 1; print(\"{} v{}\", name, version); "
+                          "print(\"bool={}, glyph={}, real={}\", true, 'x', 2.5);",
+                          "expected formatted print to validate") &&
+             passed;
+    passed = expect_error_contains("print(\"{} {}\", 1);", "print format string expects 2 arguments but got 1",
+                                   "expected missing print format argument error") &&
+             passed;
+    passed = expect_error_contains("print(\"{}\", 1, 2);", "print format string expects 1 arguments but got 2",
+                                   "expected extra print format argument error") &&
+             passed;
+    passed =
+        expect_error_contains("format: text = \"{}\"; print(format, 1);",
+                              "print format string must be a string literal", "expected literal print format error") &&
+        passed;
+    passed = expect_error_contains("print(\"{name}\", 1);", "invalid print format placeholder",
+                                   "expected invalid print placeholder error") &&
+             passed;
     passed = expect_valid("import math; "
                           "second(values: [int]): int { return values[1]; } "
                           "values: [int] = [1, math.square(2)]; values.push(9); "

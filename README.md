@@ -68,6 +68,22 @@ print(count);
 print(precise);
 ```
 
+Formatted output keeps `print(expression)` working and also supports a string
+literal with positional `{}` placeholders:
+
+```dn
+name: text = "Dune";
+version: int = 1;
+
+print("{} v{}", name, version);
+print("ready={}, value={}", true, 42);
+```
+
+For now the format string must be a literal, placeholders are plain `{}` only,
+and the number of placeholders must match the number of following arguments.
+Printable values are the scalar types: integer and unsigned integer types,
+`real32`/`real64`, `bool`, `glyph`, and `text`.
+
 Arrays and modules:
 
 ```dn
