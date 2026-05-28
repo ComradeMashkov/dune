@@ -47,6 +47,11 @@ struct SourcePosition {
     std::size_t character = 0;
 };
 
+struct CheckedProgram {
+    Program program;
+    std::unordered_map<const Expression*, Type> expression_types;
+};
+
 std::string json_escape(const std::string& value) {
     std::string escaped;
     for (const unsigned char character : value) {
@@ -561,6 +566,21 @@ std::optional<Program> parse_program_best_effort(const std::string& source) {
     }
 }
 
+std::optional<CheckedProgram> check_program_best_effort(const std::string& source,
+                                                        const std::filesystem::path& source_directory) {
+    try {
+        Lexer lexer(source);
+        Parser parser(lexer.tokenize());
+        ModuleLoader loader(module_search_paths(source_directory));
+        TypeChecker checker;
+        Program program = loader.resolve(parser.parse(), source_directory);
+        checker.check(program);
+        return CheckedProgram{std::move(program), checker.expression_types()};
+    } catch (const std::exception&) {
+        return std::nullopt;
+    }
+}
+
 bool module_has_explicit_exports(const Program& program) {
     return std::ranges::any_of(program.statements, [](const Statement& statement) {
         return statement.exported &&
@@ -926,6 +946,93 @@ std::optional<std::string> statement_hover(const std::vector<Statement>& stateme
     return std::nullopt;
 }
 
+std::string typed_variable_hover(const Statement& statement,
+                                 const std::unordered_map<const Expression*, Type>& expression_types) {
+    if (statement.kind != StatementKind::binding && statement.kind != StatementKind::const_statement &&
+        statement.kind != StatementKind::assign) {
+        return {};
+    }
+    if (statement.expression == nullptr) {
+        return {};
+    }
+
+    const auto type = expression_types.find(statement.expression.get());
+    if (type == expression_types.end()) {
+        return {};
+    }
+
+    if (statement.kind == StatementKind::const_statement) {
+        return code_hover("const " + statement.name + ": " + type_name(type->second));
+    }
+
+    const std::string name = statement.target != nullptr && statement.target->kind == ExpressionKind::identifier
+                                 ? statement.target->lexeme
+                                 : statement.name;
+    return code_hover(name + ": " + type_name(type->second));
+}
+
+std::optional<std::string> typed_statement_hover(const std::vector<Statement>& statements, const std::string& name,
+                                                 const std::unordered_map<const Expression*, Type>& expression_types) {
+    for (auto statement = statements.rbegin(); statement != statements.rend(); ++statement) {
+        if (std::optional<std::string> hover = parameter_hover(statement->parameters, name)) {
+            return hover;
+        }
+
+        const bool is_named_assign = statement->kind == StatementKind::assign && statement->target != nullptr &&
+                                     statement->target->kind == ExpressionKind::identifier &&
+                                     statement->target->lexeme == name;
+        if (statement->name == name || is_named_assign) {
+            std::string hover = typed_variable_hover(*statement, expression_types);
+            if (!hover.empty()) {
+                return hover;
+            }
+
+            hover = declaration_hover(*statement);
+            if (!hover.empty()) {
+                return hover;
+            }
+        }
+
+        if (std::optional<std::string> hover = enum_variant_hover(*statement, name)) {
+            return hover;
+        }
+
+        if (std::optional<std::string> hover = typed_statement_hover(statement->body, name, expression_types)) {
+            return hover;
+        }
+
+        if (std::optional<std::string> hover = typed_statement_hover(statement->else_body, name, expression_types)) {
+            return hover;
+        }
+
+        if (statement->initializer != nullptr && statement->initializer->name == name) {
+            std::string hover = typed_variable_hover(*statement->initializer, expression_types);
+            if (!hover.empty()) {
+                return hover;
+            }
+
+            hover = declaration_hover(*statement->initializer);
+            if (!hover.empty()) {
+                return hover;
+            }
+        }
+
+        if (statement->increment != nullptr && statement->increment->name == name) {
+            std::string hover = typed_variable_hover(*statement->increment, expression_types);
+            if (!hover.empty()) {
+                return hover;
+            }
+
+            hover = declaration_hover(*statement->increment);
+            if (!hover.empty()) {
+                return hover;
+            }
+        }
+    }
+
+    return std::nullopt;
+}
+
 std::string token_type_after_colon(const std::vector<Token>& tokens, std::size_t colon_index) {
     if (colon_index + 1 >= tokens.size()) {
         return "unknown";
@@ -1190,9 +1297,10 @@ std::vector<Diagnostic> diagnose_source(const std::string& source, const std::st
     try {
         Lexer lexer(source);
         Parser parser(lexer.tokenize());
-        ModuleLoader loader;
+        const std::filesystem::path directory = source_directory_for(uri, source_directory);
+        ModuleLoader loader(module_search_paths(directory));
         TypeChecker checker;
-        checker.check(loader.resolve(parser.parse(), source_directory_for(uri, source_directory)));
+        checker.check(loader.resolve(parser.parse(), directory));
         return {};
     } catch (const std::exception& error) {
         return {diagnostic_from_error(error.what())};
@@ -1257,6 +1365,13 @@ std::optional<Hover> hover_source(const std::string& source, const std::string& 
     const std::vector<std::string> imports = imports_in_source(source);
     if (std::ranges::find(imports, token.lexeme) != imports.end()) {
         if (std::optional<std::string> contents = module_hover(token.lexeme, directory)) {
+            return Hover{*contents};
+        }
+    }
+
+    if (std::optional<CheckedProgram> checked = check_program_best_effort(source, directory)) {
+        if (std::optional<std::string> contents =
+                typed_statement_hover(checked->program.statements, token.lexeme, checked->expression_types)) {
             return Hover{*contents};
         }
     }
