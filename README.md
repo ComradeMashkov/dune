@@ -270,6 +270,23 @@ boxed<T>(value: T): Box<T> {
 answer: Box<int> = boxed(42);
 ```
 
+Blocks, loop initializers, and `when` payloads have lexical scopes. A typed
+binding such as `x: int = 2` creates a new binding in the current scope and can
+shadow a mutable outer binding. Plain `x = 2` updates the nearest visible `x`, or
+creates one in the current scope if none exists. Constants cannot be reassigned
+or accidentally shadowed.
+
+```dn
+x = 1;
+
+{
+  x: int = 2;
+  print(x);
+}
+
+print(x);
+```
+
 Choices model values that can be one of several variants. Variants can either be
 empty or carry one payload value, and generic choice payloads are substituted from
 the expected choice type.
@@ -338,6 +355,8 @@ Indexing and slicing:
 - arrays: `values[index]`, `values[start:end]`, `values[:end]`, `values[start:]`
 - text is zero-based: `message[0]` returns the first `glyph`
 - text slices return `text`
+- array slots and record fields can be assigned directly: `values[0] = 9`, `point.x = 7`, `points[0].x = 5`
+- nested assignment targets are supported for arrays of arrays and arrays of records
 - native output checks array/text indexes, slices, and empty `pop()` calls at runtime
 
 Comments:
@@ -434,6 +453,7 @@ The current release implements a small compiled language with:
 - AST
 - arithmetic
 - inferred bindings through first assignment with `=`
+- lexical block, loop, and `when` payload scopes
 - constants
 - single-line comments
 - unary operators
@@ -455,6 +475,7 @@ The current release implements a small compiled language with:
 - unit-returning functions
 - dynamic arrays
 - records with fields and methods
+- mutable array indexes and record fields
 - `when` expressions with literal and choice variant patterns
 - array methods
 - text methods
