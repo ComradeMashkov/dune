@@ -274,7 +274,7 @@ Blocks, loop initializers, and `when` payloads have lexical scopes. A typed
 binding such as `x: int = 2` creates a new binding in the current scope and can
 shadow a mutable outer binding. Plain `x = 2` updates the nearest visible `x`, or
 creates one in the current scope if none exists. Constants cannot be reassigned
-or accidentally shadowed.
+or accidentally shadowed. Assignments to scalar values copy the value.
 
 ```dn
 x = 1;
@@ -285,6 +285,26 @@ x = 1;
 }
 
 print(x);
+```
+
+Arrays and records are reference values. Assigning or passing one copies a handle
+to the same storage, so mutation through one mutable alias is visible through
+another alias. `const` is a binding-level promise: it prevents rebinding a name
+and prevents mutation through that constant name, such as `values[0] = 2`, but it
+does not make the underlying array or record deeply immutable through other
+aliases. Use `array.copy(values)` when you need a separate array.
+
+```dn
+import array;
+
+values: [int] = [1];
+alias = values;
+alias[0] = 2;
+print(values[0]);
+
+separate = array.copy(values);
+separate[0] = 9;
+print(values[0]);
 ```
 
 Choices model values that can be one of several variants. Variants can either be
@@ -358,6 +378,7 @@ Indexing and slicing:
 - array slots and record fields can be assigned directly: `values[0] = 9`, `point.x = 7`, `points[0].x = 5`
 - nested assignment targets are supported for arrays of arrays and arrays of records
 - native output checks array/text indexes, slices, and empty `pop()` calls at runtime
+- arrays and records alias on assignment; scalars copy on assignment
 
 Comments:
 

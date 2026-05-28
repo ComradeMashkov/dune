@@ -836,7 +836,7 @@ void TypeChecker::check_statements(const std::vector<Statement>& statements) {
 Type TypeChecker::check_assignment_target(const Expression& target, SourceLocation location) {
     const std::string* root = root_identifier(target);
     if (root != nullptr && has_visible_constant(*root)) {
-        throw std::runtime_error(diagnostic(location, "cannot assign through constant '" + *root + "'"));
+        throw std::runtime_error(diagnostic(location, "cannot mutate through constant binding '" + *root + "'"));
     }
 
     Type result = make_type(ValueType::unit_type);
@@ -858,12 +858,13 @@ Type TypeChecker::check_assignment_target(const Expression& target, SourceLocati
     case ExpressionKind::index: {
         const Type indexed = check_expression(*target.left);
         if (indexed.kind == ValueType::text_type) {
-            throw std::runtime_error(diagnostic(target.left->location, "cannot assign to text index"));
+            throw std::runtime_error(
+                diagnostic(target.left->location, "text values are immutable; cannot assign to text index"));
         }
 
         if (indexed.kind != ValueType::array_type || indexed.element == nullptr) {
-            throw std::runtime_error(
-                diagnostic(target.left->location, "expected array type but got '" + type_name(indexed) + "'"));
+            throw std::runtime_error(diagnostic(target.left->location, "expected array assignment target but got '" +
+                                                                           type_name(indexed) + "'"));
         }
 
         const Type index = check_expression(*target.right);
@@ -876,13 +877,7 @@ Type TypeChecker::check_assignment_target(const Expression& target, SourceLocati
         break;
     }
     case ExpressionKind::member: {
-        if (target.left != nullptr && target.left->kind == ExpressionKind::identifier &&
-            is_known_module(target.left->lexeme)) {
-            throw std::runtime_error(diagnostic(location, "cannot assign to module member '" + target.left->lexeme +
-                                                              "." + target.lexeme + "'"));
-        }
-
-        result = check_member_expression(target, {});
+        result = check_member_assignment_target(target, location);
         break;
     }
     case ExpressionKind::number:
@@ -904,6 +899,53 @@ Type TypeChecker::check_assignment_target(const Expression& target, SourceLocati
 
     expression_types_[&target] = result;
     return result;
+}
+
+Type TypeChecker::check_member_assignment_target(const Expression& target, SourceLocation location) {
+    if (target.left == nullptr) {
+        throw std::runtime_error(diagnostic(location, "invalid assignment target"));
+    }
+
+    if (target.left->kind == ExpressionKind::identifier) {
+        const std::string module_name = target.left->lexeme;
+        if (is_known_module(module_name)) {
+            expect_imported_module(module_name, target.location);
+            expect_exported_member(module_name, target.lexeme, target.location);
+            throw std::runtime_error(
+                diagnostic(location, "cannot assign to module member '" + module_name + "." + target.lexeme + "'"));
+        }
+    }
+
+    const Type receiver = check_expression(*target.left);
+    if (receiver.kind != ValueType::struct_type) {
+        throw std::runtime_error(diagnostic(target.left->location,
+                                            "expected record assignment target but got '" + type_name(receiver) + "'"));
+    }
+
+    const auto definition = structs_.find(receiver.name);
+    if (definition == structs_.end()) {
+        throw std::runtime_error(diagnostic(target.location, "unknown record '" + receiver.name + "'"));
+    }
+
+    const auto field = definition->second.field_indices.find(target.lexeme);
+    if (field == definition->second.field_indices.end()) {
+        throw std::runtime_error(
+            diagnostic(target.location, "record '" + receiver.name + "' has no field '" + target.lexeme + "'"));
+    }
+
+    if (definition->second.generic_parameters.size() != receiver.arguments.size()) {
+        throw std::runtime_error(
+            diagnostic(target.location, "record '" + receiver.name + "' expects " +
+                                            std::to_string(definition->second.generic_parameters.size()) +
+                                            " type arguments but got " + std::to_string(receiver.arguments.size())));
+    }
+
+    std::unordered_map<std::string, Type> substitutions;
+    for (std::size_t index = 0; index < definition->second.generic_parameters.size(); ++index) {
+        substitutions.emplace(definition->second.generic_parameters[index].name, receiver.arguments[index]);
+    }
+
+    return substitute_type(definition->second.fields[field->second].type, substitutions);
 }
 
 Type TypeChecker::check_expression(const Expression& expression, const TypeAnnotation& expected) {

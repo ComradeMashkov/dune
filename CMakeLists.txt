@@ -334,6 +334,16 @@ add_test(
 )
 
 add_test(
+    NAME cli_mutability_aliasing
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/mutability_aliasing.dn
+        -D EXPECTED_OUTPUT="2\n6\n4\n9\n1\n2"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
     NAME cli_build_native_hello
     COMMAND
         ${CMAKE_COMMAND}
@@ -462,6 +472,17 @@ add_test(
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/scopes_assignment_targets.dn
         -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/scopes_assignment_targets_native
         -D EXPECTED_OUTPUT="2\n1\n3\n5\n1\n9\n8\n7\n11"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
+)
+
+add_test(
+    NAME cli_build_native_mutability_aliasing
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/mutability_aliasing.dn
+        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/mutability_aliasing_native
+        -D EXPECTED_OUTPUT="2\n6\n4\n9\n1\n2"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
 )
 
