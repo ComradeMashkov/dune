@@ -70,6 +70,8 @@ enum class OpCode {
     load_variant_payload,
     load_index,
     load_field,
+    store_index,
+    store_field,
     load_slice,
     array_len,
     array_push,

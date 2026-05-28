@@ -1826,6 +1826,10 @@
         },
         {
           "type": "SYMBOL",
+          "name": "constructor_identifier"
+        },
+        {
+          "type": "SYMBOL",
           "name": "identifier"
         }
       ]
@@ -1849,6 +1853,10 @@
                 {
                   "type": "SYMBOL",
                   "name": "identifier"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "constructor_identifier"
                 },
                 {
                   "type": "SYMBOL",
@@ -2244,22 +2252,27 @@
             "type": "FIELD",
             "name": "receiver",
             "content": {
-              "type": "SYMBOL",
-              "name": "identifier"
-            }
-          },
-          {
-            "type": "REPEAT",
-            "content": {
-              "type": "SEQ",
+              "type": "CHOICE",
               "members": [
-                {
-                  "type": "STRING",
-                  "value": "."
-                },
                 {
                   "type": "SYMBOL",
                   "name": "identifier"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "member_expression"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "call_expression"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "index_expression"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "parenthesized_expression"
                 }
               ]
             }
@@ -2314,6 +2327,10 @@
                 },
                 {
                   "type": "SYMBOL",
+                  "name": "index_expression"
+                },
+                {
+                  "type": "SYMBOL",
                   "name": "parenthesized_expression"
                 }
               ]
@@ -2361,6 +2378,10 @@
                 {
                   "type": "SYMBOL",
                   "name": "call_expression"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "index_expression"
                 },
                 {
                   "type": "SYMBOL",

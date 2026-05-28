@@ -30,6 +30,7 @@ private:
     void compile_method_call_expression(const Expression& expression);
     void compile_member_expression(const Expression& expression);
     void compile_when_expression(const Expression& expression);
+    void compile_assignment_target(const Expression& target, const Expression& value);
     void compile_variant_constructor(const Expression& expression);
     void compile_struct_literal(const Expression& expression);
     void compile_binary_expression(const Expression& expression);
@@ -38,11 +39,14 @@ private:
 
     std::size_t add_constant(Value value);
     std::size_t declare_local(const std::string& name, const Type& type);
-    std::size_t force_local(const std::string& name, const Type& type);
+    std::size_t declare_scoped_local(const std::string& name, const Type& type);
     std::size_t resolve_local(const std::string& name) const;
     const Type& expression_type(const Expression& expression) const;
     std::size_t resolve_function(const std::string& name) const;
     Type normalize_type(const Type& type) const;
+    void reset_scopes();
+    void push_scope();
+    void pop_scope();
     std::size_t emit(OpCode op, std::size_t operand = 0);
     void patch_operand(std::size_t instruction_index, std::size_t operand);
 
@@ -56,9 +60,17 @@ private:
         std::unordered_map<std::string, std::size_t> field_indices;
     };
 
+    struct ScopedLocal {
+        std::string name;
+        bool had_previous = false;
+        std::size_t previous_slot = 0;
+        Type previous_type;
+    };
+
     Bytecode bytecode_;
     std::unordered_map<std::string, std::size_t> locals_;
     std::unordered_map<std::string, Type> local_types_;
+    std::vector<std::vector<ScopedLocal>> local_scopes_;
     std::unordered_map<std::string, std::size_t> functions_;
     std::unordered_map<std::string, StructLayout> structs_;
     std::unordered_set<std::string> enums_;

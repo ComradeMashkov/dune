@@ -1,0 +1,45 @@
+x = 1;
+{
+    x: int = 2;
+    print(x);
+}
+print(x);
+
+total = 0;
+for i = 0; i < 3; i = i + 1 {
+    total = total + i;
+}
+print(total);
+
+choice Maybe {
+    Present(int),
+    Absent,
+}
+
+value: Maybe = Present(5);
+print(when value {
+    is Present(x) { x }
+    is Absent { 0 }
+});
+print(x);
+
+record Point {
+    x: int,
+    y: int,
+}
+
+values: [int] = [1, 2];
+values[1] = 9;
+print(values[1]);
+
+grid: [[int]] = [[1, 2], [3, 4]];
+grid[1][0] = 8;
+print(grid[1][0]);
+
+point: Point = Point { x: 1, y: 2 };
+point.x = 7;
+print(point.x);
+
+points: [Point] = [Point { x: 3, y: 4 }];
+points[0].y = 11;
+print(points[0].y);

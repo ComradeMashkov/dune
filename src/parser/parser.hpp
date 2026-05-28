@@ -23,6 +23,7 @@ private:
     bool check_identifier_like() const;
     bool match(TokenType type);
     bool looks_like_struct_literal() const;
+    bool looks_like_assignment_statement() const;
     bool looks_like_binding_declaration() const;
     bool looks_like_function_declaration(bool is_extern = false) const;
 
@@ -62,6 +63,7 @@ private:
     TypeAnnotation optional_type_annotation();
     TypeAnnotation type_annotation();
 
+    std::unique_ptr<Expression> assignment_target();
     std::unique_ptr<Expression> expression();
     std::unique_ptr<Expression> logical_or();
     std::unique_ptr<Expression> logical_and();

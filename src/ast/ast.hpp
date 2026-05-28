@@ -127,6 +127,7 @@ struct Statement {
     bool exported = false;
     bool is_extern = false;
     std::string extern_symbol;
+    std::unique_ptr<Expression> target;
 };
 
 struct Program {

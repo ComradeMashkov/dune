@@ -777,6 +777,37 @@ void VirtualMachine::run(std::ostream& output) {
             ++frame.ip;
             break;
         }
+        case OpCode::store_index: {
+            const Value value = pop();
+            const Value index = pop();
+            const Value indexed = pop();
+            const std::size_t offset = index_value(index);
+
+            if (indexed.kind != ValueKind::array) {
+                throw std::runtime_error("expected array value");
+            }
+
+            std::vector<Value>& elements = array_elements(indexed);
+            if (offset >= elements.size()) {
+                throw std::runtime_error("array index out of bounds");
+            }
+
+            elements[offset] = value;
+            ++frame.ip;
+            break;
+        }
+        case OpCode::store_field: {
+            const Value value = pop();
+            const Value record = pop();
+            std::vector<Value>& fields = record_fields(record);
+            if (instruction.operand >= fields.size()) {
+                throw std::runtime_error("record field out of bounds");
+            }
+
+            fields[instruction.operand] = value;
+            ++frame.ip;
+            break;
+        }
         case OpCode::load_slice: {
             const Value end_value = pop();
             const Value start_value = pop();

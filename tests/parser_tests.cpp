@@ -108,6 +108,43 @@ bool parses_control_flow() {
     return passed;
 }
 
+bool parses_assignment_targets() {
+    const dune::Program program = parse_source("values[1] = 9; grid[0][1] = 8; point.x = 7; users[0].age = 40;");
+
+    if (!expect(program.statements.size() == 4, "expected four assignment statements")) {
+        return false;
+    }
+
+    bool passed = true;
+    const dune::Expression& array_target = *program.statements[0].target;
+    passed = expect(program.statements[0].kind == dune::StatementKind::assign, "expected array assignment") && passed;
+    passed = expect(array_target.kind == dune::ExpressionKind::index, "expected array index target") && passed;
+    passed = expect(array_target.left->lexeme == "values", "expected values target root") && passed;
+    passed = expect(array_target.right->lexeme == "1", "expected index target") && passed;
+
+    const dune::Expression& nested_array_target = *program.statements[1].target;
+    passed =
+        expect(nested_array_target.kind == dune::ExpressionKind::index, "expected nested array index target") && passed;
+    passed = expect(nested_array_target.left->kind == dune::ExpressionKind::index,
+                    "expected nested array target receiver") &&
+             passed;
+
+    const dune::Expression& field_target = *program.statements[2].target;
+    passed = expect(field_target.kind == dune::ExpressionKind::member, "expected member target") && passed;
+    passed = expect(field_target.left->lexeme == "point", "expected point receiver") && passed;
+    passed = expect(field_target.lexeme == "x", "expected x field target") && passed;
+
+    const dune::Expression& nested_field_target = *program.statements[3].target;
+    passed =
+        expect(nested_field_target.kind == dune::ExpressionKind::member, "expected nested member target") && passed;
+    passed =
+        expect(nested_field_target.left->kind == dune::ExpressionKind::index, "expected indexed member receiver") &&
+        passed;
+    passed = expect(nested_field_target.lexeme == "age", "expected nested age field target") && passed;
+
+    return passed;
+}
+
 bool parses_functions_and_types() {
     const dune::Program program = parse_source("add(a: int, b: int): int { return a + b; } "
                                                "total: int = add(10, 20); print(total);");
@@ -578,6 +615,7 @@ int main() {
     passed = parses_binding_and_print() && passed;
     passed = parses_operator_precedence() && passed;
     passed = parses_control_flow() && passed;
+    passed = parses_assignment_targets() && passed;
     passed = parses_functions_and_types() && passed;
     passed = parses_extended_types() && passed;
     passed = parses_standard_types_and_unit_calls() && passed;

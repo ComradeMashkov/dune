@@ -129,6 +129,7 @@ Statement clone_statement(const Statement& statement) {
     result.exported = statement.exported;
     result.is_extern = statement.is_extern;
     result.extern_symbol = statement.extern_symbol;
+    result.target = clone_expression_pointer(statement.target);
     return result;
 }
 
@@ -142,6 +143,10 @@ void substitute_statement(Statement& statement, const std::unordered_map<std::st
 
     if (statement.expression != nullptr) {
         substitute_expression(*statement.expression, substitutions);
+    }
+
+    if (statement.target != nullptr) {
+        substitute_expression(*statement.target, substitutions);
     }
 
     for (Statement& child : statement.body) {
@@ -187,6 +192,19 @@ std::vector<const Expression*> expression_refs(const std::vector<std::unique_ptr
     }
 
     return result;
+}
+
+const std::string* root_identifier(const Expression& expression) {
+    if (expression.kind == ExpressionKind::identifier) {
+        return &expression.lexeme;
+    }
+
+    if ((expression.kind == ExpressionKind::member || expression.kind == ExpressionKind::index) &&
+        expression.left != nullptr) {
+        return root_identifier(*expression.left);
+    }
+
+    return nullptr;
 }
 
 } // namespace
@@ -415,8 +433,7 @@ void TypeChecker::check(const Program& program) {
         }
     }
 
-    variables_.clear();
-    constants_.clear();
+    reset_scopes();
     current_function_ = nullptr;
     loop_depth_ = 0;
     for (const Statement& statement : program.statements) {
@@ -426,10 +443,11 @@ void TypeChecker::check(const Program& program) {
         }
     }
 
-    for (const std::string& constant : constants_) {
-        const auto variable = variables_.find(constant);
-        if (variable != variables_.end()) {
-            global_constants_.emplace(variable->first, variable->second);
+    if (!scopes_.empty()) {
+        for (const auto& [name, binding] : scopes_.front()) {
+            if (binding.constant) {
+                global_constants_.emplace(name, binding.type);
+            }
         }
     }
 
@@ -632,19 +650,14 @@ void TypeChecker::check_function(const Statement& statement) {
     const FunctionSignature& function =
         find_function_by_key(function_key(statement.name, parameters), statement.location);
 
-    variables_.clear();
-    constants_.clear();
+    reset_scopes();
     if (statement.is_extern) {
         return;
     }
 
     for (std::size_t index = 0; index < statement.parameters.size(); ++index) {
         const Parameter& parameter = statement.parameters[index];
-        if (variables_.contains(parameter.name)) {
-            throw std::runtime_error(diagnostic(parameter.location, "duplicate parameter '" + parameter.name + "'"));
-        }
-
-        variables_.emplace(parameter.name, function.parameters[index]);
+        declare_binding(parameter.name, function.parameters[index], false, parameter.location);
     }
 
     current_function_ = &function;
@@ -680,45 +693,45 @@ void TypeChecker::check_statement(const Statement& statement) {
             expected = expected_type(actual);
         }
 
-        const auto existing = variables_.find(statement.name);
-        if (existing != variables_.end()) {
-            expect_type(existing->second, expected.type, statement.location);
-            expected = expected_type(existing->second);
-            actual = check_expression(*statement.expression, expected);
-        }
-
         expect_type(expected.type, actual, statement.expression->location);
         if (expected.type.kind == ValueType::unit_type) {
             throw std::runtime_error(diagnostic(statement.location, "variables cannot have type 'unit'"));
         }
 
-        variables_[statement.name] = expected.type;
-        if (statement.kind == StatementKind::const_statement) {
-            constants_.insert(statement.name);
-        }
+        declare_binding(statement.name, expected.type, statement.kind == StatementKind::const_statement,
+                        statement.location);
         return;
     }
     case StatementKind::assign: {
-        const auto variable = variables_.find(statement.name);
-        if (variable == variables_.end()) {
-            if (global_constants_.contains(statement.name)) {
-                throw std::runtime_error(
-                    diagnostic(statement.location, "cannot assign to constant '" + statement.name + "'"));
+        if (statement.target != nullptr && statement.target->kind != ExpressionKind::identifier) {
+            const Type expected = check_assignment_target(*statement.target, statement.location);
+            expect_type(expected, check_expression(*statement.expression, expected_type(expected)),
+                        statement.expression->location);
+            return;
+        }
+
+        std::string name = statement.name;
+        if (statement.target != nullptr) {
+            name = statement.target->lexeme;
+        }
+        VariableBinding* variable = find_binding(name);
+        if (variable == nullptr) {
+            if (global_constants_.contains(name)) {
+                throw std::runtime_error(diagnostic(statement.location, "cannot assign to constant '" + name + "'"));
             }
 
             const Type actual = check_expression(*statement.expression);
             if (actual.kind == ValueType::unit_type) {
                 throw std::runtime_error(diagnostic(statement.location, "variables cannot have type 'unit'"));
             }
-            variables_[statement.name] = actual;
+            declare_binding(name, actual, false, statement.location);
             return;
         }
-        if (constants_.contains(statement.name)) {
-            throw std::runtime_error(
-                diagnostic(statement.location, "cannot assign to constant '" + statement.name + "'"));
+        if (variable->constant) {
+            throw std::runtime_error(diagnostic(statement.location, "cannot assign to constant '" + name + "'"));
         }
 
-        expect_type(variable->second, check_expression(*statement.expression, expected_type(variable->second)),
+        expect_type(variable->type, check_expression(*statement.expression, expected_type(variable->type)),
                     statement.expression->location);
         return;
     }
@@ -733,22 +746,31 @@ void TypeChecker::check_statement(const Statement& statement) {
         return;
     }
     case StatementKind::block:
+        push_scope();
         check_statements(statement.body);
+        pop_scope();
         return;
     case StatementKind::if_statement:
         expect_type(make_type(ValueType::bool_type), check_expression(*statement.expression),
                     statement.expression->location);
+        push_scope();
         check_statements(statement.body);
+        pop_scope();
+        push_scope();
         check_statements(statement.else_body);
+        pop_scope();
         return;
     case StatementKind::while_statement:
         expect_type(make_type(ValueType::bool_type), check_expression(*statement.expression),
                     statement.expression->location);
         ++loop_depth_;
+        push_scope();
         check_statements(statement.body);
+        pop_scope();
         --loop_depth_;
         return;
     case StatementKind::for_statement:
+        push_scope();
         if (statement.initializer != nullptr) {
             check_statement(*statement.initializer);
         }
@@ -756,11 +778,14 @@ void TypeChecker::check_statement(const Statement& statement) {
         expect_type(make_type(ValueType::bool_type), check_expression(*statement.expression),
                     statement.expression->location);
         ++loop_depth_;
+        push_scope();
         check_statements(statement.body);
+        pop_scope();
         --loop_depth_;
         if (statement.increment != nullptr) {
             check_statement(*statement.increment);
         }
+        pop_scope();
         return;
     case StatementKind::break_statement:
         if (loop_depth_ == 0) {
@@ -808,6 +833,79 @@ void TypeChecker::check_statements(const std::vector<Statement>& statements) {
     }
 }
 
+Type TypeChecker::check_assignment_target(const Expression& target, SourceLocation location) {
+    const std::string* root = root_identifier(target);
+    if (root != nullptr && has_visible_constant(*root)) {
+        throw std::runtime_error(diagnostic(location, "cannot assign through constant '" + *root + "'"));
+    }
+
+    Type result = make_type(ValueType::unit_type);
+    switch (target.kind) {
+    case ExpressionKind::identifier: {
+        const VariableBinding* binding = find_binding(target.lexeme);
+        if (binding == nullptr) {
+            const auto global_constant = global_constants_.find(target.lexeme);
+            if (global_constant != global_constants_.end()) {
+                throw std::runtime_error(diagnostic(location, "cannot assign to constant '" + target.lexeme + "'"));
+            }
+
+            throw std::runtime_error(diagnostic(location, "undefined variable '" + target.lexeme + "'"));
+        }
+
+        result = binding->type;
+        break;
+    }
+    case ExpressionKind::index: {
+        const Type indexed = check_expression(*target.left);
+        if (indexed.kind == ValueType::text_type) {
+            throw std::runtime_error(diagnostic(target.left->location, "cannot assign to text index"));
+        }
+
+        if (indexed.kind != ValueType::array_type || indexed.element == nullptr) {
+            throw std::runtime_error(
+                diagnostic(target.left->location, "expected array type but got '" + type_name(indexed) + "'"));
+        }
+
+        const Type index = check_expression(*target.right);
+        if (!is_integer_type(index.kind)) {
+            throw std::runtime_error(
+                diagnostic(target.right->location, "expected integer index but got '" + type_name(index) + "'"));
+        }
+
+        result = *indexed.element;
+        break;
+    }
+    case ExpressionKind::member: {
+        if (target.left != nullptr && target.left->kind == ExpressionKind::identifier &&
+            is_known_module(target.left->lexeme)) {
+            throw std::runtime_error(diagnostic(location, "cannot assign to module member '" + target.left->lexeme +
+                                                              "." + target.lexeme + "'"));
+        }
+
+        result = check_member_expression(target, {});
+        break;
+    }
+    case ExpressionKind::number:
+    case ExpressionKind::floating:
+    case ExpressionKind::character:
+    case ExpressionKind::string:
+    case ExpressionKind::boolean:
+    case ExpressionKind::array:
+    case ExpressionKind::struct_literal:
+    case ExpressionKind::slice:
+    case ExpressionKind::unary:
+    case ExpressionKind::cast:
+    case ExpressionKind::binary:
+    case ExpressionKind::when_expression:
+    case ExpressionKind::call:
+    case ExpressionKind::method_call:
+        throw std::runtime_error(diagnostic(location, "invalid assignment target"));
+    }
+
+    expression_types_[&target] = result;
+    return result;
+}
+
 Type TypeChecker::check_expression(const Expression& expression, const TypeAnnotation& expected) {
     TypeAnnotation wanted = expected;
     if (wanted.has_type) {
@@ -818,9 +916,9 @@ Type TypeChecker::check_expression(const Expression& expression, const TypeAnnot
 
     switch (expression.kind) {
     case ExpressionKind::identifier: {
-        const auto variable = variables_.find(expression.lexeme);
-        if (variable != variables_.end()) {
-            actual = variable->second;
+        const VariableBinding* variable = find_binding(expression.lexeme);
+        if (variable != nullptr) {
+            actual = variable->type;
             break;
         }
 
@@ -1207,9 +1305,9 @@ Type TypeChecker::check_member_expression(const Expression& expression, const Ty
                                                  expected);
             }
 
-            const auto variable = variables_.find(qualified_name);
-            if (variable != variables_.end()) {
-                return variable->second;
+            const VariableBinding* variable = find_binding(qualified_name);
+            if (variable != nullptr) {
+                return variable->type;
             }
 
             const auto global_constant = global_constants_.find(qualified_name);
@@ -1810,26 +1908,13 @@ Type TypeChecker::check_enum_when_expression(const Expression& expression, const
             }
         }
 
-        bool had_previous = false;
-        Type previous_type;
+        push_scope();
         if (has_binding) {
-            const auto previous = variables_.find(binding_name);
-            if (previous != variables_.end()) {
-                had_previous = true;
-                previous_type = previous->second;
-            }
-            variables_[binding_name] = binding_type;
+            declare_binding(binding_name, binding_type, false, pattern.location);
         }
 
         const Type value = check_expression(result, has_result_type ? expected_type(result_type) : expected);
-
-        if (has_binding) {
-            if (had_previous) {
-                variables_[binding_name] = previous_type;
-            } else {
-                variables_.erase(binding_name);
-            }
-        }
+        pop_scope();
 
         if (!has_result_type) {
             result_type = value;
@@ -2257,6 +2342,64 @@ Type TypeChecker::coerce_numeric_literal(const Expression& expression, const Typ
     }
 
     return actual;
+}
+
+void TypeChecker::reset_scopes() {
+    scopes_.clear();
+    push_scope();
+}
+
+void TypeChecker::push_scope() {
+    scopes_.emplace_back();
+}
+
+void TypeChecker::pop_scope() {
+    if (!scopes_.empty()) {
+        scopes_.pop_back();
+    }
+}
+
+TypeChecker::VariableBinding* TypeChecker::find_binding(const std::string& name) {
+    for (auto scope = scopes_.rbegin(); scope != scopes_.rend(); ++scope) {
+        const auto binding = scope->find(name);
+        if (binding != scope->end()) {
+            return &binding->second;
+        }
+    }
+
+    return nullptr;
+}
+
+const TypeChecker::VariableBinding* TypeChecker::find_binding(const std::string& name) const {
+    for (auto scope = scopes_.rbegin(); scope != scopes_.rend(); ++scope) {
+        const auto binding = scope->find(name);
+        if (binding != scope->end()) {
+            return &binding->second;
+        }
+    }
+
+    return nullptr;
+}
+
+bool TypeChecker::has_visible_constant(const std::string& name) const {
+    const VariableBinding* binding = find_binding(name);
+    return (binding != nullptr && binding->constant) || global_constants_.contains(name);
+}
+
+void TypeChecker::declare_binding(const std::string& name, const Type& type, bool constant, SourceLocation location) {
+    if (scopes_.empty()) {
+        push_scope();
+    }
+
+    if (scopes_.back().contains(name)) {
+        throw std::runtime_error(diagnostic(location, "variable '" + name + "' already declared in this scope"));
+    }
+
+    if (has_visible_constant(name)) {
+        throw std::runtime_error(diagnostic(location, "cannot shadow constant '" + name + "'"));
+    }
+
+    scopes_.back().emplace(name, VariableBinding{type, constant});
 }
 
 void TypeChecker::expect_type(const Type& expected, const Type& actual, SourceLocation location) const {
