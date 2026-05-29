@@ -53,18 +53,24 @@ private:
     };
 
     bool emit_statement(const Statement& statement, std::ostream& output);
+    bool emit_for_in_statement(const Statement& statement, std::ostream& output);
+    bool emit_range_for_in_statement(const Statement& statement, const Type& element_type, std::ostream& output);
+    bool emit_array_for_in_statement(const Statement& statement, const Type& iterable_type, std::ostream& output);
     bool emit_statements(const std::vector<Statement>& statements, std::ostream& output);
     TypedValue emit_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_binary_expression(const Expression& expression, std::ostream& output);
+    TypedValue emit_membership_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_logical_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_when_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_unary_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_cast_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_call_expression(const Expression& expression, std::ostream& output);
+    TypedValue emit_format_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_method_call_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_array_method_call_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_text_method_call_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_array_literal(const Expression& expression, std::ostream& output);
+    TypedValue emit_tuple_literal(const Expression& expression, std::ostream& output);
     TypedValue emit_struct_literal(const Expression& expression, std::ostream& output);
     TypedValue emit_variant_constructor(const Expression& expression, std::ostream& output);
     TypedValue emit_member_expression(const Expression& expression, std::ostream& output);
@@ -73,6 +79,7 @@ private:
     TypedValue emit_text_literal(const std::string& lexeme);
     TypedPointer emit_lvalue_pointer(const Expression& expression, std::ostream& output);
     void emit_assignment_target(const Expression& target, const Expression& value, std::ostream& output);
+    void emit_tuple_destructuring_assignment(const Expression& target, const Expression& value, std::ostream& output);
     void emit_function(const Statement& statement, std::ostream& output);
     void emit_extern_declarations(std::ostream& output);
     void emit_memory_runtime(std::ostream& output);
@@ -99,6 +106,7 @@ private:
     std::size_t llvm_bit_width(const Type& type) const;
     std::string printf_format_name(const Type& type) const;
     std::string printf_fragment_format_name(const Type& type) const;
+    std::string printf_fragment_format_text(const Type& type) const;
     std::size_t llvm_size(const Type& type) const;
     std::string function_name(const std::string& name) const;
     std::string extern_function_name(const FunctionSignature& signature) const;
@@ -113,6 +121,7 @@ private:
     std::string llvm_symbol(const std::string& value) const;
     TypedValue cast_for_print(const TypedValue& value, std::ostream& output);
     TypedValue cast_value(const TypedValue& value, const Type& target, std::ostream& output);
+    TypedValue emit_equality_comparison(const TypedValue& left, const TypedValue& right, std::ostream& output);
     std::string emit_index_as_i64(const TypedValue& index, std::ostream& output);
     void reset_scopes();
     void push_scope();

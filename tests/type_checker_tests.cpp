@@ -87,16 +87,16 @@ bool expect_fixture_error_contains(const std::string& source, const std::string&
 int main() {
     bool passed = true;
 
-    passed = expect_valid("add(a: int, b: int): int { return a + b; } "
+    passed = expect_valid("fn add(a: int, b: int): int { return a + b; } "
                           "total: int = add(10, 20); done: bool = total == 30; print(done);",
                           "expected typed functions to validate") &&
              passed;
-    passed = expect_valid("widen(value: u64): u64 { return value + 1; } "
+    passed = expect_valid("fn widen(value: u64): u64 { return value + 1; } "
                           "amount: uint64 = widen(41); ratio: real = 1 + 2.5; mark: glyph = 'x';",
                           "expected extended types to validate") &&
              passed;
-    passed = expect_valid("log(message: text): unit { print(message); return; } "
-                          "noop(): unit { } "
+    passed = expect_valid("fn log(message: text): unit { print(message); return; } "
+                          "fn noop(): unit { } "
                           "tiny: i8 = 127; small: i16 = 32767; mid: i32 = 2147483647; "
                           "wide: i64 = 9000000000; index: usize = 5; offset: isize = 6; "
                           "rough: real32 = 1 + 2.5; exact: real64 = 2.5; "
@@ -106,6 +106,26 @@ int main() {
     passed = expect_valid("name: text = \"Dune\"; version: int = 1; print(\"{} v{}\", name, version); "
                           "print(\"bool={}, glyph={}, real={}\", true, 'x', 2.5);",
                           "expected formatted print to validate") &&
+             passed;
+    passed = expect_valid("name: text = \"Dune\"; version: int = 1; "
+                          "message: text = format(\"{} v{}\", name, version); "
+                          "print(format(\"{}: {}\", \"answer\", 42)); print(message);",
+                          "expected format expression to validate") &&
+             passed;
+    passed = expect_valid("size: int = 1_000_000; mask: u64 = 0xffu64; bits: u8 = 0b1010_0101u8; "
+                          "wide: i64 = 123i64; index: usize = 10usize; rough: real = 1_000.5_25;",
+                          "expected numeric literal polish to validate") &&
+             passed;
+    passed =
+        expect_valid(
+            R"dune(path: text = r"C:\Users\name\data.csv"; literal: text = r"\x"; line: text = "hello\n"; tab: glyph = '\t'; newline: glyph = '\n'; carriage: glyph = '\r'; quote: glyph = '\''; slash: glyph = '\\'; zero: glyph = '\0';)dune",
+            "expected raw strings and escaped literals to validate") &&
+        passed;
+    passed = expect_error_contains(R"(bad: text = "\x";)", R"(unknown text escape '\x')",
+                                   "expected invalid text escape error") &&
+             passed;
+    passed = expect_error_contains(R"(bad: glyph = '\x';)", R"(unknown glyph escape '\x')",
+                                   "expected invalid glyph escape error") &&
              passed;
     passed = expect_error_contains("print(\"{} {}\", 1);", "print format string expects 2 arguments but got 1",
                                    "expected missing print format argument error") &&
@@ -120,8 +140,23 @@ int main() {
     passed = expect_error_contains("print(\"{name}\", 1);", "invalid print format placeholder",
                                    "expected invalid print placeholder error") &&
              passed;
+    passed = expect_error_contains("format(\"{} {}\", 1);", "format string expects 2 arguments but got 1",
+                                   "expected missing format argument error") &&
+             passed;
+    passed = expect_error_contains("format(\"{}\", 1, 2);", "format string expects 1 arguments but got 2",
+                                   "expected extra format argument error") &&
+             passed;
+    passed = expect_error_contains("format: text = \"{}\"; message: text = format(format, 1);",
+                                   "format string must be a string literal", "expected literal format error") &&
+             passed;
+    passed = expect_error_contains("value: i32 = 42u64;", "expected type 'i32' but got 'u64'",
+                                   "expected suffixed integer type mismatch") &&
+             passed;
+    passed = expect_error_contains("small: u8 = 300u8;", "integer literal '300u8' does not fit in type 'u8'",
+                                   "expected suffixed integer overflow") &&
+             passed;
     passed = expect_valid("import math; "
-                          "second(values: [int]): int { return values[1]; } "
+                          "fn second(values: [int]): int { return values[1]; } "
                           "values: [int] = [1, math.square(2)]; values.push(9); "
                           "count: int = values.len(); value: int = second(values); "
                           "exact: real64 = math.square(1.5); base: u64 = 7; wide: u64 = math.square(base);",
@@ -155,7 +190,7 @@ int main() {
                           "starts: bool = message.starts_with(\"dune\"); blank: bool = \"\".is_empty();",
                           "expected array and text methods to validate") &&
              passed;
-    passed = expect_valid("foreign c_sqrt(value: real64): real64 = \"sqrt\"; "
+    passed = expect_valid("foreign fn c_sqrt(value: real64): real64 = \"sqrt\"; "
                           "root: real64 = c_sqrt(81.0); "
                           "message: text = \"dune language\"; first: glyph = message[0]; "
                           "word: text = message[5:13]; prefix: text = message[:4]; "
@@ -177,8 +212,8 @@ int main() {
                           "expected array and text stdlib modules to validate") &&
              passed;
     passed = expect_valid("import array; import math; "
-                          "identity<T>(value: T): T { return value; } "
-                          "twice<T is numeric>(value: T): T { return value + value; } "
+                          "fn identity<T>(value: T): T { return value; } "
+                          "fn twice<T is numeric>(value: T): T { return value + value; } "
                           "number: int = identity(42); label: text = identity(\"done\"); "
                           "words: [text] = [\"dune\", \"lang\"]; first: text = words.reverse().first(); "
                           "small: u16 = 12; squared: u16 = math.square(small); "
@@ -186,52 +221,57 @@ int main() {
                           "doubled: int = twice(9);",
                           "expected generic functions and stdlib generics to validate") &&
              passed;
-    passed = expect_valid("only_bad<T>(value: T): T { return value + value; } print(only_bad(1));",
+    passed = expect_valid("fn only_bad<T>(value: T): T { return value + value; } print(only_bad(1));",
                           "expected generic functions to instantiate only used types") &&
              passed;
     passed = expect_valid("record Point { x: real64, y: real64, "
-                          "sum(): real64 { return this.x + this.y; } } "
-                          "make(x: real64, y: real64): Point { return Point { x: x, y: y }; } "
+                          "fn sum(): real64 { return this.x + this.y; } } "
+                          "fn make(x: real64, y: real64): Point { return Point { x: x, y: y }; } "
                           "p: Point = make(1.5, 2.5); total: real64 = p.sum(); x: real64 = p.x;",
                           "expected records, fields, literals, and methods to validate") &&
              passed;
-    passed = expect_valid("record Box<T> { value: T, value_or(default: T): T { return this.value; } } "
-                          "boxed<T>(value: T): Box<T> { return Box { value: value }; } "
+    passed = expect_valid("record Optimizer { lr: real64 = 0.01, momentum: real64 = 0.0, name: text = \"sgd\" } "
+                          "base: Optimizer = Optimizer {}; fast: Optimizer = Optimizer { lr: 0.1 }; "
+                          "label: text = fast.name;",
+                          "expected record field defaults to validate") &&
+             passed;
+    passed = expect_valid("record Box<T> { value: T, fn value_or(default: T): T { return this.value; } } "
+                          "fn boxed<T>(value: T): Box<T> { return Box { value: value }; } "
                           "number: Box<int> = boxed(7); label: Box<text> = boxed(\"done\"); "
                           "chosen: text = when number.value { "
                           "is 7 { label.value_or(\"bad\") } is _ { \"other\" } };",
                           "expected generic records and when expressions to validate") &&
              passed;
     passed = expect_valid("record Point { x: real64, y: real64, "
-                          "new(x: real64, y: real64): Point { return Point { x: x, y: y }; } } "
+                          "fn new(x: real64, y: real64): Point { return Point { x: x, y: y }; } } "
                           "p: Point = Point.new(1.5, 2.5); x: real64 = p.x;",
                           "expected record constructors to validate") &&
              passed;
     passed = expect_valid("record Box<T> { value: T, "
-                          "new(value: T): Box<T> { return Box { value: value }; } "
-                          "get(): T { return this.value; } } "
+                          "fn new(value: T): Box<T> { return Box { value: value }; } "
+                          "fn get(): T { return this.value; } } "
                           "boxed: Box<int> = Box.new(42); value: int = boxed.get();",
                           "expected generic record constructors to validate") &&
              passed;
     passed = expect_valid("record Optimizer { lr: real64, momentum: real64, "
-                          "static default(): Optimizer { return Optimizer { lr: 0.01, momentum: 0.0 }; } "
-                          "static with_lr(lr: real64): Optimizer { return Optimizer { lr: lr, momentum: 0.0 }; } "
-                          "rate(): real64 { return this.lr; } } "
+                          "static fn default(): Optimizer { return Optimizer { lr: 0.01, momentum: 0.0 }; } "
+                          "static fn with_lr(lr: real64): Optimizer { return Optimizer { lr: lr, momentum: 0.0 }; } "
+                          "fn rate(): real64 { return this.lr; } } "
                           "opt: Optimizer = Optimizer.default(); tuned: Optimizer = Optimizer.with_lr(0.2); "
                           "rate: real64 = tuned.rate();",
                           "expected static associated record functions to validate") &&
              passed;
     passed = expect_valid("record Box<T> { value: T, "
-                          "static wrap(value: T): Box<T> { return Box { value: value }; } "
-                          "get(): T { return this.value; } } boxed: Box<int> = Box.wrap(42); "
+                          "static fn wrap(value: T): Box<T> { return Box { value: value }; } "
+                          "fn get(): T { return this.value; } } boxed: Box<int> = Box.wrap(42); "
                           "value: int = boxed.get();",
                           "expected generic static associated record function to validate") &&
              passed;
     passed = expect_valid("contract Shape { area(): real64; } "
                           "record Circle with Shape { radius: real64, "
-                          "new(radius: real64): Circle { return Circle { radius: radius }; } "
-                          "area(): real64 { return 3.0 * this.radius * this.radius; } } "
-                          "area_of<T is Shape>(shape: T): real64 { return shape.area(); } "
+                          "fn new(radius: real64): Circle { return Circle { radius: radius }; } "
+                          "fn area(): real64 { return 3.0 * this.radius * this.radius; } } "
+                          "fn area_of<T is Shape>(shape: T): real64 { return shape.area(); } "
                           "circle: Circle = Circle.new(2.0); area: real64 = area_of(circle);",
                           "expected local contracts and contract bounds to validate") &&
              passed;
@@ -239,7 +279,7 @@ int main() {
                                   "counter: object_model_api.Counter = object_model_api.Counter.new(); "
                                   "counter.inc(); value: int = counter.current(); "
                                   "zero: object_model_api.Counter = object_model_api.Counter.zero(); "
-                                  "area_of<T is object_model_api.Shape>(shape: T): real64 { return shape.area(); } "
+                                  "fn area_of<T is object_model_api.Shape>(shape: T): real64 { return shape.area(); } "
                                   "circle: object_model_api.Circle = object_model_api.Circle.new(2.0); "
                                   "area: real64 = area_of(circle);",
                                   "expected exported object model module API to validate") &&
@@ -251,8 +291,22 @@ int main() {
                           "qualified: Maybe<int> = Maybe.Present(9);",
                           "expected choices and variant when expressions to validate") &&
              passed;
-    passed = expect_valid("same<T is comparable>(left: T, right: T): bool { return left == right; } "
-                          "lower<T is ordered>(left: T, right: T): bool { return left < right; } "
+    passed = expect_valid("choice Maybe { Present(int), Absent, } "
+                          "value: Maybe = Present(42); missing: Maybe = Absent; "
+                          "chosen: int = when value { Present(x) => x; Absent => 0; }; "
+                          "fallback: int = when missing { Present(x) => x, _ => 7 };",
+                          "expected arrow-style choice when expressions to validate") &&
+             passed;
+    passed = expect_valid("record Point { x: int, y: int } "
+                          "fn minmax(): (int, int) { return (2, 5); } "
+                          "(lo, hi) = minmax(); "
+                          "point: Point = Point { x: lo, y: hi }; "
+                          "sum: int = when point { Point { x, y } => x + y; }; "
+                          "pair_sum: int = when (lo, hi) { (left, right) => left + right; };",
+                          "expected tuples and destructuring patterns to validate") &&
+             passed;
+    passed = expect_valid("fn same<T is comparable>(left: T, right: T): bool { return left == right; } "
+                          "fn lower<T is ordered>(left: T, right: T): bool { return left < right; } "
                           "text_ok: bool = same(\"dune\", \"dune\"); int_ok: bool = lower(1, 2);",
                           "expected comparable and ordered bounds to validate") &&
              passed;
@@ -297,7 +351,7 @@ int main() {
                           "top_outer: matrix.Matrix<int> = matrix.outer(vi, wi);",
                           "expected generic matrix stdlib module to validate") &&
              passed;
-    passed = expect_valid("import runtime; fail(): unit { runtime.panic(\"boom\"); }",
+    passed = expect_valid("import runtime; fn fail(): unit { runtime.panic(\"boom\"); }",
                           "expected runtime panic helper to validate") &&
              passed;
     passed = expect_valid("import array; "
@@ -315,7 +369,7 @@ int main() {
                                   "value: int = feature_exports.public();",
                                   "expected exported module members to validate") &&
              passed;
-    passed = expect_valid("const HIDDEN: int = 7; hidden(): int { return HIDDEN; } value: int = hidden();",
+    passed = expect_valid("const HIDDEN: int = 7; fn hidden(): int { return HIDDEN; } value: int = hidden();",
                           "expected top-level constants to be visible inside functions") &&
              passed;
     passed = expect_valid("x = 1; { x: int = 2; y = x + 1; } print(x); "
@@ -323,6 +377,11 @@ int main() {
                           "choice Maybe { Present(int), Absent, } value: Maybe = Present(5); "
                           "chosen: int = when value { is Present(x) { x } is Absent { 0 } };",
                           "expected lexical scopes and shadowing to validate") &&
+             passed;
+    passed = expect_valid("values: [int] = [1, 2, 3]; total = 0; "
+                          "for value in values { total = total + value; } "
+                          "for i in 0..values.len() { total = total + values[i]; }",
+                          "expected for-in arrays and ranges to validate") &&
              passed;
     passed = expect_valid("record Point { x: int, y: int } "
                           "values: [int] = [1, 2]; values[1] = 9; "
@@ -332,6 +391,11 @@ int main() {
                           "expected array, record, and nested assignment targets to validate") &&
              passed;
     passed = expect_valid("values: [int] = [];", "expected typed empty array to validate") && passed;
+    passed = expect_valid("values: [int] = [1, 2, 3]; found: bool = 2 in values; "
+                          "message: text = \"dune language\"; has: bool = \"lang\" in message; "
+                          "enabled: bool = true; ok: bool = 1 + 1 in values && enabled;",
+                          "expected membership operator to validate") &&
+             passed;
     passed = expect_error_contains("x: int = true;", "expected type 'int' but got 'bool'",
                                    "expected binding type mismatch") &&
              passed;
@@ -347,9 +411,25 @@ int main() {
     passed = expect_error_contains("for i = 0; i < 1; i = i + 1 { } print(i);", "undefined variable 'i'",
                                    "expected for variable scope error") &&
              passed;
+    passed = expect_error_contains("for value in 42 { print(value); }", "type 'int' is not iterable",
+                                   "expected non-iterable for-in error") &&
+             passed;
+    passed = expect_error_contains("for value in [1, 2] { value = value + 1; }", "cannot assign to constant 'value'",
+                                   "expected read-only for-in binding") &&
+             passed;
+    passed = expect_error_contains("value = 0..3;", "range expressions can only be used in for-in loops",
+                                   "expected range value error") &&
+             passed;
+    passed = expect_error_contains("for i in 0.0..3.0 { print(i); }", "expected integer range bound but got 'real'",
+                                   "expected real range bound error") &&
+             passed;
     passed = expect_error_contains("choice Maybe { Present(int), Absent, } value: Maybe = Present(1); "
                                    "chosen: int = when value { is Present(x) { x } is Absent { 0 } }; print(x);",
                                    "undefined variable 'x'", "expected when payload scope error") &&
+             passed;
+    passed = expect_error_contains("choice Maybe { Present(int), Absent, } value: Maybe = Present(1); "
+                                   "chosen: int = when value { Present(x) => x; Absent => 0; }; print(x);",
+                                   "undefined variable 'x'", "expected arrow when payload scope error") &&
              passed;
     passed = expect_error_contains("const values: [int] = [1]; values[0] = 2;",
                                    "cannot mutate through constant binding 'values'",
@@ -369,10 +449,10 @@ int main() {
     passed = expect_error_contains("value: int = \"7\" to int;", "cannot cast from 'text' to 'int'",
                                    "expected invalid cast") &&
              passed;
-    passed = expect_error_contains("bad(): bool { return 1; }", "expected type 'bool' but got 'int'",
+    passed = expect_error_contains("fn bad(): bool { return 1; }", "expected type 'bool' but got 'int'",
                                    "expected return type mismatch") &&
              passed;
-    passed = expect_error_contains("is_done(value: bool): bool { return value; } print(is_done(1));",
+    passed = expect_error_contains("fn is_done(value: bool): bool { return value; } print(is_done(1));",
                                    "no overload for function 'is_done' with argument types (int)",
                                    "expected call argument mismatch") &&
              passed;
@@ -387,13 +467,13 @@ int main() {
     passed =
         expect_error_contains("message: text = 65;", "expected type 'text' but got 'int'", "expected text mismatch") &&
         passed;
-    passed = expect_error_contains("bad(): unit { return 1; }", "expected type 'unit' but got 'int'",
+    passed = expect_error_contains("fn bad(): unit { return 1; }", "expected type 'unit' but got 'int'",
                                    "expected unit return mismatch") &&
              passed;
-    passed = expect_error_contains("bad(): int { return; }", "expected type 'int' but got 'unit'",
+    passed = expect_error_contains("fn bad(): int { return; }", "expected type 'int' but got 'unit'",
                                    "expected missing return value mismatch") &&
              passed;
-    passed = expect_error_contains("noop(): unit { } value = noop();", "variables cannot have type 'unit'",
+    passed = expect_error_contains("fn noop(): unit { } value = noop();", "variables cannot have type 'unit'",
                                    "expected unit binding mismatch") &&
              passed;
     passed = expect_error_contains("values: [int] = [1, true];", "expected type 'int' but got 'bool'",
@@ -401,6 +481,18 @@ int main() {
              passed;
     passed = expect_error_contains("values = [];", "empty array literal needs an array type",
                                    "expected empty array annotation error") &&
+             passed;
+    passed =
+        expect_error_contains("bad: bool = 1 in 2;", "operator 'in' requires array or text container but got 'int'",
+                              "expected unsupported membership container error") &&
+        passed;
+    passed = expect_error_contains("values: [int] = [1, 2]; bad: bool = true in values;",
+                                   "expected type 'int' but got 'bool'", "expected membership value mismatch") &&
+             passed;
+    passed = expect_error_contains("record Point { x: int } values: [Point] = []; "
+                                   "p: Point = Point { x: 1 }; bad: bool = p in values;",
+                                   "operator 'in' requires comparable array elements but got 'Point'",
+                                   "expected non-comparable membership error") &&
              passed;
     passed = expect_error_contains("values: [int] = [1]; print(math.square(values[0]));", "undefined variable 'math'",
                                    "expected missing math import") &&
@@ -477,11 +569,24 @@ int main() {
                                    "no overload for function 'math.clamp' with argument types (int, int)",
                                    "expected math.clamp arity mismatch") &&
              passed;
-    passed = expect_error_contains("bad<T is nope>(value: T): T { return value; } print(bad(1));",
+    passed = expect_error_contains("fn bad<T is nope>(value: T): T { return value; } print(bad(1));",
                                    "unknown generic bound 'nope'", "expected unknown generic bound error") &&
              passed;
     passed = expect_error_contains("record Point { x: int, y: int } p: Point = Point { x: 1 };",
                                    "missing field 'y' for record 'Point'", "expected missing record field") &&
+             passed;
+    passed = expect_error_contains("record Config { required: int, optional: int = 7 } "
+                                   "config: Config = Config { optional: 1 };",
+                                   "missing field 'required' for record 'Config'",
+                                   "expected required record field to remain mandatory") &&
+             passed;
+    passed =
+        expect_error_contains("record Config { value: int = true } config: Config = Config {};",
+                              "expected type 'int' but got 'bool'", "expected record default field type mismatch") &&
+        passed;
+    passed = expect_error_contains("record Config { base: int = 10, doubled: int = base * 2 } "
+                                   "config: Config = Config {};",
+                                   "undefined variable 'base'", "expected record defaults not to see sibling fields") &&
              passed;
     passed = expect_error_contains("record Point { x: int } p: Point = Point { x: true };",
                                    "expected type 'int' but got 'bool'", "expected record field type mismatch") &&
@@ -489,12 +594,12 @@ int main() {
     passed = expect_error_contains("record Point { x: int } p: Point = Point { x: 1 }; print(p.y);",
                                    "record 'Point' has no field 'y'", "expected missing record member") &&
              passed;
-    passed = expect_error_contains("same<T is comparable>(left: T, right: T): bool { return left == right; } "
+    passed = expect_error_contains("fn same<T is comparable>(left: T, right: T): bool { return left == right; } "
                                    "values: [int] = [1]; print(same(values, values));",
                                    "no overload for function 'same' with argument types ([int], [int])",
                                    "expected comparable bound mismatch") &&
              passed;
-    passed = expect_error_contains("invalid<T>(left: T, right: T): bool { return left == right; } "
+    passed = expect_error_contains("fn invalid<T>(left: T, right: T): bool { return left == right; } "
                                    "values: [int] = [1]; print(invalid(values, values));",
                                    "while instantiating invalid<T = [int]>", "expected generic instantiation trace") &&
              passed;
@@ -516,11 +621,38 @@ int main() {
                                    "chosen: int = when value { is Present(x) { x } is Absent(x) { x } };",
                                    "does not have a payload", "expected unit variant payload pattern error") &&
              passed;
+    passed = expect_error_contains("choice Maybe { Present(int), Absent, } value: Maybe = Absent; "
+                                   "chosen: int = when value { Missing => 0; _ => 1; };",
+                                   "has no variant 'Missing'", "expected unknown arrow variant pattern error") &&
+             passed;
+    passed = expect_error_contains("choice Maybe { Present(int), Absent, } value: Maybe = Absent; "
+                                   "chosen: int = when value { Present(x) => x; Present(y) => y; Absent => 0; };",
+                                   "duplicate when branch for variant 'Present'",
+                                   "expected duplicate arrow variant pattern error") &&
+             passed;
+    passed = expect_error_contains("pair: (int, int) = (1, 2, 3);", "tuple literal expected 2 elements but got 3",
+                                   "expected tuple literal arity error") &&
+             passed;
+    passed = expect_error_contains("(left, right) = 1;", "expected tuple value but got 'int'",
+                                   "expected non-tuple destructuring error") &&
+             passed;
+    passed =
+        expect_error_contains("left: int = 0; right: int = 0; (left, right) = (1, true);",
+                              "expected type 'int' but got 'bool'", "expected tuple destructuring type mismatch") &&
+        passed;
+    passed = expect_error_contains("record Point { x: int, y: int } point: Point = Point { x: 1, y: 2 }; "
+                                   "sum: int = when point { Point { z } => z; };",
+                                   "record 'Point' has no field 'z'", "expected record pattern field error") &&
+             passed;
+    passed =
+        expect_error_contains("value = (1, 2); sum: int = when value { (left, middle, right) => left; };",
+                              "tuple pattern expected 2 elements but got 3", "expected tuple pattern arity error") &&
+        passed;
     passed = expect_error_contains("record Box<T> { value: T } value = Box { value: 1 };",
                                    "generic record literal 'Box' needs an expected type",
                                    "expected generic record inference error") &&
              passed;
-    passed = expect_error_contains("record Point { x: int, new(): int { return 1; } }",
+    passed = expect_error_contains("record Point { x: int, fn new(): int { return 1; } }",
                                    "constructor for record 'Point' must return 'Point'",
                                    "expected constructor return type error") &&
              passed;
@@ -550,17 +682,17 @@ int main() {
                                    "expected missing contract method error") &&
              passed;
     passed = expect_error_contains("contract Shape { area(): real64; } "
-                                   "record Circle with Shape { static area(): real64 { return 1.0; } }",
+                                   "record Circle with Shape { static fn area(): real64 { return 1.0; } }",
                                    "record 'Circle' declares contract 'Shape' but is missing method 'area(): real64'",
                                    "expected static method not to satisfy contract") &&
              passed;
     passed = expect_error_contains("contract Shape { area(): real64; } "
-                                   "record Circle with Shape { area(): int { return 1; } }",
+                                   "record Circle with Shape { fn area(): int { return 1; } }",
                                    "method 'area' for contract 'Shape' expected return type 'real64' but got 'int'",
                                    "expected contract return type error") &&
              passed;
     passed = expect_error_contains("record Canvas { } contract Drawable { draw(canvas: Canvas): unit; } "
-                                   "record Pen with Drawable { draw(canvas: text): unit { } }",
+                                   "record Pen with Drawable { fn draw(canvas: text): unit { } }",
                                    "method 'draw' for contract 'Drawable' expected parameter 1 type 'Canvas' but got "
                                    "'text'",
                                    "expected contract parameter type error") &&
@@ -571,12 +703,12 @@ int main() {
     passed = expect_error_contains("import math; print(math.UNKNOWN);", "module 'math' does not export 'UNKNOWN'",
                                    "expected missing module value") &&
              passed;
-    passed = expect_error_contains("choose(value: i64): i64 { return value; } "
-                                   "choose(value: u64): u64 { return value; } print(choose(1));",
+    passed = expect_error_contains("fn choose(value: i64): i64 { return value; } "
+                                   "fn choose(value: u64): u64 { return value; } print(choose(1));",
                                    "ambiguous overload for function 'choose'", "expected ambiguous overload") &&
              passed;
-    passed = expect_error_contains("same(value: int): int { return value; } "
-                                   "same(value: int): int { return value; }",
+    passed = expect_error_contains("fn same(value: int): int { return value; } "
+                                   "fn same(value: int): int { return value; }",
                                    "duplicate overload for function 'same'", "expected duplicate overload") &&
              passed;
     passed = expect_error_contains("import time;", "unknown module 'time'", "expected unknown module error") && passed;

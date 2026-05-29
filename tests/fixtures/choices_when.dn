@@ -3,7 +3,7 @@ choice Maybe {
     Absent,
 }
 
-fallback(value: Maybe, default: int): int {
+fn fallback(value: Maybe, default: int): int {
     return when value {
         is Present(x) { x }
         is Absent { default }

@@ -5,27 +5,27 @@ export contract Shape {
 export record Counter {
     value: int,
 
-    export new(): Counter {
+    export fn new(): Counter {
         return Counter { value: 0 };
     }
 
-    export static zero(): Counter {
+    export static fn zero(): Counter {
         return Counter { value: 0 };
     }
 
-    static secret(): Counter {
+    static fn secret(): Counter {
         return Counter { value: -1 };
     }
 
-    export inc(): unit {
+    export fn inc(): unit {
         this.value = this.value + 1;
     }
 
-    reset(): unit {
+    fn reset(): unit {
         this.value = 0;
     }
 
-    export current(): int {
+    export fn current(): int {
         return this.value;
     }
 }
@@ -33,11 +33,11 @@ export record Counter {
 export record Circle with Shape {
     radius: real64,
 
-    export new(radius: real64): Circle {
+    export fn new(radius: real64): Circle {
         return Circle { radius: radius };
     }
 
-    export area(): real64 {
+    export fn area(): real64 {
         return 3.0 * this.radius * this.radius;
     }
 }

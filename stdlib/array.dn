@@ -112,7 +112,7 @@ export method<T> [T].fill(value: T): unit {
     }
 }
 
-export range(start: int, end: int): [int] {
+export fn range(start: int, end: int): [int] {
     result: [int] = [];
     for value = start; value < end; value = value + 1 {
         result.push(value);
@@ -121,11 +121,11 @@ export range(start: int, end: int): [int] {
     return result;
 }
 
-export range(end: int): [int] {
+export fn range(end: int): [int] {
     return range(0, end);
 }
 
-export range(start: int, end: int, step: int): [int] {
+export fn range(start: int, end: int, step: int): [int] {
     result: [int] = [];
     if step > 0 {
         value = start;
@@ -146,7 +146,7 @@ export range(start: int, end: int, step: int): [int] {
     return result;
 }
 
-export repeat<T>(value: T, count: int): [T] {
+export fn repeat<T>(value: T, count: int): [T] {
     result: [T] = [];
     for index = 0; index < count; index = index + 1 {
         result.push(value);
@@ -155,7 +155,7 @@ export repeat<T>(value: T, count: int): [T] {
     return result;
 }
 
-export zeros<T is numeric>(count: int): [T] {
+export fn zeros<T is numeric>(count: int): [T] {
     result: [T] = [];
     for index = 0; index < count; index = index + 1 {
         result.push(0);
@@ -164,7 +164,7 @@ export zeros<T is numeric>(count: int): [T] {
     return result;
 }
 
-export ones<T is numeric>(count: int): [T] {
+export fn ones<T is numeric>(count: int): [T] {
     result: [T] = [];
     for index = 0; index < count; index = index + 1 {
         result.push(1);
@@ -173,11 +173,11 @@ export ones<T is numeric>(count: int): [T] {
     return result;
 }
 
-export full<T>(count: int, value: T): [T] {
+export fn full<T>(count: int, value: T): [T] {
     return repeat(value, count);
 }
 
-export sum(values: [int]): int {
+export fn sum(values: [int]): int {
     result = 0;
     for index = 0; index < values.len(); index = index + 1 {
         result = result + values[index];
@@ -268,7 +268,7 @@ export method [bool].any(): bool {
     return false;
 }
 
-export sum(values: [real64]): real64 {
+export fn sum(values: [real64]): real64 {
     result: real64 = 0.0;
     for index = 0; index < values.len(); index = index + 1 {
         result = result + values[index];

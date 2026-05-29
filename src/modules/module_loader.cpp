@@ -119,6 +119,15 @@ std::unique_ptr<Expression> clone_expression_pointer(const std::unique_ptr<Expre
     return clone_expression(*expression);
 }
 
+std::shared_ptr<Expression> clone_expression_pointer(const std::shared_ptr<Expression>& expression) {
+    if (expression == nullptr) {
+        return nullptr;
+    }
+
+    std::unique_ptr<Expression> cloned = clone_expression(*expression);
+    return std::shared_ptr<Expression>(std::move(cloned));
+}
+
 std::unique_ptr<Expression> clone_expression(const Expression& expression) {
     auto result = std::make_unique<Expression>(Expression{expression.kind, expression.lexeme,
                                                           clone_expression_pointer(expression.left),
@@ -159,8 +168,8 @@ Statement clone_statement(const Statement& statement) {
     result.type = clone_type_annotation(statement.type);
     result.parameters.reserve(statement.parameters.size());
     for (const Parameter& parameter : statement.parameters) {
-        result.parameters.push_back(
-            Parameter{parameter.name, clone_type_annotation(parameter.type), parameter.location, parameter.exported});
+        result.parameters.push_back(Parameter{parameter.name, clone_type_annotation(parameter.type), parameter.location,
+                                              parameter.exported, clone_expression_pointer(parameter.default_value)});
     }
 
     result.generic_parameters = statement.generic_parameters;
@@ -487,6 +496,9 @@ void ModuleLoader::qualify_statement(Statement& statement, const std::string& mo
     qualify_type_annotation(statement.type, module_name, local_structs);
     for (Parameter& parameter : statement.parameters) {
         qualify_type_annotation(parameter.type, module_name, local_structs);
+        if (parameter.default_value != nullptr) {
+            qualify_expression(*parameter.default_value, module_name, local_functions, local_constants, local_structs);
+        }
     }
 
     if (statement.expression != nullptr) {

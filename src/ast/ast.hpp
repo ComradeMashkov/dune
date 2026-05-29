@@ -7,6 +7,8 @@
 
 namespace dune {
 
+struct Expression;
+
 struct SourceLocation {
     std::size_t line = 1;
     std::size_t column = 1;
@@ -32,6 +34,7 @@ enum class ValueType {
     text_type,
     unit_type,
     array_type,
+    tuple_type,
     generic_type,
     struct_type,
     enum_type,
@@ -54,6 +57,7 @@ struct Parameter {
     TypeAnnotation type;
     SourceLocation location;
     bool exported = false;
+    std::shared_ptr<Expression> default_value;
 };
 
 struct GenericParameter {
@@ -70,6 +74,7 @@ enum class ExpressionKind {
     string,
     boolean,
     array,
+    tuple,
     struct_literal,
     index,
     slice,
@@ -77,6 +82,7 @@ enum class ExpressionKind {
     unary,
     cast,
     binary,
+    range,
     when_expression,
     call,
     method_call,
@@ -102,6 +108,7 @@ enum class StatementKind {
     if_statement,
     while_statement,
     for_statement,
+    for_in_statement,
     break_statement,
     continue_statement,
     function,

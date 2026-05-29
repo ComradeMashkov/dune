@@ -4,6 +4,7 @@
 
 #include <deque>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -18,6 +19,7 @@ public:
         Type type;
         SourceLocation location;
         bool exported = false;
+        std::shared_ptr<Expression> default_value;
     };
 
     struct StructMethod {
@@ -107,6 +109,7 @@ private:
     void define_enum(const Statement& statement);
     void declare_contract(const Statement& statement);
     void define_contract(const Statement& statement);
+    void check_struct_field_defaults(const Statement& statement);
     void validate_constructor(const Statement& record, const Statement& method,
                               const std::unordered_set<std::string>& generic_names) const;
     void validate_contract_implementations(const Statement& statement) const;
@@ -114,13 +117,17 @@ private:
     void collect_generic_function(const Statement& statement);
     void check_function(const Statement& statement);
     void check_statement(const Statement& statement);
+    void check_for_in_statement(const Statement& statement);
     void check_statements(const std::vector<Statement>& statements);
+    Type check_for_in_iterable(const Expression& expression);
     Type check_assignment_target(const Expression& target, SourceLocation location);
     Type check_member_assignment_target(const Expression& target, SourceLocation location);
     Type check_expression(const Expression& expression, const TypeAnnotation& expected = {});
     Type check_binary_expression(const Expression& expression, const TypeAnnotation& expected);
+    Type check_membership_expression(const Expression& expression);
     Type check_when_expression(const Expression& expression, const TypeAnnotation& expected);
     Type check_call_expression(const Expression& expression, const TypeAnnotation& expected);
+    Type check_format_call_expression(const Expression& expression);
     Type check_method_call_expression(const Expression& expression, const TypeAnnotation& expected);
     Type check_constructor_call_expression(const Expression& expression, const std::string& record_name,
                                            const TypeAnnotation& expected);
@@ -130,6 +137,7 @@ private:
     Type check_unary_expression(const Expression& expression);
     Type check_cast_expression(const Expression& expression);
     Type check_array_literal(const Expression& expression, const TypeAnnotation& expected);
+    Type check_tuple_literal(const Expression& expression, const TypeAnnotation& expected);
     Type check_struct_literal(const Expression& expression, const TypeAnnotation& expected);
     Type check_index_expression(const Expression& expression);
     Type check_slice_expression(const Expression& expression);
@@ -142,6 +150,8 @@ private:
     Type check_receiver_method_call(const Expression& expression, const TypeAnnotation& expected);
     Type check_array_method_call(const Type& receiver, const Expression& expression);
     Type check_text_method_call(const Type& receiver, const Expression& expression);
+    void check_format_arguments(const Expression& format, const std::vector<std::unique_ptr<Expression>>& arguments,
+                                std::size_t first_argument, std::string_view feature_name);
 
     bool statement_returns(const Statement& statement) const;
     bool statements_return(const std::vector<Statement>& statements) const;
@@ -173,6 +183,12 @@ private:
     bool is_variant_name_for_expected_enum(const std::string& name, const TypeAnnotation& expected) const;
     VariantResolution resolve_variant_pattern(const Expression& pattern, const Type& subject);
     Type check_enum_when_expression(const Expression& expression, const Type& subject, const TypeAnnotation& expected);
+    Type check_record_when_expression(const Expression& expression, const Type& subject,
+                                      const TypeAnnotation& expected);
+    Type check_tuple_when_expression(const Expression& expression, const Type& subject, const TypeAnnotation& expected);
+    void check_tuple_destructuring_assignment(const Expression& target, const Expression& value);
+    void bind_record_pattern(const Expression& pattern, const Type& subject);
+    void bind_tuple_pattern(const Expression& pattern, const Type& subject);
     void check_integer_literal_range(const Expression& expression, const Type& target) const;
     unsigned long long max_integer_literal(ValueType target) const;
     Type coerce_numeric_literal(const Expression& expression, const Type& actual, const Type& target);
@@ -236,6 +252,7 @@ std::string type_name(ValueType type);
 std::string type_name(const Type& type);
 Type make_type(ValueType type);
 Type make_array_type(Type element);
+Type make_tuple_type(std::vector<Type> elements);
 Type make_struct_type(std::string name);
 Type make_struct_type(std::string name, std::vector<Type> arguments);
 Type make_enum_type(std::string name);

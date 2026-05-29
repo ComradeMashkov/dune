@@ -26,12 +26,18 @@ private:
     void compile_global_constants();
     void compile_statements(const std::vector<Statement>& statements);
     void compile_statement(const Statement& statement);
+    void compile_for_in_statement(const Statement& statement);
+    void compile_range_for_in_statement(const Statement& statement, const Type& element_type);
+    void compile_array_for_in_statement(const Statement& statement, const Type& iterable_type);
     void compile_expression(const Expression& expression);
     void compile_method_call_expression(const Expression& expression);
+    void compile_format_expression(const Expression& expression);
     void compile_member_expression(const Expression& expression);
     void compile_when_expression(const Expression& expression);
     void compile_assignment_target(const Expression& target, const Expression& value);
+    void compile_tuple_destructuring_assignment(const Expression& target, const Expression& value);
     void compile_variant_constructor(const Expression& expression);
+    void compile_tuple_literal(const Expression& expression);
     void compile_struct_literal(const Expression& expression);
     void compile_binary_expression(const Expression& expression);
     void compile_cast_expression(const Expression& expression);

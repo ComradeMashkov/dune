@@ -2,15 +2,15 @@ record Optimizer {
     lr: real64,
     momentum: real64,
 
-    export static default(): Optimizer {
+    export static fn default(): Optimizer {
         return Optimizer { lr: 0.01, momentum: 0.0 };
     }
 
-    export static with_lr(lr: real64): Optimizer {
+    export static fn with_lr(lr: real64): Optimizer {
         return Optimizer { lr: lr, momentum: 0.0 };
     }
 
-    rate(): real64 {
+    fn rate(): real64 {
         return this.lr;
     }
 }
@@ -18,11 +18,11 @@ record Optimizer {
 record Box<T> {
     value: T,
 
-    export static wrap(value: T): Box<T> {
+    export static fn wrap(value: T): Box<T> {
         return Box { value: value };
     }
 
-    get(): T {
+    fn get(): T {
         return this.value;
     }
 }

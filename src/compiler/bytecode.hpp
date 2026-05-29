@@ -17,6 +17,7 @@ enum class ValueKind {
     text,
     unit,
     array,
+    tuple,
     record,
     variant,
 };
@@ -30,6 +31,7 @@ struct Value {
     bool bool_value = false;
     std::string text_value;
     std::shared_ptr<std::vector<Value>> array_value;
+    std::shared_ptr<std::vector<Value>> tuple_value;
     std::shared_ptr<std::vector<Value>> record_value;
     std::size_t variant_tag = 0;
     std::shared_ptr<Value> variant_payload;
@@ -63,12 +65,14 @@ enum class OpCode {
     return_value,
     pop,
     make_array,
+    make_tuple,
     make_record,
     make_variant,
     make_unit_variant,
     load_variant_tag,
     load_variant_payload,
     load_index,
+    load_tuple_element,
     load_field,
     store_index,
     store_field,
@@ -78,12 +82,15 @@ enum class OpCode {
     array_pop,
     array_clear,
     array_is_empty,
+    array_contains,
     text_len,
     text_contains,
+    text_in,
     text_starts_with,
     text_is_empty,
     print,
     print_format,
+    format_text,
     halt,
 };
 

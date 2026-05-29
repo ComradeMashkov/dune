@@ -6,9 +6,11 @@ const PREC = {
   multiplicative: 8,
   additive: 7,
   comparison: 6,
+  membership: 6,
   equality: 5,
   and: 4,
   or: 3,
+  range: 2,
 };
 
 module.exports = grammar({
@@ -41,6 +43,7 @@ module.exports = grammar({
       $.method_declaration,
       $.binding_statement,
       $.const_statement,
+      $.tuple_assignment_statement,
       $.assignment_statement,
       $.print_statement,
       $.return_statement,
@@ -69,6 +72,7 @@ module.exports = grammar({
     import_statement: $ => seq("import", field("module", $.identifier), optional(";")),
 
     function_declaration: $ => prec(2, seq(
+      "fn",
       field("name", $.identifier),
       optional($.generic_parameters),
       field("parameters", $.parameter_list),
@@ -78,6 +82,7 @@ module.exports = grammar({
 
     foreign_function_declaration: $ => seq(
       "foreign",
+      "fn",
       field("name", $.identifier),
       optional($.generic_parameters),
       field("parameters", $.parameter_list),
@@ -99,7 +104,12 @@ module.exports = grammar({
       "}",
     ),
 
-    record_field: $ => seq(field("name", $.identifier), ":", field("type", $._type)),
+    record_field: $ => seq(
+      field("name", $.identifier),
+      ":",
+      field("type", $._type),
+      optional(seq("=", field("default", $._expression))),
+    ),
 
     record_method: $ => seq(optional("static"), $.function_declaration),
 
@@ -189,6 +199,22 @@ module.exports = grammar({
       ";",
     ),
 
+    tuple_assignment_statement: $ => seq(
+      field("target", $.tuple_destructure_target),
+      "=",
+      field("value", $._expression),
+      ";",
+    ),
+
+    tuple_destructure_target: $ => prec(2, seq(
+      "(",
+      field("name", choice($.identifier, $.wildcard_pattern)),
+      ",",
+      commaSep1(field("name", choice($.identifier, $.wildcard_pattern))),
+      optional(","),
+      ")",
+    )),
+
     print_statement: $ => seq(
       "print",
       "(",
@@ -219,11 +245,20 @@ module.exports = grammar({
 
     for_statement: $ => seq(
       "for",
-      optional($.for_binding_initializer),
-      ";",
-      optional(field("condition", $._expression)),
-      ";",
-      optional(field("increment", $.for_assignment_initializer)),
+      choice(
+        seq(
+          field("iterator", $.identifier),
+          "in",
+          field("iterable", $._expression),
+        ),
+        seq(
+          optional($.for_binding_initializer),
+          ";",
+          optional(field("condition", $._expression)),
+          ";",
+          optional(field("increment", $.for_assignment_initializer)),
+        ),
+      ),
       field("body", $.block),
     ),
 
@@ -246,6 +281,7 @@ module.exports = grammar({
 
     _type: $ => choice(
       $.array_type,
+      $.tuple_type,
       $.generic_type,
       $.builtin_type,
       $.qualified_type_identifier,
@@ -253,6 +289,15 @@ module.exports = grammar({
     ),
 
     array_type: $ => seq("[", field("element", $._type), "]"),
+
+    tuple_type: $ => seq(
+      "(",
+      field("element", $._type),
+      ",",
+      commaSep1(field("element", $._type)),
+      optional(","),
+      ")",
+    ),
 
     generic_type: $ => prec(1, seq(
       field("name", choice($.qualified_type_identifier, $.identifier)),
@@ -293,6 +338,7 @@ module.exports = grammar({
       $.call_expression,
       $.index_expression,
       $.slice_expression,
+      $.range_expression,
       $.binary_expression,
       $.unary_expression,
       $.cast_expression,
@@ -302,6 +348,7 @@ module.exports = grammar({
     _primary_expression: $ => choice(
       $.array_literal,
       $.record_literal,
+      $.tuple_literal,
       $.parenthesized_expression,
       $.number,
       $.float,
@@ -322,10 +369,20 @@ module.exports = grammar({
       "}",
     ),
 
-    when_arm: $ => seq("is", field("pattern", $._pattern), field("body", $.block)),
+    when_arm: $ => choice(
+      seq("is", field("pattern", $._pattern), field("body", $.block)),
+      seq(field("pattern", $._pattern), "=>", field("body", $.when_arrow_body), optional(";")),
+    ),
+
+    when_arrow_body: $ => choice(
+      $._expression,
+      seq("{", $._expression, optional(";"), "}"),
+    ),
 
     _pattern: $ => choice(
       $.wildcard_pattern,
+      $.record_pattern,
+      $.tuple_pattern,
       $.variant_pattern,
       $.number,
       $.float,
@@ -345,6 +402,28 @@ module.exports = grammar({
       ")",
     )),
 
+    record_pattern: $ => prec(2, seq(
+      field("type", choice($.qualified_type_identifier, $.constructor_identifier)),
+      "{",
+      optional(commaSep($.record_pattern_field)),
+      optional(","),
+      "}",
+    )),
+
+    record_pattern_field: $ => seq(
+      field("field", $.identifier),
+      optional(seq(":", field("binding", choice($.identifier, $.wildcard_pattern)))),
+    ),
+
+    tuple_pattern: $ => seq(
+      "(",
+      field("binding", choice($.identifier, $.wildcard_pattern)),
+      ",",
+      commaSep1(field("binding", choice($.identifier, $.wildcard_pattern))),
+      optional(","),
+      ")",
+    ),
+
     array_literal: $ => seq("[", optional(commaSep($._expression)), optional(","), "]"),
 
     record_literal: $ => prec(2, seq(
@@ -356,6 +435,15 @@ module.exports = grammar({
     )),
 
     field_initializer: $ => seq(field("name", $.identifier), ":", field("value", $._expression)),
+
+    tuple_literal: $ => seq(
+      "(",
+      field("element", $._expression),
+      ",",
+      commaSep1(field("element", $._expression)),
+      optional(","),
+      ")",
+    ),
 
     call_expression: $ => prec(PREC.call, seq(
       field("function", choice($.identifier, $.constructor_identifier)),
@@ -418,6 +506,12 @@ module.exports = grammar({
       field("type", $._type),
     )),
 
+    range_expression: $ => prec.left(PREC.range, seq(
+      field("start", $._expression),
+      "..",
+      field("end", $._expression),
+    )),
+
     binary_expression: $ => choice(
       ...[
         ["||", PREC.or],
@@ -428,6 +522,7 @@ module.exports = grammar({
         [">=", PREC.comparison],
         ["<", PREC.comparison],
         ["<=", PREC.comparison],
+        ["in", PREC.membership],
         ["+", PREC.additive],
         ["-", PREC.additive],
         ["*", PREC.multiplicative],
@@ -450,13 +545,13 @@ module.exports = grammar({
 
     constructor_identifier: _ => token(prec(1, /[A-Z][A-Za-z0-9_]*/)),
 
-    number: _ => /\d+/,
+    number: _ => /(0[xX][0-9A-Fa-f](?:_?[0-9A-Fa-f])*|0[bB][01](?:_?[01])*|\d(?:_?\d)*)(?:i8|i16|i32|i64|isize|u8|u16|u32|u64|usize)?/,
 
-    float: _ => /\d+\.\d+/,
+    float: _ => /\d(?:_?\d)*\.\d(?:_?\d)*/,
 
-    character: _ => token(seq("'", choice(/[^'\\\n]/, seq("\\", /./)), "'")),
+    character: _ => token(seq("'", choice(/[^'\\\n]/, seq("\\", /[nrt0'\\]/)), "'")),
 
-    string: _ => token(seq('"', repeat(choice(/[^"\\\n]/, seq("\\", /./))), '"')),
+    string: _ => token(choice(seq('r"', repeat(/[^"\n]/), '"'), seq('"', repeat(choice(/[^"\\\n]/, seq("\\", /[nrt0"\\]/))), '"'))),
   },
 });
 

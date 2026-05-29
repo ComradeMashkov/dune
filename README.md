@@ -53,23 +53,32 @@ if x == 0 {
 
 Boolean values are represented as `1` for `true` and `0` for `false` when printed.
 
-Typed functions and scalar values:
+Typed functions use the `fn` keyword. Scalar values can be annotated with an
+explicit type:
 
 ```dn
-log(message: text): unit {
+fn log(message: text): unit {
   print(message);
 }
 
 count: usize = 5;
 precise: real64 = 2.25;
+mask: u64 = 0xffu64;
+bits: u8 = 0b1010_0101u8;
 
 log("ready");
 print(count);
 print(precise);
+print(mask);
+print(bits);
 ```
 
+Integer literals support `_` separators, `0x` hex, `0b` binary, and explicit
+integer suffixes such as `i32`, `i64`, `u8`, `u64`, and `usize`.
+
 Formatted output keeps `print(expression)` working and also supports a string
-literal with positional `{}` placeholders:
+literal with positional `{}` placeholders. The same formatting is available as
+the `format(...)` expression, which returns `text`:
 
 ```dn
 name: text = "Dune";
@@ -77,12 +86,25 @@ version: int = 1;
 
 print("{} v{}", name, version);
 print("ready={}, value={}", true, 42);
+message: text = format("{} v{}", name, version);
 ```
 
 For now the format string must be a literal, placeholders are plain `{}` only,
 and the number of placeholders must match the number of following arguments.
 Printable values are the scalar types: integer and unsigned integer types,
 `real32`/`real64`, `bool`, `glyph`, and `text`.
+
+Text and glyph literals support explicit escapes. Normal `text` literals decode
+`\n`, `\t`, `\r`, `\\`, `\"`, and `\0`; `glyph` literals decode `\n`, `\t`,
+`\r`, `\\`, `\'`, and `\0`. Unknown escapes are compile-time errors. Raw
+single-line text literals use `r"..."` and keep backslashes literally:
+
+```dn
+path: text = r"C:\Users\name\data.csv";
+line: text = "hello\n";
+tab: glyph = '\t';
+quote: glyph = '\'';
+```
 
 Arrays and modules:
 
@@ -121,11 +143,11 @@ boundaries unless that member is marked `export`.
 ```dn
 export const ANSWER: int = 42;
 
-hidden(): int {
+fn hidden(): int {
   return 7;
 }
 
-export public(): int {
+export fn public(): int {
   return hidden();
 }
 ```
@@ -158,7 +180,7 @@ print(message.starts_with("dune"));
 Indexing, slices, loops, and foreign functions:
 
 ```dn
-foreign c_sqrt(value: real64): real64 = "sqrt";
+foreign fn c_sqrt(value: real64): real64 = "sqrt";
 
 message: text = "dune language";
 print(message[0]);
@@ -167,7 +189,11 @@ print(message[5:13]);
 values: [int] = [1, 2, 3, 4];
 middle: [int] = values[1:3];
 
-for i = 0; i < middle.len(); i = i + 1 {
+for value in middle {
+  print(value);
+}
+
+for i in 0..middle.len() {
   if i == 1 {
     continue;
   }
@@ -370,7 +396,7 @@ record Point {
   x: real64,
   y: real64,
 
-  sum(): real64 {
+  fn sum(): real64 {
     return this.x + this.y;
   }
 }
@@ -382,11 +408,11 @@ print(point.sum());
 Functions can be overloaded by parameter types:
 
 ```dn
-show(value: int): int {
+fn show(value: int): int {
   return value + 1;
 }
 
-show(value: bool): int {
+fn show(value: bool): int {
   if value {
     return 10;
   } else {
@@ -401,11 +427,11 @@ parameter can be unbounded, or it can use one of the current built-in bounds:
 `integer`, `numeric`, `real`, `comparable`, or `ordered`.
 
 ```dn
-identity<T>(value: T): T {
+fn identity<T>(value: T): T {
   return value;
 }
 
-square<T is numeric>(value: T): T {
+fn square<T is numeric>(value: T): T {
   return value * value;
 }
 ```
@@ -418,11 +444,40 @@ record Box<T> {
   value: T,
 }
 
-boxed<T>(value: T): Box<T> {
+fn boxed<T>(value: T): Box<T> {
   return Box { value: value };
 }
 
 answer: Box<int> = boxed(42);
+```
+
+Tuples group a small fixed number of values without declaring a record. Tuple
+types and literals currently require at least two elements. Tuples are returned,
+passed, and destructured as values; direct element access such as `.0` is a
+future extension.
+
+```dn
+fn minmax(values: [int]): (int, int) {
+  return (values[0], values[1]);
+}
+
+(lo, hi) = minmax([3, 8]);
+print(lo);
+print(hi);
+```
+
+Record fields can declare default values. A record literal may omit fields that
+have defaults; missing fields without defaults are still rejected. Defaults are
+evaluated each time a record value is created.
+
+```dn
+record Optimizer {
+  lr: real64 = 0.01,
+  momentum: real64 = 0.0,
+}
+
+base: Optimizer = Optimizer {};
+fast: Optimizer = Optimizer { lr: 0.1 };
 ```
 
 Records can declare lightweight constructors and explicitly implement contracts.
@@ -439,7 +494,7 @@ record Optimizer {
   lr: real64,
   momentum: real64,
 
-  static default(): Optimizer {
+  static fn default(): Optimizer {
     return Optimizer { lr: 0.01, momentum: 0.0 };
   }
 }
@@ -455,16 +510,16 @@ contract Shape {
 record Circle with Shape {
   radius: real64,
 
-  new(radius: real64): Circle {
+  fn new(radius: real64): Circle {
     return Circle { radius: radius };
   }
 
-  area(): real64 {
+  fn area(): real64 {
     return 3.0 * this.radius * this.radius;
   }
 }
 
-area_of<T is Shape>(shape: T): real64 {
+fn area_of<T is Shape>(shape: T): real64 {
   return shape.area();
 }
 
@@ -478,15 +533,15 @@ When records come from modules, member visibility is explicit:
 export record Counter {
   value: int,
 
-  export new(): Counter {
+  export fn new(): Counter {
     return Counter { value: 0 };
   }
 
-  export inc(): unit {
+  export fn inc(): unit {
     this.value = this.value + 1;
   }
 
-  export current(): int {
+  export fn current(): int {
     return this.value;
   }
 }
@@ -504,6 +559,16 @@ binding such as `x: int = 2` creates a new binding in the current scope and can
 shadow a mutable outer binding. Plain `x = 2` updates the nearest visible `x`, or
 creates one in the current scope if none exists. Constants cannot be reassigned
 or accidentally shadowed. Assignments to scalar values copy the value.
+
+`for name in values { ... }` iterates arrays. `for i in start..end { ... }`
+iterates integer ranges with `start` included and `end` excluded; descending or
+otherwise empty ranges run zero iterations. The loop variable is scoped to the
+loop body and is read-only, like a constant binding.
+
+The `in` operator checks membership and returns `bool`. It supports `value in
+array` for comparable array elements and `text in text` for substring checks.
+Use `!(value in container)` for negated membership; there is no separate `not
+in` operator yet.
 
 ```dn
 x = 1;
@@ -549,8 +614,8 @@ choice Maybe<T> {
 value: Maybe<int> = Present(42);
 
 answer = when value {
-  is Present(x) { x }
-  is Absent { 0 }
+  Present(x) => x;
+  Absent => 0;
 };
 ```
 
@@ -565,19 +630,30 @@ export method<T> [T].first(): T {
 ```
 
 `when` expressions compare a subject against literal patterns or choice variant
-patterns. Literal matches require a `_` fallback arm. Choice matches must cover
-every variant, or include `_` as a fallback. A payload variant pattern binds the
-payload only inside that arm.
+patterns. They can also destructure records and tuples with irrefutable patterns.
+Arms can use the compact `pattern => expression;` form, or the older
+`is pattern { expression }` form. Literal matches require a `_` fallback arm.
+Choice matches must cover every variant, or include `_` as a fallback. A payload
+variant pattern binds the payload only inside that arm; record and tuple patterns
+bind their selected fields or elements inside the arm.
 
 ```dn
 label = when answer.value {
-  is 42 { "answer" }
-  is _ { "other" }
+  42 => "answer";
+  _ => "other";
 };
 
 unwrapped = when value {
-  is Present(x) { x }
-  is Absent { 0 }
+  Present(x) => x;
+  Absent => 0;
+};
+
+point_sum = when point {
+  Point { x, y } => x + y;
+};
+
+pair_sum = when (lo, hi) {
+  (left, right) => left + right;
 };
 ```
 
@@ -593,6 +669,7 @@ Supported scalar types:
 Supported compound types:
 
 - `[T]` dynamic arrays, for example `[int]` or `[text]`
+- `(T, U)` tuples with two or more elements, for example `(int, text)`
 - `record` records with named fields, for example `Point { x: 1, y: 2 }`
 - generic records, for example `Box<int>`
 - contracts, for example `Shape` as a generic bound
@@ -603,6 +680,9 @@ Indexing and slicing:
 
 - arrays are zero-based: `values[0]` is the first element
 - arrays: `values[index]`, `values[start:end]`, `values[:end]`, `values[start:]`
+- array iteration: `for value in values { ... }`
+- integer ranges: `for i in 0..values.len() { ... }`
+- membership: `value in values`, `"lang" in message`
 - text is zero-based: `message[0]` returns the first `glyph`
 - text slices return `text`
 - array slots and record fields can be assigned directly: `values[0] = 9`, `point.x = 7`, `points[0].x = 5`
@@ -618,6 +698,8 @@ Built-in receiver methods:
 
 - arrays: `len()`, `push(value)`, `pop()`, `clear()`, `is_empty()`
 - text: `len()`, `is_empty()`, `contains(needle)`, `starts_with(prefix)`
+- raw text literals: `r"..."` keeps backslashes without escape decoding
+- format expression: `format("{} {}", left, right)` returns `text`
 
 Standard library receiver methods are enabled by importing their module:
 
@@ -726,12 +808,14 @@ The current release implements a small compiled language with:
 - logical operators
 - modulo
 - explicit casts with `to`
-- typed functions
+- typed `fn` functions
 - overloaded functions
 - generic functions with basic bounds
 - generic functions with explicit contract bounds
 - call-site generic instantiation
 - generic records
+- tuple types, tuple literals, and local tuple destructuring
+- record field defaults
 - record constructors
 - static associated record functions
 - record member visibility
@@ -742,14 +826,17 @@ The current release implements a small compiled language with:
 - booleans
 - signed and unsigned integer widths
 - floating point values
+- `_` separators, `0x`/`0b` integer literals, and integer literal suffixes
 - glyph and text values
 - unit-returning functions
 - dynamic arrays
 - records with fields and methods
 - mutable array indexes and record fields
-- `when` expressions with literal and choice variant patterns
+- `when` expressions with literal, choice variant, record, and tuple patterns, including `pattern => expression` arms
 - array methods
 - text methods
+- raw text literals and explicit text/glyph escapes
+- `format()` expressions
 - standard library receiver methods
 - text indexing
 - slices
@@ -767,6 +854,8 @@ The current release implements a small compiled language with:
 - if/else
 - while
 - for
+- for-in loops
+- integer range expressions for loops
 - break/continue
 - bytecode
 - VM

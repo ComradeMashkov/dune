@@ -1,5 +1,7 @@
 #include "type_checker.hpp"
 
+#include "ast/literal_utils.hpp"
+
 #include <cstdint>
 #include <limits>
 #include <stdexcept>
@@ -42,7 +44,8 @@ std::string expression_type_name(const Expression& expression) {
 
 bool is_printable_type(const Type& type) {
     return type.kind != ValueType::unit_type && type.kind != ValueType::array_type &&
-           type.kind != ValueType::struct_type && type.kind != ValueType::enum_type;
+           type.kind != ValueType::tuple_type && type.kind != ValueType::struct_type &&
+           type.kind != ValueType::enum_type;
 }
 
 std::pair<std::size_t, bool> count_format_placeholders(const std::string& lexeme) {
@@ -127,6 +130,15 @@ std::unique_ptr<Expression> clone_expression_pointer(const std::unique_ptr<Expre
     return clone_expression(*expression);
 }
 
+std::shared_ptr<Expression> clone_expression_pointer(const std::shared_ptr<Expression>& expression) {
+    if (expression == nullptr) {
+        return nullptr;
+    }
+
+    std::unique_ptr<Expression> cloned = clone_expression(*expression);
+    return std::shared_ptr<Expression>(std::move(cloned));
+}
+
 std::unique_ptr<Expression> clone_expression(const Expression& expression) {
     auto result = std::make_unique<Expression>(Expression{expression.kind, expression.lexeme,
                                                           clone_expression_pointer(expression.left),
@@ -167,8 +179,8 @@ Statement clone_statement(const Statement& statement) {
     result.type = clone_type_annotation(statement.type);
     result.parameters.reserve(statement.parameters.size());
     for (const Parameter& parameter : statement.parameters) {
-        result.parameters.push_back(
-            Parameter{parameter.name, clone_type_annotation(parameter.type), parameter.location, parameter.exported});
+        result.parameters.push_back(Parameter{parameter.name, clone_type_annotation(parameter.type), parameter.location,
+                                              parameter.exported, clone_expression_pointer(parameter.default_value)});
     }
 
     result.generic_parameters = statement.generic_parameters;
@@ -196,6 +208,9 @@ void substitute_statement(Statement& statement, const std::unordered_map<std::st
     statement.type = substitute_type_annotation(statement.type, substitutions);
     for (Parameter& parameter : statement.parameters) {
         parameter.type = substitute_type_annotation(parameter.type, substitutions);
+        if (parameter.default_value != nullptr) {
+            substitute_expression(*parameter.default_value, substitutions);
+        }
     }
 
     if (statement.expression != nullptr) {
@@ -274,6 +289,12 @@ Type make_array_type(Type element) {
     return Type{ValueType::array_type, std::make_shared<Type>(std::move(element))};
 }
 
+Type make_tuple_type(std::vector<Type> elements) {
+    Type type{ValueType::tuple_type, nullptr};
+    type.arguments = std::move(elements);
+    return type;
+}
+
 Type make_struct_type(std::string name) {
     Type type{ValueType::struct_type, nullptr};
     type.name = std::move(name);
@@ -336,6 +357,8 @@ std::string type_name(ValueType type) {
         return "unit";
     case ValueType::array_type:
         return "array";
+    case ValueType::tuple_type:
+        return "tuple";
     case ValueType::generic_type:
         return "generic";
     case ValueType::struct_type:
@@ -354,6 +377,18 @@ std::string type_name(const Type& type) {
         }
 
         return "[" + type_name(*type.element) + "]";
+    }
+
+    if (type.kind == ValueType::tuple_type) {
+        std::string name = "(";
+        for (std::size_t index = 0; index < type.arguments.size(); ++index) {
+            if (index > 0) {
+                name += ", ";
+            }
+            name += type_name(type.arguments[index]);
+        }
+        name += ")";
+        return name;
     }
 
     if (type.kind == ValueType::generic_type || type.kind == ValueType::struct_type ||
@@ -383,6 +418,14 @@ std::string type_key(const Type& type) {
         }
 
         return "array_" + type_key(*type.element);
+    }
+
+    if (type.kind == ValueType::tuple_type) {
+        std::string key = "tuple";
+        for (const Type& argument : type.arguments) {
+            key += "_" + type_key(argument);
+        }
+        return key;
     }
 
     if (type.kind == ValueType::generic_type) {
@@ -446,6 +489,8 @@ void TypeChecker::check(const Program& program) {
     instantiated_functions_.clear();
     instantiated_function_traces_.clear();
     current_module_.clear();
+    current_function_ = nullptr;
+    scopes_.clear();
     loop_depth_ = 0;
 
     for (const Statement& statement : program.statements) {
@@ -503,6 +548,15 @@ void TypeChecker::check(const Program& program) {
             }
 
             imports_.insert(statement.name);
+        }
+    }
+
+    for (const Statement& statement : program.statements) {
+        if (statement.kind == StatementKind::struct_statement) {
+            const std::string previous_module = current_module_;
+            current_module_ = module_name(statement.name);
+            check_struct_field_defaults(statement);
+            current_module_ = previous_module;
         }
     }
 
@@ -636,7 +690,8 @@ void TypeChecker::define_struct(const Statement& statement) {
 
         const std::size_t index = definition->second.fields.size();
         definition->second.field_indices.emplace(field.name, index);
-        definition->second.fields.push_back(StructField{field.name, field_type, field.location, field.exported});
+        definition->second.fields.push_back(
+            StructField{field.name, field_type, field.location, field.exported, field.default_value});
     }
 
     for (const Type& contract : statement.contracts) {
@@ -739,6 +794,29 @@ void TypeChecker::define_contract(const Statement& statement) {
     }
 }
 
+void TypeChecker::check_struct_field_defaults(const Statement& statement) {
+    const auto definition = structs_.find(statement.name);
+    if (definition == structs_.end()) {
+        throw std::runtime_error(diagnostic(statement.location, "undefined record '" + statement.name + "'"));
+    }
+
+    for (const Parameter& field : statement.parameters) {
+        if (field.default_value == nullptr) {
+            continue;
+        }
+
+        const auto field_index = definition->second.field_indices.find(field.name);
+        if (field_index == definition->second.field_indices.end()) {
+            throw std::runtime_error(
+                diagnostic(field.location, "record '" + statement.name + "' has no field '" + field.name + "'"));
+        }
+
+        const Type& field_type = definition->second.fields[field_index->second].type;
+        expect_type(field_type, check_expression(*field.default_value, expected_type(field_type)),
+                    field.default_value->location);
+    }
+}
+
 void TypeChecker::validate_constructor(const Statement& record, const Statement& method,
                                        const std::unordered_set<std::string>& generic_names) const {
     Type expected = make_struct_type(record.name);
@@ -765,6 +843,18 @@ std::string contract_type_name(const Type& type) {
         }
 
         return "[" + contract_type_name(*type.element) + "]";
+    }
+
+    if (type.kind == ValueType::tuple_type) {
+        std::string name = "(";
+        for (std::size_t index = 0; index < type.arguments.size(); ++index) {
+            if (index > 0) {
+                name += ", ";
+            }
+            name += contract_type_name(type.arguments[index]);
+        }
+        name += ")";
+        return name;
     }
 
     if ((type.kind == ValueType::generic_type || type.kind == ValueType::struct_type ||
@@ -963,6 +1053,11 @@ void TypeChecker::check_statement(const Statement& statement) {
         return;
     }
     case StatementKind::assign: {
+        if (statement.target != nullptr && statement.target->kind == ExpressionKind::tuple) {
+            check_tuple_destructuring_assignment(*statement.target, *statement.expression);
+            return;
+        }
+
         if (statement.target != nullptr && statement.target->kind != ExpressionKind::identifier) {
             const Type expected = check_assignment_target(*statement.target, statement.location);
             expect_type(expected, check_expression(*statement.expression, expected_type(expected)),
@@ -1006,31 +1101,7 @@ void TypeChecker::check_statement(const Statement& statement) {
             return;
         }
 
-        if (statement.expression->kind != ExpressionKind::string) {
-            throw std::runtime_error(
-                diagnostic(statement.expression->location, "print format string must be a string literal"));
-        }
-
-        const auto [placeholders, valid_format] = count_format_placeholders(statement.expression->lexeme);
-        if (!valid_format) {
-            throw std::runtime_error(diagnostic(statement.expression->location, "invalid print format placeholder"));
-        }
-
-        if (placeholders != statement.arguments.size()) {
-            throw std::runtime_error(
-                diagnostic(statement.expression->location, "print format string expects " +
-                                                               std::to_string(placeholders) + " arguments but got " +
-                                                               std::to_string(statement.arguments.size())));
-        }
-
-        for (const std::unique_ptr<Expression>& argument : statement.arguments) {
-            const Type argument_type = check_expression(*argument);
-            if (!is_printable_type(argument_type)) {
-                throw std::runtime_error(
-                    diagnostic(argument->location, "cannot print type '" + type_name(argument_type) + "'"));
-            }
-        }
-
+        check_format_arguments(*statement.expression, statement.arguments, 0, "print");
         return;
     }
     case StatementKind::block:
@@ -1075,6 +1146,9 @@ void TypeChecker::check_statement(const Statement& statement) {
         }
         pop_scope();
         return;
+    case StatementKind::for_in_statement:
+        check_for_in_statement(statement);
+        return;
     case StatementKind::break_statement:
         if (loop_depth_ == 0) {
             throw std::runtime_error(diagnostic(statement.location, "break statement outside loop"));
@@ -1117,10 +1191,103 @@ void TypeChecker::check_statement(const Statement& statement) {
     }
 }
 
+void TypeChecker::check_for_in_statement(const Statement& statement) {
+    const Type element_type = check_for_in_iterable(*statement.expression);
+
+    push_scope();
+    declare_binding(statement.name, element_type, true, statement.location);
+    ++loop_depth_;
+    push_scope();
+    check_statements(statement.body);
+    pop_scope();
+    --loop_depth_;
+    pop_scope();
+}
+
 void TypeChecker::check_statements(const std::vector<Statement>& statements) {
     for (const Statement& statement : statements) {
         check_statement(statement);
     }
+}
+
+void TypeChecker::check_tuple_destructuring_assignment(const Expression& target, const Expression& value) {
+    const Type actual = check_expression(value);
+    if (actual.kind != ValueType::tuple_type) {
+        throw std::runtime_error(
+            diagnostic(value.location, "expected tuple value but got '" + type_name(actual) + "'"));
+    }
+
+    if (target.arguments.size() != actual.arguments.size()) {
+        throw std::runtime_error(
+            diagnostic(target.location, "tuple destructuring expected " + std::to_string(target.arguments.size()) +
+                                            " values but got " + std::to_string(actual.arguments.size())));
+    }
+
+    std::unordered_set<std::string> names;
+    for (std::size_t index = 0; index < target.arguments.size(); ++index) {
+        const Expression& binding = *target.arguments[index];
+        if (binding.kind != ExpressionKind::identifier) {
+            throw std::runtime_error(diagnostic(binding.location, "expected binding name in tuple destructuring"));
+        }
+
+        if (binding.lexeme == "_") {
+            continue;
+        }
+
+        if (!names.insert(binding.lexeme).second) {
+            throw std::runtime_error(
+                diagnostic(binding.location, "duplicate binding '" + binding.lexeme + "' in tuple destructuring"));
+        }
+
+        VariableBinding* variable = find_binding(binding.lexeme);
+        if (variable == nullptr) {
+            if (global_constants_.contains(binding.lexeme)) {
+                throw std::runtime_error(
+                    diagnostic(binding.location, "cannot assign to constant '" + binding.lexeme + "'"));
+            }
+
+            declare_binding(binding.lexeme, actual.arguments[index], false, binding.location);
+            continue;
+        }
+
+        if (variable->constant) {
+            throw std::runtime_error(
+                diagnostic(binding.location, "cannot assign to constant '" + binding.lexeme + "'"));
+        }
+
+        expect_type(variable->type, actual.arguments[index], binding.location);
+    }
+}
+
+Type TypeChecker::check_for_in_iterable(const Expression& expression) {
+    if (expression.kind == ExpressionKind::range) {
+        if (expression.left == nullptr || expression.right == nullptr) {
+            throw std::runtime_error(diagnostic(expression.location, "invalid range expression"));
+        }
+
+        Type start = check_expression(*expression.left);
+        Type end = check_expression(*expression.right);
+        if (!same_type(start, end)) {
+            start = coerce_numeric_literal(*expression.left, start, end);
+            end = coerce_numeric_literal(*expression.right, end, start);
+        }
+
+        if (!is_integer_type(start.kind)) {
+            throw std::runtime_error(diagnostic(expression.left->location,
+                                                "expected integer range bound but got '" + type_name(start) + "'"));
+        }
+
+        expect_type(start, end, expression.right->location);
+        expression_types_[&expression] = start;
+        return start;
+    }
+
+    const Type iterable = check_expression(expression);
+    if (iterable.kind == ValueType::array_type && iterable.element != nullptr) {
+        return *iterable.element;
+    }
+
+    throw std::runtime_error(diagnostic(expression.location, "type '" + type_name(iterable) + "' is not iterable"));
 }
 
 Type TypeChecker::check_assignment_target(const Expression& target, SourceLocation location) {
@@ -1176,11 +1343,13 @@ Type TypeChecker::check_assignment_target(const Expression& target, SourceLocati
     case ExpressionKind::string:
     case ExpressionKind::boolean:
     case ExpressionKind::array:
+    case ExpressionKind::tuple:
     case ExpressionKind::struct_literal:
     case ExpressionKind::slice:
     case ExpressionKind::unary:
     case ExpressionKind::cast:
     case ExpressionKind::binary:
+    case ExpressionKind::range:
     case ExpressionKind::when_expression:
     case ExpressionKind::call:
     case ExpressionKind::method_call:
@@ -1272,7 +1441,12 @@ Type TypeChecker::check_expression(const Expression& expression, const TypeAnnot
         throw std::runtime_error(diagnostic(expression.location, "undefined variable '" + expression.lexeme + "'"));
     }
     case ExpressionKind::number:
-        actual = expected.has_type && is_numeric_type(expected.type) ? expected.type : make_type(ValueType::int_type);
+        if (TypeAnnotation suffix_type = integer_literal_suffix_type(expression.lexeme); suffix_type.has_type) {
+            actual = suffix_type.type;
+        } else {
+            actual =
+                expected.has_type && is_numeric_type(expected.type) ? expected.type : make_type(ValueType::int_type);
+        }
         check_integer_literal_range(expression, actual);
         break;
     case ExpressionKind::floating:
@@ -1290,6 +1464,9 @@ Type TypeChecker::check_expression(const Expression& expression, const TypeAnnot
         break;
     case ExpressionKind::array:
         actual = check_array_literal(expression, wanted);
+        break;
+    case ExpressionKind::tuple:
+        actual = check_tuple_literal(expression, wanted);
         break;
     case ExpressionKind::struct_literal:
         actual = check_struct_literal(expression, wanted);
@@ -1312,6 +1489,8 @@ Type TypeChecker::check_expression(const Expression& expression, const TypeAnnot
     case ExpressionKind::binary:
         actual = check_binary_expression(expression, wanted);
         break;
+    case ExpressionKind::range:
+        throw std::runtime_error(diagnostic(expression.location, "range expressions can only be used in for-in loops"));
     case ExpressionKind::when_expression:
         actual = check_when_expression(expression, wanted);
         break;
@@ -1342,6 +1521,10 @@ Type TypeChecker::check_binary_expression(const Expression& expression, const Ty
         expect_type(make_type(ValueType::bool_type), left, expression.left->location);
         expect_type(make_type(ValueType::bool_type), right, expression.right->location);
         return make_type(ValueType::bool_type);
+    }
+
+    if (expression.lexeme == "in") {
+        return check_membership_expression(expression);
     }
 
     const bool is_arithmetic = expression.lexeme == "+" || expression.lexeme == "-" || expression.lexeme == "*" ||
@@ -1396,6 +1579,41 @@ Type TypeChecker::check_binary_expression(const Expression& expression, const Ty
     throw std::runtime_error(diagnostic(expression.location, "unknown binary operator '" + expression.lexeme + "'"));
 }
 
+Type TypeChecker::check_membership_expression(const Expression& expression) {
+    const Type container = check_expression(*expression.right);
+    if (container.kind == ValueType::array_type) {
+        if (container.element == nullptr) {
+            throw std::runtime_error(
+                diagnostic(expression.right->location, "expected array type but got '" + type_name(container) + "'"));
+        }
+
+        if (!is_comparable_type(*container.element) && container.element->kind != ValueType::generic_type) {
+            throw std::runtime_error(
+                diagnostic(expression.right->location, "operator 'in' requires comparable array elements but got '" +
+                                                           type_name(*container.element) + "'"));
+        }
+
+        Type value = check_expression(*expression.left, expected_type(*container.element));
+        if (!same_type(value, *container.element)) {
+            value = coerce_numeric_literal(*expression.left, value, *container.element);
+        }
+
+        expect_type(*container.element, value, expression.left->location);
+        return make_type(ValueType::bool_type);
+    }
+
+    if (container.kind == ValueType::text_type) {
+        expect_type(make_type(ValueType::text_type),
+                    check_expression(*expression.left, expected_type(make_type(ValueType::text_type))),
+                    expression.left->location);
+        return make_type(ValueType::bool_type);
+    }
+
+    throw std::runtime_error(
+        diagnostic(expression.right->location,
+                   "operator 'in' requires array or text container but got '" + type_name(container) + "'"));
+}
+
 Type TypeChecker::check_when_expression(const Expression& expression, const TypeAnnotation& expected) {
     if (expression.arguments.empty() || expression.arguments.size() % 2 != 0) {
         throw std::runtime_error(diagnostic(expression.location, "when expression needs at least one arm"));
@@ -1404,6 +1622,14 @@ Type TypeChecker::check_when_expression(const Expression& expression, const Type
     const Type subject = check_expression(*expression.left);
     if (subject.kind == ValueType::enum_type) {
         return check_enum_when_expression(expression, subject, expected);
+    }
+
+    if (subject.kind == ValueType::struct_type) {
+        return check_record_when_expression(expression, subject, expected);
+    }
+
+    if (subject.kind == ValueType::tuple_type) {
+        return check_tuple_when_expression(expression, subject, expected);
     }
 
     if (!is_comparable_type(subject)) {
@@ -1442,6 +1668,11 @@ Type TypeChecker::check_when_expression(const Expression& expression, const Type
 }
 
 Type TypeChecker::check_call_expression(const Expression& expression, const TypeAnnotation& expected) {
+    if (expression.lexeme == "format") {
+        (void)expected;
+        return check_format_call_expression(expression);
+    }
+
     if (expected.has_type && expected.type.kind == ValueType::enum_type &&
         is_variant_name_for_expected_enum(expression.lexeme, expected)) {
         return check_variant_constructor(expression, expression.lexeme, expression.arguments, expression.location,
@@ -1449,6 +1680,44 @@ Type TypeChecker::check_call_expression(const Expression& expression, const Type
     }
 
     return check_function_call(expression, expression.lexeme, expression.arguments, expression.location, expected);
+}
+
+Type TypeChecker::check_format_call_expression(const Expression& expression) {
+    if (expression.arguments.empty()) {
+        throw std::runtime_error(diagnostic(expression.location, "format expects a format string argument"));
+    }
+
+    check_format_arguments(*expression.arguments[0], expression.arguments, 1, "format");
+    return make_type(ValueType::text_type);
+}
+
+void TypeChecker::check_format_arguments(const Expression& format,
+                                         const std::vector<std::unique_ptr<Expression>>& arguments,
+                                         std::size_t first_argument, std::string_view feature_name) {
+    const std::string label = feature_name == "print" ? "print format" : std::string(feature_name);
+    const std::string action = std::string(feature_name);
+    if (format.kind != ExpressionKind::string) {
+        throw std::runtime_error(diagnostic(format.location, label + " string must be a string literal"));
+    }
+
+    const auto [placeholders, valid_format] = count_format_placeholders(format.lexeme);
+    if (!valid_format) {
+        throw std::runtime_error(diagnostic(format.location, "invalid " + label + " placeholder"));
+    }
+
+    const std::size_t provided = arguments.size() - first_argument;
+    if (placeholders != provided) {
+        throw std::runtime_error(diagnostic(format.location, label + " string expects " + std::to_string(placeholders) +
+                                                                 " arguments but got " + std::to_string(provided)));
+    }
+
+    for (std::size_t index = first_argument; index < arguments.size(); ++index) {
+        const Type argument_type = check_expression(*arguments[index]);
+        if (!is_printable_type(argument_type)) {
+            throw std::runtime_error(diagnostic(arguments[index]->location,
+                                                "cannot " + action + " type '" + type_name(argument_type) + "'"));
+        }
+    }
 }
 
 Type TypeChecker::check_function_call(const Expression& expression, const std::string& name,
@@ -2326,7 +2595,10 @@ Type TypeChecker::check_enum_when_expression(const Expression& expression, const
             has_wildcard = true;
         } else {
             VariantResolution resolution = resolve_variant_pattern(pattern, subject);
-            covered_tags.insert(resolution.tag);
+            if (!covered_tags.insert(resolution.tag).second) {
+                throw std::runtime_error(diagnostic(pattern.location, "duplicate when branch for variant '" +
+                                                                          base_name(resolution.variant_name) + "'"));
+            }
             if (resolution.binds_payload) {
                 binding_name = resolution.binding_name;
                 binding_type = resolution.payload_type;
@@ -2358,6 +2630,138 @@ Type TypeChecker::check_enum_when_expression(const Expression& expression, const
     return result_type;
 }
 
+void TypeChecker::bind_record_pattern(const Expression& pattern, const Type& subject) {
+    if (pattern.kind != ExpressionKind::struct_literal) {
+        throw std::runtime_error(diagnostic(pattern.location, "expected record destructuring pattern"));
+    }
+
+    if (pattern.lexeme != subject.name) {
+        throw std::runtime_error(diagnostic(pattern.location, "expected record pattern '" + type_name(subject) +
+                                                                  "' but got '" + pattern.lexeme + "'"));
+    }
+
+    const auto definition = structs_.find(subject.name);
+    if (definition == structs_.end()) {
+        throw std::runtime_error(diagnostic(pattern.location, "unknown record '" + subject.name + "'"));
+    }
+
+    if (definition->second.generic_parameters.size() != subject.arguments.size()) {
+        throw std::runtime_error(
+            diagnostic(pattern.location, "record '" + subject.name + "' expects " +
+                                             std::to_string(definition->second.generic_parameters.size()) +
+                                             " type arguments but got " + std::to_string(subject.arguments.size())));
+    }
+
+    std::unordered_map<std::string, Type> substitutions;
+    for (std::size_t index = 0; index < definition->second.generic_parameters.size(); ++index) {
+        substitutions.emplace(definition->second.generic_parameters[index].name, subject.arguments[index]);
+    }
+
+    std::unordered_set<std::string> fields;
+    std::unordered_set<std::string> bindings;
+    for (std::size_t index = 0; index < pattern.field_names.size(); ++index) {
+        const std::string& field_name = pattern.field_names[index];
+        if (!fields.insert(field_name).second) {
+            throw std::runtime_error(
+                diagnostic(pattern.location, "duplicate field '" + field_name + "' in record pattern"));
+        }
+
+        const auto field = definition->second.field_indices.find(field_name);
+        if (field == definition->second.field_indices.end()) {
+            throw std::runtime_error(
+                diagnostic(pattern.location, "record '" + subject.name + "' has no field '" + field_name + "'"));
+        }
+
+        const Expression& binding = *pattern.arguments[index];
+        if (binding.kind != ExpressionKind::identifier) {
+            throw std::runtime_error(diagnostic(binding.location, "expected binding name in record pattern"));
+        }
+
+        if (binding.lexeme == "_") {
+            continue;
+        }
+
+        if (!bindings.insert(binding.lexeme).second) {
+            throw std::runtime_error(
+                diagnostic(binding.location, "duplicate binding '" + binding.lexeme + "' in record pattern"));
+        }
+
+        const Type field_type = substitute_type(definition->second.fields[field->second].type, substitutions);
+        declare_binding(binding.lexeme, field_type, false, binding.location);
+    }
+}
+
+void TypeChecker::bind_tuple_pattern(const Expression& pattern, const Type& subject) {
+    if (pattern.kind != ExpressionKind::tuple) {
+        throw std::runtime_error(diagnostic(pattern.location, "expected tuple destructuring pattern"));
+    }
+
+    if (pattern.arguments.size() != subject.arguments.size()) {
+        throw std::runtime_error(
+            diagnostic(pattern.location, "tuple pattern expected " + std::to_string(subject.arguments.size()) +
+                                             " elements but got " + std::to_string(pattern.arguments.size())));
+    }
+
+    std::unordered_set<std::string> bindings;
+    for (std::size_t index = 0; index < pattern.arguments.size(); ++index) {
+        const Expression& binding = *pattern.arguments[index];
+        if (binding.kind != ExpressionKind::identifier) {
+            throw std::runtime_error(diagnostic(binding.location, "expected binding name in tuple pattern"));
+        }
+
+        if (binding.lexeme == "_") {
+            continue;
+        }
+
+        if (!bindings.insert(binding.lexeme).second) {
+            throw std::runtime_error(
+                diagnostic(binding.location, "duplicate binding '" + binding.lexeme + "' in tuple pattern"));
+        }
+
+        declare_binding(binding.lexeme, subject.arguments[index], false, binding.location);
+    }
+}
+
+Type TypeChecker::check_record_when_expression(const Expression& expression, const Type& subject,
+                                               const TypeAnnotation& expected) {
+    if (expression.arguments.size() != 2) {
+        throw std::runtime_error(
+            diagnostic(expression.location, "record destructuring when expression needs exactly one arm"));
+    }
+
+    const Expression& pattern = *expression.arguments[0];
+    const Expression& result = *expression.arguments[1];
+    const bool wildcard = pattern.kind == ExpressionKind::identifier && pattern.lexeme == "_";
+
+    push_scope();
+    if (!wildcard) {
+        bind_record_pattern(pattern, subject);
+    }
+    const Type result_type = check_expression(result, expected);
+    pop_scope();
+    return result_type;
+}
+
+Type TypeChecker::check_tuple_when_expression(const Expression& expression, const Type& subject,
+                                              const TypeAnnotation& expected) {
+    if (expression.arguments.size() != 2) {
+        throw std::runtime_error(
+            diagnostic(expression.location, "tuple destructuring when expression needs exactly one arm"));
+    }
+
+    const Expression& pattern = *expression.arguments[0];
+    const Expression& result = *expression.arguments[1];
+    const bool wildcard = pattern.kind == ExpressionKind::identifier && pattern.lexeme == "_";
+
+    push_scope();
+    if (!wildcard) {
+        bind_tuple_pattern(pattern, subject);
+    }
+    const Type result_type = check_expression(result, expected);
+    pop_scope();
+    return result_type;
+}
+
 bool TypeChecker::collect_generic_constraints(
     const Type& pattern, const Type& actual,
     std::unordered_map<std::string, std::vector<std::pair<Type, bool>>>& constraints, bool preferred) const {
@@ -2372,6 +2776,21 @@ bool TypeChecker::collect_generic_constraints(
         }
 
         return collect_generic_constraints(*pattern.element, *actual.element, constraints, preferred);
+    }
+
+    if (pattern.kind == ValueType::tuple_type) {
+        if (actual.kind != ValueType::tuple_type || pattern.arguments.size() != actual.arguments.size()) {
+            return false;
+        }
+
+        for (std::size_t index = 0; index < pattern.arguments.size(); ++index) {
+            if (!collect_generic_constraints(pattern.arguments[index], actual.arguments[index], constraints,
+                                             preferred)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     if (pattern.kind == ValueType::struct_type || pattern.kind == ValueType::enum_type) {
@@ -2421,6 +2840,40 @@ Type TypeChecker::check_array_literal(const Expression& expression, const TypeAn
     }
 
     return make_array_type(element_type);
+}
+
+Type TypeChecker::check_tuple_literal(const Expression& expression, const TypeAnnotation& expected) {
+    if (expression.arguments.size() < 2) {
+        throw std::runtime_error(diagnostic(expression.location, "tuple literal needs at least two elements"));
+    }
+
+    if (expected.has_type && expected.type.kind != ValueType::tuple_type) {
+        expect_type(expected.type, make_tuple_type({}), expression.location);
+    }
+
+    if (expected.has_type && expected.type.arguments.size() != expression.arguments.size()) {
+        throw std::runtime_error(
+            diagnostic(expression.location, "tuple literal expected " + std::to_string(expected.type.arguments.size()) +
+                                                " elements but got " + std::to_string(expression.arguments.size())));
+    }
+
+    std::vector<Type> elements;
+    elements.reserve(expression.arguments.size());
+    for (std::size_t index = 0; index < expression.arguments.size(); ++index) {
+        TypeAnnotation element_expected;
+        if (expected.has_type) {
+            element_expected = expected_type(expected.type.arguments[index]);
+        }
+        elements.push_back(check_expression(*expression.arguments[index], element_expected));
+    }
+
+    Type result = make_tuple_type(std::move(elements));
+    if (expected.has_type) {
+        expect_type(expected.type, result, expression.location);
+        return expected.type;
+    }
+
+    return result;
 }
 
 Type TypeChecker::check_struct_literal(const Expression& expression, const TypeAnnotation& expected) {
@@ -2479,7 +2932,7 @@ Type TypeChecker::check_struct_literal(const Expression& expression, const TypeA
     }
 
     for (const StructField& field : definition->second.fields) {
-        if (!seen_fields.contains(field.name)) {
+        if (!seen_fields.contains(field.name) && field.default_value == nullptr) {
             throw std::runtime_error(diagnostic(expression.location, "missing field '" + field.name + "' for record '" +
                                                                          expression.lexeme + "'"));
         }
@@ -2555,6 +3008,7 @@ bool TypeChecker::statement_returns(const Statement& statement) const {
     case StatementKind::print:
     case StatementKind::while_statement:
     case StatementKind::for_statement:
+    case StatementKind::for_in_statement:
     case StatementKind::function:
     case StatementKind::method_block:
     case StatementKind::struct_statement:
@@ -2627,6 +3081,20 @@ bool TypeChecker::same_type(const Type& left, const Type& right) const {
         return false;
     }
 
+    if (left.kind == ValueType::tuple_type) {
+        if (left.arguments.size() != right.arguments.size()) {
+            return false;
+        }
+
+        for (std::size_t index = 0; index < left.arguments.size(); ++index) {
+            if (!same_type(left.arguments[index], right.arguments[index])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     if (left.kind == ValueType::generic_type || left.kind == ValueType::struct_type ||
         left.kind == ValueType::enum_type) {
         if (left.name != right.name || left.arguments.size() != right.arguments.size()) {
@@ -2690,6 +3158,7 @@ bool TypeChecker::is_cast_allowed(const Type& source, const Type& target) const 
     }
 
     if (source.kind == ValueType::array_type || target.kind == ValueType::array_type ||
+        source.kind == ValueType::tuple_type || target.kind == ValueType::tuple_type ||
         source.kind == ValueType::struct_type || target.kind == ValueType::struct_type ||
         source.kind == ValueType::enum_type || target.kind == ValueType::enum_type ||
         source.kind == ValueType::unit_type || target.kind == ValueType::unit_type ||
@@ -2705,6 +3174,10 @@ bool TypeChecker::is_cast_allowed(const Type& source, const Type& target) const 
 }
 
 bool TypeChecker::can_coerce_integer_literal(const Expression& expression, const Type& target) const {
+    if (has_integer_literal_suffix(expression.lexeme)) {
+        return false;
+    }
+
     if (expression.kind == ExpressionKind::number && is_numeric_type(target)) {
         return true;
     }
@@ -2717,7 +3190,14 @@ void TypeChecker::check_integer_literal_range(const Expression& expression, cons
         return;
     }
 
-    const unsigned long long value = std::stoull(expression.lexeme);
+    unsigned long long value = 0;
+    try {
+        value = parse_unsigned_integer_literal(expression.lexeme);
+    } catch (const std::out_of_range&) {
+        throw std::runtime_error(
+            diagnostic(expression.location,
+                       "integer literal '" + expression.lexeme + "' does not fit in type '" + type_name(target) + "'"));
+    }
     const unsigned long long max = max_integer_literal(target.kind);
     if (value > max) {
         throw std::runtime_error(
@@ -2754,6 +3234,7 @@ unsigned long long TypeChecker::max_integer_literal(ValueType target) const {
     case ValueType::text_type:
     case ValueType::unit_type:
     case ValueType::array_type:
+    case ValueType::tuple_type:
     case ValueType::generic_type:
     case ValueType::struct_type:
     case ValueType::enum_type:

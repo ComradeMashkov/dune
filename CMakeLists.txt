@@ -219,8 +219,48 @@ add_test(
         ${CMAKE_COMMAND}
         -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/formatted_print.dn
-        -D EXPECTED_OUTPUT="Dune v1\nbool=1, glyph=Z, real=2.5\nplain text still works\n42"
+        -D EXPECTED_OUTPUT="Dune v1\nDune v1 Z\ninline 42\nbool=1, glyph=Z, real=2.5\nplain text still works\n42"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
+    NAME cli_numeric_literals
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/numeric_literals.dn
+        -D EXPECTED_OUTPUT="1000000\n255\n165\n123\n10"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
+    NAME cli_record_defaults
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/record_defaults.dn
+        -D EXPECTED_OUTPUT="0.01\n0\nsgd\n0.1\n0\n0.01\n0.9\n0.2\n0\n10\n1\n20\n2"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
+    NAME cli_string_escapes
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/string_escapes.dn
+        -D EXPECTED_OUTPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/golden/string_escapes.out
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
+    NAME cli_invalid_escape
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/invalid_escape.dn
+        -D EXPECTED_ERROR="unknown text escape"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_failure_case.cmake
 )
 
 add_test(
@@ -240,6 +280,26 @@ add_test(
         -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/control_flow.dn
         -D EXPECTED_OUTPUT=42
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
+    NAME cli_for_in_ranges
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/for_in_ranges.dn
+        -D EXPECTED_OUTPUT="10\n20\n9"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
+    NAME cli_membership
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/membership.dn
+        -D EXPECTED_OUTPUT="1\n0\n1\n1\n0\n99"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
 )
 
@@ -364,6 +424,16 @@ add_test(
 )
 
 add_test(
+    NAME cli_pattern_matching
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/pattern_matching.dn
+        -D EXPECTED_OUTPUT="30\n7\ndone\nbad\n3\n8\n11\n24\n99\n20"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
     NAME cli_scopes_assignment_targets
     COMMAND
         ${CMAKE_COMMAND}
@@ -481,7 +551,40 @@ add_test(
         -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/formatted_print.dn
         -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/formatted_print_native
-        -D EXPECTED_OUTPUT="Dune v1\nbool=1, glyph=Z, real=2.5\nplain text still works\n42"
+        -D EXPECTED_OUTPUT="Dune v1\nDune v1 Z\ninline 42\nbool=1, glyph=Z, real=2.5\nplain text still works\n42"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
+)
+
+add_test(
+    NAME cli_build_native_numeric_literals
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/numeric_literals.dn
+        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/numeric_literals_native
+        -D EXPECTED_OUTPUT="1000000\n255\n165\n123\n10"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
+)
+
+add_test(
+    NAME cli_build_native_string_escapes
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/string_escapes.dn
+        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/string_escapes_native
+        -D EXPECTED_OUTPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/golden/string_escapes.out
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
+)
+
+add_test(
+    NAME cli_build_native_record_defaults
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/record_defaults.dn
+        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/record_defaults_native
+        -D EXPECTED_OUTPUT="0.01\n0\nsgd\n0.1\n0\n0.01\n0.9\n0.2\n0\n10\n1\n20\n2"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
 )
 
@@ -603,6 +706,17 @@ add_test(
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/choices_when.dn
         -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/choices_when_native
         -D EXPECTED_OUTPUT="30\n7\n31\n99"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
+)
+
+add_test(
+    NAME cli_build_native_pattern_matching
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/pattern_matching.dn
+        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/pattern_matching_native
+        -D EXPECTED_OUTPUT="30\n7\ndone\nbad\n3\n8\n11\n24\n99\n20"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
 )
 
@@ -735,5 +849,27 @@ add_test(
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/control_flow.dn
         -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/control_flow_native
         -D EXPECTED_OUTPUT=42
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
+)
+
+add_test(
+    NAME cli_build_native_for_in_ranges
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/for_in_ranges.dn
+        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/for_in_ranges_native
+        -D EXPECTED_OUTPUT="10\n20\n9"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
+)
+
+add_test(
+    NAME cli_build_native_membership
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/membership.dn
+        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/membership_native
+        -D EXPECTED_OUTPUT="1\n0\n1\n1\n0\n99"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
 )

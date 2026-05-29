@@ -1,6 +1,7 @@
 #include "lexer/lexer.hpp"
 
 #include <iostream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -28,6 +29,24 @@ bool expect_tokens(const std::string& source, const std::vector<ExpectedToken>& 
     }
 
     return true;
+}
+
+bool expect_lex_error_contains(const std::string& source, const std::string& expected, const char* message) {
+    try {
+        dune::Lexer lexer(source);
+        lexer.tokenize();
+    } catch (const std::runtime_error& error) {
+        const std::string actual = error.what();
+        if (actual.find(expected) == std::string::npos) {
+            std::cerr << message << ": expected error containing '" << expected << "', got '" << actual << "'\n";
+            return false;
+        }
+
+        return true;
+    }
+
+    std::cerr << message << ": expected lexer error\n";
+    return false;
 }
 
 } // namespace
@@ -63,6 +82,40 @@ int main() {
                                {identifier, "bar"},
                                {slash, "/"},
                                {number, "3"},
+                               {eof, ""},
+                           }) &&
+             passed;
+
+    passed = expect_tokens("for value in values { print(value); } for i in 0..items.len() { print(i); }",
+                           {
+                               {for_keyword, "for"},
+                               {identifier, "value"},
+                               {in_keyword, "in"},
+                               {identifier, "values"},
+                               {left_brace, "{"},
+                               {print, "print"},
+                               {left_paren, "("},
+                               {identifier, "value"},
+                               {right_paren, ")"},
+                               {semicolon, ";"},
+                               {right_brace, "}"},
+                               {for_keyword, "for"},
+                               {identifier, "i"},
+                               {in_keyword, "in"},
+                               {number, "0"},
+                               {dot_dot, ".."},
+                               {identifier, "items"},
+                               {dot, "."},
+                               {identifier, "len"},
+                               {left_paren, "("},
+                               {right_paren, ")"},
+                               {left_brace, "{"},
+                               {print, "print"},
+                               {left_paren, "("},
+                               {identifier, "i"},
+                               {right_paren, ")"},
+                               {semicolon, ";"},
+                               {right_brace, "}"},
                                {eof, ""},
                            }) &&
              passed;
@@ -103,21 +156,35 @@ int main() {
                            }) &&
              passed;
 
-    passed = expect_tokens("add(a: int, b: int): int { return a + b; }\ndone: bool = true;",
+    passed = expect_tokens("fn add(a: int, b: int): int { return a + b; }\ndone: bool = true;",
                            {
-                               {identifier, "add"},  {left_paren, "("},
-                               {identifier, "a"},    {colon, ":"},
-                               {int_keyword, "int"}, {comma, ","},
-                               {identifier, "b"},    {colon, ":"},
-                               {int_keyword, "int"}, {right_paren, ")"},
-                               {colon, ":"},         {int_keyword, "int"},
-                               {left_brace, "{"},    {return_keyword, "return"},
-                               {identifier, "a"},    {plus, "+"},
-                               {identifier, "b"},    {semicolon, ";"},
-                               {right_brace, "}"},   {identifier, "done"},
-                               {colon, ":"},         {bool_keyword, "bool"},
-                               {equal, "="},         {true_keyword, "true"},
-                               {semicolon, ";"},     {eof, ""},
+                               {fn_keyword, "fn"},
+                               {identifier, "add"},
+                               {left_paren, "("},
+                               {identifier, "a"},
+                               {colon, ":"},
+                               {int_keyword, "int"},
+                               {comma, ","},
+                               {identifier, "b"},
+                               {colon, ":"},
+                               {int_keyword, "int"},
+                               {right_paren, ")"},
+                               {colon, ":"},
+                               {int_keyword, "int"},
+                               {left_brace, "{"},
+                               {return_keyword, "return"},
+                               {identifier, "a"},
+                               {plus, "+"},
+                               {identifier, "b"},
+                               {semicolon, ";"},
+                               {right_brace, "}"},
+                               {identifier, "done"},
+                               {colon, ":"},
+                               {bool_keyword, "bool"},
+                               {equal, "="},
+                               {true_keyword, "true"},
+                               {semicolon, ";"},
+                               {eof, ""},
                            }) &&
              passed;
 
@@ -135,11 +202,56 @@ int main() {
                            }) &&
              passed;
 
-    passed = expect_tokens("log(message: text): unit { return; } "
+    passed = expect_tokens("size = 1_000_000; mask = 0xffu64; bits = 0b1010_0101u8; wide = 123i64;",
+                           {
+                               {identifier, "size"},
+                               {equal, "="},
+                               {number, "1_000_000"},
+                               {semicolon, ";"},
+                               {identifier, "mask"},
+                               {equal, "="},
+                               {number, "0xffu64"},
+                               {semicolon, ";"},
+                               {identifier, "bits"},
+                               {equal, "="},
+                               {number, "0b1010_0101u8"},
+                               {semicolon, ";"},
+                               {identifier, "wide"},
+                               {equal, "="},
+                               {number, "123i64"},
+                               {semicolon, ";"},
+                               {eof, ""},
+                           }) &&
+             passed;
+
+    passed = expect_tokens("rough: real = 1_000.5_25;",
+                           {
+                               {identifier, "rough"},
+                               {colon, ":"},
+                               {real_keyword, "real"},
+                               {equal, "="},
+                               {float_number, "1_000.5_25"},
+                               {semicolon, ";"},
+                               {eof, ""},
+                           }) &&
+             passed;
+
+    passed = expect_lex_error_contains("bad = 1__000;", "invalid numeric separator",
+                                       "expected repeated numeric separator error") &&
+             passed;
+    passed = expect_lex_error_contains("bad = 0b102;", "invalid digit in binary literal",
+                                       "expected invalid binary digit error") &&
+             passed;
+    passed = expect_lex_error_contains("bad = 42abc;", "invalid numeric literal suffix 'abc'",
+                                       "expected invalid numeric suffix error") &&
+             passed;
+
+    passed = expect_tokens("fn log(message: text): unit { return; } "
                            "a: i8 = 1; b: i16 = 2; c: i32 = 3; d: i64 = 4; "
                            "e: isize = 5; f: usize = 6; g: real32 = 1.5; "
                            "h: real64 = 2.5; log(\"done\");",
                            {
+                               {fn_keyword, "fn"},
                                {identifier, "log"},
                                {left_paren, "("},
                                {identifier, "message"},
@@ -207,6 +319,57 @@ int main() {
                                {semicolon, ";"},
                                {eof, ""},
                            }) &&
+             passed;
+
+    passed =
+        expect_tokens(
+            R"dune(path: text = r"C:\Users\name\data.csv"; line: text = "hello\n"; tab: glyph = '\t'; quote: glyph = '\''; slash: glyph = '\\';)dune",
+            {
+                {identifier, "path"},
+                {colon, ":"},
+                {text_keyword, "text"},
+                {equal, "="},
+                {string_literal, R"(r"C:\Users\name\data.csv")"},
+                {semicolon, ";"},
+                {identifier, "line"},
+                {colon, ":"},
+                {text_keyword, "text"},
+                {equal, "="},
+                {string_literal, R"("hello\n")"},
+                {semicolon, ";"},
+                {identifier, "tab"},
+                {colon, ":"},
+                {glyph_keyword, "glyph"},
+                {equal, "="},
+                {char_literal, R"('\t')"},
+                {semicolon, ";"},
+                {identifier, "quote"},
+                {colon, ":"},
+                {glyph_keyword, "glyph"},
+                {equal, "="},
+                {char_literal, R"('\'')"},
+                {semicolon, ";"},
+                {identifier, "slash"},
+                {colon, ":"},
+                {glyph_keyword, "glyph"},
+                {equal, "="},
+                {char_literal, R"('\\')"},
+                {semicolon, ";"},
+                {eof, ""},
+            }) &&
+        passed;
+
+    passed = expect_lex_error_contains(R"(bad: text = "\x";)", R"(unknown text escape '\x')",
+                                       "expected invalid text escape error") &&
+             passed;
+    passed = expect_lex_error_contains(R"(bad: glyph = '\x';)", R"(unknown glyph escape '\x')",
+                                       "expected invalid glyph escape error") &&
+             passed;
+    passed = expect_lex_error_contains("bad: glyph = '';", "invalid glyph literal",
+                                       "expected invalid glyph literal error") &&
+             passed;
+    passed = expect_lex_error_contains("bad: text = r\"line\nnext\";", "unterminated raw string literal",
+                                       "expected unterminated raw string error") &&
              passed;
 
     passed = expect_tokens("import math; values: [int] = [1, 2]; values.push(math.square(values[0])); "
@@ -303,12 +466,13 @@ int main() {
                            }) &&
              passed;
 
-    passed = expect_tokens("export foreign c_sqrt(value: real64): real64 = \"sqrt\"; "
+    passed = expect_tokens("export foreign fn c_sqrt(value: real64): real64 = \"sqrt\"; "
                            "for i = 0; i < 3; i = i + 1 { if i == 1 { continue; } break; } "
                            "print(\"dune\"[1:3]);",
                            {
                                {export_keyword, "export"},
                                {foreign_keyword, "foreign"},
+                               {fn_keyword, "fn"},
                                {identifier, "c_sqrt"},
                                {left_paren, "("},
                                {identifier, "value"},
@@ -439,12 +603,13 @@ int main() {
                            }) &&
              passed;
 
-    passed = expect_tokens("record Counter { static zero(): Counter { return Counter { value: 0 }; } }",
+    passed = expect_tokens("record Counter { static fn zero(): Counter { return Counter { value: 0 }; } }",
                            {
                                {record_keyword, "record"},
                                {identifier, "Counter"},
                                {left_brace, "{"},
                                {static_keyword, "static"},
+                               {fn_keyword, "fn"},
                                {identifier, "zero"},
                                {left_paren, "("},
                                {right_paren, ")"},
@@ -510,6 +675,30 @@ int main() {
                                {left_brace, "{"},
                                {number, "20"},
                                {right_brace, "}"},
+                               {right_brace, "}"},
+                               {semicolon, ";"},
+                               {eof, ""},
+                           }) &&
+             passed;
+
+    passed = expect_tokens("out = when value { Present(x) => x; _ => 0; };",
+                           {
+                               {identifier, "out"},
+                               {equal, "="},
+                               {when_keyword, "when"},
+                               {identifier, "value"},
+                               {left_brace, "{"},
+                               {identifier, "Present"},
+                               {left_paren, "("},
+                               {identifier, "x"},
+                               {right_paren, ")"},
+                               {fat_arrow, "=>"},
+                               {identifier, "x"},
+                               {semicolon, ";"},
+                               {identifier, "_"},
+                               {fat_arrow, "=>"},
+                               {number, "0"},
+                               {semicolon, ";"},
                                {right_brace, "}"},
                                {semicolon, ";"},
                                {eof, ""},

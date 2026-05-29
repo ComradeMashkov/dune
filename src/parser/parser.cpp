@@ -30,6 +30,13 @@ std::unique_ptr<Expression> make_binary(std::unique_ptr<Expression> left, std::s
     return std::make_unique<Expression>(std::move(expression));
 }
 
+std::unique_ptr<Expression> make_range(std::unique_ptr<Expression> start, std::unique_ptr<Expression> end,
+                                       SourceLocation location) {
+    Expression expression{ExpressionKind::range, "..", std::move(start), std::move(end)};
+    expression.location = location;
+    return std::make_unique<Expression>(std::move(expression));
+}
+
 std::unique_ptr<Expression> make_unary(std::string lexeme, std::unique_ptr<Expression> right, SourceLocation location) {
     Expression expression{ExpressionKind::unary, std::move(lexeme), nullptr, std::move(right)};
     expression.location = location;
@@ -72,6 +79,13 @@ std::unique_ptr<Expression> make_member(std::unique_ptr<Expression> receiver, st
 
 std::unique_ptr<Expression> make_array(std::vector<std::unique_ptr<Expression>> elements, SourceLocation location) {
     auto expression = std::make_unique<Expression>(Expression{ExpressionKind::array, "", nullptr, nullptr});
+    expression->arguments = std::move(elements);
+    expression->location = location;
+    return expression;
+}
+
+std::unique_ptr<Expression> make_tuple(std::vector<std::unique_ptr<Expression>> elements, SourceLocation location) {
+    auto expression = std::make_unique<Expression>(Expression{ExpressionKind::tuple, "", nullptr, nullptr});
     expression->arguments = std::move(elements);
     expression->location = location;
     return expression;
@@ -121,6 +135,12 @@ Type make_array_type(Type element) {
     return Type{ValueType::array_type, std::make_shared<Type>(std::move(element))};
 }
 
+Type make_tuple_type(std::vector<Type> elements) {
+    Type type{ValueType::tuple_type, nullptr};
+    type.arguments = std::move(elements);
+    return type;
+}
+
 Type make_generic_type(std::string name) {
     Type type{ValueType::generic_type, nullptr};
     type.name = std::move(name);
@@ -155,6 +175,10 @@ std::string expression_to_type_name(const Expression& expression) {
 }
 
 std::string decode_string_literal(const std::string& lexeme) {
+    if (lexeme.size() >= 3 && lexeme[0] == 'r' && lexeme[1] == '"' && lexeme.back() == '"') {
+        return lexeme.substr(2, lexeme.size() - 3);
+    }
+
     std::string result;
     for (std::size_t index = 1; index + 1 < lexeme.size(); ++index) {
         char current = lexeme[index];
@@ -280,6 +304,46 @@ bool Parser::looks_like_assignment_statement() const {
     return false;
 }
 
+bool Parser::looks_like_tuple_assignment_statement() const {
+    if (!check(TokenType::left_paren)) {
+        return false;
+    }
+
+    std::size_t index = current_ + 1;
+    std::size_t names = 0;
+    bool expect_name = true;
+    while (index < tokens_.size()) {
+        if (expect_name) {
+            if (tokens_[index].type != TokenType::identifier) {
+                return false;
+            }
+            ++names;
+            ++index;
+            expect_name = false;
+            continue;
+        }
+
+        if (tokens_[index].type == TokenType::comma) {
+            ++index;
+            if (index < tokens_.size() && tokens_[index].type == TokenType::right_paren) {
+                ++index;
+                return names >= 2 && index < tokens_.size() && tokens_[index].type == TokenType::equal;
+            }
+            expect_name = true;
+            continue;
+        }
+
+        if (tokens_[index].type == TokenType::right_paren) {
+            ++index;
+            return names >= 2 && index < tokens_.size() && tokens_[index].type == TokenType::equal;
+        }
+
+        return false;
+    }
+
+    return false;
+}
+
 bool can_start_struct_literal(const Expression& expression) {
     if (expression.kind == ExpressionKind::identifier) {
         return true;
@@ -324,79 +388,6 @@ bool Parser::looks_like_binding_declaration() const {
     }
 
     return false;
-}
-
-bool Parser::looks_like_function_declaration(bool is_extern) const {
-    if (!check_identifier_like()) {
-        return false;
-    }
-
-    std::size_t index = current_ + 1;
-    if (index < tokens_.size() && tokens_[index].type == TokenType::less) {
-        int depth = 1;
-        ++index;
-        while (index < tokens_.size() && depth > 0) {
-            if (tokens_[index].type == TokenType::less) {
-                ++depth;
-            } else if (tokens_[index].type == TokenType::greater) {
-                --depth;
-            }
-            ++index;
-        }
-        if (depth != 0) {
-            return false;
-        }
-    }
-
-    if (index >= tokens_.size() || tokens_[index].type != TokenType::left_paren) {
-        return false;
-    }
-
-    int paren_depth = 1;
-    ++index;
-    while (index < tokens_.size() && paren_depth > 0) {
-        if (tokens_[index].type == TokenType::left_paren) {
-            ++paren_depth;
-        } else if (tokens_[index].type == TokenType::right_paren) {
-            --paren_depth;
-        }
-        ++index;
-    }
-    if (paren_depth != 0) {
-        return false;
-    }
-
-    if (index < tokens_.size() && tokens_[index].type == TokenType::colon) {
-        int angle_depth = 0;
-        int bracket_depth = 0;
-        ++index;
-        while (index < tokens_.size()) {
-            const TokenType type = tokens_[index].type;
-            if (type == TokenType::less) {
-                ++angle_depth;
-            } else if (type == TokenType::greater && angle_depth > 0) {
-                --angle_depth;
-            } else if (type == TokenType::left_bracket) {
-                ++bracket_depth;
-            } else if (type == TokenType::right_bracket && bracket_depth > 0) {
-                --bracket_depth;
-            } else if ((type == TokenType::left_brace || type == TokenType::equal || type == TokenType::semicolon) &&
-                       angle_depth == 0 && bracket_depth == 0) {
-                break;
-            }
-            ++index;
-        }
-    }
-
-    if (index >= tokens_.size()) {
-        return false;
-    }
-
-    if (tokens_[index].type == TokenType::left_brace) {
-        return true;
-    }
-
-    return is_extern && (tokens_[index].type == TokenType::equal || tokens_[index].type == TokenType::semicolon);
 }
 
 const Token& Parser::advance() {
@@ -447,6 +438,10 @@ Statement Parser::statement() {
 
     if (match(TokenType::foreign_keyword)) {
         return extern_statement();
+    }
+
+    if (match(TokenType::fn_keyword)) {
+        return function_statement();
     }
 
     if (match(TokenType::method_keyword)) {
@@ -513,8 +508,8 @@ Statement Parser::statement() {
         return assignment_statement();
     }
 
-    if (looks_like_function_declaration()) {
-        return function_statement();
+    if (looks_like_tuple_assignment_statement()) {
+        return tuple_assignment_statement();
     }
 
     std::unique_ptr<Expression> value = expression();
@@ -543,6 +538,34 @@ Statement Parser::assignment_statement(bool require_semicolon) {
     Statement statement{StatementKind::assign, std::move(name), std::move(value), {}, {}};
     statement.location = target->location;
     statement.target = std::move(target);
+    return statement;
+}
+
+Statement Parser::tuple_assignment_statement() {
+    const Token& start = consume(TokenType::left_paren, "expected '(' before tuple destructuring target");
+    std::vector<std::unique_ptr<Expression>> targets;
+    auto parse_target = [&]() {
+        const Token& name = consume(TokenType::identifier, "expected binding name in tuple destructuring target");
+        targets.push_back(make_leaf(ExpressionKind::identifier, name.lexeme, location_from_token(name)));
+    };
+
+    parse_target();
+    consume(TokenType::comma, "expected ',' in tuple destructuring target");
+    if (check(TokenType::right_paren)) {
+        throw std::runtime_error("tuple destructuring target needs at least two bindings");
+    }
+    do {
+        parse_target();
+    } while (match(TokenType::comma) && !check(TokenType::right_paren));
+
+    consume(TokenType::right_paren, "expected ')' after tuple destructuring target");
+    consume(TokenType::equal, "expected '=' after tuple destructuring target");
+    std::unique_ptr<Expression> value = expression();
+    consume(TokenType::semicolon, "expected ';' after tuple destructuring assignment");
+
+    Statement statement{StatementKind::assign, "", std::move(value), {}, {}};
+    statement.location = location_from_token(start);
+    statement.target = make_tuple(std::move(targets), location_from_token(start));
     return statement;
 }
 
@@ -578,7 +601,7 @@ Statement Parser::export_statement() {
         return statement;
     }
 
-    if (looks_like_function_declaration()) {
+    if (match(TokenType::fn_keyword)) {
         Statement statement = function_statement();
         statement.exported = true;
         return statement;
@@ -615,15 +638,20 @@ Statement Parser::export_statement() {
     }
 
     throw std::runtime_error(
-        "expected function, foreign function, record, contract, choice, method, or constant after export");
+        "expected fn, foreign function, record, contract, choice, method, or constant after export");
 }
 
 Statement Parser::extern_statement() {
+    consume(TokenType::fn_keyword, "expected 'fn' after foreign");
     return function_statement(true);
 }
 
 Statement Parser::for_statement() {
     const Token& keyword = previous();
+    if (check_identifier_like() && check_next(TokenType::in_keyword)) {
+        return for_in_statement(keyword);
+    }
+
     auto statement = Statement{StatementKind::for_statement, "", nullptr, {}, {}};
     statement.location = location_from_token(keyword);
 
@@ -660,8 +688,19 @@ Statement Parser::for_statement() {
     return statement;
 }
 
+Statement Parser::for_in_statement(const Token& keyword) {
+    const Token name = consume_identifier_like("expected loop variable after for");
+    consume(TokenType::in_keyword, "expected 'in' after loop variable");
+    std::unique_ptr<Expression> iterable = expression();
+    consume(TokenType::left_brace, "expected '{' before for body");
+
+    Statement statement{StatementKind::for_in_statement, name.lexeme, std::move(iterable), block(), {}};
+    statement.location = location_from_token(keyword);
+    return statement;
+}
+
 Statement Parser::function_statement(bool is_extern) {
-    const Token name = consume_identifier_like("expected function name");
+    const Token name = consume_identifier_like("expected function name after fn");
     return finish_function_statement(name, {}, is_extern);
 }
 
@@ -885,7 +924,7 @@ Statement Parser::struct_statement() {
     while (!check(TokenType::right_brace) && !is_at_end()) {
         const bool member_exported = match(TokenType::export_keyword);
         const bool member_static = match(TokenType::static_keyword);
-        if (looks_like_function_declaration()) {
+        if (match(TokenType::fn_keyword)) {
             Statement method = function_statement();
             method.exported = member_exported;
             method.is_static_record_member = member_static;
@@ -900,7 +939,13 @@ Statement Parser::struct_statement() {
 
         const Token& field = consume_identifier_like("expected record field name");
         consume(TokenType::colon, "expected ':' after record field name");
-        fields.push_back(Parameter{field.lexeme, type_annotation(), location_from_token(field), member_exported});
+        TypeAnnotation field_type = type_annotation();
+        std::shared_ptr<Expression> default_value;
+        if (match(TokenType::equal)) {
+            default_value = expression();
+        }
+        fields.push_back(
+            Parameter{field.lexeme, std::move(field_type), location_from_token(field), member_exported, default_value});
 
         if (check(TokenType::right_brace)) {
             break;
@@ -1140,6 +1185,20 @@ TypeAnnotation Parser::type_annotation() {
         return TypeAnnotation{true, make_array_type(std::move(element.type))};
     }
 
+    if (match(TokenType::left_paren)) {
+        std::vector<Type> elements;
+        elements.push_back(type_annotation().type);
+        consume(TokenType::comma, "expected ',' in tuple type");
+        if (check(TokenType::right_paren)) {
+            throw std::runtime_error("tuple type needs at least two elements");
+        }
+        do {
+            elements.push_back(type_annotation().type);
+        } while (match(TokenType::comma) && !check(TokenType::right_paren));
+        consume(TokenType::right_paren, "expected ')' after tuple type");
+        return TypeAnnotation{true, make_tuple_type(std::move(elements))};
+    }
+
     if (match(TokenType::identifier)) {
         std::string name = previous().lexeme;
         while (match(TokenType::dot)) {
@@ -1193,7 +1252,19 @@ std::unique_ptr<Expression> Parser::assignment_target() {
 }
 
 std::unique_ptr<Expression> Parser::expression() {
-    return logical_or();
+    return range();
+}
+
+std::unique_ptr<Expression> Parser::range() {
+    std::unique_ptr<Expression> expr = logical_or();
+
+    if (match(TokenType::dot_dot)) {
+        const Token& op = previous();
+        std::unique_ptr<Expression> right = logical_or();
+        expr = make_range(std::move(expr), std::move(right), location_from_token(op));
+    }
+
+    return expr;
 }
 
 std::unique_ptr<Expression> Parser::logical_or() {
@@ -1221,9 +1292,21 @@ std::unique_ptr<Expression> Parser::logical_and() {
 }
 
 std::unique_ptr<Expression> Parser::equality() {
-    std::unique_ptr<Expression> expr = comparison();
+    std::unique_ptr<Expression> expr = membership();
 
     while (match(TokenType::equal_equal) || match(TokenType::bang_equal)) {
+        const Token& op = previous();
+        std::unique_ptr<Expression> right = membership();
+        expr = make_binary(std::move(expr), op.lexeme, std::move(right), location_from_token(op));
+    }
+
+    return expr;
+}
+
+std::unique_ptr<Expression> Parser::membership() {
+    std::unique_ptr<Expression> expr = comparison();
+
+    while (match(TokenType::in_keyword)) {
         const Token& op = previous();
         std::unique_ptr<Expression> right = comparison();
         expr = make_binary(std::move(expr), op.lexeme, std::move(right), location_from_token(op));
@@ -1300,20 +1383,37 @@ std::unique_ptr<Expression> Parser::when_expression() {
 
     std::vector<std::unique_ptr<Expression>> cases;
     while (!check(TokenType::right_brace) && !is_at_end()) {
-        consume(TokenType::is_keyword, "expected 'is' before when pattern");
         std::unique_ptr<Expression> pattern;
-        if (check(TokenType::identifier) && peek().lexeme == "_") {
-            const Token& wildcard = advance();
-            pattern = make_leaf(ExpressionKind::identifier, "_", location_from_token(wildcard));
-        } else {
-            pattern = expression();
+        const bool legacy_arm = match(TokenType::is_keyword);
+        pattern = when_pattern(!legacy_arm);
+
+        cases.push_back(std::move(pattern));
+
+        if (legacy_arm) {
+            consume(TokenType::left_brace, "expected '{' before when arm body");
+            cases.push_back(expression());
+            match(TokenType::semicolon);
+            consume(TokenType::right_brace, "expected '}' after when arm body");
+
+            if (match(TokenType::comma)) {
+                continue;
+            }
+
+            continue;
         }
 
-        consume(TokenType::left_brace, "expected '{' before when arm body");
-        cases.push_back(std::move(pattern));
-        cases.push_back(expression());
-        match(TokenType::semicolon);
-        consume(TokenType::right_brace, "expected '}' after when arm body");
+        consume(TokenType::fat_arrow, "expected '=>' after when pattern");
+        if (match(TokenType::left_brace)) {
+            cases.push_back(expression());
+            match(TokenType::semicolon);
+            consume(TokenType::right_brace, "expected '}' after when arm body");
+            match(TokenType::semicolon);
+        } else {
+            cases.push_back(expression());
+            if (!match(TokenType::semicolon) && !match(TokenType::comma) && !check(TokenType::right_brace)) {
+                throw std::runtime_error("expected ';' or ',' after when arm");
+            }
+        }
 
         if (match(TokenType::comma)) {
             continue;
@@ -1322,6 +1422,54 @@ std::unique_ptr<Expression> Parser::when_expression() {
 
     consume(TokenType::right_brace, "expected '}' after when arms");
     return make_match(std::move(subject), std::move(cases), location_from_token(keyword));
+}
+
+std::unique_ptr<Expression> Parser::when_pattern(bool allow_record_pattern) {
+    if (check(TokenType::identifier) && peek().lexeme == "_") {
+        const Token& wildcard = advance();
+        return make_leaf(ExpressionKind::identifier, "_", location_from_token(wildcard));
+    }
+
+    std::unique_ptr<Expression> pattern = expression();
+    if (allow_record_pattern && can_start_struct_literal(*pattern) && check(TokenType::left_brace)) {
+        const SourceLocation location = pattern->location;
+        const std::string name = expression_to_type_name(*pattern);
+        consume(TokenType::left_brace, "expected '{' before record pattern fields");
+
+        std::vector<std::string> field_names;
+        std::vector<std::unique_ptr<Expression>> bindings;
+        if (!check(TokenType::right_brace)) {
+            while (true) {
+                const Token field = consume(TokenType::identifier, "expected record pattern field name");
+                field_names.push_back(field.lexeme);
+                if (match(TokenType::colon)) {
+                    if (check(TokenType::identifier) && peek().lexeme == "_") {
+                        const Token& wildcard = advance();
+                        bindings.push_back(make_leaf(ExpressionKind::identifier, "_", location_from_token(wildcard)));
+                    } else {
+                        const Token binding = consume(TokenType::identifier, "expected binding name in record pattern");
+                        bindings.push_back(
+                            make_leaf(ExpressionKind::identifier, binding.lexeme, location_from_token(binding)));
+                    }
+                } else {
+                    bindings.push_back(make_leaf(ExpressionKind::identifier, field.lexeme, location_from_token(field)));
+                }
+
+                if (!match(TokenType::comma)) {
+                    break;
+                }
+
+                if (check(TokenType::right_brace)) {
+                    break;
+                }
+            }
+        }
+
+        consume(TokenType::right_brace, "expected '}' after record pattern fields");
+        return make_struct_literal(name, std::move(field_names), std::move(bindings), location);
+    }
+
+    return pattern;
 }
 
 std::unique_ptr<Expression> Parser::call() {
@@ -1456,7 +1604,22 @@ std::unique_ptr<Expression> Parser::primary() {
     }
 
     if (match(TokenType::left_paren)) {
+        const SourceLocation location = location_from_token(previous());
         std::unique_ptr<Expression> expr = expression();
+        if (match(TokenType::comma)) {
+            std::vector<std::unique_ptr<Expression>> elements;
+            elements.push_back(std::move(expr));
+            if (check(TokenType::right_paren)) {
+                throw std::runtime_error("tuple literal needs at least two elements");
+            }
+            do {
+                elements.push_back(expression());
+            } while (match(TokenType::comma) && !check(TokenType::right_paren));
+
+            consume(TokenType::right_paren, "expected ')' after tuple literal");
+            return make_tuple(std::move(elements), location);
+        }
+
         consume(TokenType::right_paren, "expected ')' after expression");
         return expr;
     }

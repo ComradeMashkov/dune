@@ -24,8 +24,8 @@ private:
     bool match(TokenType type);
     bool looks_like_struct_literal() const;
     bool looks_like_assignment_statement() const;
+    bool looks_like_tuple_assignment_statement() const;
     bool looks_like_binding_declaration() const;
-    bool looks_like_function_declaration(bool is_extern = false) const;
 
     const Token& advance();
     const Token& peek() const;
@@ -36,6 +36,7 @@ private:
 
     Statement statement();
     Statement assignment_statement(bool require_semicolon = true);
+    Statement tuple_assignment_statement();
     Statement block_statement();
     Statement break_statement();
     Statement continue_statement();
@@ -44,6 +45,7 @@ private:
     Statement export_statement();
     Statement extern_statement();
     Statement for_statement();
+    Statement for_in_statement(const Token& keyword);
     Statement function_statement(bool is_extern = false);
     Statement finish_function_statement(const Token& name, std::vector<GenericParameter> leading_generics = {},
                                         bool is_extern = false);
@@ -68,9 +70,11 @@ private:
 
     std::unique_ptr<Expression> assignment_target();
     std::unique_ptr<Expression> expression();
+    std::unique_ptr<Expression> range();
     std::unique_ptr<Expression> logical_or();
     std::unique_ptr<Expression> logical_and();
     std::unique_ptr<Expression> equality();
+    std::unique_ptr<Expression> membership();
     std::unique_ptr<Expression> comparison();
     std::unique_ptr<Expression> term();
     std::unique_ptr<Expression> factor();
@@ -78,6 +82,7 @@ private:
     std::unique_ptr<Expression> unary();
     std::unique_ptr<Expression> call();
     std::unique_ptr<Expression> when_expression();
+    std::unique_ptr<Expression> when_pattern(bool allow_record_pattern);
     std::unique_ptr<Expression> primary();
 
     std::vector<Token> tokens_;

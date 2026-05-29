@@ -3,27 +3,27 @@ export choice Outcome<T, E> {
     Failed(E),
 }
 
-export done<T, E>(value: T, error_default: E): Outcome<T, E> {
+export fn done<T, E>(value: T, error_default: E): Outcome<T, E> {
     return Done(value);
 }
 
-export failed<T, E>(value_default: T, error: E): Outcome<T, E> {
+export fn failed<T, E>(value_default: T, error: E): Outcome<T, E> {
     return Failed(error);
 }
 
-export done_int(value: int): Outcome<int, text> {
+export fn done_int(value: int): Outcome<int, text> {
     return done(value, "");
 }
 
-export failed_int(error: text): Outcome<int, text> {
+export fn failed_int(error: text): Outcome<int, text> {
     return failed(0, error);
 }
 
-export done_text(value: text): Outcome<text, text> {
+export fn done_text(value: text): Outcome<text, text> {
     return done(value, "");
 }
 
-export failed_text(error: text): Outcome<text, text> {
+export fn failed_text(error: text): Outcome<text, text> {
     return failed("", error);
 }
 

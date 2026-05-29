@@ -1,0 +1,38 @@
+record Optimizer {
+    lr: real64 = 0.01,
+    momentum: real64 = 0.0,
+    name: text = "sgd",
+
+    fn new(lr: real64): Optimizer {
+        return Optimizer { lr: lr };
+    }
+}
+
+base: Optimizer = Optimizer {};
+fast: Optimizer = Optimizer { lr: 0.1 };
+heavy: Optimizer = Optimizer { momentum: 0.9 };
+built: Optimizer = Optimizer.new(0.2);
+
+print(base.lr);
+print(base.momentum);
+print(base.name);
+print(fast.lr);
+print(fast.momentum);
+print(heavy.lr);
+print(heavy.momentum);
+print(built.lr);
+print(built.momentum);
+
+record Config {
+    required: int,
+    values: [int] = [1],
+}
+
+first: Config = Config { required: 10 };
+second: Config = Config { required: 20 };
+second.values.push(2);
+
+print(first.required);
+print(first.values.len());
+print(second.required);
+print(second.values.len());
