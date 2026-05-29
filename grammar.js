@@ -92,14 +92,16 @@ module.exports = grammar({
       optional($.generic_parameters),
       optional(seq("with", commaSep1($.qualified_name))),
       "{",
-      optional(commaSep(choice($.record_field, $.record_method, $.exported_record_field, $.exported_record_method))),
-      optional(","),
+      repeat(seq(
+        choice($.record_field, $.record_method, $.exported_record_field, $.exported_record_method),
+        optional(","),
+      )),
       "}",
     ),
 
     record_field: $ => seq(field("name", $.identifier), ":", field("type", $._type)),
 
-    record_method: $ => $.function_declaration,
+    record_method: $ => seq(optional("static"), $.function_declaration),
 
     exported_record_field: $ => seq("export", $.record_field),
 
@@ -361,7 +363,14 @@ module.exports = grammar({
     )),
 
     method_call_expression: $ => prec.left(PREC.call, seq(
-      field("receiver", choice($.identifier, $.member_expression, $.call_expression, $.index_expression, $.parenthesized_expression)),
+      field("receiver", choice(
+        $.identifier,
+        $.constructor_identifier,
+        $.member_expression,
+        $.call_expression,
+        $.index_expression,
+        $.parenthesized_expression,
+      )),
       ".",
       field("method", choice($.identifier, $.constructor_identifier)),
       field("arguments", $.argument_list),
@@ -370,7 +379,14 @@ module.exports = grammar({
     argument_list: $ => seq("(", optional(commaSep($._expression)), optional(","), ")"),
 
     member_expression: $ => prec.left(PREC.member, seq(
-      field("receiver", choice($.identifier, $.member_expression, $.call_expression, $.index_expression, $.parenthesized_expression)),
+      field("receiver", choice(
+        $.identifier,
+        $.constructor_identifier,
+        $.member_expression,
+        $.call_expression,
+        $.index_expression,
+        $.parenthesized_expression,
+      )),
       ".",
       field("property", choice($.identifier, $.constructor_identifier)),
     )),

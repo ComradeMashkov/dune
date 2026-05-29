@@ -262,6 +262,10 @@ Token Lexer::identifier(std::size_t start, std::size_t line, std::size_t column)
         return Token{TokenType::continue_keyword, lexeme, line, column};
     }
 
+    if (lexeme == "static") {
+        return Token{TokenType::static_keyword, lexeme, line, column};
+    }
+
     if (lexeme == "to") {
         return Token{TokenType::to_keyword, lexeme, line, column};
     }

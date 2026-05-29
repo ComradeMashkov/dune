@@ -394,8 +394,9 @@ void add_completion(std::vector<CompletionItem>& completions, std::string label,
 
 void add_static_completions(std::vector<CompletionItem>& completions) {
     for (const std::string_view keyword :
-         {"break", "choice", "const", "continue", "contract", "else", "export", "foreign", "for",  "if",   "import",
-          "is",    "method", "print", "record",   "return",   "to",   "when",   "while",   "with", "true", "false"}) {
+         {"break",  "choice", "const",  "continue", "contract", "else",  "export", "foreign",
+          "for",    "if",     "import", "is",       "method",   "print", "record", "return",
+          "static", "to",     "when",   "while",    "with",     "true",  "false"}) {
         add_completion(completions, std::string(keyword), "keyword", completion_kind_keyword);
     }
 
@@ -729,7 +730,7 @@ void add_struct_method_completions(const Type& receiver,
     }
 
     for (const TypeChecker::StructMethod& method : record->second.methods) {
-        if (method.is_constructor) {
+        if (method.is_constructor || method.is_static) {
             continue;
         }
 
@@ -1362,7 +1363,7 @@ receiver_method_hover(const Type& receiver, const std::string& method,
 
     std::string signatures;
     for (const TypeChecker::StructMethod& candidate : record->second.methods) {
-        if (candidate.is_constructor || candidate.name != method) {
+        if (candidate.is_constructor || candidate.is_static || candidate.name != method) {
             continue;
         }
 
@@ -1467,6 +1468,7 @@ std::optional<std::string> builtin_hover(const Token& token) {
     case TokenType::for_keyword:
     case TokenType::break_keyword:
     case TokenType::continue_keyword:
+    case TokenType::static_keyword:
     case TokenType::to_keyword:
     case TokenType::is_keyword:
     case TokenType::int_keyword:

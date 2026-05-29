@@ -15,6 +15,7 @@
   "print"
   "record"
   "return"
+  "static"
   "to"
   "when"
   "while"

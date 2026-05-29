@@ -175,6 +175,7 @@ Statement clone_statement(const Statement& statement) {
     result.is_extern = statement.is_extern;
     result.is_record_member = statement.is_record_member;
     result.is_constructor = statement.is_constructor;
+    result.is_static_record_member = statement.is_static_record_member;
     result.extern_symbol = statement.extern_symbol;
     result.owner_record = statement.owner_record;
     result.target = clone_expression_pointer(statement.target);
@@ -205,9 +206,10 @@ void desugar_impls(Program& program) {
                 function.generic_parameters = std::move(generic_parameters);
                 function.is_record_member = true;
                 function.is_constructor = function.name == "new";
+                function.is_static_record_member = function.is_static_record_member || function.is_constructor;
                 function.owner_record = statement.name;
-                if (function.is_constructor) {
-                    function.name = statement.name + ".new";
+                if (function.is_constructor || function.is_static_record_member) {
+                    function.name = statement.name + "." + function.name;
                 } else {
                     function.parameters.insert(
                         function.parameters.begin(),

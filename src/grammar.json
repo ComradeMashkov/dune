@@ -417,91 +417,45 @@
           "value": "{"
         },
         {
-          "type": "CHOICE",
-          "members": [
-            {
-              "type": "CHOICE",
-              "members": [
-                {
-                  "type": "SEQ",
-                  "members": [
-                    {
-                      "type": "CHOICE",
-                      "members": [
-                        {
-                          "type": "SYMBOL",
-                          "name": "record_field"
-                        },
-                        {
-                          "type": "SYMBOL",
-                          "name": "record_method"
-                        },
-                        {
-                          "type": "SYMBOL",
-                          "name": "exported_record_field"
-                        },
-                        {
-                          "type": "SYMBOL",
-                          "name": "exported_record_method"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "REPEAT",
-                      "content": {
-                        "type": "SEQ",
-                        "members": [
-                          {
-                            "type": "STRING",
-                            "value": ","
-                          },
-                          {
-                            "type": "CHOICE",
-                            "members": [
-                              {
-                                "type": "SYMBOL",
-                                "name": "record_field"
-                              },
-                              {
-                                "type": "SYMBOL",
-                                "name": "record_method"
-                              },
-                              {
-                                "type": "SYMBOL",
-                                "name": "exported_record_field"
-                              },
-                              {
-                                "type": "SYMBOL",
-                                "name": "exported_record_method"
-                              }
-                            ]
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                {
-                  "type": "BLANK"
-                }
-              ]
-            },
-            {
-              "type": "BLANK"
-            }
-          ]
-        },
-        {
-          "type": "CHOICE",
-          "members": [
-            {
-              "type": "STRING",
-              "value": ","
-            },
-            {
-              "type": "BLANK"
-            }
-          ]
+          "type": "REPEAT",
+          "content": {
+            "type": "SEQ",
+            "members": [
+              {
+                "type": "CHOICE",
+                "members": [
+                  {
+                    "type": "SYMBOL",
+                    "name": "record_field"
+                  },
+                  {
+                    "type": "SYMBOL",
+                    "name": "record_method"
+                  },
+                  {
+                    "type": "SYMBOL",
+                    "name": "exported_record_field"
+                  },
+                  {
+                    "type": "SYMBOL",
+                    "name": "exported_record_method"
+                  }
+                ]
+              },
+              {
+                "type": "CHOICE",
+                "members": [
+                  {
+                    "type": "STRING",
+                    "value": ","
+                  },
+                  {
+                    "type": "BLANK"
+                  }
+                ]
+              }
+            ]
+          }
         },
         {
           "type": "STRING",
@@ -535,8 +489,25 @@
       ]
     },
     "record_method": {
-      "type": "SYMBOL",
-      "name": "function_declaration"
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "STRING",
+              "value": "static"
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
+        },
+        {
+          "type": "SYMBOL",
+          "name": "function_declaration"
+        }
+      ]
     },
     "exported_record_field": {
       "type": "SEQ",
@@ -2346,6 +2317,10 @@
                 },
                 {
                   "type": "SYMBOL",
+                  "name": "constructor_identifier"
+                },
+                {
+                  "type": "SYMBOL",
                   "name": "member_expression"
                 },
                 {
@@ -2476,6 +2451,10 @@
                 {
                   "type": "SYMBOL",
                   "name": "identifier"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "constructor_identifier"
                 },
                 {
                   "type": "SYMBOL",

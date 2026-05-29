@@ -2373,6 +2373,10 @@
             "named": true
           },
           {
+            "type": "constructor_identifier",
+            "named": true
+          },
+          {
             "type": "identifier",
             "named": true
           },
@@ -2426,6 +2430,10 @@
         "types": [
           {
             "type": "call_expression",
+            "named": true
+          },
+          {
+            "type": "constructor_identifier",
             "named": true
           },
           {
@@ -4019,6 +4027,10 @@
   },
   {
     "type": "return",
+    "named": false
+  },
+  {
+    "type": "static",
     "named": false
   },
   {

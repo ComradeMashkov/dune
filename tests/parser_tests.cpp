@@ -585,10 +585,11 @@ bool parses_record_constructors_visibility_and_contracts() {
         parse_source("export contract Shape { area(): real64; } "
                      "export record Circle with Shape { radius: real64, "
                      "export new(radius: real64): Circle { return Circle { radius: radius }; } "
+                     "export static one(): Circle { return Circle.new(1.0); } "
                      "export area(): real64 { return this.radius; } } "
-                     "circle: Circle = Circle.new(2.0);");
+                     "circle: Circle = Circle.new(2.0); one: Circle = Circle.one();");
 
-    if (!expect(program.statements.size() == 3, "expected contract, record, and constructor binding")) {
+    if (!expect(program.statements.size() == 4, "expected contract, record, and static bindings")) {
         return false;
     }
 
@@ -609,11 +610,15 @@ bool parses_record_constructors_visibility_and_contracts() {
     passed = expect(record.contracts[0].name == "Shape", "expected Shape contract") && passed;
     passed = expect(record.parameters.size() == 1, "expected one field") && passed;
     passed = expect(!record.parameters[0].exported, "expected private field by default") && passed;
-    passed = expect(record.body.size() == 2, "expected constructor and method") && passed;
+    passed = expect(record.body.size() == 3, "expected constructor, static method, and method") && passed;
     passed = expect(record.body[0].name == "new", "expected constructor name") && passed;
     passed = expect(record.body[0].exported, "expected exported constructor") && passed;
-    passed = expect(record.body[1].name == "area", "expected method name") && passed;
-    passed = expect(record.body[1].exported, "expected exported method") && passed;
+    passed = expect(record.body[1].name == "one", "expected static method name") && passed;
+    passed = expect(record.body[1].is_static_record_member, "expected static record method") && passed;
+    passed = expect(record.body[1].exported, "expected exported static method") && passed;
+    passed = expect(record.body[2].name == "area", "expected method name") && passed;
+    passed = expect(!record.body[2].is_static_record_member, "expected instance method") && passed;
+    passed = expect(record.body[2].exported, "expected exported method") && passed;
 
     const dune::Expression& constructor_call = *program.statements[2].expression;
     passed = expect(constructor_call.kind == dune::ExpressionKind::method_call, "expected constructor method call") &&
@@ -622,6 +627,10 @@ bool parses_record_constructors_visibility_and_contracts() {
     passed =
         expect(constructor_call.left->kind == dune::ExpressionKind::identifier, "expected record receiver") && passed;
     passed = expect(constructor_call.left->lexeme == "Circle", "expected Circle constructor receiver") && passed;
+
+    const dune::Expression& static_call = *program.statements[3].expression;
+    passed = expect(static_call.kind == dune::ExpressionKind::method_call, "expected static method call") && passed;
+    passed = expect(static_call.lexeme == "one", "expected static method name") && passed;
 
     return passed;
 }

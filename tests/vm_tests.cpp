@@ -307,6 +307,15 @@ int main() {
                                   "flags = [true, false]; print(flags.all()); print(flags.any());"),
                        "6\n6\n1\n3\n15\n0\n4\n3\n0\n1\n", "expected expanded array stdlib output") &&
              passed;
+    passed =
+        expect_eq(run_source("record Optimizer { lr: real64, momentum: real64, "
+                             "static default(): Optimizer { return Optimizer { lr: 0.01, momentum: 0.0 }; } "
+                             "static with_lr(lr: real64): Optimizer { return Optimizer { lr: lr, momentum: 0.0 }; } "
+                             "rate(): real64 { return this.lr; } } "
+                             "opt: Optimizer = Optimizer.default(); print(opt.rate()); "
+                             "tuned: Optimizer = Optimizer.with_lr(0.2); print(tuned.rate());"),
+                  "0.01\n0.2\n", "expected static associated function output") &&
+        passed;
     passed = expect_throws("print(missing);", "expected undefined variable to throw") && passed;
     passed =
         expect_eq(run_source("missing = 1; print(missing);"), "1\n", "expected first assignment to bind") && passed;

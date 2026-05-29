@@ -9,6 +9,14 @@ export record Counter {
         return Counter { value: 0 };
     }
 
+    export static zero(): Counter {
+        return Counter { value: 0 };
+    }
+
+    static secret(): Counter {
+        return Counter { value: -1 };
+    }
+
     export inc(): unit {
         this.value = this.value + 1;
     }

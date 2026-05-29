@@ -27,6 +27,7 @@ public:
         SourceLocation location;
         bool exported = false;
         bool is_constructor = false;
+        bool is_static = false;
     };
 
     struct StructDefinition {
@@ -123,6 +124,8 @@ private:
     Type check_method_call_expression(const Expression& expression, const TypeAnnotation& expected);
     Type check_constructor_call_expression(const Expression& expression, const std::string& record_name,
                                            const TypeAnnotation& expected);
+    Type check_static_method_call_expression(const Expression& expression, const std::string& record_name,
+                                             const TypeAnnotation& expected);
     Type check_member_expression(const Expression& expression, const TypeAnnotation& expected);
     Type check_unary_expression(const Expression& expression);
     Type check_cast_expression(const Expression& expression);
@@ -178,6 +181,8 @@ private:
     void expect_exported_member(const std::string& module, const std::string& member, SourceLocation location) const;
     void expect_public_field(const Type& receiver, const StructField& field, SourceLocation location) const;
     void expect_public_method(const Type& receiver, const std::string& method, SourceLocation location) const;
+    void expect_public_static_method(const Type& receiver, const std::string& method, SourceLocation location) const;
+    const StructMethod* find_static_method(const std::string& record_name, const std::string& method) const;
     void collect_known_module(const std::string& name);
     void collect_module_export(const Statement& statement);
     bool is_qualified_module_name(const std::string& name) const;

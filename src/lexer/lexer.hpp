@@ -25,6 +25,7 @@ enum class TokenType {
     for_keyword,
     break_keyword,
     continue_keyword,
+    static_keyword,
     to_keyword,
     is_keyword,
     int_keyword,
