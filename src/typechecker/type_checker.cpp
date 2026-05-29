@@ -1073,6 +1073,9 @@ void TypeChecker::check_statement(const Statement& statement) {
         }
         pop_scope();
         return;
+    case StatementKind::for_in_statement:
+        check_for_in_statement(statement);
+        return;
     case StatementKind::break_statement:
         if (loop_depth_ == 0) {
             throw std::runtime_error(diagnostic(statement.location, "break statement outside loop"));
@@ -1115,10 +1118,54 @@ void TypeChecker::check_statement(const Statement& statement) {
     }
 }
 
+void TypeChecker::check_for_in_statement(const Statement& statement) {
+    const Type element_type = check_for_in_iterable(*statement.expression);
+
+    push_scope();
+    declare_binding(statement.name, element_type, true, statement.location);
+    ++loop_depth_;
+    push_scope();
+    check_statements(statement.body);
+    pop_scope();
+    --loop_depth_;
+    pop_scope();
+}
+
 void TypeChecker::check_statements(const std::vector<Statement>& statements) {
     for (const Statement& statement : statements) {
         check_statement(statement);
     }
+}
+
+Type TypeChecker::check_for_in_iterable(const Expression& expression) {
+    if (expression.kind == ExpressionKind::range) {
+        if (expression.left == nullptr || expression.right == nullptr) {
+            throw std::runtime_error(diagnostic(expression.location, "invalid range expression"));
+        }
+
+        Type start = check_expression(*expression.left);
+        Type end = check_expression(*expression.right);
+        if (!same_type(start, end)) {
+            start = coerce_numeric_literal(*expression.left, start, end);
+            end = coerce_numeric_literal(*expression.right, end, start);
+        }
+
+        if (!is_integer_type(start.kind)) {
+            throw std::runtime_error(diagnostic(expression.left->location,
+                                                "expected integer range bound but got '" + type_name(start) + "'"));
+        }
+
+        expect_type(start, end, expression.right->location);
+        expression_types_[&expression] = start;
+        return start;
+    }
+
+    const Type iterable = check_expression(expression);
+    if (iterable.kind == ValueType::array_type && iterable.element != nullptr) {
+        return *iterable.element;
+    }
+
+    throw std::runtime_error(diagnostic(expression.location, "type '" + type_name(iterable) + "' is not iterable"));
 }
 
 Type TypeChecker::check_assignment_target(const Expression& target, SourceLocation location) {
@@ -1179,6 +1226,7 @@ Type TypeChecker::check_assignment_target(const Expression& target, SourceLocati
     case ExpressionKind::unary:
     case ExpressionKind::cast:
     case ExpressionKind::binary:
+    case ExpressionKind::range:
     case ExpressionKind::when_expression:
     case ExpressionKind::call:
     case ExpressionKind::method_call:
@@ -1310,6 +1358,8 @@ Type TypeChecker::check_expression(const Expression& expression, const TypeAnnot
     case ExpressionKind::binary:
         actual = check_binary_expression(expression, wanted);
         break;
+    case ExpressionKind::range:
+        throw std::runtime_error(diagnostic(expression.location, "range expressions can only be used in for-in loops"));
     case ExpressionKind::when_expression:
         actual = check_when_expression(expression, wanted);
         break;
@@ -2529,6 +2579,7 @@ bool TypeChecker::statement_returns(const Statement& statement) const {
     case StatementKind::print:
     case StatementKind::while_statement:
     case StatementKind::for_statement:
+    case StatementKind::for_in_statement:
     case StatementKind::function:
     case StatementKind::method_block:
     case StatementKind::struct_statement:

@@ -244,6 +244,16 @@ add_test(
 )
 
 add_test(
+    NAME cli_for_in_ranges
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/for_in_ranges.dn
+        -D EXPECTED_OUTPUT="10\n20\n9"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
     NAME cli_functions
     COMMAND
         ${CMAKE_COMMAND}
@@ -714,5 +724,16 @@ add_test(
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/control_flow.dn
         -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/control_flow_native
         -D EXPECTED_OUTPUT=42
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
+)
+
+add_test(
+    NAME cli_build_native_for_in_ranges
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/for_in_ranges.dn
+        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/for_in_ranges_native
+        -D EXPECTED_OUTPUT="10\n20\n9"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
 )

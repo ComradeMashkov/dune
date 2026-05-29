@@ -433,6 +433,37 @@ bool parses_stdlib_primitives() {
     return passed;
 }
 
+bool parses_for_in_and_ranges() {
+    const dune::Program program = parse_source("values: [int] = [1, 2, 3]; "
+                                               "for value in values { print(value); } "
+                                               "for i in 0..values.len() { print(values[i]); }");
+
+    if (!expect(program.statements.size() == 3, "expected binding and two for-in statements")) {
+        return false;
+    }
+
+    bool passed = true;
+    const dune::Statement& array_loop = program.statements[1];
+    passed =
+        expect(array_loop.kind == dune::StatementKind::for_in_statement, "expected array for-in statement") && passed;
+    passed = expect(array_loop.name == "value", "expected array loop variable") && passed;
+    passed =
+        expect(array_loop.expression->kind == dune::ExpressionKind::identifier, "expected array iterable") && passed;
+    passed = expect(array_loop.body.size() == 1, "expected array loop body") && passed;
+
+    const dune::Statement& range_loop = program.statements[2];
+    passed =
+        expect(range_loop.kind == dune::StatementKind::for_in_statement, "expected range for-in statement") && passed;
+    passed = expect(range_loop.name == "i", "expected range loop variable") && passed;
+    passed = expect(range_loop.expression->kind == dune::ExpressionKind::range, "expected range expression") && passed;
+    passed = expect(range_loop.expression->left->lexeme == "0", "expected range start") && passed;
+    passed =
+        expect(range_loop.expression->right->kind == dune::ExpressionKind::method_call, "expected range end call") &&
+        passed;
+    passed = expect(range_loop.expression->right->lexeme == "len", "expected len range end") && passed;
+    return passed;
+}
+
 bool parses_generic_functions() {
     const dune::Program program = parse_source("choose<T, R is real, U is numeric>(left: T, middle: R, right: U): U { "
                                                "return right; } print(choose(\"x\", 1.5, 7));");
@@ -692,6 +723,7 @@ int main() {
     passed = parses_constants_and_module_members() && passed;
     passed = parses_casts_unary_logical_and_methods() && passed;
     passed = parses_stdlib_primitives() && passed;
+    passed = parses_for_in_and_ranges() && passed;
     passed = parses_generic_functions() && passed;
     passed = parses_receiver_methods() && passed;
     passed = parses_records_and_record_literals() && passed;

@@ -309,6 +309,11 @@ int main() {
                           "chosen: int = when value { is Present(x) { x } is Absent { 0 } };",
                           "expected lexical scopes and shadowing to validate") &&
              passed;
+    passed = expect_valid("values: [int] = [1, 2, 3]; total = 0; "
+                          "for value in values { total = total + value; } "
+                          "for i in 0..values.len() { total = total + values[i]; }",
+                          "expected for-in arrays and ranges to validate") &&
+             passed;
     passed = expect_valid("record Point { x: int, y: int } "
                           "values: [int] = [1, 2]; values[1] = 9; "
                           "grid: [[int]] = [[1, 2], [3, 4]]; grid[1][0] = 8; "
@@ -331,6 +336,18 @@ int main() {
              passed;
     passed = expect_error_contains("for i = 0; i < 1; i = i + 1 { } print(i);", "undefined variable 'i'",
                                    "expected for variable scope error") &&
+             passed;
+    passed = expect_error_contains("for value in 42 { print(value); }", "type 'int' is not iterable",
+                                   "expected non-iterable for-in error") &&
+             passed;
+    passed = expect_error_contains("for value in [1, 2] { value = value + 1; }", "cannot assign to constant 'value'",
+                                   "expected read-only for-in binding") &&
+             passed;
+    passed = expect_error_contains("value = 0..3;", "range expressions can only be used in for-in loops",
+                                   "expected range value error") &&
+             passed;
+    passed = expect_error_contains("for i in 0.0..3.0 { print(i); }", "expected integer range bound but got 'real'",
+                                   "expected real range bound error") &&
              passed;
     passed = expect_error_contains("choice Maybe { Present(int), Absent, } value: Maybe = Present(1); "
                                    "chosen: int = when value { is Present(x) { x } is Absent { 0 } }; print(x);",

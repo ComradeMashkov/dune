@@ -206,6 +206,34 @@ bool compiles_stdlib_primitives() {
     return passed;
 }
 
+bool compiles_for_in_arrays_and_ranges() {
+    const dune::Bytecode bytecode = compile_source("values: [int] = [1, 2, 3]; total = 0; "
+                                                   "for value in values { total = total + value; } "
+                                                   "for i in 0..values.len() { total = total + values[i]; } "
+                                                   "print(total);");
+
+    bool saw_array_len = false;
+    bool saw_load_index = false;
+    bool saw_less = false;
+    bool saw_backward_jump = false;
+    for (std::size_t index = 0; index < bytecode.instructions.size(); ++index) {
+        const dune::Instruction& instruction = bytecode.instructions[index];
+        saw_array_len = saw_array_len || instruction.op == dune::OpCode::array_len;
+        saw_load_index = saw_load_index || instruction.op == dune::OpCode::load_index;
+        saw_less = saw_less || instruction.op == dune::OpCode::less;
+        if (instruction.op == dune::OpCode::jump && instruction.operand < index) {
+            saw_backward_jump = true;
+        }
+    }
+
+    bool passed = true;
+    passed = expect(saw_array_len, "expected for-in array length check") && passed;
+    passed = expect(saw_load_index, "expected for-in array element load") && passed;
+    passed = expect(saw_less, "expected for-in range comparison") && passed;
+    passed = expect(saw_backward_jump, "expected for-in loop backward jump") && passed;
+    return passed;
+}
+
 bool compiles_generic_functions() {
     const dune::Bytecode bytecode = compile_source("identity<T>(value: T): T { return value; } "
                                                    "twice<T is numeric>(value: T): T { return value + value; } "
@@ -486,6 +514,7 @@ int main() {
     passed = compiles_module_constants() && passed;
     passed = compiles_operators_casts_and_methods() && passed;
     passed = compiles_stdlib_primitives() && passed;
+    passed = compiles_for_in_arrays_and_ranges() && passed;
     passed = compiles_generic_functions() && passed;
     passed = compiles_stdlib_receiver_methods() && passed;
     passed = compiles_record_literals_fields_and_methods() && passed;

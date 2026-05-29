@@ -53,6 +53,9 @@ private:
     };
 
     bool emit_statement(const Statement& statement, std::ostream& output);
+    bool emit_for_in_statement(const Statement& statement, std::ostream& output);
+    bool emit_range_for_in_statement(const Statement& statement, const Type& element_type, std::ostream& output);
+    bool emit_array_for_in_statement(const Statement& statement, const Type& iterable_type, std::ostream& output);
     bool emit_statements(const std::vector<Statement>& statements, std::ostream& output);
     TypedValue emit_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_binary_expression(const Expression& expression, std::ostream& output);

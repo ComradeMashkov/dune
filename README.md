@@ -167,7 +167,11 @@ print(message[5:13]);
 values: [int] = [1, 2, 3, 4];
 middle: [int] = values[1:3];
 
-for i = 0; i < middle.len(); i = i + 1 {
+for value in middle {
+  print(value);
+}
+
+for i in 0..middle.len() {
   if i == 1 {
     continue;
   }
@@ -489,6 +493,11 @@ shadow a mutable outer binding. Plain `x = 2` updates the nearest visible `x`, o
 creates one in the current scope if none exists. Constants cannot be reassigned
 or accidentally shadowed. Assignments to scalar values copy the value.
 
+`for name in values { ... }` iterates arrays. `for i in start..end { ... }`
+iterates integer ranges with `start` included and `end` excluded; descending or
+otherwise empty ranges run zero iterations. The loop variable is scoped to the
+loop body and is read-only, like a constant binding.
+
 ```dn
 x = 1;
 
@@ -587,6 +596,8 @@ Indexing and slicing:
 
 - arrays are zero-based: `values[0]` is the first element
 - arrays: `values[index]`, `values[start:end]`, `values[:end]`, `values[start:]`
+- array iteration: `for value in values { ... }`
+- integer ranges: `for i in 0..values.len() { ... }`
 - text is zero-based: `message[0]` returns the first `glyph`
 - text slices return `text`
 - array slots and record fields can be assigned directly: `values[0] = 9`, `point.x = 7`, `points[0].x = 5`
@@ -750,6 +761,8 @@ The current release implements a small compiled language with:
 - if/else
 - while
 - for
+- for-in loops
+- integer range expressions for loops
 - break/continue
 - bytecode
 - VM

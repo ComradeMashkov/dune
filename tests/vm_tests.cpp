@@ -162,6 +162,12 @@ int main() {
                        "d\nlanguage\ndune\nlanguage\n3\n2\n4\n5\n9\n",
                        "expected foreign functions slices text indexing and for loop output") &&
              passed;
+    passed = expect_eq(run_source("values: [int] = [1, 2, 3, 4]; total = 0; "
+                                  "for value in values { if value == 3 { continue; } total = total + value; } "
+                                  "for i in 0..values.len() { if i == 2 { break; } total = total + values[i]; } "
+                                  "for empty in 5..2 { total = total + empty; } print(total);"),
+                       "10\n", "expected for-in arrays ranges break continue and empty range output") &&
+             passed;
     passed = expect_eq(run_source("import array; import text; "
                                   "values: [int] = [1, 2, 3]; reversed: [int] = array.reverse(values); "
                                   "print(array.sum(reversed)); print(array.first(reversed)); "
