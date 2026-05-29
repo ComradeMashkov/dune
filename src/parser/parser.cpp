@@ -155,6 +155,10 @@ std::string expression_to_type_name(const Expression& expression) {
 }
 
 std::string decode_string_literal(const std::string& lexeme) {
+    if (lexeme.size() >= 3 && lexeme[0] == 'r' && lexeme[1] == '"' && lexeme.back() == '"') {
+        return lexeme.substr(2, lexeme.size() - 3);
+    }
+
     std::string result;
     for (std::size_t index = 1; index + 1 < lexeme.size(); ++index) {
         char current = lexeme[index];

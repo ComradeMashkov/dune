@@ -107,6 +107,26 @@ int main() {
                           "print(\"bool={}, glyph={}, real={}\", true, 'x', 2.5);",
                           "expected formatted print to validate") &&
              passed;
+    passed = expect_valid("name: text = \"Dune\"; version: int = 1; "
+                          "message: text = format(\"{} v{}\", name, version); "
+                          "print(format(\"{}: {}\", \"answer\", 42)); print(message);",
+                          "expected format expression to validate") &&
+             passed;
+    passed = expect_valid("size: int = 1_000_000; mask: u64 = 0xffu64; bits: u8 = 0b1010_0101u8; "
+                          "wide: i64 = 123i64; index: usize = 10usize; rough: real = 1_000.5_25;",
+                          "expected numeric literal polish to validate") &&
+             passed;
+    passed =
+        expect_valid(
+            R"dune(path: text = r"C:\Users\name\data.csv"; literal: text = r"\x"; line: text = "hello\n"; tab: glyph = '\t'; newline: glyph = '\n'; carriage: glyph = '\r'; quote: glyph = '\''; slash: glyph = '\\'; zero: glyph = '\0';)dune",
+            "expected raw strings and escaped literals to validate") &&
+        passed;
+    passed = expect_error_contains(R"(bad: text = "\x";)", R"(unknown text escape '\x')",
+                                   "expected invalid text escape error") &&
+             passed;
+    passed = expect_error_contains(R"(bad: glyph = '\x';)", R"(unknown glyph escape '\x')",
+                                   "expected invalid glyph escape error") &&
+             passed;
     passed = expect_error_contains("print(\"{} {}\", 1);", "print format string expects 2 arguments but got 1",
                                    "expected missing print format argument error") &&
              passed;
@@ -119,6 +139,21 @@ int main() {
         passed;
     passed = expect_error_contains("print(\"{name}\", 1);", "invalid print format placeholder",
                                    "expected invalid print placeholder error") &&
+             passed;
+    passed = expect_error_contains("format(\"{} {}\", 1);", "format string expects 2 arguments but got 1",
+                                   "expected missing format argument error") &&
+             passed;
+    passed = expect_error_contains("format(\"{}\", 1, 2);", "format string expects 1 arguments but got 2",
+                                   "expected extra format argument error") &&
+             passed;
+    passed = expect_error_contains("format: text = \"{}\"; message: text = format(format, 1);",
+                                   "format string must be a string literal", "expected literal format error") &&
+             passed;
+    passed = expect_error_contains("value: i32 = 42u64;", "expected type 'i32' but got 'u64'",
+                                   "expected suffixed integer type mismatch") &&
+             passed;
+    passed = expect_error_contains("small: u8 = 300u8;", "integer literal '300u8' does not fit in type 'u8'",
+                                   "expected suffixed integer overflow") &&
              passed;
     passed = expect_valid("import math; "
                           "fn second(values: [int]): int { return values[1]; } "

@@ -66,6 +66,10 @@ int main() {
     bool passed = true;
 
     passed = expect_eq(run_source("print(40 + 2);"), "42\n", "expected arithmetic output") && passed;
+    passed = expect_eq(run_source("message: text = format(\"{} v{}\", \"Dune\", 1); print(message); "
+                                  "print(format(\"bits {}\", 0b1010u8));"),
+                       "Dune v1\nbits 10\n", "expected format expression and numeric literal output") &&
+             passed;
     passed = expect_eq(run_source("print(true); print(false); print(3 > 2); print(3 != 3);"), "1\n0\n1\n0\n",
                        "expected boolean and comparison output") &&
              passed;
@@ -108,6 +112,27 @@ int main() {
                                   "print(\"{} v{}\", name, version); "
                                   "print(\"bool={}, glyph={}, real={}\", true, 'x', 2.5);"),
                        "Dune v1\nbool=1, glyph=x, real=2.5\n", "expected formatted print output") &&
+             passed;
+    passed = expect_eq(run_source(R"dune(path: text = r"C:\Users\name\data.csv";
+print(path);
+print("hello\nworld");
+print("quote \"ok\"");
+print("slash \\ ok");
+print('\n' to int);
+print('\t' to int);
+print('\r' to int);
+print('\\');
+print('\'');
+print('\0' to int);)dune"),
+                       "C:\\Users\\name\\data.csv\n"
+                       "hello\nworld\n"
+                       "quote \"ok\"\n"
+                       "slash \\ ok\n"
+                       "10\n9\n13\n\\\n'\n0\n",
+                       "expected raw strings and escape output") &&
+             passed;
+    passed = expect_error_contains(R"(bad: text = "\x";)", R"(unknown text escape '\x')",
+                                   "expected invalid text escape diagnostic") &&
              passed;
     passed = expect_eq(run_source("fn log(message: text): unit { print(message); return; } "
                                   "fn noop(): unit { } "

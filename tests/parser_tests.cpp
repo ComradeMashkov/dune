@@ -244,6 +244,62 @@ bool parses_extended_types() {
     return passed;
 }
 
+bool parses_format_expression_and_numeric_literals() {
+    const dune::Program program = parse_source("size = 1_000_000; mask: u64 = 0xffu64; "
+                                               "message: text = format(\"{}\", size);");
+
+    if (!expect(program.statements.size() == 3, "expected numeric and format statements")) {
+        return false;
+    }
+
+    bool passed = true;
+    passed = expect(program.statements[0].expression->kind == dune::ExpressionKind::number,
+                    "expected decimal numeric literal") &&
+             passed;
+    passed =
+        expect(program.statements[0].expression->lexeme == "1_000_000", "expected decimal separator lexeme") && passed;
+    passed = expect(program.statements[1].expression->lexeme == "0xffu64", "expected hex suffix lexeme") && passed;
+    const dune::Expression& call = *program.statements[2].expression;
+    passed = expect(call.kind == dune::ExpressionKind::call, "expected format call") && passed;
+    passed = expect(call.lexeme == "format", "expected format callee") && passed;
+    passed = expect(call.arguments.size() == 2, "expected format string and one argument") && passed;
+    return passed;
+}
+
+bool parses_raw_and_escaped_literals() {
+    const dune::Program program = parse_source(
+        R"dune(path: text = r"C:\Users\name\data.csv"; line: text = "hello\n"; tab: glyph = '\t'; quote: glyph = '\'';)dune");
+
+    if (!expect(program.statements.size() == 4, "expected raw, text, and glyph literal bindings")) {
+        return false;
+    }
+
+    bool passed = true;
+    passed =
+        expect(program.statements[0].expression->kind == dune::ExpressionKind::string, "expected raw text literal") &&
+        passed;
+    passed = expect(program.statements[0].expression->lexeme == R"(r"C:\Users\name\data.csv")",
+                    "expected raw text lexeme") &&
+             passed;
+    passed = expect(program.statements[1].expression->kind == dune::ExpressionKind::string,
+                    "expected escaped text literal") &&
+             passed;
+    passed =
+        expect(program.statements[1].expression->lexeme == R"("hello\n")", "expected escaped text lexeme") && passed;
+    passed = expect(program.statements[2].expression->kind == dune::ExpressionKind::character,
+                    "expected escaped tab glyph") &&
+             passed;
+    passed =
+        expect(program.statements[2].expression->lexeme == R"('\t')", "expected escaped tab glyph lexeme") && passed;
+    passed = expect(program.statements[3].expression->kind == dune::ExpressionKind::character,
+                    "expected escaped quote glyph") &&
+             passed;
+    passed =
+        expect(program.statements[3].expression->lexeme == R"('\'')", "expected escaped quote glyph lexeme") && passed;
+
+    return passed;
+}
+
 bool parses_standard_types_and_unit_calls() {
     const dune::Program program = parse_source("fn log(message: text): unit { print(message); return; } "
                                                "fn noop(): unit { } "
@@ -732,12 +788,14 @@ int main() {
     bool passed = true;
     passed = parses_binding_and_print() && passed;
     passed = parses_formatted_print() && passed;
+    passed = parses_format_expression_and_numeric_literals() && passed;
     passed = parses_operator_precedence() && passed;
     passed = parses_control_flow() && passed;
     passed = parses_assignment_targets() && passed;
     passed = parses_functions_and_types() && passed;
     passed = rejects_legacy_function_syntax() && passed;
     passed = parses_extended_types() && passed;
+    passed = parses_raw_and_escaped_literals() && passed;
     passed = parses_standard_types_and_unit_calls() && passed;
     passed = parses_arrays_imports_and_module_calls() && passed;
     passed = parses_constants_and_module_members() && passed;

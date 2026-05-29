@@ -77,16 +77,24 @@ bool compiles_unit_call_statement() {
 
 bool compiles_formatted_print() {
     const dune::Bytecode bytecode = compile_source("name: text = \"Dune\"; version: int = 1; "
-                                                   "print(\"{} v{}\", name, version);");
+                                                   "message: text = format(\"{} v{}\", name, version); "
+                                                   "print(\"{}\", message);");
 
     bool saw_print_format = false;
+    bool saw_format_text = false;
     for (const dune::Instruction& instruction : bytecode.instructions) {
-        if (instruction.op == dune::OpCode::print_format && instruction.operand == 2) {
+        if (instruction.op == dune::OpCode::format_text && instruction.operand == 2) {
+            saw_format_text = true;
+        }
+        if (instruction.op == dune::OpCode::print_format && instruction.operand == 1) {
             saw_print_format = true;
         }
     }
 
-    return expect(saw_print_format, "expected print_format instruction");
+    bool passed = true;
+    passed = expect(saw_format_text, "expected format_text instruction") && passed;
+    passed = expect(saw_print_format, "expected print_format instruction") && passed;
+    return passed;
 }
 
 bool compiles_arrays_and_module_calls() {
