@@ -399,6 +399,34 @@ bool compiles_record_constructors() {
     return passed;
 }
 
+bool compiles_static_associated_record_functions() {
+    const dune::Bytecode bytecode =
+        compile_source("record Optimizer { lr: real64, momentum: real64, "
+                       "static fn default(): Optimizer { return Optimizer { lr: 0.01, momentum: 0.0 }; } "
+                       "fn rate(): real64 { return this.lr; } } "
+                       "opt: Optimizer = Optimizer.default(); print(opt.rate());");
+
+    bool saw_static_function = false;
+    bool saw_static_call = false;
+    bool saw_instance_call = false;
+    for (std::size_t index = 0; index < bytecode.functions.size(); ++index) {
+        const dune::Bytecode::Function& function = bytecode.functions[index];
+        saw_static_function = saw_static_function || function.name == "Optimizer.default";
+        for (const dune::Instruction& instruction : bytecode.instructions) {
+            if (instruction.op == dune::OpCode::call && instruction.operand == index) {
+                saw_static_call = saw_static_call || function.name == "Optimizer.default";
+                saw_instance_call = saw_instance_call || function.name == "rate";
+            }
+        }
+    }
+
+    bool passed = true;
+    passed = expect(saw_static_function, "expected static associated function") && passed;
+    passed = expect(saw_static_call, "expected static associated function call") && passed;
+    passed = expect(saw_instance_call, "expected instance method call") && passed;
+    return passed;
+}
+
 bool compiles_assignment_targets() {
     const dune::Bytecode bytecode = compile_source("record Point { x: int, y: int } "
                                                    "values: [int] = [1, 2]; values[1] = 9; "
@@ -616,6 +644,7 @@ int main() {
     passed = compiles_record_literals_fields_and_methods() && passed;
     passed = compiles_record_field_defaults() && passed;
     passed = compiles_record_constructors() && passed;
+    passed = compiles_static_associated_record_functions() && passed;
     passed = compiles_assignment_targets() && passed;
     passed = compiles_when_expression() && passed;
     passed = compiles_choice_variants_and_when() && passed;

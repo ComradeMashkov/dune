@@ -1,0 +1,37 @@
+record Optimizer {
+    lr: real64,
+    momentum: real64,
+
+    export static fn default(): Optimizer {
+        return Optimizer { lr: 0.01, momentum: 0.0 };
+    }
+
+    export static fn with_lr(lr: real64): Optimizer {
+        return Optimizer { lr: lr, momentum: 0.0 };
+    }
+
+    fn rate(): real64 {
+        return this.lr;
+    }
+}
+
+record Box<T> {
+    value: T,
+
+    export static fn wrap(value: T): Box<T> {
+        return Box { value: value };
+    }
+
+    fn get(): T {
+        return this.value;
+    }
+}
+
+opt: Optimizer = Optimizer.default();
+print(opt.rate());
+
+tuned: Optimizer = Optimizer.with_lr(0.2);
+print(tuned.rate());
+
+boxed: Box<int> = Box.wrap(42);
+print(boxed.get());

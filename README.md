@@ -483,8 +483,24 @@ fast: Optimizer = Optimizer { lr: 0.1 };
 Records can declare lightweight constructors and explicitly implement contracts.
 Constructors are statically checked functions associated with the record type;
 they must return the enclosing record type and are called with `Record.new(...)`.
+Records can also declare `static` associated functions for type-level helpers
+that do not receive `this`; they are called as `Record.function(...)` and can use
+the record's generic parameters.
 Contracts declare method requirements only. A record satisfies a contract bound
 only when its declaration lists that contract in a `with` clause.
+
+```dn
+record Optimizer {
+  lr: real64,
+  momentum: real64,
+
+  static fn default(): Optimizer {
+    return Optimizer { lr: 0.01, momentum: 0.0 };
+  }
+}
+
+opt: Optimizer = Optimizer.default();
+```
 
 ```dn
 contract Shape {
@@ -801,6 +817,7 @@ The current release implements a small compiled language with:
 - tuple types, tuple literals, and local tuple destructuring
 - record field defaults
 - record constructors
+- static associated record functions
 - record member visibility
 - contracts and explicit record `with` declarations
 - choices

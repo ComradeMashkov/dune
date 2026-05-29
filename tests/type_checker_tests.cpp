@@ -253,6 +253,20 @@ int main() {
                           "boxed: Box<int> = Box.new(42); value: int = boxed.get();",
                           "expected generic record constructors to validate") &&
              passed;
+    passed = expect_valid("record Optimizer { lr: real64, momentum: real64, "
+                          "static fn default(): Optimizer { return Optimizer { lr: 0.01, momentum: 0.0 }; } "
+                          "static fn with_lr(lr: real64): Optimizer { return Optimizer { lr: lr, momentum: 0.0 }; } "
+                          "fn rate(): real64 { return this.lr; } } "
+                          "opt: Optimizer = Optimizer.default(); tuned: Optimizer = Optimizer.with_lr(0.2); "
+                          "rate: real64 = tuned.rate();",
+                          "expected static associated record functions to validate") &&
+             passed;
+    passed = expect_valid("record Box<T> { value: T, "
+                          "static fn wrap(value: T): Box<T> { return Box { value: value }; } "
+                          "fn get(): T { return this.value; } } boxed: Box<int> = Box.wrap(42); "
+                          "value: int = boxed.get();",
+                          "expected generic static associated record function to validate") &&
+             passed;
     passed = expect_valid("contract Shape { area(): real64; } "
                           "record Circle with Shape { radius: real64, "
                           "fn new(radius: real64): Circle { return Circle { radius: radius }; } "
@@ -264,6 +278,7 @@ int main() {
     passed = expect_fixture_valid("import object_model_api; "
                                   "counter: object_model_api.Counter = object_model_api.Counter.new(); "
                                   "counter.inc(); value: int = counter.current(); "
+                                  "zero: object_model_api.Counter = object_model_api.Counter.zero(); "
                                   "fn area_of<T is object_model_api.Shape>(shape: T): real64 { return shape.area(); } "
                                   "circle: object_model_api.Circle = object_model_api.Circle.new(2.0); "
                                   "area: real64 = area_of(circle);",
@@ -641,6 +656,10 @@ int main() {
                                    "constructor for record 'Point' must return 'Point'",
                                    "expected constructor return type error") &&
              passed;
+    passed = expect_error_contains("record Point { x: int } p: Point = Point.origin();",
+                                   "record 'Point' has no static method 'origin'",
+                                   "expected missing static associated function error") &&
+             passed;
     passed = expect_fixture_error_contains("import object_model_api; "
                                            "counter: object_model_api.Counter = object_model_api.Counter.new(); "
                                            "print(counter.value);",
@@ -653,9 +672,19 @@ int main() {
                                            "method 'reset' of record 'Counter' is private",
                                            "expected private record method error") &&
              passed;
+    passed = expect_fixture_error_contains("import object_model_api; "
+                                           "counter: object_model_api.Counter = object_model_api.Counter.secret();",
+                                           "method 'secret' of record 'Counter' is private",
+                                           "expected private static record method error") &&
+             passed;
     passed = expect_error_contains("contract Shape { area(): real64; } record Circle with Shape { radius: real64 }",
                                    "record 'Circle' declares contract 'Shape' but is missing method 'area(): real64'",
                                    "expected missing contract method error") &&
+             passed;
+    passed = expect_error_contains("contract Shape { area(): real64; } "
+                                   "record Circle with Shape { static fn area(): real64 { return 1.0; } }",
+                                   "record 'Circle' declares contract 'Shape' but is missing method 'area(): real64'",
+                                   "expected static method not to satisfy contract") &&
              passed;
     passed = expect_error_contains("contract Shape { area(): real64; } "
                                    "record Circle with Shape { fn area(): int { return 1; } }",

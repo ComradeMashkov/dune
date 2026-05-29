@@ -603,6 +603,33 @@ int main() {
                            }) &&
              passed;
 
+    passed = expect_tokens("record Counter { static fn zero(): Counter { return Counter { value: 0 }; } }",
+                           {
+                               {record_keyword, "record"},
+                               {identifier, "Counter"},
+                               {left_brace, "{"},
+                               {static_keyword, "static"},
+                               {fn_keyword, "fn"},
+                               {identifier, "zero"},
+                               {left_paren, "("},
+                               {right_paren, ")"},
+                               {colon, ":"},
+                               {identifier, "Counter"},
+                               {left_brace, "{"},
+                               {return_keyword, "return"},
+                               {identifier, "Counter"},
+                               {left_brace, "{"},
+                               {identifier, "value"},
+                               {colon, ":"},
+                               {number, "0"},
+                               {right_brace, "}"},
+                               {semicolon, ";"},
+                               {right_brace, "}"},
+                               {right_brace, "}"},
+                               {eof, ""},
+                           }) &&
+             passed;
+
     passed =
         expect_tokens("export contract Shape { area(): real64; } record Circle with Shape { export radius: real64 }",
                       {

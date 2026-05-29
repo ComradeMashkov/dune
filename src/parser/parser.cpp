@@ -923,12 +923,18 @@ Statement Parser::struct_statement() {
     std::vector<Statement> methods;
     while (!check(TokenType::right_brace) && !is_at_end()) {
         const bool member_exported = match(TokenType::export_keyword);
+        const bool member_static = match(TokenType::static_keyword);
         if (match(TokenType::fn_keyword)) {
             Statement method = function_statement();
             method.exported = member_exported;
+            method.is_static_record_member = member_static;
             methods.push_back(std::move(method));
             match(TokenType::comma);
             continue;
+        }
+
+        if (member_static) {
+            throw std::runtime_error("expected static record function");
         }
 
         const Token& field = consume_identifier_like("expected record field name");

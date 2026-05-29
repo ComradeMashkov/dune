@@ -195,6 +195,7 @@ Statement clone_statement(const Statement& statement) {
     result.is_extern = statement.is_extern;
     result.is_record_member = statement.is_record_member;
     result.is_constructor = statement.is_constructor;
+    result.is_static_record_member = statement.is_static_record_member;
     result.extern_symbol = statement.extern_symbol;
     result.owner_record = statement.owner_record;
     result.target = clone_expression_pointer(statement.target);
@@ -716,6 +717,7 @@ void TypeChecker::define_struct(const Statement& statement) {
         signature.location = method.location;
         signature.exported = method.exported;
         signature.is_constructor = method.name == "new";
+        signature.is_static = method.is_static_record_member;
         for (const Parameter& parameter : method.parameters) {
             signature.parameters.push_back(annotation_or_default(parameter.type, generic_names));
         }
@@ -899,7 +901,7 @@ void TypeChecker::validate_contract_implementations(const Statement& statement) 
         for (const ContractMethod& expected : contract->second.methods) {
             const StructMethod* actual = nullptr;
             for (const StructMethod& method : record->second.methods) {
-                if (!method.is_constructor && method.name == expected.name &&
+                if (!method.is_constructor && !method.is_static && method.name == expected.name &&
                     method.parameters.size() == expected.parameters.size()) {
                     actual = &method;
                     break;
@@ -1771,10 +1773,14 @@ Type TypeChecker::check_variant_constructor(const Expression& expression, const 
 }
 
 Type TypeChecker::check_method_call_expression(const Expression& expression, const TypeAnnotation& expected) {
-    if (expression.left != nullptr && expression.lexeme == "new") {
+    if (expression.left != nullptr) {
         const std::string record_name = expression_type_name(*expression.left);
         if (!record_name.empty() && structs_.contains(record_name)) {
-            return check_constructor_call_expression(expression, record_name, expected);
+            if (expression.lexeme == "new") {
+                return check_constructor_call_expression(expression, record_name, expected);
+            }
+
+            return check_static_method_call_expression(expression, record_name, expected);
         }
     }
 
@@ -1835,6 +1841,26 @@ Type TypeChecker::check_constructor_call_expression(const Expression& expression
     }
 
     return check_function_call(expression, record_name + ".new", expression.arguments, expression.location, expected);
+}
+
+Type TypeChecker::check_static_method_call_expression(const Expression& expression, const std::string& record_name,
+                                                      const TypeAnnotation& expected) {
+    if (find_static_method(record_name, expression.lexeme) == nullptr) {
+        throw std::runtime_error(
+            diagnostic(expression.location,
+                       "record '" + base_name(record_name) + "' has no static method '" + expression.lexeme + "'"));
+    }
+
+    if (is_external_record_access(record_name)) {
+        const std::string module = module_name(record_name);
+        expect_imported_module(module, expression.location);
+        expect_exported_member(module, module_member_name(record_name), expression.location);
+        expect_public_static_method(make_struct_type(record_name), expression.lexeme, expression.location);
+        expect_exported_member(module, module_member_name(record_name) + "." + expression.lexeme, expression.location);
+    }
+
+    return check_function_call(expression, record_name + "." + expression.lexeme, expression.arguments,
+                               expression.location, expected);
 }
 
 Type TypeChecker::check_receiver_method_call(const Expression& expression, const TypeAnnotation& expected) {
@@ -3340,6 +3366,10 @@ void TypeChecker::expect_public_method(const Type& receiver, const std::string& 
             continue;
         }
 
+        if (candidate.is_static && !candidate.is_constructor) {
+            continue;
+        }
+
         has_private = has_private || !candidate.exported;
         has_public = has_public || candidate.exported;
     }
@@ -3348,6 +3378,50 @@ void TypeChecker::expect_public_method(const Type& receiver, const std::string& 
         throw std::runtime_error(
             diagnostic(location, "method '" + method + "' of record '" + base_name(receiver.name) + "' is private"));
     }
+}
+
+void TypeChecker::expect_public_static_method(const Type& receiver, const std::string& method,
+                                              SourceLocation location) const {
+    if (!is_external_record_access(receiver.name)) {
+        return;
+    }
+
+    const auto record = structs_.find(receiver.name);
+    if (record == structs_.end()) {
+        return;
+    }
+
+    bool has_private = false;
+    bool has_public = false;
+    for (const StructMethod& candidate : record->second.methods) {
+        if (candidate.name != method || !candidate.is_static) {
+            continue;
+        }
+
+        has_private = has_private || !candidate.exported;
+        has_public = has_public || candidate.exported;
+    }
+
+    if (has_private && !has_public) {
+        throw std::runtime_error(
+            diagnostic(location, "method '" + method + "' of record '" + base_name(receiver.name) + "' is private"));
+    }
+}
+
+const TypeChecker::StructMethod* TypeChecker::find_static_method(const std::string& record_name,
+                                                                 const std::string& method) const {
+    const auto record = structs_.find(record_name);
+    if (record == structs_.end()) {
+        return nullptr;
+    }
+
+    for (const StructMethod& candidate : record->second.methods) {
+        if (candidate.name == method && candidate.is_static) {
+            return &candidate;
+        }
+    }
+
+    return nullptr;
 }
 
 void TypeChecker::collect_known_module(const std::string& name) {
