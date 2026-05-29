@@ -86,6 +86,7 @@ enum class OpCode {
     text_is_empty,
     print,
     print_format,
+    format_text,
     halt,
 };
 

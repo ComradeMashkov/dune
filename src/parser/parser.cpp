@@ -162,6 +162,10 @@ std::string expression_to_type_name(const Expression& expression) {
 }
 
 std::string decode_string_literal(const std::string& lexeme) {
+    if (lexeme.size() >= 3 && lexeme[0] == 'r' && lexeme[1] == '"' && lexeme.back() == '"') {
+        return lexeme.substr(2, lexeme.size() - 3);
+    }
+
     std::string result;
     for (std::size_t index = 1; index + 1 < lexeme.size(); ++index) {
         char current = lexeme[index];
@@ -333,79 +337,6 @@ bool Parser::looks_like_binding_declaration() const {
     return false;
 }
 
-bool Parser::looks_like_function_declaration(bool is_extern) const {
-    if (!check_identifier_like()) {
-        return false;
-    }
-
-    std::size_t index = current_ + 1;
-    if (index < tokens_.size() && tokens_[index].type == TokenType::less) {
-        int depth = 1;
-        ++index;
-        while (index < tokens_.size() && depth > 0) {
-            if (tokens_[index].type == TokenType::less) {
-                ++depth;
-            } else if (tokens_[index].type == TokenType::greater) {
-                --depth;
-            }
-            ++index;
-        }
-        if (depth != 0) {
-            return false;
-        }
-    }
-
-    if (index >= tokens_.size() || tokens_[index].type != TokenType::left_paren) {
-        return false;
-    }
-
-    int paren_depth = 1;
-    ++index;
-    while (index < tokens_.size() && paren_depth > 0) {
-        if (tokens_[index].type == TokenType::left_paren) {
-            ++paren_depth;
-        } else if (tokens_[index].type == TokenType::right_paren) {
-            --paren_depth;
-        }
-        ++index;
-    }
-    if (paren_depth != 0) {
-        return false;
-    }
-
-    if (index < tokens_.size() && tokens_[index].type == TokenType::colon) {
-        int angle_depth = 0;
-        int bracket_depth = 0;
-        ++index;
-        while (index < tokens_.size()) {
-            const TokenType type = tokens_[index].type;
-            if (type == TokenType::less) {
-                ++angle_depth;
-            } else if (type == TokenType::greater && angle_depth > 0) {
-                --angle_depth;
-            } else if (type == TokenType::left_bracket) {
-                ++bracket_depth;
-            } else if (type == TokenType::right_bracket && bracket_depth > 0) {
-                --bracket_depth;
-            } else if ((type == TokenType::left_brace || type == TokenType::equal || type == TokenType::semicolon) &&
-                       angle_depth == 0 && bracket_depth == 0) {
-                break;
-            }
-            ++index;
-        }
-    }
-
-    if (index >= tokens_.size()) {
-        return false;
-    }
-
-    if (tokens_[index].type == TokenType::left_brace) {
-        return true;
-    }
-
-    return is_extern && (tokens_[index].type == TokenType::equal || tokens_[index].type == TokenType::semicolon);
-}
-
 const Token& Parser::advance() {
     if (!is_at_end()) {
         ++current_;
@@ -454,6 +385,10 @@ Statement Parser::statement() {
 
     if (match(TokenType::foreign_keyword)) {
         return extern_statement();
+    }
+
+    if (match(TokenType::fn_keyword)) {
+        return function_statement();
     }
 
     if (match(TokenType::method_keyword)) {
@@ -520,10 +455,6 @@ Statement Parser::statement() {
         return assignment_statement();
     }
 
-    if (looks_like_function_declaration()) {
-        return function_statement();
-    }
-
     std::unique_ptr<Expression> value = expression();
     if (!match(TokenType::semicolon) && !check(TokenType::right_brace) && !check(TokenType::eof)) {
         throw std::runtime_error("expected ';' after expression statement");
@@ -585,7 +516,7 @@ Statement Parser::export_statement() {
         return statement;
     }
 
-    if (looks_like_function_declaration()) {
+    if (match(TokenType::fn_keyword)) {
         Statement statement = function_statement();
         statement.exported = true;
         return statement;
@@ -622,10 +553,11 @@ Statement Parser::export_statement() {
     }
 
     throw std::runtime_error(
-        "expected function, foreign function, record, contract, choice, method, or constant after export");
+        "expected fn, foreign function, record, contract, choice, method, or constant after export");
 }
 
 Statement Parser::extern_statement() {
+    consume(TokenType::fn_keyword, "expected 'fn' after foreign");
     return function_statement(true);
 }
 
@@ -683,7 +615,7 @@ Statement Parser::for_in_statement(const Token& keyword) {
 }
 
 Statement Parser::function_statement(bool is_extern) {
-    const Token name = consume_identifier_like("expected function name");
+    const Token name = consume_identifier_like("expected function name after fn");
     return finish_function_statement(name, {}, is_extern);
 }
 
@@ -906,7 +838,7 @@ Statement Parser::struct_statement() {
     std::vector<Statement> methods;
     while (!check(TokenType::right_brace) && !is_at_end()) {
         const bool member_exported = match(TokenType::export_keyword);
-        if (looks_like_function_declaration()) {
+        if (match(TokenType::fn_keyword)) {
             Statement method = function_statement();
             method.exported = member_exported;
             methods.push_back(std::move(method));
@@ -916,7 +848,13 @@ Statement Parser::struct_statement() {
 
         const Token& field = consume_identifier_like("expected record field name");
         consume(TokenType::colon, "expected ':' after record field name");
-        fields.push_back(Parameter{field.lexeme, type_annotation(), location_from_token(field), member_exported});
+        TypeAnnotation field_type = type_annotation();
+        std::shared_ptr<Expression> default_value;
+        if (match(TokenType::equal)) {
+            default_value = expression();
+        }
+        fields.push_back(
+            Parameter{field.lexeme, std::move(field_type), location_from_token(field), member_exported, default_value});
 
         if (check(TokenType::right_brace)) {
             break;

@@ -53,23 +53,32 @@ if x == 0 {
 
 Boolean values are represented as `1` for `true` and `0` for `false` when printed.
 
-Typed functions and scalar values:
+Typed functions use the `fn` keyword. Scalar values can be annotated with an
+explicit type:
 
 ```dn
-log(message: text): unit {
+fn log(message: text): unit {
   print(message);
 }
 
 count: usize = 5;
 precise: real64 = 2.25;
+mask: u64 = 0xffu64;
+bits: u8 = 0b1010_0101u8;
 
 log("ready");
 print(count);
 print(precise);
+print(mask);
+print(bits);
 ```
 
+Integer literals support `_` separators, `0x` hex, `0b` binary, and explicit
+integer suffixes such as `i32`, `i64`, `u8`, `u64`, and `usize`.
+
 Formatted output keeps `print(expression)` working and also supports a string
-literal with positional `{}` placeholders:
+literal with positional `{}` placeholders. The same formatting is available as
+the `format(...)` expression, which returns `text`:
 
 ```dn
 name: text = "Dune";
@@ -77,12 +86,25 @@ version: int = 1;
 
 print("{} v{}", name, version);
 print("ready={}, value={}", true, 42);
+message: text = format("{} v{}", name, version);
 ```
 
 For now the format string must be a literal, placeholders are plain `{}` only,
 and the number of placeholders must match the number of following arguments.
 Printable values are the scalar types: integer and unsigned integer types,
 `real32`/`real64`, `bool`, `glyph`, and `text`.
+
+Text and glyph literals support explicit escapes. Normal `text` literals decode
+`\n`, `\t`, `\r`, `\\`, `\"`, and `\0`; `glyph` literals decode `\n`, `\t`,
+`\r`, `\\`, `\'`, and `\0`. Unknown escapes are compile-time errors. Raw
+single-line text literals use `r"..."` and keep backslashes literally:
+
+```dn
+path: text = r"C:\Users\name\data.csv";
+line: text = "hello\n";
+tab: glyph = '\t';
+quote: glyph = '\'';
+```
 
 Arrays and modules:
 
@@ -121,11 +143,11 @@ boundaries unless that member is marked `export`.
 ```dn
 export const ANSWER: int = 42;
 
-hidden(): int {
+fn hidden(): int {
   return 7;
 }
 
-export public(): int {
+export fn public(): int {
   return hidden();
 }
 ```
@@ -158,7 +180,7 @@ print(message.starts_with("dune"));
 Indexing, slices, loops, and foreign functions:
 
 ```dn
-foreign c_sqrt(value: real64): real64 = "sqrt";
+foreign fn c_sqrt(value: real64): real64 = "sqrt";
 
 message: text = "dune language";
 print(message[0]);
@@ -374,7 +396,7 @@ record Point {
   x: real64,
   y: real64,
 
-  sum(): real64 {
+  fn sum(): real64 {
     return this.x + this.y;
   }
 }
@@ -386,11 +408,11 @@ print(point.sum());
 Functions can be overloaded by parameter types:
 
 ```dn
-show(value: int): int {
+fn show(value: int): int {
   return value + 1;
 }
 
-show(value: bool): int {
+fn show(value: bool): int {
   if value {
     return 10;
   } else {
@@ -405,11 +427,11 @@ parameter can be unbounded, or it can use one of the current built-in bounds:
 `integer`, `numeric`, `real`, `comparable`, or `ordered`.
 
 ```dn
-identity<T>(value: T): T {
+fn identity<T>(value: T): T {
   return value;
 }
 
-square<T is numeric>(value: T): T {
+fn square<T is numeric>(value: T): T {
   return value * value;
 }
 ```
@@ -422,11 +444,25 @@ record Box<T> {
   value: T,
 }
 
-boxed<T>(value: T): Box<T> {
+fn boxed<T>(value: T): Box<T> {
   return Box { value: value };
 }
 
 answer: Box<int> = boxed(42);
+```
+
+Record fields can declare default values. A record literal may omit fields that
+have defaults; missing fields without defaults are still rejected. Defaults are
+evaluated each time a record value is created.
+
+```dn
+record Optimizer {
+  lr: real64 = 0.01,
+  momentum: real64 = 0.0,
+}
+
+base: Optimizer = Optimizer {};
+fast: Optimizer = Optimizer { lr: 0.1 };
 ```
 
 Records can declare lightweight constructors and explicitly implement contracts.
@@ -443,16 +479,16 @@ contract Shape {
 record Circle with Shape {
   radius: real64,
 
-  new(radius: real64): Circle {
+  fn new(radius: real64): Circle {
     return Circle { radius: radius };
   }
 
-  area(): real64 {
+  fn area(): real64 {
     return 3.0 * this.radius * this.radius;
   }
 }
 
-area_of<T is Shape>(shape: T): real64 {
+fn area_of<T is Shape>(shape: T): real64 {
   return shape.area();
 }
 
@@ -466,15 +502,15 @@ When records come from modules, member visibility is explicit:
 export record Counter {
   value: int,
 
-  export new(): Counter {
+  export fn new(): Counter {
     return Counter { value: 0 };
   }
 
-  export inc(): unit {
+  export fn inc(): unit {
     this.value = this.value + 1;
   }
 
-  export current(): int {
+  export fn current(): int {
     return this.value;
   }
 }
@@ -619,6 +655,8 @@ Built-in receiver methods:
 
 - arrays: `len()`, `push(value)`, `pop()`, `clear()`, `is_empty()`
 - text: `len()`, `is_empty()`, `contains(needle)`, `starts_with(prefix)`
+- raw text literals: `r"..."` keeps backslashes without escape decoding
+- format expression: `format("{} {}", left, right)` returns `text`
 
 Standard library receiver methods are enabled by importing their module:
 
@@ -727,12 +765,13 @@ The current release implements a small compiled language with:
 - logical operators
 - modulo
 - explicit casts with `to`
-- typed functions
+- typed `fn` functions
 - overloaded functions
 - generic functions with basic bounds
 - generic functions with explicit contract bounds
 - call-site generic instantiation
 - generic records
+- record field defaults
 - record constructors
 - record member visibility
 - contracts and explicit record `with` declarations
@@ -742,6 +781,7 @@ The current release implements a small compiled language with:
 - booleans
 - signed and unsigned integer widths
 - floating point values
+- `_` separators, `0x`/`0b` integer literals, and integer literal suffixes
 - glyph and text values
 - unit-returning functions
 - dynamic arrays
@@ -750,6 +790,8 @@ The current release implements a small compiled language with:
 - `when` expressions with literal and choice variant patterns
 - array methods
 - text methods
+- raw text literals and explicit text/glyph escapes
+- `format()` expressions
 - standard library receiver methods
 - text indexing
 - slices

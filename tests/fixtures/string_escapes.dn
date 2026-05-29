@@ -1,0 +1,11 @@
+path: text = r"C:\Users\name\data.csv";
+print(path);
+print("hello\nworld");
+print("quote \"ok\"");
+print("slash \\ ok");
+print('\n' to int);
+print('\t' to int);
+print('\r' to int);
+print('\\');
+print('\'');
+print('\0' to int);

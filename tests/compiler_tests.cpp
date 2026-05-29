@@ -26,7 +26,7 @@ bool expect(bool condition, const char* message) {
 }
 
 bool compiles_function_table_and_call() {
-    const dune::Bytecode bytecode = compile_source("add(a: int, b: int): int { return a + b; } "
+    const dune::Bytecode bytecode = compile_source("fn add(a: int, b: int): int { return a + b; } "
                                                    "print(add(1, 2));");
 
     bool passed = true;
@@ -55,7 +55,7 @@ bool compiles_function_table_and_call() {
 }
 
 bool compiles_unit_call_statement() {
-    const dune::Bytecode bytecode = compile_source("log(message: text): unit { print(message); } log(\"done\");");
+    const dune::Bytecode bytecode = compile_source("fn log(message: text): unit { print(message); } log(\"done\");");
 
     bool saw_call = false;
     bool saw_pop = false;
@@ -77,16 +77,24 @@ bool compiles_unit_call_statement() {
 
 bool compiles_formatted_print() {
     const dune::Bytecode bytecode = compile_source("name: text = \"Dune\"; version: int = 1; "
-                                                   "print(\"{} v{}\", name, version);");
+                                                   "message: text = format(\"{} v{}\", name, version); "
+                                                   "print(\"{}\", message);");
 
     bool saw_print_format = false;
+    bool saw_format_text = false;
     for (const dune::Instruction& instruction : bytecode.instructions) {
-        if (instruction.op == dune::OpCode::print_format && instruction.operand == 2) {
+        if (instruction.op == dune::OpCode::format_text && instruction.operand == 2) {
+            saw_format_text = true;
+        }
+        if (instruction.op == dune::OpCode::print_format && instruction.operand == 1) {
             saw_print_format = true;
         }
     }
 
-    return expect(saw_print_format, "expected print_format instruction");
+    bool passed = true;
+    passed = expect(saw_format_text, "expected format_text instruction") && passed;
+    passed = expect(saw_print_format, "expected print_format instruction") && passed;
+    return passed;
 }
 
 bool compiles_arrays_and_module_calls() {
@@ -190,7 +198,7 @@ bool compiles_membership_operator() {
 }
 
 bool compiles_stdlib_primitives() {
-    const dune::Bytecode bytecode = compile_source("foreign c_sqrt(value: real64): real64 = \"sqrt\"; "
+    const dune::Bytecode bytecode = compile_source("foreign fn c_sqrt(value: real64): real64 = \"sqrt\"; "
                                                    "message: text = \"dune\"; print(message[0]); "
                                                    "print(message[1:3]); "
                                                    "values: [int] = [1, 2, 3]; part: [int] = values[:2]; "
@@ -252,8 +260,8 @@ bool compiles_for_in_arrays_and_ranges() {
 }
 
 bool compiles_generic_functions() {
-    const dune::Bytecode bytecode = compile_source("identity<T>(value: T): T { return value; } "
-                                                   "twice<T is numeric>(value: T): T { return value + value; } "
+    const dune::Bytecode bytecode = compile_source("fn identity<T>(value: T): T { return value; } "
+                                                   "fn twice<T is numeric>(value: T): T { return value + value; } "
                                                    "print(identity(42)); print(identity(\"done\")); print(twice(9));");
 
     int identity_count = 0;
@@ -314,7 +322,7 @@ bool compiles_stdlib_receiver_methods() {
 
 bool compiles_record_literals_fields_and_methods() {
     const dune::Bytecode bytecode =
-        compile_source("record Point { x: int, y: int, sum(): int { return this.x + this.y; } } "
+        compile_source("record Point { x: int, y: int, fn sum(): int { return this.x + this.y; } } "
                        "p: Point = Point { x: 10, y: 20 }; print(p.x); print(p.sum());");
 
     bool saw_make_record = false;
@@ -339,9 +347,30 @@ bool compiles_record_literals_fields_and_methods() {
     return passed;
 }
 
+bool compiles_record_field_defaults() {
+    const dune::Bytecode bytecode =
+        compile_source("record Optimizer { lr: real64 = 0.01, momentum: real64 = 0.0, name: text = \"sgd\" } "
+                       "base: Optimizer = Optimizer {}; fast: Optimizer = Optimizer { lr: 0.1 }; "
+                       "print(base.lr); print(fast.momentum); print(fast.name);");
+
+    std::size_t make_record_count = 0;
+    bool saw_load_field = false;
+    for (const dune::Instruction& instruction : bytecode.instructions) {
+        if (instruction.op == dune::OpCode::make_record) {
+            ++make_record_count;
+        }
+        saw_load_field = saw_load_field || instruction.op == dune::OpCode::load_field;
+    }
+
+    bool passed = true;
+    passed = expect(make_record_count == 2, "expected two record literals with defaults") && passed;
+    passed = expect(saw_load_field, "expected defaulted record field loads") && passed;
+    return passed;
+}
+
 bool compiles_record_constructors() {
     const dune::Bytecode bytecode = compile_source("record Point { x: int, y: int, "
-                                                   "new(x: int, y: int): Point { return Point { x: x, y: y }; } } "
+                                                   "fn new(x: int, y: int): Point { return Point { x: x, y: y }; } } "
                                                    "point: Point = Point.new(10, 20); print(point.x);");
 
     bool saw_constructor = false;
@@ -536,6 +565,7 @@ int main() {
     passed = compiles_generic_functions() && passed;
     passed = compiles_stdlib_receiver_methods() && passed;
     passed = compiles_record_literals_fields_and_methods() && passed;
+    passed = compiles_record_field_defaults() && passed;
     passed = compiles_record_constructors() && passed;
     passed = compiles_assignment_targets() && passed;
     passed = compiles_when_expression() && passed;

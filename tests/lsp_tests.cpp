@@ -33,8 +33,8 @@ bool has_completion(const std::vector<dune::lsp::CompletionItem>& completions, c
 
 bool diagnoses_valid_source() {
     const std::vector<dune::lsp::Diagnostic> diagnostics =
-        dune::lsp::diagnose_source("add(a: int, b: int): int { return a + b; } "
-                                   "const HIDDEN: int = 7; hidden(): int { return HIDDEN; } "
+        dune::lsp::diagnose_source("fn add(a: int, b: int): int { return a + b; } "
+                                   "const HIDDEN: int = 7; fn hidden(): int { return HIDDEN; } "
                                    "total: int = add(10, hidden());");
 
     return expect(diagnostics.empty(), "expected no diagnostics for valid source");
@@ -59,11 +59,12 @@ bool diagnoses_type_errors_with_range() {
 
 bool completes_keywords_and_local_symbols() {
     const std::vector<dune::lsp::CompletionItem> completions =
-        dune::lsp::complete_source("add(a: int, b: int): int { return a + b; }\ntotal: int = add(10, 20);");
+        dune::lsp::complete_source("fn add(a: int, b: int): int { return a + b; }\ntotal: int = add(10, 20);");
 
     bool passed = true;
     passed = expect(has_completion(completions, "method"), "expected keyword completion") && passed;
     passed = expect(has_completion(completions, "in"), "expected for-in keyword completion") && passed;
+    passed = expect(has_completion(completions, "fn"), "expected fn keyword completion") && passed;
     passed = expect(has_completion(completions, "real64"), "expected type completion") && passed;
     passed = expect(has_completion(completions, "add"), "expected function completion") && passed;
     passed = expect(has_completion(completions, "total"), "expected local variable completion") && passed;

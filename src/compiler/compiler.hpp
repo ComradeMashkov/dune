@@ -31,6 +31,7 @@ private:
     void compile_array_for_in_statement(const Statement& statement, const Type& iterable_type);
     void compile_expression(const Expression& expression);
     void compile_method_call_expression(const Expression& expression);
+    void compile_format_expression(const Expression& expression);
     void compile_member_expression(const Expression& expression);
     void compile_when_expression(const Expression& expression);
     void compile_assignment_target(const Expression& target, const Expression& value);

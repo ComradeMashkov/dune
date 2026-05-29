@@ -71,6 +71,7 @@ module.exports = grammar({
     import_statement: $ => seq("import", field("module", $.identifier), optional(";")),
 
     function_declaration: $ => prec(2, seq(
+      "fn",
       field("name", $.identifier),
       optional($.generic_parameters),
       field("parameters", $.parameter_list),
@@ -80,6 +81,7 @@ module.exports = grammar({
 
     foreign_function_declaration: $ => seq(
       "foreign",
+      "fn",
       field("name", $.identifier),
       optional($.generic_parameters),
       field("parameters", $.parameter_list),
@@ -99,7 +101,12 @@ module.exports = grammar({
       "}",
     ),
 
-    record_field: $ => seq(field("name", $.identifier), ":", field("type", $._type)),
+    record_field: $ => seq(
+      field("name", $.identifier),
+      ":",
+      field("type", $._type),
+      optional(seq("=", field("default", $._expression))),
+    ),
 
     record_method: $ => $.function_declaration,
 
@@ -453,13 +460,13 @@ module.exports = grammar({
 
     constructor_identifier: _ => token(prec(1, /[A-Z][A-Za-z0-9_]*/)),
 
-    number: _ => /\d+/,
+    number: _ => /(0[xX][0-9A-Fa-f](?:_?[0-9A-Fa-f])*|0[bB][01](?:_?[01])*|\d(?:_?\d)*)(?:i8|i16|i32|i64|isize|u8|u16|u32|u64|usize)?/,
 
-    float: _ => /\d+\.\d+/,
+    float: _ => /\d(?:_?\d)*\.\d(?:_?\d)*/,
 
-    character: _ => token(seq("'", choice(/[^'\\\n]/, seq("\\", /./)), "'")),
+    character: _ => token(seq("'", choice(/[^'\\\n]/, seq("\\", /[nrt0'\\]/)), "'")),
 
-    string: _ => token(seq('"', repeat(choice(/[^"\\\n]/, seq("\\", /./))), '"')),
+    string: _ => token(choice(seq('r"', repeat(/[^"\n]/), '"'), seq('"', repeat(choice(/[^"\\\n]/, seq("\\", /[nrt0"\\]/))), '"'))),
   },
 });
 

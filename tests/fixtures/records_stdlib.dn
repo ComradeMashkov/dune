@@ -7,7 +7,7 @@ record Point {
     x: int,
     y: int,
 
-    sum(): int {
+    fn sum(): int {
         return this.x + this.y;
     }
 }

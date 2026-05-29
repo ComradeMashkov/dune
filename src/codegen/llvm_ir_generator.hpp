@@ -65,6 +65,7 @@ private:
     TypedValue emit_unary_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_cast_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_call_expression(const Expression& expression, std::ostream& output);
+    TypedValue emit_format_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_method_call_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_array_method_call_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_text_method_call_expression(const Expression& expression, std::ostream& output);
@@ -103,6 +104,7 @@ private:
     std::size_t llvm_bit_width(const Type& type) const;
     std::string printf_format_name(const Type& type) const;
     std::string printf_fragment_format_name(const Type& type) const;
+    std::string printf_fragment_format_text(const Type& type) const;
     std::size_t llvm_size(const Type& type) const;
     std::string function_name(const std::string& name) const;
     std::string extern_function_name(const FunctionSignature& signature) const;

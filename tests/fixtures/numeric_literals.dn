@@ -1,0 +1,11 @@
+size: int = 1_000_000;
+mask: u64 = 0xffu64;
+bits: u8 = 0b1010_0101u8;
+wide: i64 = 123i64;
+index: usize = 10usize;
+
+print(size);
+print(mask);
+print(bits);
+print(wide);
+print(index);

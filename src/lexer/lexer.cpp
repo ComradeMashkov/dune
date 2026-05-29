@@ -2,9 +2,71 @@
 
 #include <cctype>
 #include <stdexcept>
+#include <string_view>
 #include <utility>
 
 namespace dune {
+
+namespace {
+
+std::string escape_name(char value) {
+    switch (value) {
+    case '\0':
+        return "\\0";
+    case '\n':
+        return "\\n";
+    case '\r':
+        return "\\r";
+    case '\t':
+        return "\\t";
+    default:
+        return "\\" + std::string(1, value);
+    }
+}
+
+bool is_text_escape(char value) {
+    switch (value) {
+    case 'n':
+    case 'r':
+    case 't':
+    case '0':
+    case '"':
+    case '\\':
+        return true;
+    default:
+        return false;
+    }
+}
+
+bool is_glyph_escape(char value) {
+    switch (value) {
+    case 'n':
+    case 'r':
+    case 't':
+    case '0':
+    case '\'':
+    case '\\':
+        return true;
+    default:
+        return false;
+    }
+}
+
+bool is_hex_digit(char value) {
+    return std::isdigit(static_cast<unsigned char>(value)) || (value >= 'a' && value <= 'f') ||
+           (value >= 'A' && value <= 'F');
+}
+
+bool is_binary_digit(char value) {
+    return value == '0' || value == '1';
+}
+
+bool is_integer_suffix(std::string_view suffix) {
+    return suffix == "i8" || suffix == "i16" || suffix == "i32" || suffix == "i64" || suffix == "isize" ||
+           suffix == "u8" || suffix == "u16" || suffix == "u32" || suffix == "u64" || suffix == "usize";
+}
+
+} // namespace
 
 Lexer::Lexer(std::string source) : source_(std::move(source)) {}
 
@@ -19,6 +81,11 @@ Token Lexer::next_token() {
     const std::size_t line = line_;
     const std::size_t column = column_;
     const char current = advance();
+
+    if (current == 'r' && peek() == '"') {
+        advance();
+        return raw_string(start, line, column);
+    }
 
     if (std::isalpha(static_cast<unsigned char>(current)) || current == '_') {
         return identifier(start, line, column);
@@ -206,6 +273,10 @@ Token Lexer::identifier(std::size_t start, std::size_t line, std::size_t column)
         return Token{TokenType::foreign_keyword, lexeme, line, column};
     }
 
+    if (lexeme == "fn") {
+        return Token{TokenType::fn_keyword, lexeme, line, column};
+    }
+
     if (lexeme == "method") {
         return Token{TokenType::method_keyword, lexeme, line, column};
     }
@@ -378,21 +449,81 @@ Token Lexer::identifier(std::size_t start, std::size_t line, std::size_t column)
 }
 
 Token Lexer::number(std::size_t start, std::size_t line, std::size_t column) {
-    while (std::isdigit(static_cast<unsigned char>(peek()))) {
+    auto consume_digits = [&](auto is_digit, std::string_view description, bool saw_initial_digit = false) {
+        bool saw_digit = saw_initial_digit;
+        bool previous_separator = false;
+        while (is_digit(peek()) || peek() == '_') {
+            if (peek() == '_') {
+                if (!saw_digit || previous_separator) {
+                    throw std::runtime_error("invalid numeric separator");
+                }
+                previous_separator = true;
+                advance();
+                continue;
+            }
+
+            saw_digit = true;
+            previous_separator = false;
+            advance();
+        }
+
+        if (!saw_digit) {
+            throw std::runtime_error("expected digit in " + std::string(description) + " literal");
+        }
+
+        if (previous_separator) {
+            throw std::runtime_error("invalid numeric separator");
+        }
+    };
+
+    auto consume_suffix = [&]() {
+        if (!std::isalpha(static_cast<unsigned char>(peek()))) {
+            return;
+        }
+
+        const std::size_t suffix_start = current_;
+        while (std::isalnum(static_cast<unsigned char>(peek()))) {
+            advance();
+        }
+
+        const std::string suffix = source_.substr(suffix_start, current_ - suffix_start);
+        if (!is_integer_suffix(suffix)) {
+            throw std::runtime_error("invalid numeric literal suffix '" + suffix + "'");
+        }
+    };
+
+    if (source_[start] == '0' && (peek() == 'x' || peek() == 'X')) {
         advance();
+        consume_digits(is_hex_digit, "hex");
+        consume_suffix();
+        return make_token(TokenType::number, start, line, column);
     }
+
+    if (source_[start] == '0' && (peek() == 'b' || peek() == 'B')) {
+        advance();
+        consume_digits(is_binary_digit, "binary");
+        if (std::isdigit(static_cast<unsigned char>(peek()))) {
+            throw std::runtime_error("invalid digit in binary literal");
+        }
+        consume_suffix();
+        return make_token(TokenType::number, start, line, column);
+    }
+
+    consume_digits([](char value) { return std::isdigit(static_cast<unsigned char>(value)); }, "decimal", true);
 
     if (peek() == '.' && current_ + 1 < source_.size() &&
         std::isdigit(static_cast<unsigned char>(source_[current_ + 1]))) {
         advance();
 
-        while (std::isdigit(static_cast<unsigned char>(peek()))) {
-            advance();
+        consume_digits([](char value) { return std::isdigit(static_cast<unsigned char>(value)); }, "decimal", true);
+        if (std::isalpha(static_cast<unsigned char>(peek()))) {
+            throw std::runtime_error("float literal suffixes are not supported");
         }
 
         return make_token(TokenType::float_number, start, line, column);
     }
 
+    consume_suffix();
     return make_token(TokenType::number, start, line, column);
 }
 
@@ -406,6 +537,12 @@ Token Lexer::character(std::size_t start, std::size_t line, std::size_t column) 
         if (is_at_end() || peek() == '\n') {
             throw std::runtime_error("unterminated character literal");
         }
+
+        if (!is_glyph_escape(peek())) {
+            throw std::runtime_error("unknown glyph escape '" + escape_name(peek()) + "'");
+        }
+    } else if (peek() == '\'') {
+        throw std::runtime_error("invalid glyph literal");
     }
 
     advance();
@@ -428,6 +565,10 @@ Token Lexer::string(std::size_t start, std::size_t line, std::size_t column) {
             if (is_at_end() || peek() == '\n') {
                 throw std::runtime_error("unterminated string literal");
             }
+
+            if (!is_text_escape(peek())) {
+                throw std::runtime_error("unknown text escape '" + escape_name(peek()) + "'");
+            }
         }
 
         advance();
@@ -435,6 +576,22 @@ Token Lexer::string(std::size_t start, std::size_t line, std::size_t column) {
 
     if (!match('"')) {
         throw std::runtime_error("unterminated string literal");
+    }
+
+    return make_token(TokenType::string_literal, start, line, column);
+}
+
+Token Lexer::raw_string(std::size_t start, std::size_t line, std::size_t column) {
+    while (!is_at_end() && peek() != '"') {
+        if (peek() == '\n') {
+            throw std::runtime_error("unterminated raw string literal");
+        }
+
+        advance();
+    }
+
+    if (!match('"')) {
+        throw std::runtime_error("unterminated raw string literal");
     }
 
     return make_token(TokenType::string_literal, start, line, column);
