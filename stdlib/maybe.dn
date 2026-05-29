@@ -3,19 +3,19 @@ export choice Maybe<T> {
     Absent,
 }
 
-export present<T>(value: T): Maybe<T> {
+export fn present<T>(value: T): Maybe<T> {
     return Present(value);
 }
 
-export absent<T>(default: T): Maybe<T> {
+export fn absent<T>(default: T): Maybe<T> {
     return Absent;
 }
 
-export absent_int(): Maybe<int> {
+export fn absent_int(): Maybe<int> {
     return absent(0);
 }
 
-export absent_text(): Maybe<text> {
+export fn absent_text(): Maybe<text> {
     return absent("");
 }
 

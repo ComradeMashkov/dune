@@ -1,12 +1,12 @@
-say(message: text): unit {
+fn say(message: text): unit {
     print(message);
     return;
 }
 
-noop(): unit {
+fn noop(): unit {
 }
 
-next(value: i32): i32 {
+fn next(value: i32): i32 {
     return value + 1;
 }
 

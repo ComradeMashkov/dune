@@ -25,7 +25,6 @@ private:
     bool looks_like_struct_literal() const;
     bool looks_like_assignment_statement() const;
     bool looks_like_binding_declaration() const;
-    bool looks_like_function_declaration(bool is_extern = false) const;
 
     const Token& advance();
     const Token& peek() const;

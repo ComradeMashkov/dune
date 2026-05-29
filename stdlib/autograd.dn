@@ -4,7 +4,7 @@ record Edge {
     value: Value,
     weight: real64,
 
-    new(value: Value, weight: real64): Edge {
+    fn new(value: Value, weight: real64): Edge {
         return Edge { value: value, weight: weight };
     }
 }
@@ -15,7 +15,7 @@ export record Value {
     export requires_grad: bool,
     parents: [Edge],
 
-    new(data: real64, requires_grad: bool, parents: [Edge]): Value {
+    fn new(data: real64, requires_grad: bool, parents: [Edge]): Value {
         return Value {
             data: data,
             grad: 0.0,
@@ -25,7 +25,7 @@ export record Value {
     }
 }
 
-parents_for(value: Value, weight: real64): [Edge] {
+fn parents_for(value: Value, weight: real64): [Edge] {
     parents: [Edge] = [];
     if value.requires_grad {
         parents.push(Edge.new(value, weight));
@@ -34,7 +34,7 @@ parents_for(value: Value, weight: real64): [Edge] {
     return parents;
 }
 
-combine_parents(left: [Edge], right: [Edge]): [Edge] {
+fn combine_parents(left: [Edge], right: [Edge]): [Edge] {
     parents: [Edge] = [];
     for index = 0; index < left.len(); index = index + 1 {
         parents.push(left[index]);
@@ -47,16 +47,16 @@ combine_parents(left: [Edge], right: [Edge]): [Edge] {
     return parents;
 }
 
-empty_parents(): [Edge] {
+fn empty_parents(): [Edge] {
     parents: [Edge] = [];
     return parents;
 }
 
-unary(data: real64, value: Value, weight: real64): Value {
+fn unary(data: real64, value: Value, weight: real64): Value {
     return Value.new(data, value.requires_grad, parents_for(value, weight));
 }
 
-binary(data: real64, left: Value, left_weight: real64, right: Value, right_weight: real64): Value {
+fn binary(data: real64, left: Value, left_weight: real64, right: Value, right_weight: real64): Value {
     return Value.new(
         data,
         left.requires_grad || right.requires_grad,
@@ -64,7 +64,7 @@ binary(data: real64, left: Value, left_weight: real64, right: Value, right_weigh
     );
 }
 
-accumulate(value: Value, amount: real64): unit {
+fn accumulate(value: Value, amount: real64): unit {
     value.grad = value.grad + amount;
 
     for index = 0; index < value.parents.len(); index = index + 1 {
@@ -73,7 +73,7 @@ accumulate(value: Value, amount: real64): unit {
     }
 }
 
-zero_grad_visit(value: Value): unit {
+fn zero_grad_visit(value: Value): unit {
     value.grad = 0.0;
 
     for index = 0; index < value.parents.len(); index = index + 1 {
@@ -81,79 +81,79 @@ zero_grad_visit(value: Value): unit {
     }
 }
 
-export variable(data: real64): Value {
+export fn variable(data: real64): Value {
     return Value.new(data, true, empty_parents());
 }
 
-export constant(data: real64): Value {
+export fn constant(data: real64): Value {
     return Value.new(data, false, empty_parents());
 }
 
-export value(data: real64): Value {
+export fn value(data: real64): Value {
     return variable(data);
 }
 
-export data(value: Value): real64 {
+export fn data(value: Value): real64 {
     return value.data;
 }
 
-export grad(value: Value): real64 {
+export fn grad(value: Value): real64 {
     return value.grad;
 }
 
-export add(left: Value, right: Value): Value {
+export fn add(left: Value, right: Value): Value {
     return binary(left.data + right.data, left, 1.0, right, 1.0);
 }
 
-export add(left: Value, right: real64): Value {
+export fn add(left: Value, right: real64): Value {
     return add(left, constant(right));
 }
 
-export add(left: real64, right: Value): Value {
+export fn add(left: real64, right: Value): Value {
     return add(constant(left), right);
 }
 
-export sub(left: Value, right: Value): Value {
+export fn sub(left: Value, right: Value): Value {
     return binary(left.data - right.data, left, 1.0, right, 0.0 - 1.0);
 }
 
-export sub(left: Value, right: real64): Value {
+export fn sub(left: Value, right: real64): Value {
     return sub(left, constant(right));
 }
 
-export sub(left: real64, right: Value): Value {
+export fn sub(left: real64, right: Value): Value {
     return sub(constant(left), right);
 }
 
-export mul(left: Value, right: Value): Value {
+export fn mul(left: Value, right: Value): Value {
     return binary(left.data * right.data, left, right.data, right, left.data);
 }
 
-export mul(left: Value, right: real64): Value {
+export fn mul(left: Value, right: real64): Value {
     return mul(left, constant(right));
 }
 
-export mul(left: real64, right: Value): Value {
+export fn mul(left: real64, right: Value): Value {
     return mul(constant(left), right);
 }
 
-export div(left: Value, right: Value): Value {
+export fn div(left: Value, right: Value): Value {
     return binary(left.data / right.data, left, 1.0 / right.data, right, (0.0 - left.data) / (right.data * right.data));
 }
 
-export div(left: Value, right: real64): Value {
+export fn div(left: Value, right: real64): Value {
     return div(left, constant(right));
 }
 
-export div(left: real64, right: Value): Value {
+export fn div(left: real64, right: Value): Value {
     return div(constant(left), right);
 }
 
-export neg(value: Value): Value {
+export fn neg(value: Value): Value {
     return unary(0.0 - value.data, value, 0.0 - 1.0);
 }
 
-export pow(base: Value, exponent: real64): Value {
+export fn pow(base: Value, exponent: real64): Value {
     data: real64 = math.pow(base.data, exponent);
     weight: real64 = 0.0;
     if exponent != 0.0 {
@@ -163,7 +163,7 @@ export pow(base: Value, exponent: real64): Value {
     return unary(data, base, weight);
 }
 
-export relu(value: Value): Value {
+export fn relu(value: Value): Value {
     if value.data > 0.0 {
         return unary(value.data, value, 1.0);
     }
@@ -171,22 +171,22 @@ export relu(value: Value): Value {
     return unary(0.0, value, 0.0);
 }
 
-export tanh(value: Value): Value {
+export fn tanh(value: Value): Value {
     scale: real64 = math.exp(2.0 * value.data);
     data: real64 = (scale - 1.0) / (scale + 1.0);
     return unary(data, value, 1.0 - data * data);
 }
 
-export exp(value: Value): Value {
+export fn exp(value: Value): Value {
     data: real64 = math.exp(value.data);
     return unary(data, value, data);
 }
 
-export ln(value: Value): Value {
+export fn ln(value: Value): Value {
     return unary(math.ln(value.data), value, 1.0 / value.data);
 }
 
-export sqrt(value: Value): Value {
+export fn sqrt(value: Value): Value {
     data: real64 = math.sqrt(value.data);
     weight: real64 = 0.0;
     if data != 0.0 {
@@ -196,11 +196,11 @@ export sqrt(value: Value): Value {
     return unary(data, value, weight);
 }
 
-export zero_grad(value: Value): unit {
+export fn zero_grad(value: Value): unit {
     zero_grad_visit(value);
 }
 
-export backward(value: Value): unit {
+export fn backward(value: Value): unit {
     zero_grad(value);
     accumulate(value, 1.0);
 }

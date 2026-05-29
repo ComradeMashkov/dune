@@ -202,6 +202,10 @@ Token Lexer::identifier(std::size_t start, std::size_t line, std::size_t column)
         return Token{TokenType::foreign_keyword, lexeme, line, column};
     }
 
+    if (lexeme == "fn") {
+        return Token{TokenType::fn_keyword, lexeme, line, column};
+    }
+
     if (lexeme == "method") {
         return Token{TokenType::method_keyword, lexeme, line, column};
     }
