@@ -322,6 +322,11 @@ int main() {
                           "expected array, record, and nested assignment targets to validate") &&
              passed;
     passed = expect_valid("values: [int] = [];", "expected typed empty array to validate") && passed;
+    passed = expect_valid("values: [int] = [1, 2, 3]; found: bool = 2 in values; "
+                          "message: text = \"dune language\"; has: bool = \"lang\" in message; "
+                          "enabled: bool = true; ok: bool = 1 + 1 in values && enabled;",
+                          "expected membership operator to validate") &&
+             passed;
     passed = expect_error_contains("x: int = true;", "expected type 'int' but got 'bool'",
                                    "expected binding type mismatch") &&
              passed;
@@ -403,6 +408,18 @@ int main() {
              passed;
     passed = expect_error_contains("values = [];", "empty array literal needs an array type",
                                    "expected empty array annotation error") &&
+             passed;
+    passed =
+        expect_error_contains("bad: bool = 1 in 2;", "operator 'in' requires array or text container but got 'int'",
+                              "expected unsupported membership container error") &&
+        passed;
+    passed = expect_error_contains("values: [int] = [1, 2]; bad: bool = true in values;",
+                                   "expected type 'int' but got 'bool'", "expected membership value mismatch") &&
+             passed;
+    passed = expect_error_contains("record Point { x: int } values: [Point] = []; "
+                                   "p: Point = Point { x: 1 }; bad: bool = p in values;",
+                                   "operator 'in' requires comparable array elements but got 'Point'",
+                                   "expected non-comparable membership error") &&
              passed;
     passed = expect_error_contains("values: [int] = [1]; print(math.square(values[0]));", "undefined variable 'math'",
                                    "expected missing math import") &&

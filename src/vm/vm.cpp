@@ -939,6 +939,20 @@ void VirtualMachine::run(std::ostream& output) {
             ++frame.ip;
             break;
         }
+        case OpCode::array_contains: {
+            const Value array = pop();
+            const Value needle = pop();
+            bool found = false;
+            for (const Value& element : array_elements(array)) {
+                if (values_equal(element, needle)) {
+                    found = true;
+                    break;
+                }
+            }
+            stack_.push_back(make_bool(found));
+            ++frame.ip;
+            break;
+        }
         case OpCode::text_len: {
             const Value text = pop();
             if (text.kind != ValueKind::text) {
@@ -962,6 +976,17 @@ void VirtualMachine::run(std::ostream& output) {
         case OpCode::text_contains: {
             const Value needle = pop();
             const Value text = pop();
+            if (text.kind != ValueKind::text || needle.kind != ValueKind::text) {
+                throw std::runtime_error("expected text value");
+            }
+
+            stack_.push_back(make_bool(text.text_value.find(needle.text_value) != std::string::npos));
+            ++frame.ip;
+            break;
+        }
+        case OpCode::text_in: {
+            const Value text = pop();
+            const Value needle = pop();
             if (text.kind != ValueKind::text || needle.kind != ValueKind::text) {
                 throw std::runtime_error("expected text value");
             }

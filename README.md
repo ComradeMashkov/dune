@@ -498,6 +498,11 @@ iterates integer ranges with `start` included and `end` excluded; descending or
 otherwise empty ranges run zero iterations. The loop variable is scoped to the
 loop body and is read-only, like a constant binding.
 
+The `in` operator checks membership and returns `bool`. It supports `value in
+array` for comparable array elements and `text in text` for substring checks.
+Use `!(value in container)` for negated membership; there is no separate `not
+in` operator yet.
+
 ```dn
 x = 1;
 
@@ -598,6 +603,7 @@ Indexing and slicing:
 - arrays: `values[index]`, `values[start:end]`, `values[:end]`, `values[start:]`
 - array iteration: `for value in values { ... }`
 - integer ranges: `for i in 0..values.len() { ... }`
+- membership: `value in values`, `"lang" in message`
 - text is zero-based: `message[0]` returns the first `glyph`
 - text slices return `text`
 - array slots and record fields can be assigned directly: `values[0] = 9`, `point.x = 7`, `points[0].x = 5`

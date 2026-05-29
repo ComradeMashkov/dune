@@ -313,6 +313,13 @@ int main() {
                                   "flags = [true, false]; print(flags.all()); print(flags.any());"),
                        "6\n6\n1\n3\n15\n0\n4\n3\n0\n1\n", "expected expanded array stdlib output") &&
              passed;
+    passed = expect_eq(run_source("values = [1, 2, 3]; words = [\"dune\", \"lang\"]; "
+                                  "message: text = \"dune language\"; enabled: bool = true; "
+                                  "print(2 in values); print(4 in values); print(\"lang\" in words); "
+                                  "print(\"lang\" in message); print(\"go\" in message); "
+                                  "if 1 + 1 in values && enabled { print(99); }"),
+                       "1\n0\n1\n1\n0\n99\n", "expected membership operator output") &&
+             passed;
     passed = expect_throws("print(missing);", "expected undefined variable to throw") && passed;
     passed =
         expect_eq(run_source("missing = 1; print(missing);"), "1\n", "expected first assignment to bind") && passed;

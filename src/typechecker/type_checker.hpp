@@ -120,6 +120,7 @@ private:
     Type check_member_assignment_target(const Expression& target, SourceLocation location);
     Type check_expression(const Expression& expression, const TypeAnnotation& expected = {});
     Type check_binary_expression(const Expression& expression, const TypeAnnotation& expected);
+    Type check_membership_expression(const Expression& expression);
     Type check_when_expression(const Expression& expression, const TypeAnnotation& expected);
     Type check_call_expression(const Expression& expression, const TypeAnnotation& expected);
     Type check_method_call_expression(const Expression& expression, const TypeAnnotation& expected);

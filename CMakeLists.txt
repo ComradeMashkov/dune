@@ -254,6 +254,16 @@ add_test(
 )
 
 add_test(
+    NAME cli_membership
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/membership.dn
+        -D EXPECTED_OUTPUT="1\n0\n1\n1\n0\n99"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
     NAME cli_functions
     COMMAND
         ${CMAKE_COMMAND}
@@ -735,5 +745,16 @@ add_test(
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/for_in_ranges.dn
         -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/for_in_ranges_native
         -D EXPECTED_OUTPUT="10\n20\n9"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
+)
+
+add_test(
+    NAME cli_build_native_membership
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/membership.dn
+        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/membership_native
+        -D EXPECTED_OUTPUT="1\n0\n1\n1\n0\n99"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
 )

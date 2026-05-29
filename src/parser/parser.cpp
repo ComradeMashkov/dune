@@ -1249,9 +1249,21 @@ std::unique_ptr<Expression> Parser::logical_and() {
 }
 
 std::unique_ptr<Expression> Parser::equality() {
-    std::unique_ptr<Expression> expr = comparison();
+    std::unique_ptr<Expression> expr = membership();
 
     while (match(TokenType::equal_equal) || match(TokenType::bang_equal)) {
+        const Token& op = previous();
+        std::unique_ptr<Expression> right = membership();
+        expr = make_binary(std::move(expr), op.lexeme, std::move(right), location_from_token(op));
+    }
+
+    return expr;
+}
+
+std::unique_ptr<Expression> Parser::membership() {
+    std::unique_ptr<Expression> expr = comparison();
+
+    while (match(TokenType::in_keyword)) {
         const Token& op = previous();
         std::unique_ptr<Expression> right = comparison();
         expr = make_binary(std::move(expr), op.lexeme, std::move(right), location_from_token(op));

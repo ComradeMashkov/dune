@@ -73,6 +73,7 @@ private:
     std::unique_ptr<Expression> logical_or();
     std::unique_ptr<Expression> logical_and();
     std::unique_ptr<Expression> equality();
+    std::unique_ptr<Expression> membership();
     std::unique_ptr<Expression> comparison();
     std::unique_ptr<Expression> term();
     std::unique_ptr<Expression> factor();

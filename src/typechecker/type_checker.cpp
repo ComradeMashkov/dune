@@ -1392,6 +1392,10 @@ Type TypeChecker::check_binary_expression(const Expression& expression, const Ty
         return make_type(ValueType::bool_type);
     }
 
+    if (expression.lexeme == "in") {
+        return check_membership_expression(expression);
+    }
+
     const bool is_arithmetic = expression.lexeme == "+" || expression.lexeme == "-" || expression.lexeme == "*" ||
                                expression.lexeme == "/" || expression.lexeme == "%";
     const TypeAnnotation operand_expected =
@@ -1442,6 +1446,41 @@ Type TypeChecker::check_binary_expression(const Expression& expression, const Ty
     }
 
     throw std::runtime_error(diagnostic(expression.location, "unknown binary operator '" + expression.lexeme + "'"));
+}
+
+Type TypeChecker::check_membership_expression(const Expression& expression) {
+    const Type container = check_expression(*expression.right);
+    if (container.kind == ValueType::array_type) {
+        if (container.element == nullptr) {
+            throw std::runtime_error(
+                diagnostic(expression.right->location, "expected array type but got '" + type_name(container) + "'"));
+        }
+
+        if (!is_comparable_type(*container.element) && container.element->kind != ValueType::generic_type) {
+            throw std::runtime_error(
+                diagnostic(expression.right->location, "operator 'in' requires comparable array elements but got '" +
+                                                           type_name(*container.element) + "'"));
+        }
+
+        Type value = check_expression(*expression.left, expected_type(*container.element));
+        if (!same_type(value, *container.element)) {
+            value = coerce_numeric_literal(*expression.left, value, *container.element);
+        }
+
+        expect_type(*container.element, value, expression.left->location);
+        return make_type(ValueType::bool_type);
+    }
+
+    if (container.kind == ValueType::text_type) {
+        expect_type(make_type(ValueType::text_type),
+                    check_expression(*expression.left, expected_type(make_type(ValueType::text_type))),
+                    expression.left->location);
+        return make_type(ValueType::bool_type);
+    }
+
+    throw std::runtime_error(
+        diagnostic(expression.right->location,
+                   "operator 'in' requires array or text container but got '" + type_name(container) + "'"));
 }
 
 Type TypeChecker::check_when_expression(const Expression& expression, const TypeAnnotation& expected) {

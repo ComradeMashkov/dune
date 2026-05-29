@@ -99,6 +99,27 @@ bool parses_operator_precedence() {
     return passed;
 }
 
+bool parses_membership_operator_precedence() {
+    const dune::Program program = parse_source("ok = 1 + 1 in values && enabled;");
+
+    if (!expect(program.statements.size() == 1, "expected one statement")) {
+        return false;
+    }
+
+    bool passed = true;
+    const dune::Expression& expression = *program.statements[0].expression;
+    passed = expect(expression.kind == dune::ExpressionKind::binary, "expected root binary expression") && passed;
+    passed = expect(expression.lexeme == "&&", "expected logical and at root") && passed;
+    passed = expect(expression.left->kind == dune::ExpressionKind::binary, "expected membership expression") && passed;
+    passed = expect(expression.left->lexeme == "in", "expected in operator") && passed;
+    passed =
+        expect(expression.left->left->kind == dune::ExpressionKind::binary, "expected arithmetic left side") && passed;
+    passed = expect(expression.left->left->lexeme == "+", "expected addition before membership") && passed;
+    passed = expect(expression.left->right->lexeme == "values", "expected membership container") && passed;
+    passed = expect(expression.right->lexeme == "enabled", "expected logical right side") && passed;
+    return passed;
+}
+
 bool parses_control_flow() {
     const dune::Program program = parse_source("x = 3; while x > 0 { x = x - 1; } "
                                                "if x == 0 { print(true); } else { print(false); }");
@@ -714,6 +735,7 @@ int main() {
     passed = parses_binding_and_print() && passed;
     passed = parses_formatted_print() && passed;
     passed = parses_operator_precedence() && passed;
+    passed = parses_membership_operator_precedence() && passed;
     passed = parses_control_flow() && passed;
     passed = parses_assignment_targets() && passed;
     passed = parses_functions_and_types() && passed;

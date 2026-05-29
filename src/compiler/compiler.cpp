@@ -1014,6 +1014,20 @@ void Compiler::compile_binary_expression(const Expression& expression) {
         return;
     }
 
+    if (expression.lexeme == "in") {
+        compile_expression(*expression.left);
+        compile_expression(*expression.right);
+
+        const Type container = expression_type(*expression.right);
+        if (container.kind == ValueType::text_type) {
+            emit(OpCode::text_in);
+            return;
+        }
+
+        emit(OpCode::array_contains);
+        return;
+    }
+
     compile_expression(*expression.left);
     compile_expression(*expression.right);
 

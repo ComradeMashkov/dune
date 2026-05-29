@@ -59,6 +59,7 @@ private:
     bool emit_statements(const std::vector<Statement>& statements, std::ostream& output);
     TypedValue emit_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_binary_expression(const Expression& expression, std::ostream& output);
+    TypedValue emit_membership_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_logical_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_when_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_unary_expression(const Expression& expression, std::ostream& output);
@@ -116,6 +117,7 @@ private:
     std::string llvm_symbol(const std::string& value) const;
     TypedValue cast_for_print(const TypedValue& value, std::ostream& output);
     TypedValue cast_value(const TypedValue& value, const Type& target, std::ostream& output);
+    TypedValue emit_equality_comparison(const TypedValue& left, const TypedValue& right, std::ostream& output);
     std::string emit_index_as_i64(const TypedValue& index, std::ostream& output);
     void reset_scopes();
     void push_scope();

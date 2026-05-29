@@ -172,6 +172,23 @@ bool compiles_operators_casts_and_methods() {
     return passed;
 }
 
+bool compiles_membership_operator() {
+    const dune::Bytecode bytecode = compile_source("values: [int] = [1, 2, 3]; print(2 in values); "
+                                                   "message: text = \"dune\"; print(\"un\" in message);");
+
+    bool saw_array_contains = false;
+    bool saw_text_in = false;
+    for (const dune::Instruction& instruction : bytecode.instructions) {
+        saw_array_contains = saw_array_contains || instruction.op == dune::OpCode::array_contains;
+        saw_text_in = saw_text_in || instruction.op == dune::OpCode::text_in;
+    }
+
+    bool passed = true;
+    passed = expect(saw_array_contains, "expected array_contains instruction") && passed;
+    passed = expect(saw_text_in, "expected text_in instruction") && passed;
+    return passed;
+}
+
 bool compiles_stdlib_primitives() {
     const dune::Bytecode bytecode = compile_source("foreign c_sqrt(value: real64): real64 = \"sqrt\"; "
                                                    "message: text = \"dune\"; print(message[0]); "
@@ -513,6 +530,7 @@ int main() {
     passed = compiles_arrays_and_module_calls() && passed;
     passed = compiles_module_constants() && passed;
     passed = compiles_operators_casts_and_methods() && passed;
+    passed = compiles_membership_operator() && passed;
     passed = compiles_stdlib_primitives() && passed;
     passed = compiles_for_in_arrays_and_ranges() && passed;
     passed = compiles_generic_functions() && passed;
