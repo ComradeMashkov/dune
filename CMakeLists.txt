@@ -224,6 +224,26 @@ add_test(
 )
 
 add_test(
+    NAME cli_string_escapes
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/string_escapes.dn
+        -D EXPECTED_OUTPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/golden/string_escapes.out
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
+    NAME cli_invalid_escape
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/invalid_escape.dn
+        -D EXPECTED_ERROR="unknown text escape"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_failure_case.cmake
+)
+
+add_test(
     NAME cli_arithmetic
     COMMAND
         ${CMAKE_COMMAND}
@@ -472,6 +492,17 @@ add_test(
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/formatted_print.dn
         -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/formatted_print_native
         -D EXPECTED_OUTPUT="Dune v1\nbool=1, glyph=Z, real=2.5\nplain text still works\n42"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
+)
+
+add_test(
+    NAME cli_build_native_string_escapes
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/string_escapes.dn
+        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/string_escapes_native
+        -D EXPECTED_OUTPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/golden/string_escapes.out
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
 )
 

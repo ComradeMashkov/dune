@@ -107,6 +107,17 @@ int main() {
                           "print(\"bool={}, glyph={}, real={}\", true, 'x', 2.5);",
                           "expected formatted print to validate") &&
              passed;
+    passed =
+        expect_valid(
+            R"dune(path: text = r"C:\Users\name\data.csv"; literal: text = r"\x"; line: text = "hello\n"; tab: glyph = '\t'; newline: glyph = '\n'; carriage: glyph = '\r'; quote: glyph = '\''; slash: glyph = '\\'; zero: glyph = '\0';)dune",
+            "expected raw strings and escaped literals to validate") &&
+        passed;
+    passed = expect_error_contains(R"(bad: text = "\x";)", R"(unknown text escape '\x')",
+                                   "expected invalid text escape error") &&
+             passed;
+    passed = expect_error_contains(R"(bad: glyph = '\x';)", R"(unknown glyph escape '\x')",
+                                   "expected invalid glyph escape error") &&
+             passed;
     passed = expect_error_contains("print(\"{} {}\", 1);", "print format string expects 2 arguments but got 1",
                                    "expected missing print format argument error") &&
              passed;

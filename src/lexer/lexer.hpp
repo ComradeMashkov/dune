@@ -112,6 +112,7 @@ private:
     Token number(std::size_t start, std::size_t line, std::size_t column);
     Token character(std::size_t start, std::size_t line, std::size_t column);
     Token string(std::size_t start, std::size_t line, std::size_t column);
+    Token raw_string(std::size_t start, std::size_t line, std::size_t column);
 
     std::string source_;
     std::size_t current_ = 0;

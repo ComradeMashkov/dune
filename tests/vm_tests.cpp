@@ -109,6 +109,27 @@ int main() {
                                   "print(\"bool={}, glyph={}, real={}\", true, 'x', 2.5);"),
                        "Dune v1\nbool=1, glyph=x, real=2.5\n", "expected formatted print output") &&
              passed;
+    passed = expect_eq(run_source(R"dune(path: text = r"C:\Users\name\data.csv";
+print(path);
+print("hello\nworld");
+print("quote \"ok\"");
+print("slash \\ ok");
+print('\n' to int);
+print('\t' to int);
+print('\r' to int);
+print('\\');
+print('\'');
+print('\0' to int);)dune"),
+                       "C:\\Users\\name\\data.csv\n"
+                       "hello\nworld\n"
+                       "quote \"ok\"\n"
+                       "slash \\ ok\n"
+                       "10\n9\n13\n\\\n'\n0\n",
+                       "expected raw strings and escape output") &&
+             passed;
+    passed = expect_error_contains(R"(bad: text = "\x";)", R"(unknown text escape '\x')",
+                                   "expected invalid text escape diagnostic") &&
+             passed;
     passed = expect_eq(run_source("log(message: text): unit { print(message); return; } "
                                   "noop(): unit { } "
                                   "tiny: i8 = 127; small: i16 = 32767; mid: i32 = 2147483647; "

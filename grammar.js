@@ -438,9 +438,9 @@ module.exports = grammar({
 
     float: _ => /\d+\.\d+/,
 
-    character: _ => token(seq("'", choice(/[^'\\\n]/, seq("\\", /./)), "'")),
+    character: _ => token(seq("'", choice(/[^'\\\n]/, seq("\\", /[nrt0'\\]/)), "'")),
 
-    string: _ => token(seq('"', repeat(choice(/[^"\\\n]/, seq("\\", /./))), '"')),
+    string: _ => token(choice(seq('r"', repeat(/[^"\n]/), '"'), seq('"', repeat(choice(/[^"\\\n]/, seq("\\", /[nrt0"\\]/))), '"'))),
   },
 });
 

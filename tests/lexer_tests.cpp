@@ -1,6 +1,7 @@
 #include "lexer/lexer.hpp"
 
 #include <iostream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -28,6 +29,24 @@ bool expect_tokens(const std::string& source, const std::vector<ExpectedToken>& 
     }
 
     return true;
+}
+
+bool expect_lex_error_contains(const std::string& source, const std::string& expected, const char* message) {
+    try {
+        dune::Lexer lexer(source);
+        lexer.tokenize();
+    } catch (const std::runtime_error& error) {
+        const std::string actual = error.what();
+        if (actual.find(expected) == std::string::npos) {
+            std::cerr << message << ": expected error containing '" << expected << "', got '" << actual << "'\n";
+            return false;
+        }
+
+        return true;
+    }
+
+    std::cerr << message << ": expected lexer error\n";
+    return false;
 }
 
 } // namespace
@@ -207,6 +226,57 @@ int main() {
                                {semicolon, ";"},
                                {eof, ""},
                            }) &&
+             passed;
+
+    passed =
+        expect_tokens(
+            R"dune(path: text = r"C:\Users\name\data.csv"; line: text = "hello\n"; tab: glyph = '\t'; quote: glyph = '\''; slash: glyph = '\\';)dune",
+            {
+                {identifier, "path"},
+                {colon, ":"},
+                {text_keyword, "text"},
+                {equal, "="},
+                {string_literal, R"(r"C:\Users\name\data.csv")"},
+                {semicolon, ";"},
+                {identifier, "line"},
+                {colon, ":"},
+                {text_keyword, "text"},
+                {equal, "="},
+                {string_literal, R"("hello\n")"},
+                {semicolon, ";"},
+                {identifier, "tab"},
+                {colon, ":"},
+                {glyph_keyword, "glyph"},
+                {equal, "="},
+                {char_literal, R"('\t')"},
+                {semicolon, ";"},
+                {identifier, "quote"},
+                {colon, ":"},
+                {glyph_keyword, "glyph"},
+                {equal, "="},
+                {char_literal, R"('\'')"},
+                {semicolon, ";"},
+                {identifier, "slash"},
+                {colon, ":"},
+                {glyph_keyword, "glyph"},
+                {equal, "="},
+                {char_literal, R"('\\')"},
+                {semicolon, ";"},
+                {eof, ""},
+            }) &&
+        passed;
+
+    passed = expect_lex_error_contains(R"(bad: text = "\x";)", R"(unknown text escape '\x')",
+                                       "expected invalid text escape error") &&
+             passed;
+    passed = expect_lex_error_contains(R"(bad: glyph = '\x';)", R"(unknown glyph escape '\x')",
+                                       "expected invalid glyph escape error") &&
+             passed;
+    passed = expect_lex_error_contains("bad: glyph = '';", "invalid glyph literal",
+                                       "expected invalid glyph literal error") &&
+             passed;
+    passed = expect_lex_error_contains("bad: text = r\"line\nnext\";", "unterminated raw string literal",
+                                       "expected unterminated raw string error") &&
              passed;
 
     passed = expect_tokens("import math; values: [int] = [1, 2]; values.push(math.square(values[0])); "

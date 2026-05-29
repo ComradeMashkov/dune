@@ -84,6 +84,18 @@ and the number of placeholders must match the number of following arguments.
 Printable values are the scalar types: integer and unsigned integer types,
 `real32`/`real64`, `bool`, `glyph`, and `text`.
 
+Text and glyph literals support explicit escapes. Normal `text` literals decode
+`\n`, `\t`, `\r`, `\\`, `\"`, and `\0`; `glyph` literals decode `\n`, `\t`,
+`\r`, `\\`, `\'`, and `\0`. Unknown escapes are compile-time errors. Raw
+single-line text literals use `r"..."` and keep backslashes literally:
+
+```dn
+path: text = r"C:\Users\name\data.csv";
+line: text = "hello\n";
+tab: glyph = '\t';
+quote: glyph = '\'';
+```
+
 Arrays and modules:
 
 ```dn
@@ -602,6 +614,7 @@ Built-in receiver methods:
 
 - arrays: `len()`, `push(value)`, `pop()`, `clear()`, `is_empty()`
 - text: `len()`, `is_empty()`, `contains(needle)`, `starts_with(prefix)`
+- raw text literals: `r"..."` keeps backslashes without escape decoding
 
 Standard library receiver methods are enabled by importing their module:
 
@@ -733,6 +746,7 @@ The current release implements a small compiled language with:
 - `when` expressions with literal and choice variant patterns
 - array methods
 - text methods
+- raw text literals and explicit text/glyph escapes
 - standard library receiver methods
 - text indexing
 - slices

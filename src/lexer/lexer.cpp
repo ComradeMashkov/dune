@@ -6,6 +6,53 @@
 
 namespace dune {
 
+namespace {
+
+std::string escape_name(char value) {
+    switch (value) {
+    case '\0':
+        return "\\0";
+    case '\n':
+        return "\\n";
+    case '\r':
+        return "\\r";
+    case '\t':
+        return "\\t";
+    default:
+        return "\\" + std::string(1, value);
+    }
+}
+
+bool is_text_escape(char value) {
+    switch (value) {
+    case 'n':
+    case 'r':
+    case 't':
+    case '0':
+    case '"':
+    case '\\':
+        return true;
+    default:
+        return false;
+    }
+}
+
+bool is_glyph_escape(char value) {
+    switch (value) {
+    case 'n':
+    case 'r':
+    case 't':
+    case '0':
+    case '\'':
+    case '\\':
+        return true;
+    default:
+        return false;
+    }
+}
+
+} // namespace
+
 Lexer::Lexer(std::string source) : source_(std::move(source)) {}
 
 Token Lexer::next_token() {
@@ -19,6 +66,11 @@ Token Lexer::next_token() {
     const std::size_t line = line_;
     const std::size_t column = column_;
     const char current = advance();
+
+    if (current == 'r' && peek() == '"') {
+        advance();
+        return raw_string(start, line, column);
+    }
 
     if (std::isalpha(static_cast<unsigned char>(current)) || current == '_') {
         return identifier(start, line, column);
@@ -400,6 +452,12 @@ Token Lexer::character(std::size_t start, std::size_t line, std::size_t column) 
         if (is_at_end() || peek() == '\n') {
             throw std::runtime_error("unterminated character literal");
         }
+
+        if (!is_glyph_escape(peek())) {
+            throw std::runtime_error("unknown glyph escape '" + escape_name(peek()) + "'");
+        }
+    } else if (peek() == '\'') {
+        throw std::runtime_error("invalid glyph literal");
     }
 
     advance();
@@ -422,6 +480,10 @@ Token Lexer::string(std::size_t start, std::size_t line, std::size_t column) {
             if (is_at_end() || peek() == '\n') {
                 throw std::runtime_error("unterminated string literal");
             }
+
+            if (!is_text_escape(peek())) {
+                throw std::runtime_error("unknown text escape '" + escape_name(peek()) + "'");
+            }
         }
 
         advance();
@@ -429,6 +491,22 @@ Token Lexer::string(std::size_t start, std::size_t line, std::size_t column) {
 
     if (!match('"')) {
         throw std::runtime_error("unterminated string literal");
+    }
+
+    return make_token(TokenType::string_literal, start, line, column);
+}
+
+Token Lexer::raw_string(std::size_t start, std::size_t line, std::size_t column) {
+    while (!is_at_end() && peek() != '"') {
+        if (peek() == '\n') {
+            throw std::runtime_error("unterminated raw string literal");
+        }
+
+        advance();
+    }
+
+    if (!match('"')) {
+        throw std::runtime_error("unterminated raw string literal");
     }
 
     return make_token(TokenType::string_literal, start, line, column);
