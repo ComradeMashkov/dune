@@ -451,6 +451,21 @@ fn boxed<T>(value: T): Box<T> {
 answer: Box<int> = boxed(42);
 ```
 
+Tuples group a small fixed number of values without declaring a record. Tuple
+types and literals currently require at least two elements. Tuples are returned,
+passed, and destructured as values; direct element access such as `.0` is a
+future extension.
+
+```dn
+fn minmax(values: [int]): (int, int) {
+  return (values[0], values[1]);
+}
+
+(lo, hi) = minmax([3, 8]);
+print(lo);
+print(hi);
+```
+
 Record fields can declare default values. A record literal may omit fields that
 have defaults; missing fields without defaults are still rejected. Defaults are
 evaluated each time a record value is created.
@@ -583,8 +598,8 @@ choice Maybe<T> {
 value: Maybe<int> = Present(42);
 
 answer = when value {
-  is Present(x) { x }
-  is Absent { 0 }
+  Present(x) => x;
+  Absent => 0;
 };
 ```
 
@@ -599,19 +614,30 @@ export method<T> [T].first(): T {
 ```
 
 `when` expressions compare a subject against literal patterns or choice variant
-patterns. Literal matches require a `_` fallback arm. Choice matches must cover
-every variant, or include `_` as a fallback. A payload variant pattern binds the
-payload only inside that arm.
+patterns. They can also destructure records and tuples with irrefutable patterns.
+Arms can use the compact `pattern => expression;` form, or the older
+`is pattern { expression }` form. Literal matches require a `_` fallback arm.
+Choice matches must cover every variant, or include `_` as a fallback. A payload
+variant pattern binds the payload only inside that arm; record and tuple patterns
+bind their selected fields or elements inside the arm.
 
 ```dn
 label = when answer.value {
-  is 42 { "answer" }
-  is _ { "other" }
+  42 => "answer";
+  _ => "other";
 };
 
 unwrapped = when value {
-  is Present(x) { x }
-  is Absent { 0 }
+  Present(x) => x;
+  Absent => 0;
+};
+
+point_sum = when point {
+  Point { x, y } => x + y;
+};
+
+pair_sum = when (lo, hi) {
+  (left, right) => left + right;
 };
 ```
 
@@ -627,6 +653,7 @@ Supported scalar types:
 Supported compound types:
 
 - `[T]` dynamic arrays, for example `[int]` or `[text]`
+- `(T, U)` tuples with two or more elements, for example `(int, text)`
 - `record` records with named fields, for example `Point { x: 1, y: 2 }`
 - generic records, for example `Box<int>`
 - contracts, for example `Shape` as a generic bound
@@ -771,6 +798,7 @@ The current release implements a small compiled language with:
 - generic functions with explicit contract bounds
 - call-site generic instantiation
 - generic records
+- tuple types, tuple literals, and local tuple destructuring
 - record field defaults
 - record constructors
 - record member visibility
@@ -787,7 +815,7 @@ The current release implements a small compiled language with:
 - dynamic arrays
 - records with fields and methods
 - mutable array indexes and record fields
-- `when` expressions with literal and choice variant patterns
+- `when` expressions with literal, choice variant, record, and tuple patterns, including `pattern => expression` arms
 - array methods
 - text methods
 - raw text literals and explicit text/glyph escapes

@@ -462,6 +462,11 @@ bool LlvmIrGenerator::emit_statement(const Statement& statement, std::ostream& o
         return false;
     }
     case StatementKind::assign: {
+        if (statement.target != nullptr && statement.target->kind == ExpressionKind::tuple) {
+            emit_tuple_destructuring_assignment(*statement.target, *statement.expression, output);
+            return false;
+        }
+
         if (statement.target != nullptr && statement.target->kind != ExpressionKind::identifier) {
             emit_assignment_target(*statement.target, *statement.expression, output);
             return false;
@@ -794,6 +799,8 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_expression(const Expression& e
         return TypedValue{expression.lexeme == "true" ? "1" : "0", make_type(ValueType::bool_type)};
     case ExpressionKind::array:
         return emit_array_literal(expression, output);
+    case ExpressionKind::tuple:
+        return emit_tuple_literal(expression, output);
     case ExpressionKind::struct_literal:
         return emit_struct_literal(expression, output);
     case ExpressionKind::index:
@@ -1081,6 +1088,85 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_when_expression(const Expressi
         const std::string value = next_register();
         output << "  " << value << " = load " << llvm_type(inferred->second) << ", ptr " << result_pointer << '\n';
         return TypedValue{value, inferred->second};
+    }
+
+    if (subject.type.kind == ValueType::struct_type || subject.type.kind == ValueType::tuple_type) {
+        if (expression.arguments.size() != 2) {
+            throw std::runtime_error("record and tuple destructuring when expressions need exactly one arm");
+        }
+
+        const Expression& pattern = *expression.arguments[0];
+        const Expression& result = *expression.arguments[1];
+        const bool wildcard = pattern.kind == ExpressionKind::identifier && pattern.lexeme == "_";
+
+        push_scope();
+        if (!wildcard && subject.type.kind == ValueType::struct_type) {
+            const StructLayout layout = concrete_struct_layout(subject.type);
+            const std::string subject_value = next_register();
+            output << "  " << subject_value << " = load ptr, ptr " << subject_pointer << '\n';
+            for (std::size_t index = 0; index < pattern.field_names.size(); ++index) {
+                const Expression& binding = *pattern.arguments[index];
+                if (binding.kind != ExpressionKind::identifier || binding.lexeme == "_") {
+                    continue;
+                }
+
+                const std::string& field_name = pattern.field_names[index];
+                const auto field = layout.field_indices.find(field_name);
+                if (field == layout.field_indices.end()) {
+                    throw std::runtime_error("unknown field '" + field_name + "'");
+                }
+
+                const Type& field_type = layout.fields[field->second].type.type;
+                const std::string slot = next_register();
+                const std::string value = next_register();
+                const std::string pointer = next_register();
+                output << "  " << slot << " = getelementptr i8, ptr " << subject_value << ", i64 "
+                       << layout.field_offsets.at(field_name) << '\n';
+                output << "  " << value << " = load " << llvm_type(field_type) << ", ptr " << slot << '\n';
+                output << "  " << pointer << " = alloca " << llvm_type(field_type) << '\n';
+                output << "  store " << llvm_type(field_type) << ' ' << value << ", ptr " << pointer << '\n';
+                declare_scoped_local(binding.lexeme, Local{pointer, field_type});
+            }
+        } else if (!wildcard && subject.type.kind == ValueType::tuple_type) {
+            std::vector<std::size_t> offsets;
+            offsets.reserve(subject.type.arguments.size());
+            std::size_t size = 0;
+            for (const Type& element_type : subject.type.arguments) {
+                const std::size_t element_size = llvm_size(element_type);
+                size = align_to(size, element_size);
+                offsets.push_back(size);
+                size += element_size;
+            }
+
+            const std::string subject_value = next_register();
+            output << "  " << subject_value << " = load ptr, ptr " << subject_pointer << '\n';
+            for (std::size_t index = 0; index < pattern.arguments.size(); ++index) {
+                const Expression& binding = *pattern.arguments[index];
+                if (binding.kind != ExpressionKind::identifier || binding.lexeme == "_") {
+                    continue;
+                }
+
+                const Type& element_type = subject.type.arguments[index];
+                const std::string slot = next_register();
+                const std::string value = next_register();
+                const std::string pointer = next_register();
+                output << "  " << slot << " = getelementptr i8, ptr " << subject_value << ", i64 " << offsets[index]
+                       << '\n';
+                output << "  " << value << " = load " << llvm_type(element_type) << ", ptr " << slot << '\n';
+                output << "  " << pointer << " = alloca " << llvm_type(element_type) << '\n';
+                output << "  store " << llvm_type(element_type) << ' ' << value << ", ptr " << pointer << '\n';
+                declare_scoped_local(binding.lexeme, Local{pointer, element_type});
+            }
+        }
+
+        const TypedValue value = emit_expression(result, output);
+        pop_scope();
+        output << "  store " << llvm_type(inferred->second) << ' ' << value.name << ", ptr " << result_pointer << '\n';
+        output << "  br label %" << end_label << '\n';
+        output << end_label << ":\n";
+        const std::string loaded = next_register();
+        output << "  " << loaded << " = load " << llvm_type(inferred->second) << ", ptr " << result_pointer << '\n';
+        return TypedValue{loaded, inferred->second};
     }
 
     for (std::size_t index = 0; index < expression.arguments.size(); index += 2) {
@@ -1475,6 +1561,37 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_array_literal(const Expression
     return TypedValue{handle, type->second};
 }
 
+LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_tuple_literal(const Expression& expression, std::ostream& output) {
+    const auto type = expression_types_.find(&expression);
+    if (type == expression_types_.end() || type->second.kind != ValueType::tuple_type) {
+        throw std::runtime_error("missing inferred tuple literal type");
+    }
+
+    std::vector<std::size_t> offsets;
+    offsets.reserve(type->second.arguments.size());
+    std::size_t size = 0;
+    for (const Type& element_type : type->second.arguments) {
+        const std::size_t element_size = llvm_size(element_type);
+        size = align_to(size, element_size);
+        offsets.push_back(size);
+        size += element_size;
+    }
+    if (size == 0) {
+        size = 1;
+    }
+
+    const std::string handle = next_register();
+    output << "  " << handle << " = call ptr @dune_alloc(i64 " << size << ")\n";
+    for (std::size_t index = 0; index < expression.arguments.size(); ++index) {
+        const TypedValue value = emit_expression(*expression.arguments[index], output);
+        const std::string slot = next_register();
+        output << "  " << slot << " = getelementptr i8, ptr " << handle << ", i64 " << offsets[index] << '\n';
+        output << "  store " << llvm_type(value.type) << ' ' << value.name << ", ptr " << slot << '\n';
+    }
+
+    return TypedValue{handle, type->second};
+}
+
 LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_struct_literal(const Expression& expression, std::ostream& output) {
     const auto type = expression_types_.find(&expression);
     if (type == expression_types_.end() || type->second.kind != ValueType::struct_type) {
@@ -1765,6 +1882,7 @@ LlvmIrGenerator::TypedPointer LlvmIrGenerator::emit_lvalue_pointer(const Express
     case ExpressionKind::string:
     case ExpressionKind::boolean:
     case ExpressionKind::array:
+    case ExpressionKind::tuple:
     case ExpressionKind::struct_literal:
     case ExpressionKind::slice:
     case ExpressionKind::unary:
@@ -1784,6 +1902,49 @@ void LlvmIrGenerator::emit_assignment_target(const Expression& target, const Exp
     const TypedPointer pointer = emit_lvalue_pointer(target, output);
     const TypedValue assigned = emit_expression(value, output);
     output << "  store " << llvm_type(pointer.type) << ' ' << assigned.name << ", ptr " << pointer.pointer << '\n';
+}
+
+void LlvmIrGenerator::emit_tuple_destructuring_assignment(const Expression& target, const Expression& value,
+                                                          std::ostream& output) {
+    const TypedValue tuple = emit_expression(value, output);
+    if (tuple.type.kind != ValueType::tuple_type) {
+        throw std::runtime_error("expected tuple value");
+    }
+
+    std::vector<std::size_t> offsets;
+    offsets.reserve(tuple.type.arguments.size());
+    std::size_t size = 0;
+    for (const Type& element_type : tuple.type.arguments) {
+        const std::size_t element_size = llvm_size(element_type);
+        size = align_to(size, element_size);
+        offsets.push_back(size);
+        size += element_size;
+    }
+
+    for (std::size_t index = 0; index < target.arguments.size(); ++index) {
+        const Expression& binding = *target.arguments[index];
+        if (binding.kind != ExpressionKind::identifier || binding.lexeme == "_") {
+            continue;
+        }
+
+        const Type& element_type = tuple.type.arguments[index];
+        const std::string slot = next_register();
+        const std::string element = next_register();
+        output << "  " << slot << " = getelementptr i8, ptr " << tuple.name << ", i64 " << offsets[index] << '\n';
+        output << "  " << element << " = load " << llvm_type(element_type) << ", ptr " << slot << '\n';
+
+        const auto local = locals_.find(binding.lexeme);
+        if (local != locals_.end()) {
+            output << "  store " << llvm_type(element_type) << ' ' << element << ", ptr " << local->second.pointer
+                   << '\n';
+            continue;
+        }
+
+        const std::string pointer = next_register();
+        output << "  " << pointer << " = alloca " << llvm_type(element_type) << '\n';
+        output << "  store " << llvm_type(element_type) << ' ' << element << ", ptr " << pointer << '\n';
+        declare_scoped_local(binding.lexeme, Local{pointer, element_type});
+    }
 }
 
 void LlvmIrGenerator::emit_print(const TypedValue& value, std::ostream& output) {
@@ -1929,8 +2090,8 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::cast_value(const TypedValue& value,
     }
 
     if (target.kind == ValueType::text_type || target.kind == ValueType::unit_type ||
-        target.kind == ValueType::array_type || target.kind == ValueType::struct_type ||
-        target.kind == ValueType::enum_type) {
+        target.kind == ValueType::array_type || target.kind == ValueType::tuple_type ||
+        target.kind == ValueType::struct_type || target.kind == ValueType::enum_type) {
         return TypedValue{value.name, target};
     }
 
@@ -2115,6 +2276,7 @@ std::string LlvmIrGenerator::llvm_type(const Type& type) const {
         return "double";
     case ValueType::text_type:
     case ValueType::array_type:
+    case ValueType::tuple_type:
     case ValueType::struct_type:
     case ValueType::enum_type:
         return "ptr";
@@ -2152,6 +2314,7 @@ std::size_t LlvmIrGenerator::llvm_bit_width(const Type& type) const {
     case ValueType::text_type:
     case ValueType::unit_type:
     case ValueType::array_type:
+    case ValueType::tuple_type:
     case ValueType::generic_type:
     case ValueType::struct_type:
     case ValueType::enum_type:
@@ -2186,6 +2349,7 @@ std::string LlvmIrGenerator::printf_format_name(const Type& type) const {
         return "[4 x i8], ptr @.dune_fmt_text, i64 0, i64 0";
     case ValueType::unit_type:
     case ValueType::array_type:
+    case ValueType::tuple_type:
     case ValueType::generic_type:
     case ValueType::struct_type:
     case ValueType::enum_type:
@@ -2220,6 +2384,7 @@ std::string LlvmIrGenerator::printf_fragment_format_name(const Type& type) const
         return "[3 x i8], ptr @.dune_fmt_text_raw, i64 0, i64 0";
     case ValueType::unit_type:
     case ValueType::array_type:
+    case ValueType::tuple_type:
     case ValueType::generic_type:
     case ValueType::struct_type:
     case ValueType::enum_type:
@@ -2406,6 +2571,7 @@ std::size_t LlvmIrGenerator::llvm_size(const Type& type) const {
     case ValueType::real_type:
     case ValueType::text_type:
     case ValueType::array_type:
+    case ValueType::tuple_type:
     case ValueType::struct_type:
     case ValueType::enum_type:
         return 8;
@@ -2421,7 +2587,7 @@ std::string LlvmIrGenerator::default_value(const Type& type) const {
         return "0.000000e+00";
     }
 
-    if (type.kind == ValueType::text_type || type.kind == ValueType::array_type ||
+    if (type.kind == ValueType::text_type || type.kind == ValueType::array_type || type.kind == ValueType::tuple_type ||
         type.kind == ValueType::struct_type || type.kind == ValueType::enum_type) {
         return "null";
     }

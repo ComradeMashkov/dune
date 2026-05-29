@@ -24,6 +24,7 @@ private:
     bool match(TokenType type);
     bool looks_like_struct_literal() const;
     bool looks_like_assignment_statement() const;
+    bool looks_like_tuple_assignment_statement() const;
     bool looks_like_binding_declaration() const;
 
     const Token& advance();
@@ -35,6 +36,7 @@ private:
 
     Statement statement();
     Statement assignment_statement(bool require_semicolon = true);
+    Statement tuple_assignment_statement();
     Statement block_statement();
     Statement break_statement();
     Statement continue_statement();
@@ -80,6 +82,7 @@ private:
     std::unique_ptr<Expression> unary();
     std::unique_ptr<Expression> call();
     std::unique_ptr<Expression> when_expression();
+    std::unique_ptr<Expression> when_pattern(bool allow_record_pattern);
     std::unique_ptr<Expression> primary();
 
     std::vector<Token> tokens_;

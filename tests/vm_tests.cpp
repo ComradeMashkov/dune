@@ -240,6 +240,23 @@ print('\0' to int);)dune"),
                                   "print(when \"dune\" { is \"lang\" { 1 } is _ { 2 } });"),
                        "7\ndone\n70\n2\n", "expected generic records and when output") &&
              passed;
+    passed = expect_eq(run_source("choice Maybe { Present(int), Absent, } "
+                                  "fn unwrap(value: Maybe): int { return when value { Present(x) => x + 1; "
+                                  "Absent => 0; }; } "
+                                  "value: Maybe = Present(41); missing: Maybe = Absent; "
+                                  "print(unwrap(value)); print(unwrap(missing)); "
+                                  "print(when missing { Present(x) => x; _ => 7; }); "
+                                  "print(when 2 { 1 => 10; _ => 20; });"),
+                       "42\n0\n7\n20\n", "expected arrow-style pattern matching output") &&
+             passed;
+    passed = expect_eq(run_source("record Point { x: int, y: int } "
+                                  "fn minmax(values: [int]): (int, int) { return (values[0], values[1]); } "
+                                  "(lo, hi) = minmax([3, 8]); print(lo); print(hi); "
+                                  "point: Point = Point { x: lo, y: hi }; "
+                                  "print(when point { Point { x, y } => x + y; }); "
+                                  "print(when (lo, hi) { (left, right) => left * right; });"),
+                       "3\n8\n11\n24\n", "expected tuple and record destructuring output") &&
+             passed;
     passed = expect_eq(run_source("contract Shape { area(): real64; } "
                                   "record Circle with Shape { radius: real64, "
                                   "fn new(radius: real64): Circle { return Circle { radius: radius }; } "

@@ -904,6 +904,8 @@ std::optional<std::string> literal_expression_type(const Expression& expression)
         return "bool";
     case ExpressionKind::array:
         return "[unknown]";
+    case ExpressionKind::tuple:
+        return "(unknown, unknown)";
     case ExpressionKind::struct_literal:
         return expression.lexeme;
     case ExpressionKind::identifier:

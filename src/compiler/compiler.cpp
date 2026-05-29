@@ -397,6 +397,11 @@ void Compiler::compile_statement(const Statement& statement) {
         return;
     }
     case StatementKind::assign: {
+        if (statement.target != nullptr && statement.target->kind == ExpressionKind::tuple) {
+            compile_tuple_destructuring_assignment(*statement.target, *statement.expression);
+            return;
+        }
+
         if (statement.target != nullptr && statement.target->kind != ExpressionKind::identifier) {
             compile_assignment_target(*statement.target, *statement.expression);
             return;
@@ -674,6 +679,9 @@ void Compiler::compile_expression(const Expression& expression) {
 
         emit(OpCode::make_array, expression.arguments.size());
         return;
+    case ExpressionKind::tuple:
+        compile_tuple_literal(expression);
+        return;
     case ExpressionKind::struct_literal:
         compile_struct_literal(expression);
         return;
@@ -785,6 +793,56 @@ void Compiler::compile_when_expression(const Expression& expression) {
         return;
     }
 
+    if (subject_type.kind == ValueType::struct_type || subject_type.kind == ValueType::tuple_type) {
+        if (expression.arguments.size() != 2) {
+            throw std::runtime_error("record and tuple destructuring when expressions need exactly one arm");
+        }
+
+        const Expression& pattern = *expression.arguments[0];
+        const Expression& result = *expression.arguments[1];
+        const bool wildcard = pattern.kind == ExpressionKind::identifier && pattern.lexeme == "_";
+
+        push_scope();
+        if (!wildcard && subject_type.kind == ValueType::struct_type) {
+            const auto layout = structs_.find(subject_type.name);
+            if (layout == structs_.end()) {
+                throw std::runtime_error("unknown record '" + subject_type.name + "'");
+            }
+
+            for (std::size_t index = 0; index < pattern.field_names.size(); ++index) {
+                const Expression& binding = *pattern.arguments[index];
+                if (binding.kind != ExpressionKind::identifier || binding.lexeme == "_") {
+                    continue;
+                }
+
+                const auto field = layout->second.field_indices.find(pattern.field_names[index]);
+                if (field == layout->second.field_indices.end()) {
+                    throw std::runtime_error("unknown field '" + pattern.field_names[index] + "'");
+                }
+
+                emit(OpCode::load_local, subject_slot);
+                emit(OpCode::load_field, field->second);
+                emit(OpCode::store_local,
+                     declare_scoped_local(binding.lexeme, layout->second.fields[field->second].type.type));
+            }
+        } else if (!wildcard && subject_type.kind == ValueType::tuple_type) {
+            for (std::size_t index = 0; index < pattern.arguments.size(); ++index) {
+                const Expression& binding = *pattern.arguments[index];
+                if (binding.kind != ExpressionKind::identifier || binding.lexeme == "_") {
+                    continue;
+                }
+
+                emit(OpCode::load_local, subject_slot);
+                emit(OpCode::load_tuple_element, index);
+                emit(OpCode::store_local, declare_scoped_local(binding.lexeme, subject_type.arguments[index]));
+            }
+        }
+
+        compile_expression(result);
+        pop_scope();
+        return;
+    }
+
     std::vector<std::size_t> end_jumps;
     for (std::size_t index = 0; index < expression.arguments.size(); index += 2) {
         const Expression& pattern = *expression.arguments[index];
@@ -852,6 +910,7 @@ void Compiler::compile_assignment_target(const Expression& target, const Express
     case ExpressionKind::string:
     case ExpressionKind::boolean:
     case ExpressionKind::array:
+    case ExpressionKind::tuple:
     case ExpressionKind::struct_literal:
     case ExpressionKind::slice:
     case ExpressionKind::unary:
@@ -881,6 +940,41 @@ void Compiler::compile_variant_constructor(const Expression& expression) {
     }
 
     emit(OpCode::make_unit_variant, resolution.tag);
+}
+
+void Compiler::compile_tuple_literal(const Expression& expression) {
+    for (const std::unique_ptr<Expression>& element : expression.arguments) {
+        compile_expression(*element);
+    }
+
+    emit(OpCode::make_tuple, expression.arguments.size());
+}
+
+void Compiler::compile_tuple_destructuring_assignment(const Expression& target, const Expression& value) {
+    const Type tuple_type = expression_type(value);
+    if (tuple_type.kind != ValueType::tuple_type) {
+        throw std::runtime_error("expected tuple value");
+    }
+
+    compile_expression(value);
+    const std::size_t tuple_slot =
+        declare_scoped_local("__tuple_destructure_" + std::to_string(temporary_count_++), tuple_type);
+    emit(OpCode::store_local, tuple_slot);
+
+    for (std::size_t index = 0; index < target.arguments.size(); ++index) {
+        const Expression& binding = *target.arguments[index];
+        if (binding.kind != ExpressionKind::identifier || binding.lexeme == "_") {
+            continue;
+        }
+
+        emit(OpCode::load_local, tuple_slot);
+        emit(OpCode::load_tuple_element, index);
+        if (const auto local = locals_.find(binding.lexeme); local != locals_.end()) {
+            emit(OpCode::store_local, local->second);
+        } else {
+            emit(OpCode::store_local, declare_scoped_local(binding.lexeme, tuple_type.arguments[index]));
+        }
+    }
 }
 
 void Compiler::compile_member_expression(const Expression& expression) {

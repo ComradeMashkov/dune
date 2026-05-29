@@ -414,6 +414,16 @@ add_test(
 )
 
 add_test(
+    NAME cli_pattern_matching
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/pattern_matching.dn
+        -D EXPECTED_OUTPUT="30\n7\ndone\nbad\n3\n8\n11\n24\n99\n20"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
     NAME cli_scopes_assignment_targets
     COMMAND
         ${CMAKE_COMMAND}
@@ -675,6 +685,17 @@ add_test(
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/choices_when.dn
         -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/choices_when_native
         -D EXPECTED_OUTPUT="30\n7\n31\n99"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
+)
+
+add_test(
+    NAME cli_build_native_pattern_matching
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/pattern_matching.dn
+        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/pattern_matching_native
+        -D EXPECTED_OUTPUT="30\n7\ndone\nbad\n3\n8\n11\n24\n99\n20"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
 )
 

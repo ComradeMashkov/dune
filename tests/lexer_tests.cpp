@@ -654,6 +654,30 @@ int main() {
                            }) &&
              passed;
 
+    passed = expect_tokens("out = when value { Present(x) => x; _ => 0; };",
+                           {
+                               {identifier, "out"},
+                               {equal, "="},
+                               {when_keyword, "when"},
+                               {identifier, "value"},
+                               {left_brace, "{"},
+                               {identifier, "Present"},
+                               {left_paren, "("},
+                               {identifier, "x"},
+                               {right_paren, ")"},
+                               {fat_arrow, "=>"},
+                               {identifier, "x"},
+                               {semicolon, ";"},
+                               {identifier, "_"},
+                               {fat_arrow, "=>"},
+                               {number, "0"},
+                               {semicolon, ";"},
+                               {right_brace, "}"},
+                               {semicolon, ";"},
+                               {eof, ""},
+                           }) &&
+             passed;
+
     passed = expect_tokens("export choice Maybe<T> { Present(T), Absent, }",
                            {
                                {export_keyword, "export"},

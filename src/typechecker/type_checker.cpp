@@ -44,7 +44,8 @@ std::string expression_type_name(const Expression& expression) {
 
 bool is_printable_type(const Type& type) {
     return type.kind != ValueType::unit_type && type.kind != ValueType::array_type &&
-           type.kind != ValueType::struct_type && type.kind != ValueType::enum_type;
+           type.kind != ValueType::tuple_type && type.kind != ValueType::struct_type &&
+           type.kind != ValueType::enum_type;
 }
 
 std::pair<std::size_t, bool> count_format_placeholders(const std::string& lexeme) {
@@ -287,6 +288,12 @@ Type make_array_type(Type element) {
     return Type{ValueType::array_type, std::make_shared<Type>(std::move(element))};
 }
 
+Type make_tuple_type(std::vector<Type> elements) {
+    Type type{ValueType::tuple_type, nullptr};
+    type.arguments = std::move(elements);
+    return type;
+}
+
 Type make_struct_type(std::string name) {
     Type type{ValueType::struct_type, nullptr};
     type.name = std::move(name);
@@ -349,6 +356,8 @@ std::string type_name(ValueType type) {
         return "unit";
     case ValueType::array_type:
         return "array";
+    case ValueType::tuple_type:
+        return "tuple";
     case ValueType::generic_type:
         return "generic";
     case ValueType::struct_type:
@@ -367,6 +376,18 @@ std::string type_name(const Type& type) {
         }
 
         return "[" + type_name(*type.element) + "]";
+    }
+
+    if (type.kind == ValueType::tuple_type) {
+        std::string name = "(";
+        for (std::size_t index = 0; index < type.arguments.size(); ++index) {
+            if (index > 0) {
+                name += ", ";
+            }
+            name += type_name(type.arguments[index]);
+        }
+        name += ")";
+        return name;
     }
 
     if (type.kind == ValueType::generic_type || type.kind == ValueType::struct_type ||
@@ -396,6 +417,14 @@ std::string type_key(const Type& type) {
         }
 
         return "array_" + type_key(*type.element);
+    }
+
+    if (type.kind == ValueType::tuple_type) {
+        std::string key = "tuple";
+        for (const Type& argument : type.arguments) {
+            key += "_" + type_key(argument);
+        }
+        return key;
     }
 
     if (type.kind == ValueType::generic_type) {
@@ -814,6 +843,18 @@ std::string contract_type_name(const Type& type) {
         return "[" + contract_type_name(*type.element) + "]";
     }
 
+    if (type.kind == ValueType::tuple_type) {
+        std::string name = "(";
+        for (std::size_t index = 0; index < type.arguments.size(); ++index) {
+            if (index > 0) {
+                name += ", ";
+            }
+            name += contract_type_name(type.arguments[index]);
+        }
+        name += ")";
+        return name;
+    }
+
     if ((type.kind == ValueType::generic_type || type.kind == ValueType::struct_type ||
          type.kind == ValueType::enum_type) &&
         !type.arguments.empty()) {
@@ -1010,6 +1051,11 @@ void TypeChecker::check_statement(const Statement& statement) {
         return;
     }
     case StatementKind::assign: {
+        if (statement.target != nullptr && statement.target->kind == ExpressionKind::tuple) {
+            check_tuple_destructuring_assignment(*statement.target, *statement.expression);
+            return;
+        }
+
         if (statement.target != nullptr && statement.target->kind != ExpressionKind::identifier) {
             const Type expected = check_assignment_target(*statement.target, statement.location);
             expect_type(expected, check_expression(*statement.expression, expected_type(expected)),
@@ -1162,6 +1208,55 @@ void TypeChecker::check_statements(const std::vector<Statement>& statements) {
     }
 }
 
+void TypeChecker::check_tuple_destructuring_assignment(const Expression& target, const Expression& value) {
+    const Type actual = check_expression(value);
+    if (actual.kind != ValueType::tuple_type) {
+        throw std::runtime_error(
+            diagnostic(value.location, "expected tuple value but got '" + type_name(actual) + "'"));
+    }
+
+    if (target.arguments.size() != actual.arguments.size()) {
+        throw std::runtime_error(
+            diagnostic(target.location, "tuple destructuring expected " + std::to_string(target.arguments.size()) +
+                                            " values but got " + std::to_string(actual.arguments.size())));
+    }
+
+    std::unordered_set<std::string> names;
+    for (std::size_t index = 0; index < target.arguments.size(); ++index) {
+        const Expression& binding = *target.arguments[index];
+        if (binding.kind != ExpressionKind::identifier) {
+            throw std::runtime_error(diagnostic(binding.location, "expected binding name in tuple destructuring"));
+        }
+
+        if (binding.lexeme == "_") {
+            continue;
+        }
+
+        if (!names.insert(binding.lexeme).second) {
+            throw std::runtime_error(
+                diagnostic(binding.location, "duplicate binding '" + binding.lexeme + "' in tuple destructuring"));
+        }
+
+        VariableBinding* variable = find_binding(binding.lexeme);
+        if (variable == nullptr) {
+            if (global_constants_.contains(binding.lexeme)) {
+                throw std::runtime_error(
+                    diagnostic(binding.location, "cannot assign to constant '" + binding.lexeme + "'"));
+            }
+
+            declare_binding(binding.lexeme, actual.arguments[index], false, binding.location);
+            continue;
+        }
+
+        if (variable->constant) {
+            throw std::runtime_error(
+                diagnostic(binding.location, "cannot assign to constant '" + binding.lexeme + "'"));
+        }
+
+        expect_type(variable->type, actual.arguments[index], binding.location);
+    }
+}
+
 Type TypeChecker::check_for_in_iterable(const Expression& expression) {
     if (expression.kind == ExpressionKind::range) {
         if (expression.left == nullptr || expression.right == nullptr) {
@@ -1246,6 +1341,7 @@ Type TypeChecker::check_assignment_target(const Expression& target, SourceLocati
     case ExpressionKind::string:
     case ExpressionKind::boolean:
     case ExpressionKind::array:
+    case ExpressionKind::tuple:
     case ExpressionKind::struct_literal:
     case ExpressionKind::slice:
     case ExpressionKind::unary:
@@ -1366,6 +1462,9 @@ Type TypeChecker::check_expression(const Expression& expression, const TypeAnnot
         break;
     case ExpressionKind::array:
         actual = check_array_literal(expression, wanted);
+        break;
+    case ExpressionKind::tuple:
+        actual = check_tuple_literal(expression, wanted);
         break;
     case ExpressionKind::struct_literal:
         actual = check_struct_literal(expression, wanted);
@@ -1521,6 +1620,14 @@ Type TypeChecker::check_when_expression(const Expression& expression, const Type
     const Type subject = check_expression(*expression.left);
     if (subject.kind == ValueType::enum_type) {
         return check_enum_when_expression(expression, subject, expected);
+    }
+
+    if (subject.kind == ValueType::struct_type) {
+        return check_record_when_expression(expression, subject, expected);
+    }
+
+    if (subject.kind == ValueType::tuple_type) {
+        return check_tuple_when_expression(expression, subject, expected);
     }
 
     if (!is_comparable_type(subject)) {
@@ -2462,7 +2569,10 @@ Type TypeChecker::check_enum_when_expression(const Expression& expression, const
             has_wildcard = true;
         } else {
             VariantResolution resolution = resolve_variant_pattern(pattern, subject);
-            covered_tags.insert(resolution.tag);
+            if (!covered_tags.insert(resolution.tag).second) {
+                throw std::runtime_error(diagnostic(pattern.location, "duplicate when branch for variant '" +
+                                                                          base_name(resolution.variant_name) + "'"));
+            }
             if (resolution.binds_payload) {
                 binding_name = resolution.binding_name;
                 binding_type = resolution.payload_type;
@@ -2494,6 +2604,138 @@ Type TypeChecker::check_enum_when_expression(const Expression& expression, const
     return result_type;
 }
 
+void TypeChecker::bind_record_pattern(const Expression& pattern, const Type& subject) {
+    if (pattern.kind != ExpressionKind::struct_literal) {
+        throw std::runtime_error(diagnostic(pattern.location, "expected record destructuring pattern"));
+    }
+
+    if (pattern.lexeme != subject.name) {
+        throw std::runtime_error(diagnostic(pattern.location, "expected record pattern '" + type_name(subject) +
+                                                                  "' but got '" + pattern.lexeme + "'"));
+    }
+
+    const auto definition = structs_.find(subject.name);
+    if (definition == structs_.end()) {
+        throw std::runtime_error(diagnostic(pattern.location, "unknown record '" + subject.name + "'"));
+    }
+
+    if (definition->second.generic_parameters.size() != subject.arguments.size()) {
+        throw std::runtime_error(
+            diagnostic(pattern.location, "record '" + subject.name + "' expects " +
+                                             std::to_string(definition->second.generic_parameters.size()) +
+                                             " type arguments but got " + std::to_string(subject.arguments.size())));
+    }
+
+    std::unordered_map<std::string, Type> substitutions;
+    for (std::size_t index = 0; index < definition->second.generic_parameters.size(); ++index) {
+        substitutions.emplace(definition->second.generic_parameters[index].name, subject.arguments[index]);
+    }
+
+    std::unordered_set<std::string> fields;
+    std::unordered_set<std::string> bindings;
+    for (std::size_t index = 0; index < pattern.field_names.size(); ++index) {
+        const std::string& field_name = pattern.field_names[index];
+        if (!fields.insert(field_name).second) {
+            throw std::runtime_error(
+                diagnostic(pattern.location, "duplicate field '" + field_name + "' in record pattern"));
+        }
+
+        const auto field = definition->second.field_indices.find(field_name);
+        if (field == definition->second.field_indices.end()) {
+            throw std::runtime_error(
+                diagnostic(pattern.location, "record '" + subject.name + "' has no field '" + field_name + "'"));
+        }
+
+        const Expression& binding = *pattern.arguments[index];
+        if (binding.kind != ExpressionKind::identifier) {
+            throw std::runtime_error(diagnostic(binding.location, "expected binding name in record pattern"));
+        }
+
+        if (binding.lexeme == "_") {
+            continue;
+        }
+
+        if (!bindings.insert(binding.lexeme).second) {
+            throw std::runtime_error(
+                diagnostic(binding.location, "duplicate binding '" + binding.lexeme + "' in record pattern"));
+        }
+
+        const Type field_type = substitute_type(definition->second.fields[field->second].type, substitutions);
+        declare_binding(binding.lexeme, field_type, false, binding.location);
+    }
+}
+
+void TypeChecker::bind_tuple_pattern(const Expression& pattern, const Type& subject) {
+    if (pattern.kind != ExpressionKind::tuple) {
+        throw std::runtime_error(diagnostic(pattern.location, "expected tuple destructuring pattern"));
+    }
+
+    if (pattern.arguments.size() != subject.arguments.size()) {
+        throw std::runtime_error(
+            diagnostic(pattern.location, "tuple pattern expected " + std::to_string(subject.arguments.size()) +
+                                             " elements but got " + std::to_string(pattern.arguments.size())));
+    }
+
+    std::unordered_set<std::string> bindings;
+    for (std::size_t index = 0; index < pattern.arguments.size(); ++index) {
+        const Expression& binding = *pattern.arguments[index];
+        if (binding.kind != ExpressionKind::identifier) {
+            throw std::runtime_error(diagnostic(binding.location, "expected binding name in tuple pattern"));
+        }
+
+        if (binding.lexeme == "_") {
+            continue;
+        }
+
+        if (!bindings.insert(binding.lexeme).second) {
+            throw std::runtime_error(
+                diagnostic(binding.location, "duplicate binding '" + binding.lexeme + "' in tuple pattern"));
+        }
+
+        declare_binding(binding.lexeme, subject.arguments[index], false, binding.location);
+    }
+}
+
+Type TypeChecker::check_record_when_expression(const Expression& expression, const Type& subject,
+                                               const TypeAnnotation& expected) {
+    if (expression.arguments.size() != 2) {
+        throw std::runtime_error(
+            diagnostic(expression.location, "record destructuring when expression needs exactly one arm"));
+    }
+
+    const Expression& pattern = *expression.arguments[0];
+    const Expression& result = *expression.arguments[1];
+    const bool wildcard = pattern.kind == ExpressionKind::identifier && pattern.lexeme == "_";
+
+    push_scope();
+    if (!wildcard) {
+        bind_record_pattern(pattern, subject);
+    }
+    const Type result_type = check_expression(result, expected);
+    pop_scope();
+    return result_type;
+}
+
+Type TypeChecker::check_tuple_when_expression(const Expression& expression, const Type& subject,
+                                              const TypeAnnotation& expected) {
+    if (expression.arguments.size() != 2) {
+        throw std::runtime_error(
+            diagnostic(expression.location, "tuple destructuring when expression needs exactly one arm"));
+    }
+
+    const Expression& pattern = *expression.arguments[0];
+    const Expression& result = *expression.arguments[1];
+    const bool wildcard = pattern.kind == ExpressionKind::identifier && pattern.lexeme == "_";
+
+    push_scope();
+    if (!wildcard) {
+        bind_tuple_pattern(pattern, subject);
+    }
+    const Type result_type = check_expression(result, expected);
+    pop_scope();
+    return result_type;
+}
+
 bool TypeChecker::collect_generic_constraints(
     const Type& pattern, const Type& actual,
     std::unordered_map<std::string, std::vector<std::pair<Type, bool>>>& constraints, bool preferred) const {
@@ -2508,6 +2750,21 @@ bool TypeChecker::collect_generic_constraints(
         }
 
         return collect_generic_constraints(*pattern.element, *actual.element, constraints, preferred);
+    }
+
+    if (pattern.kind == ValueType::tuple_type) {
+        if (actual.kind != ValueType::tuple_type || pattern.arguments.size() != actual.arguments.size()) {
+            return false;
+        }
+
+        for (std::size_t index = 0; index < pattern.arguments.size(); ++index) {
+            if (!collect_generic_constraints(pattern.arguments[index], actual.arguments[index], constraints,
+                                             preferred)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     if (pattern.kind == ValueType::struct_type || pattern.kind == ValueType::enum_type) {
@@ -2557,6 +2814,40 @@ Type TypeChecker::check_array_literal(const Expression& expression, const TypeAn
     }
 
     return make_array_type(element_type);
+}
+
+Type TypeChecker::check_tuple_literal(const Expression& expression, const TypeAnnotation& expected) {
+    if (expression.arguments.size() < 2) {
+        throw std::runtime_error(diagnostic(expression.location, "tuple literal needs at least two elements"));
+    }
+
+    if (expected.has_type && expected.type.kind != ValueType::tuple_type) {
+        expect_type(expected.type, make_tuple_type({}), expression.location);
+    }
+
+    if (expected.has_type && expected.type.arguments.size() != expression.arguments.size()) {
+        throw std::runtime_error(
+            diagnostic(expression.location, "tuple literal expected " + std::to_string(expected.type.arguments.size()) +
+                                                " elements but got " + std::to_string(expression.arguments.size())));
+    }
+
+    std::vector<Type> elements;
+    elements.reserve(expression.arguments.size());
+    for (std::size_t index = 0; index < expression.arguments.size(); ++index) {
+        TypeAnnotation element_expected;
+        if (expected.has_type) {
+            element_expected = expected_type(expected.type.arguments[index]);
+        }
+        elements.push_back(check_expression(*expression.arguments[index], element_expected));
+    }
+
+    Type result = make_tuple_type(std::move(elements));
+    if (expected.has_type) {
+        expect_type(expected.type, result, expression.location);
+        return expected.type;
+    }
+
+    return result;
 }
 
 Type TypeChecker::check_struct_literal(const Expression& expression, const TypeAnnotation& expected) {
@@ -2764,6 +3055,20 @@ bool TypeChecker::same_type(const Type& left, const Type& right) const {
         return false;
     }
 
+    if (left.kind == ValueType::tuple_type) {
+        if (left.arguments.size() != right.arguments.size()) {
+            return false;
+        }
+
+        for (std::size_t index = 0; index < left.arguments.size(); ++index) {
+            if (!same_type(left.arguments[index], right.arguments[index])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     if (left.kind == ValueType::generic_type || left.kind == ValueType::struct_type ||
         left.kind == ValueType::enum_type) {
         if (left.name != right.name || left.arguments.size() != right.arguments.size()) {
@@ -2827,6 +3132,7 @@ bool TypeChecker::is_cast_allowed(const Type& source, const Type& target) const 
     }
 
     if (source.kind == ValueType::array_type || target.kind == ValueType::array_type ||
+        source.kind == ValueType::tuple_type || target.kind == ValueType::tuple_type ||
         source.kind == ValueType::struct_type || target.kind == ValueType::struct_type ||
         source.kind == ValueType::enum_type || target.kind == ValueType::enum_type ||
         source.kind == ValueType::unit_type || target.kind == ValueType::unit_type ||
@@ -2902,6 +3208,7 @@ unsigned long long TypeChecker::max_integer_literal(ValueType target) const {
     case ValueType::text_type:
     case ValueType::unit_type:
     case ValueType::array_type:
+    case ValueType::tuple_type:
     case ValueType::generic_type:
     case ValueType::struct_type:
     case ValueType::enum_type:
