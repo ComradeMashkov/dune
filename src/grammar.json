@@ -189,6 +189,10 @@
         "type": "SEQ",
         "members": [
           {
+            "type": "STRING",
+            "value": "fn"
+          },
+          {
             "type": "FIELD",
             "name": "name",
             "content": {
@@ -258,6 +262,10 @@
         {
           "type": "STRING",
           "value": "foreign"
+        },
+        {
+          "type": "STRING",
+          "value": "fn"
         },
         {
           "type": "FIELD",

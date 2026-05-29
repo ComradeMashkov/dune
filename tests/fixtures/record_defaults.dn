@@ -3,7 +3,7 @@ record Optimizer {
     momentum: real64 = 0.0,
     name: text = "sgd",
 
-    new(lr: real64): Optimizer {
+    fn new(lr: real64): Optimizer {
         return Optimizer { lr: lr };
     }
 }

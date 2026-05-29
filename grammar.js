@@ -69,6 +69,7 @@ module.exports = grammar({
     import_statement: $ => seq("import", field("module", $.identifier), optional(";")),
 
     function_declaration: $ => prec(2, seq(
+      "fn",
       field("name", $.identifier),
       optional($.generic_parameters),
       field("parameters", $.parameter_list),
@@ -78,6 +79,7 @@ module.exports = grammar({
 
     foreign_function_declaration: $ => seq(
       "foreign",
+      "fn",
       field("name", $.identifier),
       optional($.generic_parameters),
       field("parameters", $.parameter_list),

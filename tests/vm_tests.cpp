@@ -76,24 +76,24 @@ int main() {
                                   "if x == 0 { print(42); } else { print(0); }"),
                        "42\n", "expected control flow output") &&
              passed;
-    passed = expect_eq(run_source("add(a, b) { return a + b; } print(add(10, 20));"), "30\n",
+    passed = expect_eq(run_source("fn add(a, b) { return a + b; } print(add(10, 20));"), "30\n",
                        "expected function call output") &&
              passed;
-    passed = expect_eq(run_source("add(a: int, b: int): int { return a + b; } "
-                                  "twice(value: int): int { return add(value, value); } "
+    passed = expect_eq(run_source("fn add(a: int, b: int): int { return a + b; } "
+                                  "fn twice(value: int): int { return add(value, value); } "
                                   "print(add(twice(5), add(3, 4)));"),
                        "17\n", "expected nested function call output") &&
              passed;
-    passed = expect_eq(run_source("const HIDDEN: int = 7; hidden(): int { return HIDDEN; } print(hidden());"), "7\n",
+    passed = expect_eq(run_source("const HIDDEN: int = 7; fn hidden(): int { return HIDDEN; } print(hidden());"), "7\n",
                        "expected top-level constant in function output") &&
              passed;
-    passed = expect_eq(run_source("choose(flag: bool, yes: int, no: int): int { "
+    passed = expect_eq(run_source("fn choose(flag: bool, yes: int, no: int): int { "
                                   "if flag { return yes; } else { return no; } } "
                                   "print(choose(false, 1, 2));"),
                        "2\n", "expected function return through branches") &&
              passed;
-    passed = expect_eq(run_source("show(value: int): int { return value + 1; } "
-                                  "show(value: bool): int { if value { return 10; } else { return 20; } } "
+    passed = expect_eq(run_source("fn show(value: int): int { return value + 1; } "
+                                  "fn show(value: bool): int { if value { return 10; } else { return 20; } } "
                                   "print(show(41)); print(show(false));"),
                        "42\n20\n", "expected overloaded function dispatch") &&
              passed;
@@ -109,8 +109,8 @@ int main() {
                                   "print(\"bool={}, glyph={}, real={}\", true, 'x', 2.5);"),
                        "Dune v1\nbool=1, glyph=x, real=2.5\n", "expected formatted print output") &&
              passed;
-    passed = expect_eq(run_source("log(message: text): unit { print(message); return; } "
-                                  "noop(): unit { } "
+    passed = expect_eq(run_source("fn log(message: text): unit { print(message); return; } "
+                                  "fn noop(): unit { } "
                                   "tiny: i8 = 127; small: i16 = 32767; mid: i32 = 2147483647; "
                                   "wide: i64 = 9000000000; index: usize = 5; offset: isize = 6; "
                                   "rough: real32 = 1 + 2.5; exact: real64 = 2.25; "
@@ -150,7 +150,7 @@ int main() {
                        "-17\n-17\n2\n1\n0\n1\n8.5\n65\nB\n0\n0\n3\n2\n1\n13\n1\n1\n1\n",
                        "expected operators casts and methods output") &&
              passed;
-    passed = expect_eq(run_source("foreign c_sqrt(value: real64): real64 = \"sqrt\"; "
+    passed = expect_eq(run_source("foreign fn c_sqrt(value: real64): real64 = \"sqrt\"; "
                                   "message: text = \"dune language\"; print(message[0]); "
                                   "print(message[5:13]); print(message[:4]); print(message[5:]); "
                                   "values: [int] = [1, 2, 3, 4, 5]; middle: [int] = values[1:4]; "
@@ -178,8 +178,8 @@ int main() {
                        "expected array and text stdlib module output") &&
              passed;
     passed = expect_eq(run_source("import array; import math; "
-                                  "identity<T>(value: T): T { return value; } "
-                                  "twice<T is numeric>(value: T): T { return value + value; } "
+                                  "fn identity<T>(value: T): T { return value; } "
+                                  "fn twice<T is numeric>(value: T): T { return value + value; } "
                                   "words: [text] = [\"dune\", \"lang\"]; "
                                   "reversed: [text] = array.reverse(words); "
                                   "rough: real32 = 1.5; "
@@ -196,13 +196,13 @@ int main() {
                        "7\n7\n4\n", "expected comments and zero-based array output") &&
              passed;
     passed = expect_eq(run_source("record Point { x: int, y: int, "
-                                  "sum(): int { return this.x + this.y; } } "
-                                  "make(x: int, y: int): Point { return Point { x: x, y: y }; } "
+                                  "fn sum(): int { return this.x + this.y; } } "
+                                  "fn make(x: int, y: int): Point { return Point { x: x, y: y }; } "
                                   "p: Point = make(10, 20); print(p.x); print(p.y); print(p.sum());"),
                        "10\n20\n30\n", "expected record fields and methods output") &&
              passed;
-    passed = expect_eq(run_source("record Box<T> { value: T, value_or(default: T): T { return this.value; } } "
-                                  "boxed<T>(value: T): Box<T> { return Box { value: value }; } "
+    passed = expect_eq(run_source("record Box<T> { value: T, fn value_or(default: T): T { return this.value; } } "
+                                  "fn boxed<T>(value: T): Box<T> { return Box { value: value }; } "
                                   "number: Box<int> = boxed(7); label: Box<text> = boxed(\"done\"); "
                                   "print(number.value_or(0)); print(label.value_or(\"bad\")); "
                                   "print(when number.value { is 7 { 70 } is _ { 0 } }); "
@@ -211,9 +211,9 @@ int main() {
              passed;
     passed = expect_eq(run_source("contract Shape { area(): real64; } "
                                   "record Circle with Shape { radius: real64, "
-                                  "new(radius: real64): Circle { return Circle { radius: radius }; } "
-                                  "area(): real64 { return 3.0 * this.radius * this.radius; } } "
-                                  "area_of<T is Shape>(shape: T): real64 { return shape.area(); } "
+                                  "fn new(radius: real64): Circle { return Circle { radius: radius }; } "
+                                  "fn area(): real64 { return 3.0 * this.radius * this.radius; } } "
+                                  "fn area_of<T is Shape>(shape: T): real64 { return shape.area(); } "
                                   "circle: Circle = Circle.new(2.0); "
                                   "print(circle.area()); print(area_of(circle));"),
                        "12\n12\n", "expected constructors, contracts, and static contract-bound calls") &&
