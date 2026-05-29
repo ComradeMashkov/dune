@@ -425,6 +425,20 @@ boxed<T>(value: T): Box<T> {
 answer: Box<int> = boxed(42);
 ```
 
+Record fields can declare default values. A record literal may omit fields that
+have defaults; missing fields without defaults are still rejected. Defaults are
+evaluated each time a record value is created.
+
+```dn
+record Optimizer {
+  lr: real64 = 0.01,
+  momentum: real64 = 0.0,
+}
+
+base: Optimizer = Optimizer {};
+fast: Optimizer = Optimizer { lr: 0.1 };
+```
+
 Records can declare lightweight constructors and explicitly implement contracts.
 Constructors are statically checked functions associated with the record type;
 they must return the enclosing record type and are called with `Record.new(...)`.
@@ -716,6 +730,7 @@ The current release implements a small compiled language with:
 - generic functions with explicit contract bounds
 - call-site generic instantiation
 - generic records
+- record field defaults
 - record constructors
 - record member visibility
 - contracts and explicit record `with` declarations

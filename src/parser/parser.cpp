@@ -894,7 +894,13 @@ Statement Parser::struct_statement() {
 
         const Token& field = consume_identifier_like("expected record field name");
         consume(TokenType::colon, "expected ':' after record field name");
-        fields.push_back(Parameter{field.lexeme, type_annotation(), location_from_token(field), member_exported});
+        TypeAnnotation field_type = type_annotation();
+        std::shared_ptr<Expression> default_value;
+        if (match(TokenType::equal)) {
+            default_value = expression();
+        }
+        fields.push_back(
+            Parameter{field.lexeme, std::move(field_type), location_from_token(field), member_exported, default_value});
 
         if (check(TokenType::right_brace)) {
             break;

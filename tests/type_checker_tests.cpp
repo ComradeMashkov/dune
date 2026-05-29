@@ -195,6 +195,11 @@ int main() {
                           "p: Point = make(1.5, 2.5); total: real64 = p.sum(); x: real64 = p.x;",
                           "expected records, fields, literals, and methods to validate") &&
              passed;
+    passed = expect_valid("record Optimizer { lr: real64 = 0.01, momentum: real64 = 0.0, name: text = \"sgd\" } "
+                          "base: Optimizer = Optimizer {}; fast: Optimizer = Optimizer { lr: 0.1 }; "
+                          "label: text = fast.name;",
+                          "expected record field defaults to validate") &&
+             passed;
     passed = expect_valid("record Box<T> { value: T, value_or(default: T): T { return this.value; } } "
                           "boxed<T>(value: T): Box<T> { return Box { value: value }; } "
                           "number: Box<int> = boxed(7); label: Box<text> = boxed(\"done\"); "
@@ -467,6 +472,19 @@ int main() {
              passed;
     passed = expect_error_contains("record Point { x: int, y: int } p: Point = Point { x: 1 };",
                                    "missing field 'y' for record 'Point'", "expected missing record field") &&
+             passed;
+    passed = expect_error_contains("record Config { required: int, optional: int = 7 } "
+                                   "config: Config = Config { optional: 1 };",
+                                   "missing field 'required' for record 'Config'",
+                                   "expected required record field to remain mandatory") &&
+             passed;
+    passed =
+        expect_error_contains("record Config { value: int = true } config: Config = Config {};",
+                              "expected type 'int' but got 'bool'", "expected record default field type mismatch") &&
+        passed;
+    passed = expect_error_contains("record Config { base: int = 10, doubled: int = base * 2 } "
+                                   "config: Config = Config {};",
+                                   "undefined variable 'base'", "expected record defaults not to see sibling fields") &&
              passed;
     passed = expect_error_contains("record Point { x: int } p: Point = Point { x: true };",
                                    "expected type 'int' but got 'bool'", "expected record field type mismatch") &&

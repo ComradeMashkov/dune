@@ -538,6 +538,38 @@ bool parses_records_and_record_literals() {
     return passed;
 }
 
+bool parses_record_field_defaults() {
+    const dune::Program program =
+        parse_source("record Optimizer { lr: real64 = 0.01, momentum: real64 = 0.0, name: text = \"sgd\" } "
+                     "optimizer: Optimizer = Optimizer { lr: 0.1 };");
+
+    if (!expect(program.statements.size() == 2, "expected record and binding")) {
+        return false;
+    }
+
+    bool passed = true;
+    const dune::Statement& record = program.statements[0];
+    passed = expect(record.kind == dune::StatementKind::struct_statement, "expected record statement") && passed;
+    passed = expect(record.parameters.size() == 3, "expected three record fields") && passed;
+    passed = expect(record.parameters[0].default_value != nullptr, "expected lr default") && passed;
+    passed = expect(record.parameters[0].default_value->kind == dune::ExpressionKind::floating,
+                    "expected floating default") &&
+             passed;
+    passed = expect(record.parameters[1].default_value != nullptr, "expected momentum default") && passed;
+    passed = expect(record.parameters[2].default_value != nullptr, "expected name default") && passed;
+    passed =
+        expect(record.parameters[2].default_value->kind == dune::ExpressionKind::string, "expected string default") &&
+        passed;
+
+    const dune::Expression& literal = *program.statements[1].expression;
+    passed =
+        expect(literal.kind == dune::ExpressionKind::struct_literal, "expected record literal expression") && passed;
+    passed = expect(literal.field_names.size() == 1, "expected one explicit field") && passed;
+    passed = expect(literal.field_names[0] == "lr", "expected lr override") && passed;
+
+    return passed;
+}
+
 bool parses_generic_records_and_when() {
     const dune::Program program = parse_source("record Box<T> { value: T } "
                                                "box: Box<int> = Box { value: 7 }; "
@@ -695,6 +727,7 @@ int main() {
     passed = parses_generic_functions() && passed;
     passed = parses_receiver_methods() && passed;
     passed = parses_records_and_record_literals() && passed;
+    passed = parses_record_field_defaults() && passed;
     passed = parses_generic_records_and_when() && passed;
     passed = parses_record_constructors_visibility_and_contracts() && passed;
     passed = parses_choices_and_variant_when() && passed;

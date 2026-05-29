@@ -280,7 +280,8 @@ void Compiler::collect_structs(const std::unordered_map<std::string, TypeChecker
         StructLayout layout;
         for (const TypeChecker::StructField& field : definition.fields) {
             layout.field_indices.emplace(field.name, layout.fields.size());
-            layout.fields.push_back(Parameter{field.name, TypeAnnotation{true, field.type}, field.location});
+            layout.fields.push_back(Parameter{field.name, TypeAnnotation{true, field.type}, field.location,
+                                              field.exported, field.default_value});
         }
 
         structs_.emplace(name, std::move(layout));
@@ -789,7 +790,12 @@ void Compiler::compile_struct_literal(const Expression& expression) {
     for (const Parameter& field : layout->second.fields) {
         const auto source = std::find(expression.field_names.begin(), expression.field_names.end(), field.name);
         if (source == expression.field_names.end()) {
-            throw std::runtime_error("missing field '" + field.name + "'");
+            if (field.default_value == nullptr) {
+                throw std::runtime_error("missing field '" + field.name + "'");
+            }
+
+            compile_expression(*field.default_value);
+            continue;
         }
 
         const std::size_t index = static_cast<std::size_t>(source - expression.field_names.begin());
