@@ -86,6 +86,40 @@ int main() {
                            }) &&
              passed;
 
+    passed = expect_tokens("for value in values { print(value); } for i in 0..items.len() { print(i); }",
+                           {
+                               {for_keyword, "for"},
+                               {identifier, "value"},
+                               {in_keyword, "in"},
+                               {identifier, "values"},
+                               {left_brace, "{"},
+                               {print, "print"},
+                               {left_paren, "("},
+                               {identifier, "value"},
+                               {right_paren, ")"},
+                               {semicolon, ";"},
+                               {right_brace, "}"},
+                               {for_keyword, "for"},
+                               {identifier, "i"},
+                               {in_keyword, "in"},
+                               {number, "0"},
+                               {dot_dot, ".."},
+                               {identifier, "items"},
+                               {dot, "."},
+                               {identifier, "len"},
+                               {left_paren, "("},
+                               {right_paren, ")"},
+                               {left_brace, "{"},
+                               {print, "print"},
+                               {left_paren, "("},
+                               {identifier, "i"},
+                               {right_paren, ")"},
+                               {semicolon, ";"},
+                               {right_brace, "}"},
+                               {eof, ""},
+                           }) &&
+             passed;
+
     passed = expect_tokens("if true { x = 3; } else { while x >= 0 { x = x - 1; } print(x == false); }",
                            {
                                {if_keyword, "if"},

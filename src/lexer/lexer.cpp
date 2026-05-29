@@ -159,6 +159,10 @@ Token Lexer::next_token() {
     case ',':
         return make_token(TokenType::comma, start, line, column);
     case '.':
+        if (match('.')) {
+            return make_token(TokenType::dot_dot, start, line, column);
+        }
+
         return make_token(TokenType::dot, start, line, column);
     case ';':
         return make_token(TokenType::semicolon, start, line, column);
@@ -323,6 +327,10 @@ Token Lexer::identifier(std::size_t start, std::size_t line, std::size_t column)
 
     if (lexeme == "for") {
         return Token{TokenType::for_keyword, lexeme, line, column};
+    }
+
+    if (lexeme == "in") {
+        return Token{TokenType::in_keyword, lexeme, line, column};
     }
 
     if (lexeme == "break") {
@@ -503,11 +511,9 @@ Token Lexer::number(std::size_t start, std::size_t line, std::size_t column) {
 
     consume_digits([](char value) { return std::isdigit(static_cast<unsigned char>(value)); }, "decimal", true);
 
-    if (peek() == '.') {
+    if (peek() == '.' && current_ + 1 < source_.size() &&
+        std::isdigit(static_cast<unsigned char>(source_[current_ + 1]))) {
         advance();
-        if (!std::isdigit(static_cast<unsigned char>(peek()))) {
-            throw std::runtime_error("expected digit after decimal point");
-        }
 
         consume_digits([](char value) { return std::isdigit(static_cast<unsigned char>(value)); }, "decimal", true);
         if (std::isalpha(static_cast<unsigned char>(peek()))) {

@@ -1,0 +1,20 @@
+values: [int] = [1, 2, 3, 4];
+
+sum = 0;
+for value in values {
+  sum = sum + value;
+}
+
+weighted = 0;
+for i in 0..values.len() {
+  weighted = weighted + values[i] * i;
+}
+
+empty = 9;
+for i in 5..2 {
+  empty = empty + i;
+}
+
+print(sum);
+print(weighted);
+print(empty);

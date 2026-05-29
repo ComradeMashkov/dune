@@ -111,6 +111,27 @@ bool parses_operator_precedence() {
     return passed;
 }
 
+bool parses_membership_operator_precedence() {
+    const dune::Program program = parse_source("ok = 1 + 1 in values && enabled;");
+
+    if (!expect(program.statements.size() == 1, "expected one statement")) {
+        return false;
+    }
+
+    bool passed = true;
+    const dune::Expression& expression = *program.statements[0].expression;
+    passed = expect(expression.kind == dune::ExpressionKind::binary, "expected root binary expression") && passed;
+    passed = expect(expression.lexeme == "&&", "expected logical and at root") && passed;
+    passed = expect(expression.left->kind == dune::ExpressionKind::binary, "expected membership expression") && passed;
+    passed = expect(expression.left->lexeme == "in", "expected in operator") && passed;
+    passed =
+        expect(expression.left->left->kind == dune::ExpressionKind::binary, "expected arithmetic left side") && passed;
+    passed = expect(expression.left->left->lexeme == "+", "expected addition before membership") && passed;
+    passed = expect(expression.left->right->lexeme == "values", "expected membership container") && passed;
+    passed = expect(expression.right->lexeme == "enabled", "expected logical right side") && passed;
+    return passed;
+}
+
 bool parses_control_flow() {
     const dune::Program program = parse_source("x = 3; while x > 0 { x = x - 1; } "
                                                "if x == 0 { print(true); } else { print(false); }");
@@ -506,6 +527,37 @@ bool parses_stdlib_primitives() {
     return passed;
 }
 
+bool parses_for_in_and_ranges() {
+    const dune::Program program = parse_source("values: [int] = [1, 2, 3]; "
+                                               "for value in values { print(value); } "
+                                               "for i in 0..values.len() { print(values[i]); }");
+
+    if (!expect(program.statements.size() == 3, "expected binding and two for-in statements")) {
+        return false;
+    }
+
+    bool passed = true;
+    const dune::Statement& array_loop = program.statements[1];
+    passed =
+        expect(array_loop.kind == dune::StatementKind::for_in_statement, "expected array for-in statement") && passed;
+    passed = expect(array_loop.name == "value", "expected array loop variable") && passed;
+    passed =
+        expect(array_loop.expression->kind == dune::ExpressionKind::identifier, "expected array iterable") && passed;
+    passed = expect(array_loop.body.size() == 1, "expected array loop body") && passed;
+
+    const dune::Statement& range_loop = program.statements[2];
+    passed =
+        expect(range_loop.kind == dune::StatementKind::for_in_statement, "expected range for-in statement") && passed;
+    passed = expect(range_loop.name == "i", "expected range loop variable") && passed;
+    passed = expect(range_loop.expression->kind == dune::ExpressionKind::range, "expected range expression") && passed;
+    passed = expect(range_loop.expression->left->lexeme == "0", "expected range start") && passed;
+    passed =
+        expect(range_loop.expression->right->kind == dune::ExpressionKind::method_call, "expected range end call") &&
+        passed;
+    passed = expect(range_loop.expression->right->lexeme == "len", "expected len range end") && passed;
+    return passed;
+}
+
 bool parses_generic_functions() {
     const dune::Program program =
         parse_source("fn choose<T, R is real, U is numeric>(left: T, middle: R, right: U): U { "
@@ -790,6 +842,7 @@ int main() {
     passed = parses_formatted_print() && passed;
     passed = parses_format_expression_and_numeric_literals() && passed;
     passed = parses_operator_precedence() && passed;
+    passed = parses_membership_operator_precedence() && passed;
     passed = parses_control_flow() && passed;
     passed = parses_assignment_targets() && passed;
     passed = parses_functions_and_types() && passed;
@@ -801,6 +854,7 @@ int main() {
     passed = parses_constants_and_module_members() && passed;
     passed = parses_casts_unary_logical_and_methods() && passed;
     passed = parses_stdlib_primitives() && passed;
+    passed = parses_for_in_and_ranges() && passed;
     passed = parses_generic_functions() && passed;
     passed = parses_receiver_methods() && passed;
     passed = parses_records_and_record_literals() && passed;

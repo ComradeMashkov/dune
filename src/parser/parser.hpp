@@ -43,6 +43,7 @@ private:
     Statement export_statement();
     Statement extern_statement();
     Statement for_statement();
+    Statement for_in_statement(const Token& keyword);
     Statement function_statement(bool is_extern = false);
     Statement finish_function_statement(const Token& name, std::vector<GenericParameter> leading_generics = {},
                                         bool is_extern = false);
@@ -67,9 +68,11 @@ private:
 
     std::unique_ptr<Expression> assignment_target();
     std::unique_ptr<Expression> expression();
+    std::unique_ptr<Expression> range();
     std::unique_ptr<Expression> logical_or();
     std::unique_ptr<Expression> logical_and();
     std::unique_ptr<Expression> equality();
+    std::unique_ptr<Expression> membership();
     std::unique_ptr<Expression> comparison();
     std::unique_ptr<Expression> term();
     std::unique_ptr<Expression> factor();

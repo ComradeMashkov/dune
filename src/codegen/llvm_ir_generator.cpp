@@ -580,6 +580,8 @@ bool LlvmIrGenerator::emit_statement(const Statement& statement, std::ostream& o
         pop_scope();
         return false;
     }
+    case StatementKind::for_in_statement:
+        return emit_for_in_statement(statement, output);
     case StatementKind::break_statement:
         if (loop_stack_.empty()) {
             throw std::runtime_error("break statement outside loop");
@@ -617,6 +619,140 @@ bool LlvmIrGenerator::emit_statement(const Statement& statement, std::ostream& o
         return false;
     }
 
+    return false;
+}
+
+bool LlvmIrGenerator::emit_for_in_statement(const Statement& statement, std::ostream& output) {
+    const auto type = expression_types_.find(statement.expression.get());
+    if (type == expression_types_.end()) {
+        throw std::runtime_error("missing inferred for-in iterable type");
+    }
+
+    push_scope();
+    const bool terminated = statement.expression->kind == ExpressionKind::range
+                                ? emit_range_for_in_statement(statement, type->second, output)
+                                : emit_array_for_in_statement(statement, type->second, output);
+    pop_scope();
+    return terminated;
+}
+
+bool LlvmIrGenerator::emit_range_for_in_statement(const Statement& statement, const Type& element_type,
+                                                  std::ostream& output) {
+    const Expression& range = *statement.expression;
+    const TypedValue start = emit_expression(*range.left, output);
+    const TypedValue end = emit_expression(*range.right, output);
+    const std::string current_pointer = next_register();
+    const std::string end_pointer = next_register();
+    const std::string item_pointer = next_register();
+    output << "  " << current_pointer << " = alloca " << llvm_type(element_type) << '\n';
+    output << "  store " << llvm_type(element_type) << ' ' << start.name << ", ptr " << current_pointer << '\n';
+    output << "  " << end_pointer << " = alloca " << llvm_type(element_type) << '\n';
+    output << "  store " << llvm_type(element_type) << ' ' << end.name << ", ptr " << end_pointer << '\n';
+    output << "  " << item_pointer << " = alloca " << llvm_type(element_type) << '\n';
+    declare_scoped_local(statement.name, Local{item_pointer, element_type});
+
+    const std::string condition_label = next_label("for_in_range_cond");
+    const std::string body_label = next_label("for_in_range_body");
+    const std::string increment_label = next_label("for_in_range_increment");
+    const std::string end_label = next_label("for_in_range_end");
+    output << "  br label %" << condition_label << '\n';
+    output << condition_label << ":\n";
+    const std::string current_value = next_register();
+    const std::string end_value = next_register();
+    const std::string condition = next_register();
+    output << "  " << current_value << " = load " << llvm_type(element_type) << ", ptr " << current_pointer << '\n';
+    output << "  " << end_value << " = load " << llvm_type(element_type) << ", ptr " << end_pointer << '\n';
+    output << "  " << condition << " = icmp " << (is_unsigned_type(element_type.kind) ? "ult" : "slt") << ' '
+           << llvm_type(element_type) << ' ' << current_value << ", " << end_value << '\n';
+    output << "  br i1 " << condition << ", label %" << body_label << ", label %" << end_label << '\n';
+
+    output << body_label << ":\n";
+    output << "  store " << llvm_type(element_type) << ' ' << current_value << ", ptr " << item_pointer << '\n';
+    loop_stack_.push_back(LoopLabels{end_label, increment_label});
+    push_scope();
+    const bool body_terminated = emit_statements(statement.body, output);
+    pop_scope();
+    loop_stack_.pop_back();
+    if (!body_terminated) {
+        output << "  br label %" << increment_label << '\n';
+    }
+
+    output << increment_label << ":\n";
+    const std::string value = next_register();
+    const std::string next_value = next_register();
+    output << "  " << value << " = load " << llvm_type(element_type) << ", ptr " << current_pointer << '\n';
+    output << "  " << next_value << " = add " << llvm_type(element_type) << ' ' << value << ", 1\n";
+    output << "  store " << llvm_type(element_type) << ' ' << next_value << ", ptr " << current_pointer << '\n';
+    output << "  br label %" << condition_label << '\n';
+    output << end_label << ":\n";
+    return false;
+}
+
+bool LlvmIrGenerator::emit_array_for_in_statement(const Statement& statement, const Type& iterable_type,
+                                                  std::ostream& output) {
+    if (iterable_type.kind != ValueType::array_type || iterable_type.element == nullptr) {
+        throw std::runtime_error("for-in used with non-array type");
+    }
+
+    const Type& element_type = *iterable_type.element;
+    const TypedValue iterable = emit_expression(*statement.expression, output);
+    const std::string iterable_pointer = next_register();
+    const std::string index_pointer = next_register();
+    const std::string item_pointer = next_register();
+    output << "  " << iterable_pointer << " = alloca ptr\n";
+    output << "  store ptr " << iterable.name << ", ptr " << iterable_pointer << '\n';
+    output << "  " << index_pointer << " = alloca i64\n";
+    output << "  store i64 0, ptr " << index_pointer << '\n';
+    output << "  " << item_pointer << " = alloca " << llvm_type(element_type) << '\n';
+    declare_scoped_local(statement.name, Local{item_pointer, element_type});
+
+    const std::string condition_label = next_label("for_in_array_cond");
+    const std::string body_label = next_label("for_in_array_body");
+    const std::string increment_label = next_label("for_in_array_increment");
+    const std::string end_label = next_label("for_in_array_end");
+    output << "  br label %" << condition_label << '\n';
+    output << condition_label << ":\n";
+    const std::string index_value = next_register();
+    const std::string array_value = next_register();
+    const std::string length = next_register();
+    const std::string condition = next_register();
+    output << "  " << index_value << " = load i64, ptr " << index_pointer << '\n';
+    output << "  " << array_value << " = load ptr, ptr " << iterable_pointer << '\n';
+    output << "  " << length << " = load i64, ptr " << array_value << '\n';
+    output << "  " << condition << " = icmp slt i64 " << index_value << ", " << length << '\n';
+    output << "  br i1 " << condition << ", label %" << body_label << ", label %" << end_label << '\n';
+
+    output << body_label << ":\n";
+    const std::size_t element_size = llvm_size(element_type);
+    const std::string data_pointer_pointer = next_register();
+    const std::string data = next_register();
+    const std::string offset = next_register();
+    const std::string slot = next_register();
+    const std::string item_value = next_register();
+    output << "  " << data_pointer_pointer << " = getelementptr i8, ptr " << array_value << ", i64 16\n";
+    output << "  " << data << " = load ptr, ptr " << data_pointer_pointer << '\n';
+    output << "  " << offset << " = mul i64 " << index_value << ", " << element_size << '\n';
+    output << "  " << slot << " = getelementptr i8, ptr " << data << ", i64 " << offset << '\n';
+    output << "  " << item_value << " = load " << llvm_type(element_type) << ", ptr " << slot << '\n';
+    output << "  store " << llvm_type(element_type) << ' ' << item_value << ", ptr " << item_pointer << '\n';
+
+    loop_stack_.push_back(LoopLabels{end_label, increment_label});
+    push_scope();
+    const bool body_terminated = emit_statements(statement.body, output);
+    pop_scope();
+    loop_stack_.pop_back();
+    if (!body_terminated) {
+        output << "  br label %" << increment_label << '\n';
+    }
+
+    output << increment_label << ":\n";
+    const std::string index = next_register();
+    const std::string next_index = next_register();
+    output << "  " << index << " = load i64, ptr " << index_pointer << '\n';
+    output << "  " << next_index << " = add i64 " << index << ", 1\n";
+    output << "  store i64 " << next_index << ", ptr " << index_pointer << '\n';
+    output << "  br label %" << condition_label << '\n';
+    output << end_label << ":\n";
     return false;
 }
 
@@ -672,6 +808,8 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_expression(const Expression& e
         return emit_cast_expression(expression, output);
     case ExpressionKind::binary:
         return emit_binary_expression(expression, output);
+    case ExpressionKind::range:
+        throw std::runtime_error("range expressions can only be emitted as for-in iterables");
     case ExpressionKind::when_expression:
         return emit_when_expression(expression, output);
     case ExpressionKind::call:
@@ -690,6 +828,10 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_binary_expression(const Expres
                                                                     std::ostream& output) {
     if (expression.lexeme == "&&" || expression.lexeme == "||") {
         return emit_logical_expression(expression, output);
+    }
+
+    if (expression.lexeme == "in") {
+        return emit_membership_expression(expression, output);
     }
 
     const TypedValue left = emit_expression(*expression.left, output);
@@ -759,6 +901,78 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_binary_expression(const Expres
 
     output << "  " << result << " = " << (is_real_type(left.type.kind) ? "fcmp " : "icmp ") << op << ' '
            << llvm_type(left.type) << ' ' << left.name << ", " << right.name << '\n';
+    return TypedValue{result, make_type(ValueType::bool_type)};
+}
+
+LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_membership_expression(const Expression& expression,
+                                                                        std::ostream& output) {
+    const TypedValue needle = emit_expression(*expression.left, output);
+    const TypedValue container = emit_expression(*expression.right, output);
+
+    if (container.type.kind == ValueType::text_type) {
+        const std::string found = next_register();
+        const std::string result = next_register();
+        output << "  " << found << " = call ptr @strstr(ptr " << container.name << ", ptr " << needle.name << ")\n";
+        output << "  " << result << " = icmp ne ptr " << found << ", null\n";
+        return TypedValue{result, make_type(ValueType::bool_type)};
+    }
+
+    if (container.type.kind != ValueType::array_type || container.type.element == nullptr) {
+        throw std::runtime_error("membership expression used with non-array and non-text type");
+    }
+
+    const Type& element_type = *container.type.element;
+    const std::size_t element_size = llvm_size(element_type);
+    const std::string result_pointer = next_register();
+    const std::string index_pointer = next_register();
+    const std::string length = next_register();
+    const std::string data_pointer_pointer = next_register();
+    const std::string data = next_register();
+    const std::string condition_label = next_label("in_array_cond");
+    const std::string body_label = next_label("in_array_body");
+    const std::string found_label = next_label("in_array_found");
+    const std::string next_label_name = next_label("in_array_next");
+    const std::string end_label = next_label("in_array_end");
+
+    output << "  " << result_pointer << " = alloca i1\n";
+    output << "  " << index_pointer << " = alloca i64\n";
+    output << "  store i1 0, ptr " << result_pointer << '\n';
+    output << "  store i64 0, ptr " << index_pointer << '\n';
+    output << "  " << length << " = load i64, ptr " << container.name << '\n';
+    output << "  " << data_pointer_pointer << " = getelementptr i8, ptr " << container.name << ", i64 16\n";
+    output << "  " << data << " = load ptr, ptr " << data_pointer_pointer << '\n';
+    output << "  br label %" << condition_label << '\n';
+
+    output << condition_label << ":\n";
+    const std::string index = next_register();
+    const std::string has_item = next_register();
+    output << "  " << index << " = load i64, ptr " << index_pointer << '\n';
+    output << "  " << has_item << " = icmp slt i64 " << index << ", " << length << '\n';
+    output << "  br i1 " << has_item << ", label %" << body_label << ", label %" << end_label << '\n';
+
+    output << body_label << ":\n";
+    const std::string offset = next_register();
+    const std::string slot = next_register();
+    const std::string element = next_register();
+    output << "  " << offset << " = mul i64 " << index << ", " << element_size << '\n';
+    output << "  " << slot << " = getelementptr i8, ptr " << data << ", i64 " << offset << '\n';
+    output << "  " << element << " = load " << llvm_type(element_type) << ", ptr " << slot << '\n';
+    const TypedValue matches = emit_equality_comparison(TypedValue{element, element_type}, needle, output);
+    output << "  br i1 " << matches.name << ", label %" << found_label << ", label %" << next_label_name << '\n';
+
+    output << found_label << ":\n";
+    output << "  store i1 1, ptr " << result_pointer << '\n';
+    output << "  br label %" << end_label << '\n';
+
+    output << next_label_name << ":\n";
+    const std::string incremented = next_register();
+    output << "  " << incremented << " = add i64 " << index << ", 1\n";
+    output << "  store i64 " << incremented << ", ptr " << index_pointer << '\n';
+    output << "  br label %" << condition_label << '\n';
+
+    output << end_label << ":\n";
+    const std::string result = next_register();
+    output << "  " << result << " = load i1, ptr " << result_pointer << '\n';
     return TypedValue{result, make_type(ValueType::bool_type)};
 }
 
@@ -1556,6 +1770,7 @@ LlvmIrGenerator::TypedPointer LlvmIrGenerator::emit_lvalue_pointer(const Express
     case ExpressionKind::unary:
     case ExpressionKind::cast:
     case ExpressionKind::binary:
+    case ExpressionKind::range:
     case ExpressionKind::when_expression:
     case ExpressionKind::call:
     case ExpressionKind::method_call:
@@ -1783,6 +1998,26 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::cast_value(const TypedValue& value,
     }
 
     throw std::runtime_error("unsupported cast");
+}
+
+LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_equality_comparison(const TypedValue& left, const TypedValue& right,
+                                                                      std::ostream& output) {
+    const std::string result = next_register();
+    if (left.type.kind == ValueType::text_type) {
+        const std::string comparison = next_register();
+        output << "  " << comparison << " = call i32 @strcmp(ptr " << left.name << ", ptr " << right.name << ")\n";
+        output << "  " << result << " = icmp eq i32 " << comparison << ", 0\n";
+        return TypedValue{result, make_type(ValueType::bool_type)};
+    }
+
+    if (is_real_type(left.type.kind)) {
+        output << "  " << result << " = fcmp oeq " << llvm_type(left.type) << ' ' << left.name << ", " << right.name
+               << '\n';
+        return TypedValue{result, make_type(ValueType::bool_type)};
+    }
+
+    output << "  " << result << " = icmp eq " << llvm_type(left.type) << ' ' << left.name << ", " << right.name << '\n';
+    return TypedValue{result, make_type(ValueType::bool_type)};
 }
 
 std::string LlvmIrGenerator::emit_index_as_i64(const TypedValue& index, std::ostream& output) {

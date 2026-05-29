@@ -30,6 +30,13 @@ std::unique_ptr<Expression> make_binary(std::unique_ptr<Expression> left, std::s
     return std::make_unique<Expression>(std::move(expression));
 }
 
+std::unique_ptr<Expression> make_range(std::unique_ptr<Expression> start, std::unique_ptr<Expression> end,
+                                       SourceLocation location) {
+    Expression expression{ExpressionKind::range, "..", std::move(start), std::move(end)};
+    expression.location = location;
+    return std::make_unique<Expression>(std::move(expression));
+}
+
 std::unique_ptr<Expression> make_unary(std::string lexeme, std::unique_ptr<Expression> right, SourceLocation location) {
     Expression expression{ExpressionKind::unary, std::move(lexeme), nullptr, std::move(right)};
     expression.location = location;
@@ -556,6 +563,10 @@ Statement Parser::extern_statement() {
 
 Statement Parser::for_statement() {
     const Token& keyword = previous();
+    if (check_identifier_like() && check_next(TokenType::in_keyword)) {
+        return for_in_statement(keyword);
+    }
+
     auto statement = Statement{StatementKind::for_statement, "", nullptr, {}, {}};
     statement.location = location_from_token(keyword);
 
@@ -589,6 +600,17 @@ Statement Parser::for_statement() {
 
     consume(TokenType::left_brace, "expected '{' before for body");
     statement.body = block();
+    return statement;
+}
+
+Statement Parser::for_in_statement(const Token& keyword) {
+    const Token name = consume_identifier_like("expected loop variable after for");
+    consume(TokenType::in_keyword, "expected 'in' after loop variable");
+    std::unique_ptr<Expression> iterable = expression();
+    consume(TokenType::left_brace, "expected '{' before for body");
+
+    Statement statement{StatementKind::for_in_statement, name.lexeme, std::move(iterable), block(), {}};
+    statement.location = location_from_token(keyword);
     return statement;
 }
 
@@ -1125,7 +1147,19 @@ std::unique_ptr<Expression> Parser::assignment_target() {
 }
 
 std::unique_ptr<Expression> Parser::expression() {
-    return logical_or();
+    return range();
+}
+
+std::unique_ptr<Expression> Parser::range() {
+    std::unique_ptr<Expression> expr = logical_or();
+
+    if (match(TokenType::dot_dot)) {
+        const Token& op = previous();
+        std::unique_ptr<Expression> right = logical_or();
+        expr = make_range(std::move(expr), std::move(right), location_from_token(op));
+    }
+
+    return expr;
 }
 
 std::unique_ptr<Expression> Parser::logical_or() {
@@ -1153,9 +1187,21 @@ std::unique_ptr<Expression> Parser::logical_and() {
 }
 
 std::unique_ptr<Expression> Parser::equality() {
-    std::unique_ptr<Expression> expr = comparison();
+    std::unique_ptr<Expression> expr = membership();
 
     while (match(TokenType::equal_equal) || match(TokenType::bang_equal)) {
+        const Token& op = previous();
+        std::unique_ptr<Expression> right = membership();
+        expr = make_binary(std::move(expr), op.lexeme, std::move(right), location_from_token(op));
+    }
+
+    return expr;
+}
+
+std::unique_ptr<Expression> Parser::membership() {
+    std::unique_ptr<Expression> expr = comparison();
+
+    while (match(TokenType::in_keyword)) {
         const Token& op = previous();
         std::unique_ptr<Expression> right = comparison();
         expr = make_binary(std::move(expr), op.lexeme, std::move(right), location_from_token(op));

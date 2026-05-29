@@ -394,9 +394,9 @@ void add_completion(std::vector<CompletionItem>& completions, std::string label,
 
 void add_static_completions(std::vector<CompletionItem>& completions) {
     for (const std::string_view keyword :
-         {"break",   "choice", "const", "continue", "contract", "else",   "export", "fn",
-          "foreign", "for",    "if",    "import",   "is",       "method", "print",  "record",
-          "return",  "to",     "when",  "while",    "with",     "true",   "false"}) {
+         {"break",   "choice", "const", "continue", "contract", "else", "export", "fn",
+          "foreign", "for",    "if",    "import",   "in",       "is",   "method", "print",
+          "record",  "return", "to",    "when",     "while",    "with", "true",   "false"}) {
         add_completion(completions, std::string(keyword), "keyword", completion_kind_keyword);
     }
 
@@ -478,6 +478,11 @@ void add_token_symbols(const std::string& source, std::vector<CompletionItem>& c
 
         if (tokens[index].type == TokenType::const_keyword && tokens[index + 1].type == TokenType::identifier) {
             add_completion(completions, tokens[index + 1].lexeme, "constant", completion_kind_constant);
+        }
+
+        if (index + 2 < tokens.size() && tokens[index].type == TokenType::for_keyword &&
+            tokens[index + 1].type == TokenType::identifier && tokens[index + 2].type == TokenType::in_keyword) {
+            add_completion(completions, tokens[index + 1].lexeme, "loop variable", completion_kind_variable);
         }
 
         if (tokens[index].type == TokenType::record_keyword && tokens[index + 1].type == TokenType::identifier) {
@@ -908,6 +913,7 @@ std::optional<std::string> literal_expression_type(const Expression& expression)
     case ExpressionKind::unary:
     case ExpressionKind::cast:
     case ExpressionKind::binary:
+    case ExpressionKind::range:
     case ExpressionKind::when_expression:
     case ExpressionKind::call:
     case ExpressionKind::method_call:
@@ -1051,6 +1057,7 @@ std::string declaration_hover(const Statement& statement) {
     case StatementKind::if_statement:
     case StatementKind::while_statement:
     case StatementKind::for_statement:
+    case StatementKind::for_in_statement:
     case StatementKind::break_statement:
     case StatementKind::continue_statement:
     case StatementKind::return_statement:
@@ -1136,6 +1143,25 @@ std::optional<std::string> statement_hover(const std::vector<Statement>& stateme
 
 std::string typed_variable_hover(const Statement& statement,
                                  const std::unordered_map<const Expression*, Type>& expression_types) {
+    if (statement.kind == StatementKind::for_in_statement) {
+        if (statement.expression == nullptr) {
+            return {};
+        }
+
+        const auto type = expression_types.find(statement.expression.get());
+        if (type == expression_types.end()) {
+            return {};
+        }
+
+        Type item_type = type->second;
+        if (statement.expression->kind != ExpressionKind::range && item_type.kind == ValueType::array_type &&
+            item_type.element != nullptr) {
+            item_type = *item_type.element;
+        }
+
+        return code_hover(statement.name + ": " + type_name(item_type));
+    }
+
     if (statement.kind != StatementKind::binding && statement.kind != StatementKind::const_statement &&
         statement.kind != StatementKind::assign) {
         return {};
@@ -1441,6 +1467,7 @@ std::optional<std::string> builtin_hover(const Token& token) {
     case TokenType::colon:
     case TokenType::comma:
     case TokenType::dot:
+    case TokenType::dot_dot:
     case TokenType::semicolon:
     case TokenType::left_paren:
     case TokenType::right_paren:
@@ -1467,6 +1494,7 @@ std::optional<std::string> builtin_hover(const Token& token) {
     case TokenType::else_keyword:
     case TokenType::while_keyword:
     case TokenType::for_keyword:
+    case TokenType::in_keyword:
     case TokenType::break_keyword:
     case TokenType::continue_keyword:
     case TokenType::to_keyword:

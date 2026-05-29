@@ -180,6 +180,23 @@ bool compiles_operators_casts_and_methods() {
     return passed;
 }
 
+bool compiles_membership_operator() {
+    const dune::Bytecode bytecode = compile_source("values: [int] = [1, 2, 3]; print(2 in values); "
+                                                   "message: text = \"dune\"; print(\"un\" in message);");
+
+    bool saw_array_contains = false;
+    bool saw_text_in = false;
+    for (const dune::Instruction& instruction : bytecode.instructions) {
+        saw_array_contains = saw_array_contains || instruction.op == dune::OpCode::array_contains;
+        saw_text_in = saw_text_in || instruction.op == dune::OpCode::text_in;
+    }
+
+    bool passed = true;
+    passed = expect(saw_array_contains, "expected array_contains instruction") && passed;
+    passed = expect(saw_text_in, "expected text_in instruction") && passed;
+    return passed;
+}
+
 bool compiles_stdlib_primitives() {
     const dune::Bytecode bytecode = compile_source("foreign fn c_sqrt(value: real64): real64 = \"sqrt\"; "
                                                    "message: text = \"dune\"; print(message[0]); "
@@ -211,6 +228,34 @@ bool compiles_stdlib_primitives() {
     passed = expect(saw_slice, "expected slice instruction") && passed;
     passed = expect(saw_backward_jump, "expected loop backward jump") && passed;
     passed = expect(saw_foreign_call, "expected foreign call instruction") && passed;
+    return passed;
+}
+
+bool compiles_for_in_arrays_and_ranges() {
+    const dune::Bytecode bytecode = compile_source("values: [int] = [1, 2, 3]; total = 0; "
+                                                   "for value in values { total = total + value; } "
+                                                   "for i in 0..values.len() { total = total + values[i]; } "
+                                                   "print(total);");
+
+    bool saw_array_len = false;
+    bool saw_load_index = false;
+    bool saw_less = false;
+    bool saw_backward_jump = false;
+    for (std::size_t index = 0; index < bytecode.instructions.size(); ++index) {
+        const dune::Instruction& instruction = bytecode.instructions[index];
+        saw_array_len = saw_array_len || instruction.op == dune::OpCode::array_len;
+        saw_load_index = saw_load_index || instruction.op == dune::OpCode::load_index;
+        saw_less = saw_less || instruction.op == dune::OpCode::less;
+        if (instruction.op == dune::OpCode::jump && instruction.operand < index) {
+            saw_backward_jump = true;
+        }
+    }
+
+    bool passed = true;
+    passed = expect(saw_array_len, "expected for-in array length check") && passed;
+    passed = expect(saw_load_index, "expected for-in array element load") && passed;
+    passed = expect(saw_less, "expected for-in range comparison") && passed;
+    passed = expect(saw_backward_jump, "expected for-in loop backward jump") && passed;
     return passed;
 }
 
@@ -514,7 +559,9 @@ int main() {
     passed = compiles_arrays_and_module_calls() && passed;
     passed = compiles_module_constants() && passed;
     passed = compiles_operators_casts_and_methods() && passed;
+    passed = compiles_membership_operator() && passed;
     passed = compiles_stdlib_primitives() && passed;
+    passed = compiles_for_in_arrays_and_ranges() && passed;
     passed = compiles_generic_functions() && passed;
     passed = compiles_stdlib_receiver_methods() && passed;
     passed = compiles_record_literals_fields_and_methods() && passed;

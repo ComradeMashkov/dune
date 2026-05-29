@@ -500,6 +500,9 @@ void Compiler::compile_statement(const Statement& statement) {
         pop_scope();
         return;
     }
+    case StatementKind::for_in_statement:
+        compile_for_in_statement(statement);
+        return;
     case StatementKind::break_statement:
         if (loop_stack_.empty()) {
             throw std::runtime_error("break statement outside loop");
@@ -533,6 +536,109 @@ void Compiler::compile_statement(const Statement& statement) {
         return;
     case StatementKind::import_statement:
         return;
+    }
+}
+
+void Compiler::compile_for_in_statement(const Statement& statement) {
+    push_scope();
+    const Type iterable_type = expression_type(*statement.expression);
+    if (statement.expression->kind == ExpressionKind::range) {
+        compile_range_for_in_statement(statement, iterable_type);
+    } else {
+        compile_array_for_in_statement(statement, iterable_type);
+    }
+    pop_scope();
+}
+
+void Compiler::compile_range_for_in_statement(const Statement& statement, const Type& element_type) {
+    const Expression& range = *statement.expression;
+    compile_expression(*range.left);
+    const std::size_t current_slot =
+        declare_scoped_local("__for_current_" + std::to_string(temporary_count_++), element_type);
+    emit(OpCode::store_local, current_slot);
+
+    compile_expression(*range.right);
+    const std::size_t end_slot = declare_scoped_local("__for_end_" + std::to_string(temporary_count_++), element_type);
+    emit(OpCode::store_local, end_slot);
+
+    const std::size_t item_slot = declare_scoped_local(statement.name, element_type);
+    const std::size_t loop_start = instructions_->size();
+    emit(OpCode::load_local, current_slot);
+    emit(OpCode::load_local, end_slot);
+    emit(OpCode::less);
+    const std::size_t loop_exit = emit(OpCode::jump_if_false);
+
+    emit(OpCode::load_local, current_slot);
+    emit(OpCode::store_local, item_slot);
+
+    loop_stack_.push_back(LoopJumps{});
+    push_scope();
+    compile_statements(statement.body);
+    pop_scope();
+    LoopJumps jumps = std::move(loop_stack_.back());
+    loop_stack_.pop_back();
+    const std::size_t continue_target = instructions_->size();
+    for (const std::size_t jump : jumps.continues) {
+        patch_operand(jump, continue_target);
+    }
+    emit(OpCode::load_local, current_slot);
+    emit(OpCode::push_constant, add_constant(make_number("1", element_type)));
+    emit(OpCode::add);
+    emit(OpCode::store_local, current_slot);
+    emit(OpCode::jump, loop_start);
+    patch_operand(loop_exit, instructions_->size());
+    for (const std::size_t jump : jumps.breaks) {
+        patch_operand(jump, instructions_->size());
+    }
+}
+
+void Compiler::compile_array_for_in_statement(const Statement& statement, const Type& iterable_type) {
+    if (iterable_type.kind != ValueType::array_type || iterable_type.element == nullptr) {
+        throw std::runtime_error("for-in used with non-array type");
+    }
+
+    compile_expression(*statement.expression);
+    const std::size_t iterable_slot =
+        declare_scoped_local("__for_iterable_" + std::to_string(temporary_count_++), iterable_type);
+    emit(OpCode::store_local, iterable_slot);
+
+    const Type index_type = make_type(ValueType::int_type);
+    emit(OpCode::push_constant, add_constant(make_signed(0)));
+    const std::size_t index_slot =
+        declare_scoped_local("__for_index_" + std::to_string(temporary_count_++), index_type);
+    emit(OpCode::store_local, index_slot);
+
+    const std::size_t item_slot = declare_scoped_local(statement.name, *iterable_type.element);
+    const std::size_t loop_start = instructions_->size();
+    emit(OpCode::load_local, index_slot);
+    emit(OpCode::load_local, iterable_slot);
+    emit(OpCode::array_len);
+    emit(OpCode::less);
+    const std::size_t exit_jump = emit(OpCode::jump_if_false);
+
+    emit(OpCode::load_local, iterable_slot);
+    emit(OpCode::load_local, index_slot);
+    emit(OpCode::load_index);
+    emit(OpCode::store_local, item_slot);
+
+    loop_stack_.push_back(LoopJumps{});
+    push_scope();
+    compile_statements(statement.body);
+    pop_scope();
+    LoopJumps jumps = std::move(loop_stack_.back());
+    loop_stack_.pop_back();
+    const std::size_t continue_target = instructions_->size();
+    for (const std::size_t jump : jumps.continues) {
+        patch_operand(jump, continue_target);
+    }
+    emit(OpCode::load_local, index_slot);
+    emit(OpCode::push_constant, add_constant(make_signed(1)));
+    emit(OpCode::add);
+    emit(OpCode::store_local, index_slot);
+    emit(OpCode::jump, loop_start);
+    patch_operand(exit_jump, instructions_->size());
+    for (const std::size_t jump : jumps.breaks) {
+        patch_operand(jump, instructions_->size());
     }
 }
 
@@ -616,6 +722,8 @@ void Compiler::compile_expression(const Expression& expression) {
     case ExpressionKind::binary:
         compile_binary_expression(expression);
         return;
+    case ExpressionKind::range:
+        throw std::runtime_error("range expressions can only be compiled as for-in iterables");
     case ExpressionKind::when_expression:
         compile_when_expression(expression);
         return;
@@ -749,6 +857,7 @@ void Compiler::compile_assignment_target(const Expression& target, const Express
     case ExpressionKind::unary:
     case ExpressionKind::cast:
     case ExpressionKind::binary:
+    case ExpressionKind::range:
     case ExpressionKind::when_expression:
     case ExpressionKind::call:
     case ExpressionKind::method_call:
@@ -927,6 +1036,20 @@ void Compiler::compile_binary_expression(const Expression& expression) {
         patch_operand(right_jump, instructions_->size());
         compile_expression(*expression.right);
         patch_operand(end_jump, instructions_->size());
+        return;
+    }
+
+    if (expression.lexeme == "in") {
+        compile_expression(*expression.left);
+        compile_expression(*expression.right);
+
+        const Type container = expression_type(*expression.right);
+        if (container.kind == ValueType::text_type) {
+            emit(OpCode::text_in);
+            return;
+        }
+
+        emit(OpCode::array_contains);
         return;
     }
 

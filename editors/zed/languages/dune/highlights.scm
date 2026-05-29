@@ -11,6 +11,7 @@
   "for"
   "if"
   "import"
+  "in"
   "is"
   "method"
   "print"
@@ -116,6 +117,8 @@
   "&&"
   "||"
   "!"
+  ".."
+  "in"
   "="
 ] @operator
 

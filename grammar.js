@@ -6,9 +6,11 @@ const PREC = {
   multiplicative: 8,
   additive: 7,
   comparison: 6,
+  membership: 6,
   equality: 5,
   and: 4,
   or: 3,
+  range: 2,
 };
 
 module.exports = grammar({
@@ -224,11 +226,20 @@ module.exports = grammar({
 
     for_statement: $ => seq(
       "for",
-      optional($.for_binding_initializer),
-      ";",
-      optional(field("condition", $._expression)),
-      ";",
-      optional(field("increment", $.for_assignment_initializer)),
+      choice(
+        seq(
+          field("iterator", $.identifier),
+          "in",
+          field("iterable", $._expression),
+        ),
+        seq(
+          optional($.for_binding_initializer),
+          ";",
+          optional(field("condition", $._expression)),
+          ";",
+          optional(field("increment", $.for_assignment_initializer)),
+        ),
+      ),
       field("body", $.block),
     ),
 
@@ -298,6 +309,7 @@ module.exports = grammar({
       $.call_expression,
       $.index_expression,
       $.slice_expression,
+      $.range_expression,
       $.binary_expression,
       $.unary_expression,
       $.cast_expression,
@@ -409,6 +421,12 @@ module.exports = grammar({
       field("type", $._type),
     )),
 
+    range_expression: $ => prec.left(PREC.range, seq(
+      field("start", $._expression),
+      "..",
+      field("end", $._expression),
+    )),
+
     binary_expression: $ => choice(
       ...[
         ["||", PREC.or],
@@ -419,6 +437,7 @@ module.exports = grammar({
         [">=", PREC.comparison],
         ["<", PREC.comparison],
         ["<=", PREC.comparison],
+        ["in", PREC.membership],
         ["+", PREC.additive],
         ["-", PREC.additive],
         ["*", PREC.multiplicative],

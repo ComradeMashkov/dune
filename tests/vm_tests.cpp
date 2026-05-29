@@ -187,6 +187,12 @@ print('\0' to int);)dune"),
                        "d\nlanguage\ndune\nlanguage\n3\n2\n4\n5\n9\n",
                        "expected foreign functions slices text indexing and for loop output") &&
              passed;
+    passed = expect_eq(run_source("values: [int] = [1, 2, 3, 4]; total = 0; "
+                                  "for value in values { if value == 3 { continue; } total = total + value; } "
+                                  "for i in 0..values.len() { if i == 2 { break; } total = total + values[i]; } "
+                                  "for empty in 5..2 { total = total + empty; } print(total);"),
+                       "10\n", "expected for-in arrays ranges break continue and empty range output") &&
+             passed;
     passed = expect_eq(run_source("import array; import text; "
                                   "values: [int] = [1, 2, 3]; reversed: [int] = array.reverse(values); "
                                   "print(array.sum(reversed)); print(array.first(reversed)); "
@@ -338,6 +344,13 @@ print('\0' to int);)dune"),
                                   "print(combined.last()); print(combined.slice(1, 3).sum()); "
                                   "flags = [true, false]; print(flags.all()); print(flags.any());"),
                        "6\n6\n1\n3\n15\n0\n4\n3\n0\n1\n", "expected expanded array stdlib output") &&
+             passed;
+    passed = expect_eq(run_source("values = [1, 2, 3]; words = [\"dune\", \"lang\"]; "
+                                  "message: text = \"dune language\"; enabled: bool = true; "
+                                  "print(2 in values); print(4 in values); print(\"lang\" in words); "
+                                  "print(\"lang\" in message); print(\"go\" in message); "
+                                  "if 1 + 1 in values && enabled { print(99); }"),
+                       "1\n0\n1\n1\n0\n99\n", "expected membership operator output") &&
              passed;
     passed = expect_throws("print(missing);", "expected undefined variable to throw") && passed;
     passed =

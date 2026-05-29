@@ -349,6 +349,11 @@ int main() {
                           "chosen: int = when value { is Present(x) { x } is Absent { 0 } };",
                           "expected lexical scopes and shadowing to validate") &&
              passed;
+    passed = expect_valid("values: [int] = [1, 2, 3]; total = 0; "
+                          "for value in values { total = total + value; } "
+                          "for i in 0..values.len() { total = total + values[i]; }",
+                          "expected for-in arrays and ranges to validate") &&
+             passed;
     passed = expect_valid("record Point { x: int, y: int } "
                           "values: [int] = [1, 2]; values[1] = 9; "
                           "grid: [[int]] = [[1, 2], [3, 4]]; grid[1][0] = 8; "
@@ -357,6 +362,11 @@ int main() {
                           "expected array, record, and nested assignment targets to validate") &&
              passed;
     passed = expect_valid("values: [int] = [];", "expected typed empty array to validate") && passed;
+    passed = expect_valid("values: [int] = [1, 2, 3]; found: bool = 2 in values; "
+                          "message: text = \"dune language\"; has: bool = \"lang\" in message; "
+                          "enabled: bool = true; ok: bool = 1 + 1 in values && enabled;",
+                          "expected membership operator to validate") &&
+             passed;
     passed = expect_error_contains("x: int = true;", "expected type 'int' but got 'bool'",
                                    "expected binding type mismatch") &&
              passed;
@@ -371,6 +381,18 @@ int main() {
              passed;
     passed = expect_error_contains("for i = 0; i < 1; i = i + 1 { } print(i);", "undefined variable 'i'",
                                    "expected for variable scope error") &&
+             passed;
+    passed = expect_error_contains("for value in 42 { print(value); }", "type 'int' is not iterable",
+                                   "expected non-iterable for-in error") &&
+             passed;
+    passed = expect_error_contains("for value in [1, 2] { value = value + 1; }", "cannot assign to constant 'value'",
+                                   "expected read-only for-in binding") &&
+             passed;
+    passed = expect_error_contains("value = 0..3;", "range expressions can only be used in for-in loops",
+                                   "expected range value error") &&
+             passed;
+    passed = expect_error_contains("for i in 0.0..3.0 { print(i); }", "expected integer range bound but got 'real'",
+                                   "expected real range bound error") &&
              passed;
     passed = expect_error_contains("choice Maybe { Present(int), Absent, } value: Maybe = Present(1); "
                                    "chosen: int = when value { is Present(x) { x } is Absent { 0 } }; print(x);",
@@ -426,6 +448,18 @@ int main() {
              passed;
     passed = expect_error_contains("values = [];", "empty array literal needs an array type",
                                    "expected empty array annotation error") &&
+             passed;
+    passed =
+        expect_error_contains("bad: bool = 1 in 2;", "operator 'in' requires array or text container but got 'int'",
+                              "expected unsupported membership container error") &&
+        passed;
+    passed = expect_error_contains("values: [int] = [1, 2]; bad: bool = true in values;",
+                                   "expected type 'int' but got 'bool'", "expected membership value mismatch") &&
+             passed;
+    passed = expect_error_contains("record Point { x: int } values: [Point] = []; "
+                                   "p: Point = Point { x: 1 }; bad: bool = p in values;",
+                                   "operator 'in' requires comparable array elements but got 'Point'",
+                                   "expected non-comparable membership error") &&
              passed;
     passed = expect_error_contains("values: [int] = [1]; print(math.square(values[0]));", "undefined variable 'math'",
                                    "expected missing math import") &&

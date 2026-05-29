@@ -116,11 +116,14 @@ private:
     void collect_generic_function(const Statement& statement);
     void check_function(const Statement& statement);
     void check_statement(const Statement& statement);
+    void check_for_in_statement(const Statement& statement);
     void check_statements(const std::vector<Statement>& statements);
+    Type check_for_in_iterable(const Expression& expression);
     Type check_assignment_target(const Expression& target, SourceLocation location);
     Type check_member_assignment_target(const Expression& target, SourceLocation location);
     Type check_expression(const Expression& expression, const TypeAnnotation& expected = {});
     Type check_binary_expression(const Expression& expression, const TypeAnnotation& expected);
+    Type check_membership_expression(const Expression& expression);
     Type check_when_expression(const Expression& expression, const TypeAnnotation& expected);
     Type check_call_expression(const Expression& expression, const TypeAnnotation& expected);
     Type check_format_call_expression(const Expression& expression);
