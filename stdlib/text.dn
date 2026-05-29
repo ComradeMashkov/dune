@@ -83,25 +83,25 @@ export method text.trim(): text {
     return trim_end(trim_start(this));
 }
 
-export is_space(value: glyph): bool {
+export fn is_space(value: glyph): bool {
     return value == ' ' || value == '\n' || value == '\r' || value == '\t';
 }
 
-export is_digit(value: glyph): bool {
+export fn is_digit(value: glyph): bool {
     code: int = value to int;
     return code >= ('0' to int) && code <= ('9' to int);
 }
 
-export is_lower(value: glyph): bool {
+export fn is_lower(value: glyph): bool {
     code: int = value to int;
     return code >= ('a' to int) && code <= ('z' to int);
 }
 
-export is_upper(value: glyph): bool {
+export fn is_upper(value: glyph): bool {
     code: int = value to int;
     return code >= ('A' to int) && code <= ('Z' to int);
 }
 
-export is_alpha(value: glyph): bool {
+export fn is_alpha(value: glyph): bool {
     return is_lower(value) || is_upper(value);
 }

@@ -6,6 +6,7 @@
   "contract"
   "else"
   "export"
+  "fn"
   "foreign"
   "for"
   "if"
