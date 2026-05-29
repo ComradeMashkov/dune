@@ -19,6 +19,7 @@ public:
         Type type;
         SourceLocation location;
         bool exported = false;
+        std::shared_ptr<Expression> default_value;
     };
 
     struct StructMethod {
@@ -107,6 +108,7 @@ private:
     void define_enum(const Statement& statement);
     void declare_contract(const Statement& statement);
     void define_contract(const Statement& statement);
+    void check_struct_field_defaults(const Statement& statement);
     void validate_constructor(const Statement& record, const Statement& method,
                               const std::unordered_set<std::string>& generic_names) const;
     void validate_contract_implementations(const Statement& statement) const;

@@ -4,43 +4,43 @@ import runtime;
 export record Vector<T is numeric> {
     data: [T],
 
-    export new(data: [T]): Vector<T> {
+    export fn new(data: [T]): Vector<T> {
         return Vector { data: data };
     }
 
-    require_same_shape(other: Vector<T>): unit {
+    fn require_same_shape(other: Vector<T>): unit {
         if this.data.len() != other.data.len() {
             runtime.panic("vector shape mismatch");
         }
     }
 
-    require_non_empty(): unit {
+    fn require_non_empty(): unit {
         if this.data.is_empty() {
             runtime.panic("empty vector reduction");
         }
     }
 
-    export len(): int {
+    export fn len(): int {
         return this.data.len();
     }
 
-    export shape(): [int] {
+    export fn shape(): [int] {
         return [this.data.len()];
     }
 
-    export is_empty(): bool {
+    export fn is_empty(): bool {
         return this.data.is_empty();
     }
 
-    export get(index: int): T {
+    export fn get(index: int): T {
         return this.data[index];
     }
 
-    export set(index: int, value: T): unit {
+    export fn set(index: int, value: T): unit {
         this.data[index] = value;
     }
 
-    export to_array(): [T] {
+    export fn to_array(): [T] {
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
             values.push(this.data[index]);
@@ -49,11 +49,11 @@ export record Vector<T is numeric> {
         return values;
     }
 
-    export copy(): Vector<T> {
+    export fn copy(): Vector<T> {
         return Vector.new(this.to_array());
     }
 
-    export equals(other: Vector<T>): bool {
+    export fn equals(other: Vector<T>): bool {
         if this.data.len() != other.data.len() {
             return false;
         }
@@ -67,11 +67,11 @@ export record Vector<T is numeric> {
         return true;
     }
 
-    export same_shape(other: Vector<T>): bool {
+    export fn same_shape(other: Vector<T>): bool {
         return this.data.len() == other.data.len();
     }
 
-    export slice(start: int, end: int): Vector<T> {
+    export fn slice(start: int, end: int): Vector<T> {
         values: [T] = [];
         for index = start; index < end; index = index + 1 {
             values.push(this.data[index]);
@@ -80,7 +80,7 @@ export record Vector<T is numeric> {
         return Vector.new(values);
     }
 
-    export concat(other: Vector<T>): Vector<T> {
+    export fn concat(other: Vector<T>): Vector<T> {
         values: [T] = this.to_array();
         for index = 0; index < other.data.len(); index = index + 1 {
             values.push(other.data[index]);
@@ -89,13 +89,13 @@ export record Vector<T is numeric> {
         return Vector.new(values);
     }
 
-    export fill(value: T): unit {
+    export fn fill(value: T): unit {
         for index = 0; index < this.data.len(); index = index + 1 {
             this.data[index] = value;
         }
     }
 
-    export add(other: Vector<T>): Vector<T> {
+    export fn add(other: Vector<T>): Vector<T> {
         this.require_same_shape(other);
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
@@ -105,7 +105,7 @@ export record Vector<T is numeric> {
         return Vector.new(values);
     }
 
-    export add(value: T): Vector<T> {
+    export fn add(value: T): Vector<T> {
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
             values.push(this.data[index] + value);
@@ -114,7 +114,7 @@ export record Vector<T is numeric> {
         return Vector.new(values);
     }
 
-    export sub(other: Vector<T>): Vector<T> {
+    export fn sub(other: Vector<T>): Vector<T> {
         this.require_same_shape(other);
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
@@ -124,7 +124,7 @@ export record Vector<T is numeric> {
         return Vector.new(values);
     }
 
-    export sub(value: T): Vector<T> {
+    export fn sub(value: T): Vector<T> {
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
             values.push(this.data[index] - value);
@@ -133,7 +133,7 @@ export record Vector<T is numeric> {
         return Vector.new(values);
     }
 
-    export rsub(value: T): Vector<T> {
+    export fn rsub(value: T): Vector<T> {
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
             values.push(value - this.data[index]);
@@ -142,7 +142,7 @@ export record Vector<T is numeric> {
         return Vector.new(values);
     }
 
-    export mul(other: Vector<T>): Vector<T> {
+    export fn mul(other: Vector<T>): Vector<T> {
         this.require_same_shape(other);
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
@@ -152,11 +152,11 @@ export record Vector<T is numeric> {
         return Vector.new(values);
     }
 
-    export mul(value: T): Vector<T> {
+    export fn mul(value: T): Vector<T> {
         return this.scale(value);
     }
 
-    export div(other: Vector<T>): Vector<T> {
+    export fn div(other: Vector<T>): Vector<T> {
         this.require_same_shape(other);
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
@@ -166,7 +166,7 @@ export record Vector<T is numeric> {
         return Vector.new(values);
     }
 
-    export div(value: T): Vector<T> {
+    export fn div(value: T): Vector<T> {
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
             values.push(this.data[index] / value);
@@ -175,7 +175,7 @@ export record Vector<T is numeric> {
         return Vector.new(values);
     }
 
-    export rdiv(value: T): Vector<T> {
+    export fn rdiv(value: T): Vector<T> {
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
             values.push(value / this.data[index]);
@@ -184,7 +184,7 @@ export record Vector<T is numeric> {
         return Vector.new(values);
     }
 
-    export scale(factor: T): Vector<T> {
+    export fn scale(factor: T): Vector<T> {
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
             values.push(this.data[index] * factor);
@@ -193,7 +193,7 @@ export record Vector<T is numeric> {
         return Vector.new(values);
     }
 
-    export neg(): Vector<T> {
+    export fn neg(): Vector<T> {
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
             values.push(0 - this.data[index]);
@@ -202,7 +202,7 @@ export record Vector<T is numeric> {
         return Vector.new(values);
     }
 
-    export abs(): Vector<T> {
+    export fn abs(): Vector<T> {
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
             value: T = this.data[index];
@@ -216,7 +216,7 @@ export record Vector<T is numeric> {
         return Vector.new(values);
     }
 
-    export clip(lower: T, upper: T): Vector<T> {
+    export fn clip(lower: T, upper: T): Vector<T> {
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
             value: T = this.data[index];
@@ -234,7 +234,7 @@ export record Vector<T is numeric> {
         return Vector.new(values);
     }
 
-    export dot(other: Vector<T>): T {
+    export fn dot(other: Vector<T>): T {
         this.require_same_shape(other);
         total: T = 0;
         for index = 0; index < this.data.len(); index = index + 1 {
@@ -244,25 +244,25 @@ export record Vector<T is numeric> {
         return total;
     }
 
-    export norm_squared(): T {
+    export fn norm_squared(): T {
         return this.dot(this);
     }
 
-    export norm(): real64 {
+    export fn norm(): real64 {
         squared: real64 = this.norm_squared() to real64;
         return math.sqrt(squared);
     }
 
-    export distance_squared(other: Vector<T>): T {
+    export fn distance_squared(other: Vector<T>): T {
         return this.sub(other).norm_squared();
     }
 
-    export distance(other: Vector<T>): real64 {
+    export fn distance(other: Vector<T>): real64 {
         squared: real64 = this.distance_squared(other) to real64;
         return math.sqrt(squared);
     }
 
-    export sum(): T {
+    export fn sum(): T {
         total: T = 0;
         for index = 0; index < this.data.len(); index = index + 1 {
             total = total + this.data[index];
@@ -271,7 +271,7 @@ export record Vector<T is numeric> {
         return total;
     }
 
-    export product(): T {
+    export fn product(): T {
         total: T = 1;
         for index = 0; index < this.data.len(); index = index + 1 {
             total = total * this.data[index];
@@ -280,14 +280,14 @@ export record Vector<T is numeric> {
         return total;
     }
 
-    export mean(): real64 {
+    export fn mean(): real64 {
         this.require_non_empty();
         total: real64 = this.sum() to real64;
         count: real64 = this.data.len() to real64;
         return total / count;
     }
 
-    export min(): T {
+    export fn min(): T {
         this.require_non_empty();
         result: T = this.data[0];
         for index = 1; index < this.data.len(); index = index + 1 {
@@ -299,7 +299,7 @@ export record Vector<T is numeric> {
         return result;
     }
 
-    export max(): T {
+    export fn max(): T {
         this.require_non_empty();
         result: T = this.data[0];
         for index = 1; index < this.data.len(); index = index + 1 {
@@ -311,7 +311,7 @@ export record Vector<T is numeric> {
         return result;
     }
 
-    export argmin(): int {
+    export fn argmin(): int {
         this.require_non_empty();
         result = 0;
         for index = 1; index < this.data.len(); index = index + 1 {
@@ -323,7 +323,7 @@ export record Vector<T is numeric> {
         return result;
     }
 
-    export argmax(): int {
+    export fn argmax(): int {
         this.require_non_empty();
         result = 0;
         for index = 1; index < this.data.len(); index = index + 1 {
@@ -335,15 +335,15 @@ export record Vector<T is numeric> {
         return result;
     }
 
-    export to_row_matrix(): Matrix<T> {
+    export fn to_row_matrix(): Matrix<T> {
         return Matrix.new(1, this.data.len(), this.to_array());
     }
 
-    export to_column_matrix(): Matrix<T> {
+    export fn to_column_matrix(): Matrix<T> {
         return Matrix.new(this.data.len(), 1, this.to_array());
     }
 
-    export reshape(rows: int, cols: int): Matrix<T> {
+    export fn reshape(rows: int, cols: int): Matrix<T> {
         if rows * cols != this.data.len() {
             runtime.panic("vector reshape size mismatch");
         }
@@ -351,11 +351,11 @@ export record Vector<T is numeric> {
         return Matrix.new(rows, cols, this.to_array());
     }
 
-    export dot(other: Matrix<T>): Vector<T> {
+    export fn dot(other: Matrix<T>): Vector<T> {
         return this.matmul(other);
     }
 
-    export matmul(other: Matrix<T>): Vector<T> {
+    export fn matmul(other: Matrix<T>): Vector<T> {
         if this.data.len() != other.rows {
             runtime.panic("vector-matrix shape mismatch");
         }
@@ -373,7 +373,7 @@ export record Vector<T is numeric> {
         return Vector.new(values);
     }
 
-    export outer(other: Vector<T>): Matrix<T> {
+    export fn outer(other: Vector<T>): Matrix<T> {
         values: [T] = [];
         for row = 0; row < this.data.len(); row = row + 1 {
             for col = 0; col < other.data.len(); col = col + 1 {
@@ -390,7 +390,7 @@ export record Matrix<T is numeric> {
     cols: int,
     data: [T],
 
-    export new(rows: int, cols: int, data: [T]): Matrix<T> {
+    export fn new(rows: int, cols: int, data: [T]): Matrix<T> {
         if rows < 0 || cols < 0 {
             runtime.panic("matrix dimensions cannot be negative");
         }
@@ -402,67 +402,67 @@ export record Matrix<T is numeric> {
         return Matrix { rows: rows, cols: cols, data: data };
     }
 
-    require_same_shape(other: Matrix<T>): unit {
+    fn require_same_shape(other: Matrix<T>): unit {
         if this.rows != other.rows || this.cols != other.cols {
             runtime.panic("matrix shape mismatch");
         }
     }
 
-    require_can_matmul(other: Matrix<T>): unit {
+    fn require_can_matmul(other: Matrix<T>): unit {
         if this.cols != other.rows {
             runtime.panic("matrix multiplication shape mismatch");
         }
     }
 
-    require_vector_width(vector: Vector<T>): unit {
+    fn require_vector_width(vector: Vector<T>): unit {
         if this.cols != vector.len() {
             runtime.panic("matrix-vector shape mismatch");
         }
     }
 
-    require_non_empty(): unit {
+    fn require_non_empty(): unit {
         if this.data.is_empty() {
             runtime.panic("empty matrix reduction");
         }
     }
 
-    index(row: int, col: int): int {
+    fn index(row: int, col: int): int {
         return row * this.cols + col;
     }
 
-    export rows(): int {
+    export fn rows(): int {
         return this.rows;
     }
 
-    export cols(): int {
+    export fn cols(): int {
         return this.cols;
     }
 
-    export shape(): [int] {
+    export fn shape(): [int] {
         return [this.rows, this.cols];
     }
 
-    export is_empty(): bool {
+    export fn is_empty(): bool {
         return this.data.is_empty();
     }
 
-    export is_square(): bool {
+    export fn is_square(): bool {
         return this.rows == this.cols;
     }
 
-    export len(): int {
+    export fn len(): int {
         return this.data.len();
     }
 
-    export get(row: int, col: int): T {
+    export fn get(row: int, col: int): T {
         return this.data[this.index(row, col)];
     }
 
-    export set(row: int, col: int, value: T): unit {
+    export fn set(row: int, col: int, value: T): unit {
         this.data[this.index(row, col)] = value;
     }
 
-    export to_array(): [T] {
+    export fn to_array(): [T] {
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
             values.push(this.data[index]);
@@ -471,11 +471,11 @@ export record Matrix<T is numeric> {
         return values;
     }
 
-    export copy(): Matrix<T> {
+    export fn copy(): Matrix<T> {
         return Matrix.new(this.rows, this.cols, this.to_array());
     }
 
-    export equals(other: Matrix<T>): bool {
+    export fn equals(other: Matrix<T>): bool {
         if this.rows != other.rows || this.cols != other.cols {
             return false;
         }
@@ -489,21 +489,21 @@ export record Matrix<T is numeric> {
         return true;
     }
 
-    export same_shape(other: Matrix<T>): bool {
+    export fn same_shape(other: Matrix<T>): bool {
         return this.rows == other.rows && this.cols == other.cols;
     }
 
-    export can_matmul(other: Matrix<T>): bool {
+    export fn can_matmul(other: Matrix<T>): bool {
         return this.cols == other.rows;
     }
 
-    export fill(value: T): unit {
+    export fn fill(value: T): unit {
         for index = 0; index < this.data.len(); index = index + 1 {
             this.data[index] = value;
         }
     }
 
-    export row(row: int): Vector<T> {
+    export fn row(row: int): Vector<T> {
         values: [T] = [];
         for col = 0; col < this.cols; col = col + 1 {
             values.push(this.get(row, col));
@@ -512,7 +512,7 @@ export record Matrix<T is numeric> {
         return Vector.new(values);
     }
 
-    export column(col: int): Vector<T> {
+    export fn column(col: int): Vector<T> {
         values: [T] = [];
         for row = 0; row < this.rows; row = row + 1 {
             values.push(this.get(row, col));
@@ -521,11 +521,11 @@ export record Matrix<T is numeric> {
         return Vector.new(values);
     }
 
-    export flatten(): Vector<T> {
+    export fn flatten(): Vector<T> {
         return Vector.new(this.to_array());
     }
 
-    export reshape(rows: int, cols: int): Matrix<T> {
+    export fn reshape(rows: int, cols: int): Matrix<T> {
         if rows * cols != this.data.len() {
             runtime.panic("matrix reshape size mismatch");
         }
@@ -533,7 +533,7 @@ export record Matrix<T is numeric> {
         return Matrix.new(rows, cols, this.to_array());
     }
 
-    export diagonal(): Vector<T> {
+    export fn diagonal(): Vector<T> {
         values: [T] = [];
         size = this.rows;
         if this.cols < size {
@@ -547,15 +547,15 @@ export record Matrix<T is numeric> {
         return Vector.new(values);
     }
 
-    export diag(): Vector<T> {
+    export fn diag(): Vector<T> {
         return this.diagonal();
     }
 
-    export trace(): T {
+    export fn trace(): T {
         return this.diagonal().sum();
     }
 
-    export add(other: Matrix<T>): Matrix<T> {
+    export fn add(other: Matrix<T>): Matrix<T> {
         this.require_same_shape(other);
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
@@ -565,7 +565,7 @@ export record Matrix<T is numeric> {
         return Matrix.new(this.rows, this.cols, values);
     }
 
-    export add(value: T): Matrix<T> {
+    export fn add(value: T): Matrix<T> {
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
             values.push(this.data[index] + value);
@@ -574,7 +574,7 @@ export record Matrix<T is numeric> {
         return Matrix.new(this.rows, this.cols, values);
     }
 
-    export sub(other: Matrix<T>): Matrix<T> {
+    export fn sub(other: Matrix<T>): Matrix<T> {
         this.require_same_shape(other);
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
@@ -584,7 +584,7 @@ export record Matrix<T is numeric> {
         return Matrix.new(this.rows, this.cols, values);
     }
 
-    export sub(value: T): Matrix<T> {
+    export fn sub(value: T): Matrix<T> {
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
             values.push(this.data[index] - value);
@@ -593,7 +593,7 @@ export record Matrix<T is numeric> {
         return Matrix.new(this.rows, this.cols, values);
     }
 
-    export rsub(value: T): Matrix<T> {
+    export fn rsub(value: T): Matrix<T> {
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
             values.push(value - this.data[index]);
@@ -602,7 +602,7 @@ export record Matrix<T is numeric> {
         return Matrix.new(this.rows, this.cols, values);
     }
 
-    export mul(other: Matrix<T>): Matrix<T> {
+    export fn mul(other: Matrix<T>): Matrix<T> {
         this.require_same_shape(other);
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
@@ -612,15 +612,15 @@ export record Matrix<T is numeric> {
         return Matrix.new(this.rows, this.cols, values);
     }
 
-    export mul(value: T): Matrix<T> {
+    export fn mul(value: T): Matrix<T> {
         return this.scale(value);
     }
 
-    export hadamard(other: Matrix<T>): Matrix<T> {
+    export fn hadamard(other: Matrix<T>): Matrix<T> {
         return this.mul(other);
     }
 
-    export div(other: Matrix<T>): Matrix<T> {
+    export fn div(other: Matrix<T>): Matrix<T> {
         this.require_same_shape(other);
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
@@ -630,7 +630,7 @@ export record Matrix<T is numeric> {
         return Matrix.new(this.rows, this.cols, values);
     }
 
-    export div(value: T): Matrix<T> {
+    export fn div(value: T): Matrix<T> {
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
             values.push(this.data[index] / value);
@@ -639,7 +639,7 @@ export record Matrix<T is numeric> {
         return Matrix.new(this.rows, this.cols, values);
     }
 
-    export rdiv(value: T): Matrix<T> {
+    export fn rdiv(value: T): Matrix<T> {
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
             values.push(value / this.data[index]);
@@ -648,7 +648,7 @@ export record Matrix<T is numeric> {
         return Matrix.new(this.rows, this.cols, values);
     }
 
-    export scale(factor: T): Matrix<T> {
+    export fn scale(factor: T): Matrix<T> {
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
             values.push(this.data[index] * factor);
@@ -657,7 +657,7 @@ export record Matrix<T is numeric> {
         return Matrix.new(this.rows, this.cols, values);
     }
 
-    export neg(): Matrix<T> {
+    export fn neg(): Matrix<T> {
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
             values.push(0 - this.data[index]);
@@ -666,7 +666,7 @@ export record Matrix<T is numeric> {
         return Matrix.new(this.rows, this.cols, values);
     }
 
-    export abs(): Matrix<T> {
+    export fn abs(): Matrix<T> {
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
             value: T = this.data[index];
@@ -680,7 +680,7 @@ export record Matrix<T is numeric> {
         return Matrix.new(this.rows, this.cols, values);
     }
 
-    export clip(lower: T, upper: T): Matrix<T> {
+    export fn clip(lower: T, upper: T): Matrix<T> {
         values: [T] = [];
         for index = 0; index < this.data.len(); index = index + 1 {
             value: T = this.data[index];
@@ -698,7 +698,7 @@ export record Matrix<T is numeric> {
         return Matrix.new(this.rows, this.cols, values);
     }
 
-    export transpose(): Matrix<T> {
+    export fn transpose(): Matrix<T> {
         values: [T] = [];
         for col = 0; col < this.cols; col = col + 1 {
             for row = 0; row < this.rows; row = row + 1 {
@@ -709,7 +709,7 @@ export record Matrix<T is numeric> {
         return Matrix.new(this.cols, this.rows, values);
     }
 
-    export matmul(other: Matrix<T>): Matrix<T> {
+    export fn matmul(other: Matrix<T>): Matrix<T> {
         this.require_can_matmul(other);
         values: [T] = [];
         for row = 0; row < this.rows; row = row + 1 {
@@ -726,15 +726,15 @@ export record Matrix<T is numeric> {
         return Matrix.new(this.rows, other.cols, values);
     }
 
-    export dot(other: Matrix<T>): Matrix<T> {
+    export fn dot(other: Matrix<T>): Matrix<T> {
         return this.matmul(other);
     }
 
-    export dot(vector: Vector<T>): Vector<T> {
+    export fn dot(vector: Vector<T>): Vector<T> {
         return this.mul_vector(vector);
     }
 
-    export mul_vector(vector: Vector<T>): Vector<T> {
+    export fn mul_vector(vector: Vector<T>): Vector<T> {
         this.require_vector_width(vector);
         values: [T] = [];
         for row = 0; row < this.rows; row = row + 1 {
@@ -749,7 +749,7 @@ export record Matrix<T is numeric> {
         return Vector.new(values);
     }
 
-    export sum_rows(): Vector<T> {
+    export fn sum_rows(): Vector<T> {
         values: [T] = [];
         for row = 0; row < this.rows; row = row + 1 {
             values.push(this.row(row).sum());
@@ -758,7 +758,7 @@ export record Matrix<T is numeric> {
         return Vector.new(values);
     }
 
-    export sum_columns(): Vector<T> {
+    export fn sum_columns(): Vector<T> {
         values: [T] = [];
         for col = 0; col < this.cols; col = col + 1 {
             values.push(this.column(col).sum());
@@ -767,7 +767,7 @@ export record Matrix<T is numeric> {
         return Vector.new(values);
     }
 
-    export mean_rows(): Vector<real64> {
+    export fn mean_rows(): Vector<real64> {
         if this.cols == 0 {
             runtime.panic("matrix mean axis has empty dimension");
         }
@@ -782,7 +782,7 @@ export record Matrix<T is numeric> {
         return Vector.new(values);
     }
 
-    export mean_columns(): Vector<real64> {
+    export fn mean_columns(): Vector<real64> {
         if this.rows == 0 {
             runtime.panic("matrix mean axis has empty dimension");
         }
@@ -797,7 +797,7 @@ export record Matrix<T is numeric> {
         return Vector.new(values);
     }
 
-    export sum(): T {
+    export fn sum(): T {
         total: T = 0;
         for index = 0; index < this.data.len(); index = index + 1 {
             total = total + this.data[index];
@@ -806,7 +806,7 @@ export record Matrix<T is numeric> {
         return total;
     }
 
-    export product(): T {
+    export fn product(): T {
         total: T = 1;
         for index = 0; index < this.data.len(); index = index + 1 {
             total = total * this.data[index];
@@ -815,14 +815,14 @@ export record Matrix<T is numeric> {
         return total;
     }
 
-    export mean(): real64 {
+    export fn mean(): real64 {
         this.require_non_empty();
         total: real64 = this.sum() to real64;
         count: real64 = this.data.len() to real64;
         return total / count;
     }
 
-    export norm_squared(): T {
+    export fn norm_squared(): T {
         total: T = 0;
         for index = 0; index < this.data.len(); index = index + 1 {
             total = total + this.data[index] * this.data[index];
@@ -831,32 +831,32 @@ export record Matrix<T is numeric> {
         return total;
     }
 
-    export norm(): real64 {
+    export fn norm(): real64 {
         squared: real64 = this.norm_squared() to real64;
         return math.sqrt(squared);
     }
 
-    export min(): T {
+    export fn min(): T {
         this.require_non_empty();
         return this.flatten().min();
     }
 
-    export max(): T {
+    export fn max(): T {
         this.require_non_empty();
         return this.flatten().max();
     }
 
-    export argmin(): int {
+    export fn argmin(): int {
         this.require_non_empty();
         return this.flatten().argmin();
     }
 
-    export argmax(): int {
+    export fn argmax(): int {
         this.require_non_empty();
         return this.flatten().argmax();
     }
 
-    export det2(): T {
+    export fn det2(): T {
         if this.rows != 2 || this.cols != 2 {
             runtime.panic("matrix det2 requires 2x2 shape");
         }
@@ -864,7 +864,7 @@ export record Matrix<T is numeric> {
         return this.get(0, 0) * this.get(1, 1) - this.get(0, 1) * this.get(1, 0);
     }
 
-    export det3(): T {
+    export fn det3(): T {
         if this.rows != 3 || this.cols != 3 {
             runtime.panic("matrix det3 requires 3x3 shape");
         }
@@ -875,15 +875,15 @@ export record Matrix<T is numeric> {
     }
 }
 
-export vector<T is numeric>(data: [T]): Vector<T> {
+export fn vector<T is numeric>(data: [T]): Vector<T> {
     return Vector.new(data);
 }
 
-export from_flat<T is numeric>(rows: int, cols: int, data: [T]): Matrix<T> {
+export fn from_flat<T is numeric>(rows: int, cols: int, data: [T]): Matrix<T> {
     return Matrix.new(rows, cols, data);
 }
 
-export from_rows<T is numeric>(rows: [[T]]): Matrix<T> {
+export fn from_rows<T is numeric>(rows: [[T]]): Matrix<T> {
     data: [T] = [];
     if rows.len() == 0 {
         return Matrix.new(0, 0, data);
@@ -903,7 +903,7 @@ export from_rows<T is numeric>(rows: [[T]]): Matrix<T> {
     return Matrix.new(rows.len(), cols, data);
 }
 
-export zeros<T is numeric>(size: int): Vector<T> {
+export fn zeros<T is numeric>(size: int): Vector<T> {
     values: [T] = [];
     for index = 0; index < size; index = index + 1 {
         values.push(0);
@@ -912,7 +912,7 @@ export zeros<T is numeric>(size: int): Vector<T> {
     return Vector.new(values);
 }
 
-export zeros<T is numeric>(rows: int, cols: int): Matrix<T> {
+export fn zeros<T is numeric>(rows: int, cols: int): Matrix<T> {
     values: [T] = [];
     for index = 0; index < rows * cols; index = index + 1 {
         values.push(0);
@@ -921,7 +921,7 @@ export zeros<T is numeric>(rows: int, cols: int): Matrix<T> {
     return Matrix.new(rows, cols, values);
 }
 
-export ones<T is numeric>(size: int): Vector<T> {
+export fn ones<T is numeric>(size: int): Vector<T> {
     values: [T] = [];
     for index = 0; index < size; index = index + 1 {
         values.push(1);
@@ -930,7 +930,7 @@ export ones<T is numeric>(size: int): Vector<T> {
     return Vector.new(values);
 }
 
-export ones<T is numeric>(rows: int, cols: int): Matrix<T> {
+export fn ones<T is numeric>(rows: int, cols: int): Matrix<T> {
     values: [T] = [];
     for index = 0; index < rows * cols; index = index + 1 {
         values.push(1);
@@ -939,7 +939,7 @@ export ones<T is numeric>(rows: int, cols: int): Matrix<T> {
     return Matrix.new(rows, cols, values);
 }
 
-export full<T is numeric>(size: int, value: T): Vector<T> {
+export fn full<T is numeric>(size: int, value: T): Vector<T> {
     values: [T] = [];
     for index = 0; index < size; index = index + 1 {
         values.push(value);
@@ -948,7 +948,7 @@ export full<T is numeric>(size: int, value: T): Vector<T> {
     return Vector.new(values);
 }
 
-export full<T is numeric>(rows: int, cols: int, value: T): Matrix<T> {
+export fn full<T is numeric>(rows: int, cols: int, value: T): Matrix<T> {
     values: [T] = [];
     for index = 0; index < rows * cols; index = index + 1 {
         values.push(value);
@@ -957,15 +957,15 @@ export full<T is numeric>(rows: int, cols: int, value: T): Matrix<T> {
     return Matrix.new(rows, cols, values);
 }
 
-export arange<T is numeric>(end: T): Vector<T> {
+export fn arange<T is numeric>(end: T): Vector<T> {
     return arange(0, end, 1);
 }
 
-export arange<T is numeric>(start: T, end: T): Vector<T> {
+export fn arange<T is numeric>(start: T, end: T): Vector<T> {
     return arange(start, end, 1);
 }
 
-export arange<T is numeric>(start: T, end: T, step: T): Vector<T> {
+export fn arange<T is numeric>(start: T, end: T, step: T): Vector<T> {
     values: [T] = [];
     if step > 0 {
         value: T = start;
@@ -986,7 +986,7 @@ export arange<T is numeric>(start: T, end: T, step: T): Vector<T> {
     return Vector.new(values);
 }
 
-export identity<T is numeric>(size: int): Matrix<T> {
+export fn identity<T is numeric>(size: int): Matrix<T> {
     values: [T] = [];
     for row = 0; row < size; row = row + 1 {
         for col = 0; col < size; col = col + 1 {
@@ -1001,11 +1001,11 @@ export identity<T is numeric>(size: int): Matrix<T> {
     return Matrix.new(size, size, values);
 }
 
-export eye<T is numeric>(size: int): Matrix<T> {
+export fn eye<T is numeric>(size: int): Matrix<T> {
     return identity(size);
 }
 
-export diagonal<T is numeric>(values: Vector<T>): Matrix<T> {
+export fn diagonal<T is numeric>(values: Vector<T>): Matrix<T> {
     data: [T] = [];
     for row = 0; row < values.len(); row = row + 1 {
         for col = 0; col < values.len(); col = col + 1 {
@@ -1020,26 +1020,26 @@ export diagonal<T is numeric>(values: Vector<T>): Matrix<T> {
     return Matrix.new(values.len(), values.len(), data);
 }
 
-export diag<T is numeric>(values: Vector<T>): Matrix<T> {
+export fn diag<T is numeric>(values: Vector<T>): Matrix<T> {
     return diagonal(values);
 }
 
-export dot<T is numeric>(left: Vector<T>, right: Vector<T>): T {
+export fn dot<T is numeric>(left: Vector<T>, right: Vector<T>): T {
     return left.dot(right);
 }
 
-export dot<T is numeric>(left: Matrix<T>, right: Matrix<T>): Matrix<T> {
+export fn dot<T is numeric>(left: Matrix<T>, right: Matrix<T>): Matrix<T> {
     return left.matmul(right);
 }
 
-export dot<T is numeric>(left: Matrix<T>, right: Vector<T>): Vector<T> {
+export fn dot<T is numeric>(left: Matrix<T>, right: Vector<T>): Vector<T> {
     return left.mul_vector(right);
 }
 
-export matmul<T is numeric>(left: Matrix<T>, right: Matrix<T>): Matrix<T> {
+export fn matmul<T is numeric>(left: Matrix<T>, right: Matrix<T>): Matrix<T> {
     return left.matmul(right);
 }
 
-export outer<T is numeric>(left: Vector<T>, right: Vector<T>): Matrix<T> {
+export fn outer<T is numeric>(left: Vector<T>, right: Vector<T>): Matrix<T> {
     return left.outer(right);
 }

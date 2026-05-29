@@ -122,21 +122,35 @@ int main() {
                            }) &&
              passed;
 
-    passed = expect_tokens("add(a: int, b: int): int { return a + b; }\ndone: bool = true;",
+    passed = expect_tokens("fn add(a: int, b: int): int { return a + b; }\ndone: bool = true;",
                            {
-                               {identifier, "add"},  {left_paren, "("},
-                               {identifier, "a"},    {colon, ":"},
-                               {int_keyword, "int"}, {comma, ","},
-                               {identifier, "b"},    {colon, ":"},
-                               {int_keyword, "int"}, {right_paren, ")"},
-                               {colon, ":"},         {int_keyword, "int"},
-                               {left_brace, "{"},    {return_keyword, "return"},
-                               {identifier, "a"},    {plus, "+"},
-                               {identifier, "b"},    {semicolon, ";"},
-                               {right_brace, "}"},   {identifier, "done"},
-                               {colon, ":"},         {bool_keyword, "bool"},
-                               {equal, "="},         {true_keyword, "true"},
-                               {semicolon, ";"},     {eof, ""},
+                               {fn_keyword, "fn"},
+                               {identifier, "add"},
+                               {left_paren, "("},
+                               {identifier, "a"},
+                               {colon, ":"},
+                               {int_keyword, "int"},
+                               {comma, ","},
+                               {identifier, "b"},
+                               {colon, ":"},
+                               {int_keyword, "int"},
+                               {right_paren, ")"},
+                               {colon, ":"},
+                               {int_keyword, "int"},
+                               {left_brace, "{"},
+                               {return_keyword, "return"},
+                               {identifier, "a"},
+                               {plus, "+"},
+                               {identifier, "b"},
+                               {semicolon, ";"},
+                               {right_brace, "}"},
+                               {identifier, "done"},
+                               {colon, ":"},
+                               {bool_keyword, "bool"},
+                               {equal, "="},
+                               {true_keyword, "true"},
+                               {semicolon, ";"},
+                               {eof, ""},
                            }) &&
              passed;
 
@@ -198,11 +212,12 @@ int main() {
                                        "expected invalid numeric suffix error") &&
              passed;
 
-    passed = expect_tokens("log(message: text): unit { return; } "
+    passed = expect_tokens("fn log(message: text): unit { return; } "
                            "a: i8 = 1; b: i16 = 2; c: i32 = 3; d: i64 = 4; "
                            "e: isize = 5; f: usize = 6; g: real32 = 1.5; "
                            "h: real64 = 2.5; log(\"done\");",
                            {
+                               {fn_keyword, "fn"},
                                {identifier, "log"},
                                {left_paren, "("},
                                {identifier, "message"},
@@ -417,12 +432,13 @@ int main() {
                            }) &&
              passed;
 
-    passed = expect_tokens("export foreign c_sqrt(value: real64): real64 = \"sqrt\"; "
+    passed = expect_tokens("export foreign fn c_sqrt(value: real64): real64 = \"sqrt\"; "
                            "for i = 0; i < 3; i = i + 1 { if i == 1 { continue; } break; } "
                            "print(\"dune\"[1:3]);",
                            {
                                {export_keyword, "export"},
                                {foreign_keyword, "foreign"},
+                               {fn_keyword, "fn"},
                                {identifier, "c_sqrt"},
                                {left_paren, "("},
                                {identifier, "value"},

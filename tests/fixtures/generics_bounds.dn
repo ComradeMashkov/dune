@@ -2,11 +2,11 @@ import array;
 import math;
 
 // Generic functions are instantiated only for call sites.
-identity<T>(value: T): T {
+fn identity<T>(value: T): T {
     return value;
 }
 
-twice<T is numeric>(value: T): T {
+fn twice<T is numeric>(value: T): T {
     return value + value;
 }
 

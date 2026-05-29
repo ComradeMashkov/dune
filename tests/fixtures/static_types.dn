@@ -1,4 +1,4 @@
-is_equal(left: int, right: int): bool {
+fn is_equal(left: int, right: int): bool {
     return left == right;
 }
 

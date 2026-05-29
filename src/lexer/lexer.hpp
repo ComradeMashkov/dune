@@ -10,6 +10,7 @@ enum class TokenType {
     const_keyword,
     export_keyword,
     foreign_keyword,
+    fn_keyword,
     method_keyword,
     record_keyword,
     contract_keyword,

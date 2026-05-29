@@ -7,15 +7,15 @@ const TAU32: real32 = PI32 * 2.0;
 const E32: real32 = 2.7182817;
 const INVERSE_E32: real32 = 1.0 / E32;
 
-square<T is numeric>(value: T): T {
+fn square<T is numeric>(value: T): T {
     return value * value;
 }
 
-cube<T is numeric>(value: T): T {
+fn cube<T is numeric>(value: T): T {
     return value * value * value;
 }
 
-abs<T is numeric>(value: T): T {
+fn abs<T is numeric>(value: T): T {
     if value < 0 {
         return 0 - value;
     }
@@ -23,7 +23,7 @@ abs<T is numeric>(value: T): T {
     return value;
 }
 
-min<T is numeric>(left: T, right: T): T {
+fn min<T is numeric>(left: T, right: T): T {
     if left < right {
         return left;
     }
@@ -31,7 +31,7 @@ min<T is numeric>(left: T, right: T): T {
     return right;
 }
 
-max<T is numeric>(left: T, right: T): T {
+fn max<T is numeric>(left: T, right: T): T {
     if left > right {
         return left;
     }
@@ -39,7 +39,7 @@ max<T is numeric>(left: T, right: T): T {
     return right;
 }
 
-clamp<T is numeric>(value: T, lower: T, upper: T): T {
+fn clamp<T is numeric>(value: T, lower: T, upper: T): T {
     if value < lower {
         return lower;
     }
@@ -51,7 +51,7 @@ clamp<T is numeric>(value: T, lower: T, upper: T): T {
     return value;
 }
 
-sqrt<T is real>(value: T): T {
+fn sqrt<T is real>(value: T): T {
     if value <= 0.0 {
         return 0.0;
     }
@@ -66,7 +66,7 @@ sqrt<T is real>(value: T): T {
     return guess;
 }
 
-normalize_radians<T is real>(value: T): T {
+fn normalize_radians<T is real>(value: T): T {
     pi: T = 3.141592653589793;
     tau: T = pi * 2.0;
     x: T = value;
@@ -82,7 +82,7 @@ normalize_radians<T is real>(value: T): T {
     return x;
 }
 
-sin<T is real>(value: T): T {
+fn sin<T is real>(value: T): T {
     x: T = normalize_radians(value);
     term: T = x;
     sum: T = x;
@@ -99,7 +99,7 @@ sin<T is real>(value: T): T {
     return sum;
 }
 
-cos<T is real>(value: T): T {
+fn cos<T is real>(value: T): T {
     x: T = normalize_radians(value);
     term: T = 1.0;
     sum: T = 1.0;
@@ -116,11 +116,11 @@ cos<T is real>(value: T): T {
     return sum;
 }
 
-tan<T is real>(value: T): T {
+fn tan<T is real>(value: T): T {
     return sin(value) / cos(value);
 }
 
-exp<T is real>(value: T): T {
+fn exp<T is real>(value: T): T {
     e: T = 2.718281828459045;
     x: T = value;
     scale = 0;
@@ -158,7 +158,7 @@ exp<T is real>(value: T): T {
     return sum;
 }
 
-ln<T is real>(value: T): T {
+fn ln<T is real>(value: T): T {
     if value <= 0.0 {
         return 0.0;
     }
@@ -193,7 +193,7 @@ ln<T is real>(value: T): T {
     return 2.0 * sum + scale_value;
 }
 
-pow<T is real>(base: T, exponent: int): T {
+fn pow<T is real>(base: T, exponent: int): T {
     result: T = 1.0;
     count = exponent;
     if count < 0 {
@@ -212,11 +212,11 @@ pow<T is real>(base: T, exponent: int): T {
     return result;
 }
 
-pow<T is real>(base: T, exponent: T): T {
+fn pow<T is real>(base: T, exponent: T): T {
     return exp(exponent * ln(base));
 }
 
-floor<T is real>(value: T): T {
+fn floor<T is real>(value: T): T {
     result: T = 0.0;
     if value >= 0.0 {
         while result + 1.0 <= value {
@@ -231,7 +231,7 @@ floor<T is real>(value: T): T {
     return result;
 }
 
-ceil<T is real>(value: T): T {
+fn ceil<T is real>(value: T): T {
     result: T = floor(value);
     if result < value {
         return result + 1.0;
@@ -240,7 +240,7 @@ ceil<T is real>(value: T): T {
     return result;
 }
 
-round<T is real>(value: T): T {
+fn round<T is real>(value: T): T {
     if value >= 0.0 {
         return floor(value + 0.5);
     }

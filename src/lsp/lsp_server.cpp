@@ -394,8 +394,9 @@ void add_completion(std::vector<CompletionItem>& completions, std::string label,
 
 void add_static_completions(std::vector<CompletionItem>& completions) {
     for (const std::string_view keyword :
-         {"break", "choice", "const", "continue", "contract", "else", "export", "foreign", "for",  "if",   "import",
-          "is",    "method", "print", "record",   "return",   "to",   "when",   "while",   "with", "true", "false"}) {
+         {"break",   "choice", "const", "continue", "contract", "else",   "export", "fn",
+          "foreign", "for",    "if",    "import",   "is",       "method", "print",  "record",
+          "return",  "to",     "when",  "while",    "with",     "true",   "false"}) {
         add_completion(completions, std::string(keyword), "keyword", completion_kind_keyword);
     }
 
@@ -1452,6 +1453,7 @@ std::optional<std::string> builtin_hover(const Token& token) {
     case TokenType::const_keyword:
     case TokenType::export_keyword:
     case TokenType::foreign_keyword:
+    case TokenType::fn_keyword:
     case TokenType::method_keyword:
     case TokenType::record_keyword:
     case TokenType::contract_keyword:

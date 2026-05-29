@@ -200,7 +200,8 @@ void LlvmIrGenerator::collect_structs(const std::unordered_map<std::string, Type
         layout.generic_parameters = definition.generic_parameters;
         for (const TypeChecker::StructField& field : definition.fields) {
             layout.field_indices.emplace(field.name, layout.fields.size());
-            layout.fields.push_back(Parameter{field.name, TypeAnnotation{true, field.type}, field.location});
+            layout.fields.push_back(Parameter{field.name, TypeAnnotation{true, field.type}, field.location,
+                                              field.exported, field.default_value});
         }
 
         structs_.emplace(name, std::move(layout));
@@ -1272,12 +1273,18 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_struct_literal(const Expressio
 
     for (const Parameter& field : layout.fields) {
         const auto source = std::find(expression.field_names.begin(), expression.field_names.end(), field.name);
-        if (source == expression.field_names.end()) {
+        TypedValue value;
+        if (source == expression.field_names.end() && field.default_value == nullptr) {
             throw std::runtime_error("missing field '" + field.name + "'");
         }
 
-        const std::size_t source_index = static_cast<std::size_t>(source - expression.field_names.begin());
-        const TypedValue value = emit_expression(*expression.arguments.at(source_index), output);
+        if (source == expression.field_names.end()) {
+            value = emit_expression(*field.default_value, output);
+        } else {
+            const std::size_t source_index = static_cast<std::size_t>(source - expression.field_names.begin());
+            value = emit_expression(*expression.arguments.at(source_index), output);
+        }
+
         const std::size_t offset = layout.field_offsets.at(field.name);
         const std::string slot = next_register();
         output << "  " << slot << " = getelementptr i8, ptr " << handle << ", i64 " << offset << '\n';
@@ -2113,7 +2120,8 @@ LlvmIrGenerator::StructLayout LlvmIrGenerator::concrete_struct_layout(const Type
         layout.size = align_to(layout.size, field_size);
         layout.field_indices.emplace(field.name, layout.fields.size());
         layout.field_offsets.emplace(field.name, layout.size);
-        layout.fields.push_back(Parameter{field.name, TypeAnnotation{true, concrete_type}, field.location});
+        layout.fields.push_back(Parameter{field.name, TypeAnnotation{true, concrete_type}, field.location,
+                                          field.exported, field.default_value});
         layout.size += field_size;
     }
 

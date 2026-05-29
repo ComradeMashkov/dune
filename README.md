@@ -53,10 +53,11 @@ if x == 0 {
 
 Boolean values are represented as `1` for `true` and `0` for `false` when printed.
 
-Typed functions and scalar values:
+Typed functions use the `fn` keyword. Scalar values can be annotated with an
+explicit type:
 
 ```dn
-log(message: text): unit {
+fn log(message: text): unit {
   print(message);
 }
 
@@ -142,11 +143,11 @@ boundaries unless that member is marked `export`.
 ```dn
 export const ANSWER: int = 42;
 
-hidden(): int {
+fn hidden(): int {
   return 7;
 }
 
-export public(): int {
+export fn public(): int {
   return hidden();
 }
 ```
@@ -179,7 +180,7 @@ print(message.starts_with("dune"));
 Indexing, slices, loops, and foreign functions:
 
 ```dn
-foreign c_sqrt(value: real64): real64 = "sqrt";
+foreign fn c_sqrt(value: real64): real64 = "sqrt";
 
 message: text = "dune language";
 print(message[0]);
@@ -391,7 +392,7 @@ record Point {
   x: real64,
   y: real64,
 
-  sum(): real64 {
+  fn sum(): real64 {
     return this.x + this.y;
   }
 }
@@ -403,11 +404,11 @@ print(point.sum());
 Functions can be overloaded by parameter types:
 
 ```dn
-show(value: int): int {
+fn show(value: int): int {
   return value + 1;
 }
 
-show(value: bool): int {
+fn show(value: bool): int {
   if value {
     return 10;
   } else {
@@ -422,11 +423,11 @@ parameter can be unbounded, or it can use one of the current built-in bounds:
 `integer`, `numeric`, `real`, `comparable`, or `ordered`.
 
 ```dn
-identity<T>(value: T): T {
+fn identity<T>(value: T): T {
   return value;
 }
 
-square<T is numeric>(value: T): T {
+fn square<T is numeric>(value: T): T {
   return value * value;
 }
 ```
@@ -439,11 +440,25 @@ record Box<T> {
   value: T,
 }
 
-boxed<T>(value: T): Box<T> {
+fn boxed<T>(value: T): Box<T> {
   return Box { value: value };
 }
 
 answer: Box<int> = boxed(42);
+```
+
+Record fields can declare default values. A record literal may omit fields that
+have defaults; missing fields without defaults are still rejected. Defaults are
+evaluated each time a record value is created.
+
+```dn
+record Optimizer {
+  lr: real64 = 0.01,
+  momentum: real64 = 0.0,
+}
+
+base: Optimizer = Optimizer {};
+fast: Optimizer = Optimizer { lr: 0.1 };
 ```
 
 Records can declare lightweight constructors and explicitly implement contracts.
@@ -460,16 +475,16 @@ contract Shape {
 record Circle with Shape {
   radius: real64,
 
-  new(radius: real64): Circle {
+  fn new(radius: real64): Circle {
     return Circle { radius: radius };
   }
 
-  area(): real64 {
+  fn area(): real64 {
     return 3.0 * this.radius * this.radius;
   }
 }
 
-area_of<T is Shape>(shape: T): real64 {
+fn area_of<T is Shape>(shape: T): real64 {
   return shape.area();
 }
 
@@ -483,15 +498,15 @@ When records come from modules, member visibility is explicit:
 export record Counter {
   value: int,
 
-  export new(): Counter {
+  export fn new(): Counter {
     return Counter { value: 0 };
   }
 
-  export inc(): unit {
+  export fn inc(): unit {
     this.value = this.value + 1;
   }
 
-  export current(): int {
+  export fn current(): int {
     return this.value;
   }
 }
@@ -733,12 +748,13 @@ The current release implements a small compiled language with:
 - logical operators
 - modulo
 - explicit casts with `to`
-- typed functions
+- typed `fn` functions
 - overloaded functions
 - generic functions with basic bounds
 - generic functions with explicit contract bounds
 - call-site generic instantiation
 - generic records
+- record field defaults
 - record constructors
 - record member visibility
 - contracts and explicit record `with` declarations

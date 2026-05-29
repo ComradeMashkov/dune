@@ -1,1 +1,1 @@
-export foreign panic(message: text): unit = "dune_panic";
+export foreign fn panic(message: text): unit = "dune_panic";

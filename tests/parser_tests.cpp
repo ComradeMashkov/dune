@@ -2,6 +2,7 @@
 #include "parser/parser.hpp"
 
 #include <iostream>
+#include <stdexcept>
 #include <string>
 
 namespace {
@@ -19,6 +20,17 @@ bool expect(bool condition, const char* message) {
     }
 
     return true;
+}
+
+bool expect_parse_error(const std::string& source, const char* message) {
+    try {
+        parse_source(source);
+    } catch (const std::runtime_error&) {
+        return true;
+    }
+
+    std::cerr << message << '\n';
+    return false;
 }
 
 bool parses_binding_and_print() {
@@ -168,7 +180,7 @@ bool parses_assignment_targets() {
 }
 
 bool parses_functions_and_types() {
-    const dune::Program program = parse_source("add(a: int, b: int): int { return a + b; } "
+    const dune::Program program = parse_source("fn add(a: int, b: int): int { return a + b; } "
                                                "total: int = add(10, 20); print(total);");
 
     if (!expect(program.statements.size() == 3, "expected function, binding, and print statements")) {
@@ -200,6 +212,11 @@ bool parses_functions_and_types() {
     passed = expect(binding_statement.expression->arguments.size() == 2, "expected two call arguments") && passed;
 
     return passed;
+}
+
+bool rejects_legacy_function_syntax() {
+    return expect_parse_error("add(a: int, b: int): int { return a + b; }",
+                              "expected legacy function syntax to be rejected");
 }
 
 bool parses_extended_types() {
@@ -284,8 +301,8 @@ bool parses_raw_and_escaped_literals() {
 }
 
 bool parses_standard_types_and_unit_calls() {
-    const dune::Program program = parse_source("log(message: text): unit { print(message); return; } "
-                                               "noop(): unit { } "
+    const dune::Program program = parse_source("fn log(message: text): unit { print(message); return; } "
+                                               "fn noop(): unit { } "
                                                "tiny: i8 = 1; wide: i64 = 2; "
                                                "index: usize = 3; offset: isize = 4; "
                                                "rough: real32 = 1.5; exact: real64 = 2.5; "
@@ -446,7 +463,7 @@ bool parses_casts_unary_logical_and_methods() {
 
 bool parses_stdlib_primitives() {
     const dune::Program program = parse_source("import text; "
-                                               "export foreign c_sqrt(value: real64): real64 = \"sqrt\"; "
+                                               "export foreign fn c_sqrt(value: real64): real64 = \"sqrt\"; "
                                                "message: text = \"dune\"; print(message[1:3]); print(message[:2]); "
                                                "for i = 0; i < 3; i = i + 1 { "
                                                "if i == 1 { continue; } break; }");
@@ -490,8 +507,9 @@ bool parses_stdlib_primitives() {
 }
 
 bool parses_generic_functions() {
-    const dune::Program program = parse_source("choose<T, R is real, U is numeric>(left: T, middle: R, right: U): U { "
-                                               "return right; } print(choose(\"x\", 1.5, 7));");
+    const dune::Program program =
+        parse_source("fn choose<T, R is real, U is numeric>(left: T, middle: R, right: U): U { "
+                     "return right; } print(choose(\"x\", 1.5, 7));");
 
     if (!expect(program.statements.size() == 2, "expected generic function and print statements")) {
         return false;
@@ -559,7 +577,7 @@ bool parses_receiver_methods() {
 
 bool parses_records_and_record_literals() {
     const dune::Program program = parse_source("record Point { x: real64, y: real64, "
-                                               "sum(): real64 { return this.x + this.y; } } "
+                                               "fn sum(): real64 { return this.x + this.y; } } "
                                                "p: Point = Point { x: 1.5, y: 2.5 }; print(p.sum());");
 
     if (!expect(program.statements.size() == 3, "expected record, binding, and print")) {
@@ -590,6 +608,38 @@ bool parses_records_and_record_literals() {
     const dune::Expression& call = *program.statements[2].expression;
     passed = expect(call.kind == dune::ExpressionKind::method_call, "expected record method call") && passed;
     passed = expect(call.lexeme == "sum", "expected method name") && passed;
+
+    return passed;
+}
+
+bool parses_record_field_defaults() {
+    const dune::Program program =
+        parse_source("record Optimizer { lr: real64 = 0.01, momentum: real64 = 0.0, name: text = \"sgd\" } "
+                     "optimizer: Optimizer = Optimizer { lr: 0.1 };");
+
+    if (!expect(program.statements.size() == 2, "expected record and binding")) {
+        return false;
+    }
+
+    bool passed = true;
+    const dune::Statement& record = program.statements[0];
+    passed = expect(record.kind == dune::StatementKind::struct_statement, "expected record statement") && passed;
+    passed = expect(record.parameters.size() == 3, "expected three record fields") && passed;
+    passed = expect(record.parameters[0].default_value != nullptr, "expected lr default") && passed;
+    passed = expect(record.parameters[0].default_value->kind == dune::ExpressionKind::floating,
+                    "expected floating default") &&
+             passed;
+    passed = expect(record.parameters[1].default_value != nullptr, "expected momentum default") && passed;
+    passed = expect(record.parameters[2].default_value != nullptr, "expected name default") && passed;
+    passed =
+        expect(record.parameters[2].default_value->kind == dune::ExpressionKind::string, "expected string default") &&
+        passed;
+
+    const dune::Expression& literal = *program.statements[1].expression;
+    passed =
+        expect(literal.kind == dune::ExpressionKind::struct_literal, "expected record literal expression") && passed;
+    passed = expect(literal.field_names.size() == 1, "expected one explicit field") && passed;
+    passed = expect(literal.field_names[0] == "lr", "expected lr override") && passed;
 
     return passed;
 }
@@ -640,8 +690,8 @@ bool parses_record_constructors_visibility_and_contracts() {
     const dune::Program program =
         parse_source("export contract Shape { area(): real64; } "
                      "export record Circle with Shape { radius: real64, "
-                     "export new(radius: real64): Circle { return Circle { radius: radius }; } "
-                     "export area(): real64 { return this.radius; } } "
+                     "export fn new(radius: real64): Circle { return Circle { radius: radius }; } "
+                     "export fn area(): real64 { return this.radius; } } "
                      "circle: Circle = Circle.new(2.0);");
 
     if (!expect(program.statements.size() == 3, "expected contract, record, and constructor binding")) {
@@ -743,6 +793,7 @@ int main() {
     passed = parses_control_flow() && passed;
     passed = parses_assignment_targets() && passed;
     passed = parses_functions_and_types() && passed;
+    passed = rejects_legacy_function_syntax() && passed;
     passed = parses_extended_types() && passed;
     passed = parses_raw_and_escaped_literals() && passed;
     passed = parses_standard_types_and_unit_calls() && passed;
@@ -753,6 +804,7 @@ int main() {
     passed = parses_generic_functions() && passed;
     passed = parses_receiver_methods() && passed;
     passed = parses_records_and_record_literals() && passed;
+    passed = parses_record_field_defaults() && passed;
     passed = parses_generic_records_and_when() && passed;
     passed = parses_record_constructors_visibility_and_contracts() && passed;
     passed = parses_choices_and_variant_when() && passed;
