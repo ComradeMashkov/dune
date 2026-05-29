@@ -66,6 +66,10 @@ int main() {
     bool passed = true;
 
     passed = expect_eq(run_source("print(40 + 2);"), "42\n", "expected arithmetic output") && passed;
+    passed = expect_eq(run_source("message: text = format(\"{} v{}\", \"Dune\", 1); print(message); "
+                                  "print(format(\"bits {}\", 0b1010u8));"),
+                       "Dune v1\nbits 10\n", "expected format expression and numeric literal output") &&
+             passed;
     passed = expect_eq(run_source("print(true); print(false); print(3 > 2); print(3 != 3);"), "1\n0\n1\n0\n",
                        "expected boolean and comparison output") &&
              passed;

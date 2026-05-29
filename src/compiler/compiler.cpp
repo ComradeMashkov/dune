@@ -1,5 +1,6 @@
 #include "compiler.hpp"
 
+#include "ast/literal_utils.hpp"
 #include "typechecker/type_checker.hpp"
 
 #include <algorithm>
@@ -156,14 +157,15 @@ std::string decode_text_literal(const std::string& lexeme) {
 
 Value make_number(const std::string& lexeme, const Type& type) {
     if (is_real_type(type.kind)) {
-        return make_real(std::stod(lexeme));
+        return make_real(std::stod(clean_real_literal(lexeme)));
     }
 
+    const unsigned long long value = parse_unsigned_integer_literal(lexeme);
     if (is_unsigned_type(type.kind)) {
-        return make_unsigned(std::stoull(lexeme));
+        return make_unsigned(value);
     }
 
-    return make_signed(std::stoll(lexeme));
+    return make_signed(static_cast<std::int64_t>(value));
 }
 
 Value default_value(const Type& type) {
@@ -547,7 +549,7 @@ void Compiler::compile_expression(const Expression& expression) {
         emit(OpCode::push_constant, add_constant(make_number(expression.lexeme, expression_type(expression))));
         return;
     case ExpressionKind::floating:
-        emit(OpCode::push_constant, add_constant(make_real(std::stod(expression.lexeme))));
+        emit(OpCode::push_constant, add_constant(make_real(std::stod(clean_real_literal(expression.lexeme)))));
         return;
     case ExpressionKind::character:
         emit(OpCode::push_constant, add_constant(make_glyph(decode_glyph_literal(expression.lexeme))));
@@ -596,6 +598,11 @@ void Compiler::compile_expression(const Expression& expression) {
         compile_cast_expression(expression);
         return;
     case ExpressionKind::call:
+        if (expression.lexeme == "format") {
+            compile_format_expression(expression);
+            return;
+        }
+
         for (const std::unique_ptr<Expression>& argument : expression.arguments) {
             compile_expression(*argument);
         }
@@ -612,6 +619,14 @@ void Compiler::compile_expression(const Expression& expression) {
         compile_when_expression(expression);
         return;
     }
+}
+
+void Compiler::compile_format_expression(const Expression& expression) {
+    for (const std::unique_ptr<Expression>& argument : expression.arguments) {
+        compile_expression(*argument);
+    }
+
+    emit(OpCode::format_text, expression.arguments.size() - 1);
 }
 
 void Compiler::compile_when_expression(const Expression& expression) {

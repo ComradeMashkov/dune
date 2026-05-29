@@ -154,6 +154,50 @@ int main() {
                            }) &&
              passed;
 
+    passed = expect_tokens("size = 1_000_000; mask = 0xffu64; bits = 0b1010_0101u8; wide = 123i64;",
+                           {
+                               {identifier, "size"},
+                               {equal, "="},
+                               {number, "1_000_000"},
+                               {semicolon, ";"},
+                               {identifier, "mask"},
+                               {equal, "="},
+                               {number, "0xffu64"},
+                               {semicolon, ";"},
+                               {identifier, "bits"},
+                               {equal, "="},
+                               {number, "0b1010_0101u8"},
+                               {semicolon, ";"},
+                               {identifier, "wide"},
+                               {equal, "="},
+                               {number, "123i64"},
+                               {semicolon, ";"},
+                               {eof, ""},
+                           }) &&
+             passed;
+
+    passed = expect_tokens("rough: real = 1_000.5_25;",
+                           {
+                               {identifier, "rough"},
+                               {colon, ":"},
+                               {real_keyword, "real"},
+                               {equal, "="},
+                               {float_number, "1_000.5_25"},
+                               {semicolon, ";"},
+                               {eof, ""},
+                           }) &&
+             passed;
+
+    passed = expect_lex_error_contains("bad = 1__000;", "invalid numeric separator",
+                                       "expected repeated numeric separator error") &&
+             passed;
+    passed = expect_lex_error_contains("bad = 0b102;", "invalid digit in binary literal",
+                                       "expected invalid binary digit error") &&
+             passed;
+    passed = expect_lex_error_contains("bad = 42abc;", "invalid numeric literal suffix 'abc'",
+                                       "expected invalid numeric suffix error") &&
+             passed;
+
     passed = expect_tokens("log(message: text): unit { return; } "
                            "a: i8 = 1; b: i16 = 2; c: i32 = 3; d: i64 = 4; "
                            "e: isize = 5; f: usize = 6; g: real32 = 1.5; "

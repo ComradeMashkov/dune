@@ -62,14 +62,22 @@ log(message: text): unit {
 
 count: usize = 5;
 precise: real64 = 2.25;
+mask: u64 = 0xffu64;
+bits: u8 = 0b1010_0101u8;
 
 log("ready");
 print(count);
 print(precise);
+print(mask);
+print(bits);
 ```
 
+Integer literals support `_` separators, `0x` hex, `0b` binary, and explicit
+integer suffixes such as `i32`, `i64`, `u8`, `u64`, and `usize`.
+
 Formatted output keeps `print(expression)` working and also supports a string
-literal with positional `{}` placeholders:
+literal with positional `{}` placeholders. The same formatting is available as
+the `format(...)` expression, which returns `text`:
 
 ```dn
 name: text = "Dune";
@@ -77,6 +85,7 @@ version: int = 1;
 
 print("{} v{}", name, version);
 print("ready={}, value={}", true, 42);
+message: text = format("{} v{}", name, version);
 ```
 
 For now the format string must be a literal, placeholders are plain `{}` only,
@@ -615,6 +624,7 @@ Built-in receiver methods:
 - arrays: `len()`, `push(value)`, `pop()`, `clear()`, `is_empty()`
 - text: `len()`, `is_empty()`, `contains(needle)`, `starts_with(prefix)`
 - raw text literals: `r"..."` keeps backslashes without escape decoding
+- format expression: `format("{} {}", left, right)` returns `text`
 
 Standard library receiver methods are enabled by importing their module:
 
@@ -738,6 +748,7 @@ The current release implements a small compiled language with:
 - booleans
 - signed and unsigned integer widths
 - floating point values
+- `_` separators, `0x`/`0b` integer literals, and integer literal suffixes
 - glyph and text values
 - unit-returning functions
 - dynamic arrays
@@ -747,6 +758,7 @@ The current release implements a small compiled language with:
 - array methods
 - text methods
 - raw text literals and explicit text/glyph escapes
+- `format()` expressions
 - standard library receiver methods
 - text indexing
 - slices

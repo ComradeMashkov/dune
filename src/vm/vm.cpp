@@ -369,12 +369,13 @@ std::string value_to_text(const Value& value) {
     throw std::runtime_error("cannot print unknown value");
 }
 
-void print_formatted_value(const std::string& format, const std::vector<Value>& arguments, std::ostream& output) {
+std::string format_value(const std::string& format, const std::vector<Value>& arguments) {
+    std::ostringstream output;
     std::size_t argument_index = 0;
     for (std::size_t index = 0; index < format.size(); ++index) {
         if (format[index] == '{' && index + 1 < format.size() && format[index + 1] == '}') {
             if (argument_index >= arguments.size()) {
-                throw std::runtime_error("not enough print format arguments");
+                throw std::runtime_error("not enough format arguments");
             }
 
             output << value_to_text(arguments[argument_index++]);
@@ -386,10 +387,14 @@ void print_formatted_value(const std::string& format, const std::vector<Value>& 
     }
 
     if (argument_index != arguments.size()) {
-        throw std::runtime_error("too many print format arguments");
+        throw std::runtime_error("too many format arguments");
     }
 
-    output << '\n';
+    return output.str();
+}
+
+void print_formatted_value(const std::string& format, const std::vector<Value>& arguments, std::ostream& output) {
+    output << format_value(format, arguments) << '\n';
 }
 
 std::size_t index_value(const Value& value) {
@@ -997,6 +1002,21 @@ void VirtualMachine::run(std::ostream& output) {
             }
 
             print_formatted_value(format.text_value, arguments, output);
+            ++frame.ip;
+            break;
+        }
+        case OpCode::format_text: {
+            std::vector<Value> arguments(instruction.operand);
+            for (std::size_t index = instruction.operand; index > 0; --index) {
+                arguments[index - 1] = pop();
+            }
+
+            const Value format = pop();
+            if (format.kind != ValueKind::text) {
+                throw std::runtime_error("format string must be text");
+            }
+
+            stack_.push_back(make_text(format_value(format.text_value, arguments)));
             ++frame.ip;
             break;
         }

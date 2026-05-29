@@ -227,6 +227,28 @@ bool parses_extended_types() {
     return passed;
 }
 
+bool parses_format_expression_and_numeric_literals() {
+    const dune::Program program = parse_source("size = 1_000_000; mask: u64 = 0xffu64; "
+                                               "message: text = format(\"{}\", size);");
+
+    if (!expect(program.statements.size() == 3, "expected numeric and format statements")) {
+        return false;
+    }
+
+    bool passed = true;
+    passed = expect(program.statements[0].expression->kind == dune::ExpressionKind::number,
+                    "expected decimal numeric literal") &&
+             passed;
+    passed =
+        expect(program.statements[0].expression->lexeme == "1_000_000", "expected decimal separator lexeme") && passed;
+    passed = expect(program.statements[1].expression->lexeme == "0xffu64", "expected hex suffix lexeme") && passed;
+    const dune::Expression& call = *program.statements[2].expression;
+    passed = expect(call.kind == dune::ExpressionKind::call, "expected format call") && passed;
+    passed = expect(call.lexeme == "format", "expected format callee") && passed;
+    passed = expect(call.arguments.size() == 2, "expected format string and one argument") && passed;
+    return passed;
+}
+
 bool parses_raw_and_escaped_literals() {
     const dune::Program program = parse_source(
         R"dune(path: text = r"C:\Users\name\data.csv"; line: text = "hello\n"; tab: glyph = '\t'; quote: glyph = '\'';)dune");
@@ -716,6 +738,7 @@ int main() {
     bool passed = true;
     passed = parses_binding_and_print() && passed;
     passed = parses_formatted_print() && passed;
+    passed = parses_format_expression_and_numeric_literals() && passed;
     passed = parses_operator_precedence() && passed;
     passed = parses_control_flow() && passed;
     passed = parses_assignment_targets() && passed;

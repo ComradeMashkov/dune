@@ -1,5 +1,7 @@
 #include "type_checker.hpp"
 
+#include "ast/literal_utils.hpp"
+
 #include <cstdint>
 #include <limits>
 #include <stdexcept>
@@ -1004,31 +1006,7 @@ void TypeChecker::check_statement(const Statement& statement) {
             return;
         }
 
-        if (statement.expression->kind != ExpressionKind::string) {
-            throw std::runtime_error(
-                diagnostic(statement.expression->location, "print format string must be a string literal"));
-        }
-
-        const auto [placeholders, valid_format] = count_format_placeholders(statement.expression->lexeme);
-        if (!valid_format) {
-            throw std::runtime_error(diagnostic(statement.expression->location, "invalid print format placeholder"));
-        }
-
-        if (placeholders != statement.arguments.size()) {
-            throw std::runtime_error(
-                diagnostic(statement.expression->location, "print format string expects " +
-                                                               std::to_string(placeholders) + " arguments but got " +
-                                                               std::to_string(statement.arguments.size())));
-        }
-
-        for (const std::unique_ptr<Expression>& argument : statement.arguments) {
-            const Type argument_type = check_expression(*argument);
-            if (!is_printable_type(argument_type)) {
-                throw std::runtime_error(
-                    diagnostic(argument->location, "cannot print type '" + type_name(argument_type) + "'"));
-            }
-        }
-
+        check_format_arguments(*statement.expression, statement.arguments, 0, "print");
         return;
     }
     case StatementKind::block:
@@ -1270,7 +1248,12 @@ Type TypeChecker::check_expression(const Expression& expression, const TypeAnnot
         throw std::runtime_error(diagnostic(expression.location, "undefined variable '" + expression.lexeme + "'"));
     }
     case ExpressionKind::number:
-        actual = expected.has_type && is_numeric_type(expected.type) ? expected.type : make_type(ValueType::int_type);
+        if (TypeAnnotation suffix_type = integer_literal_suffix_type(expression.lexeme); suffix_type.has_type) {
+            actual = suffix_type.type;
+        } else {
+            actual =
+                expected.has_type && is_numeric_type(expected.type) ? expected.type : make_type(ValueType::int_type);
+        }
         check_integer_literal_range(expression, actual);
         break;
     case ExpressionKind::floating:
@@ -1440,6 +1423,11 @@ Type TypeChecker::check_when_expression(const Expression& expression, const Type
 }
 
 Type TypeChecker::check_call_expression(const Expression& expression, const TypeAnnotation& expected) {
+    if (expression.lexeme == "format") {
+        (void)expected;
+        return check_format_call_expression(expression);
+    }
+
     if (expected.has_type && expected.type.kind == ValueType::enum_type &&
         is_variant_name_for_expected_enum(expression.lexeme, expected)) {
         return check_variant_constructor(expression, expression.lexeme, expression.arguments, expression.location,
@@ -1447,6 +1435,44 @@ Type TypeChecker::check_call_expression(const Expression& expression, const Type
     }
 
     return check_function_call(expression, expression.lexeme, expression.arguments, expression.location, expected);
+}
+
+Type TypeChecker::check_format_call_expression(const Expression& expression) {
+    if (expression.arguments.empty()) {
+        throw std::runtime_error(diagnostic(expression.location, "format expects a format string argument"));
+    }
+
+    check_format_arguments(*expression.arguments[0], expression.arguments, 1, "format");
+    return make_type(ValueType::text_type);
+}
+
+void TypeChecker::check_format_arguments(const Expression& format,
+                                         const std::vector<std::unique_ptr<Expression>>& arguments,
+                                         std::size_t first_argument, std::string_view feature_name) {
+    const std::string label = feature_name == "print" ? "print format" : std::string(feature_name);
+    const std::string action = std::string(feature_name);
+    if (format.kind != ExpressionKind::string) {
+        throw std::runtime_error(diagnostic(format.location, label + " string must be a string literal"));
+    }
+
+    const auto [placeholders, valid_format] = count_format_placeholders(format.lexeme);
+    if (!valid_format) {
+        throw std::runtime_error(diagnostic(format.location, "invalid " + label + " placeholder"));
+    }
+
+    const std::size_t provided = arguments.size() - first_argument;
+    if (placeholders != provided) {
+        throw std::runtime_error(diagnostic(format.location, label + " string expects " + std::to_string(placeholders) +
+                                                                 " arguments but got " + std::to_string(provided)));
+    }
+
+    for (std::size_t index = first_argument; index < arguments.size(); ++index) {
+        const Type argument_type = check_expression(*arguments[index]);
+        if (!is_printable_type(argument_type)) {
+            throw std::runtime_error(diagnostic(arguments[index]->location,
+                                                "cannot " + action + " type '" + type_name(argument_type) + "'"));
+        }
+    }
 }
 
 Type TypeChecker::check_function_call(const Expression& expression, const std::string& name,
@@ -2679,6 +2705,10 @@ bool TypeChecker::is_cast_allowed(const Type& source, const Type& target) const 
 }
 
 bool TypeChecker::can_coerce_integer_literal(const Expression& expression, const Type& target) const {
+    if (has_integer_literal_suffix(expression.lexeme)) {
+        return false;
+    }
+
     if (expression.kind == ExpressionKind::number && is_numeric_type(target)) {
         return true;
     }
@@ -2691,7 +2721,14 @@ void TypeChecker::check_integer_literal_range(const Expression& expression, cons
         return;
     }
 
-    const unsigned long long value = std::stoull(expression.lexeme);
+    unsigned long long value = 0;
+    try {
+        value = parse_unsigned_integer_literal(expression.lexeme);
+    } catch (const std::out_of_range&) {
+        throw std::runtime_error(
+            diagnostic(expression.location,
+                       "integer literal '" + expression.lexeme + "' does not fit in type '" + type_name(target) + "'"));
+    }
     const unsigned long long max = max_integer_literal(target.kind);
     if (value > max) {
         throw std::runtime_error(

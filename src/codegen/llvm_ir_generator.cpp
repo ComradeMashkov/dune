@@ -1,5 +1,6 @@
 #include "llvm_ir_generator.hpp"
 
+#include "ast/literal_utils.hpp"
 #include "typechecker/type_checker.hpp"
 
 #include <algorithm>
@@ -35,8 +36,9 @@ bool is_real_type(ValueType type) {
 }
 
 std::string real_literal(const std::string& lexeme, const Type& type) {
+    const std::string clean = clean_real_literal(lexeme);
     if (type.kind == ValueType::real32_type) {
-        const double rounded = static_cast<double>(static_cast<float>(std::stod(lexeme)));
+        const double rounded = static_cast<double>(static_cast<float>(std::stod(clean)));
         const std::uint64_t bits = std::bit_cast<std::uint64_t>(rounded);
         std::ostringstream output;
         output << "0x" << std::uppercase << std::hex << std::setw(16) << std::setfill('0') << bits;
@@ -44,8 +46,20 @@ std::string real_literal(const std::string& lexeme, const Type& type) {
     }
 
     std::ostringstream output;
-    output << std::scientific << std::setprecision(16) << std::stod(lexeme);
+    output << std::scientific << std::setprecision(16) << std::stod(clean);
     return output.str();
+}
+
+std::string c_format_segment(const std::string& value) {
+    std::string result;
+    result.reserve(value.size());
+    for (const char current : value) {
+        result += current;
+        if (current == '%') {
+            result += '%';
+        }
+    }
+    return result;
 }
 
 std::size_t align_to(std::size_t value, std::size_t alignment) {
@@ -133,6 +147,7 @@ void LlvmIrGenerator::generate(const Program& program, std::ostream& output) {
     }
 
     output << "declare i32 @printf(ptr, ...)\n";
+    output << "declare i32 @snprintf(ptr, i64, ptr, ...)\n";
     output << "declare i32 @strcmp(ptr, ptr)\n\n";
     output << "declare i64 @strlen(ptr)\n";
     output << "declare ptr @strstr(ptr, ptr)\n";
@@ -631,7 +646,7 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_expression(const Expression& e
             return TypedValue{real_literal(expression.lexeme, type->second), type->second};
         }
 
-        return TypedValue{expression.lexeme, type->second};
+        return TypedValue{llvm_integer_literal(expression.lexeme), type->second};
     case ExpressionKind::floating:
         return TypedValue{real_literal(expression.lexeme, type->second), type->second};
     case ExpressionKind::character:
@@ -659,6 +674,9 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_expression(const Expression& e
     case ExpressionKind::when_expression:
         return emit_when_expression(expression, output);
     case ExpressionKind::call:
+        if (expression.lexeme == "format") {
+            return emit_format_expression(expression, output);
+        }
         return emit_call_expression(expression, output);
     case ExpressionKind::method_call:
         return emit_method_call_expression(expression, output);
@@ -947,6 +965,53 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_call_expression(const Expressi
     }
     output << ")\n";
     return TypedValue{result, function->second.return_type};
+}
+
+LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_format_expression(const Expression& expression,
+                                                                    std::ostream& output) {
+    const std::string format_text = decode_text_literal(expression.arguments[0]->lexeme);
+    std::size_t argument_index = 1;
+    std::string c_format;
+    for (std::size_t index = 0; index < format_text.size(); ++index) {
+        if (format_text[index] == '{' && index + 1 < format_text.size() && format_text[index + 1] == '}') {
+            const Type argument_type = expression_types_.at(expression.arguments[argument_index].get());
+            c_format += printf_fragment_format_text(argument_type);
+            ++argument_index;
+            ++index;
+            continue;
+        }
+
+        c_format += c_format_segment(std::string(1, format_text[index]));
+    }
+
+    const std::string format_pointer = emit_c_string_literal(c_format);
+    std::vector<TypedValue> arguments;
+    arguments.reserve(expression.arguments.size() - 1);
+    for (std::size_t index = 1; index < expression.arguments.size(); ++index) {
+        arguments.push_back(cast_for_print(emit_expression(*expression.arguments[index], output), output));
+    }
+
+    const std::string length_i32 = next_register();
+    output << "  " << length_i32 << " = call i32 (ptr, i64, ptr, ...) @snprintf(ptr null, i64 0, ptr "
+           << format_pointer;
+    for (const TypedValue& argument : arguments) {
+        output << ", " << llvm_type(argument.type) << ' ' << argument.name;
+    }
+    output << ")\n";
+
+    const std::string length_i64 = next_register();
+    const std::string bytes = next_register();
+    const std::string result = next_register();
+    output << "  " << length_i64 << " = sext i32 " << length_i32 << " to i64\n";
+    output << "  " << bytes << " = add i64 " << length_i64 << ", 1\n";
+    output << "  " << result << " = call ptr @dune_alloc(i64 " << bytes << ")\n";
+    output << "  call i32 (ptr, i64, ptr, ...) @snprintf(ptr " << result << ", i64 " << bytes << ", ptr "
+           << format_pointer;
+    for (const TypedValue& argument : arguments) {
+        output << ", " << llvm_type(argument.type) << ' ' << argument.name;
+    }
+    output << ")\n";
+    return TypedValue{result, make_type(ValueType::text_type)};
 }
 
 LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_method_call_expression(const Expression& expression,
@@ -1911,6 +1976,40 @@ std::string LlvmIrGenerator::printf_fragment_format_name(const Type& type) const
         return "[3 x i8], ptr @.dune_fmt_glyph_raw, i64 0, i64 0";
     case ValueType::text_type:
         return "[3 x i8], ptr @.dune_fmt_text_raw, i64 0, i64 0";
+    case ValueType::unit_type:
+    case ValueType::array_type:
+    case ValueType::generic_type:
+    case ValueType::struct_type:
+    case ValueType::enum_type:
+        break;
+    }
+
+    throw std::runtime_error("unknown type");
+}
+
+std::string LlvmIrGenerator::printf_fragment_format_text(const Type& type) const {
+    switch (type.kind) {
+    case ValueType::int_type:
+    case ValueType::i8_type:
+    case ValueType::i16_type:
+    case ValueType::i32_type:
+    case ValueType::i64_type:
+    case ValueType::isize_type:
+    case ValueType::bool_type:
+        return "%lld";
+    case ValueType::u16_type:
+    case ValueType::u8_type:
+    case ValueType::u32_type:
+    case ValueType::u64_type:
+    case ValueType::usize_type:
+        return "%llu";
+    case ValueType::real32_type:
+    case ValueType::real_type:
+        return "%.15g";
+    case ValueType::glyph_type:
+        return "%c";
+    case ValueType::text_type:
+        return "%s";
     case ValueType::unit_type:
     case ValueType::array_type:
     case ValueType::generic_type:

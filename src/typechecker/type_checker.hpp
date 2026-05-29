@@ -4,6 +4,7 @@
 
 #include <deque>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -120,6 +121,7 @@ private:
     Type check_binary_expression(const Expression& expression, const TypeAnnotation& expected);
     Type check_when_expression(const Expression& expression, const TypeAnnotation& expected);
     Type check_call_expression(const Expression& expression, const TypeAnnotation& expected);
+    Type check_format_call_expression(const Expression& expression);
     Type check_method_call_expression(const Expression& expression, const TypeAnnotation& expected);
     Type check_constructor_call_expression(const Expression& expression, const std::string& record_name,
                                            const TypeAnnotation& expected);
@@ -139,6 +141,8 @@ private:
     Type check_receiver_method_call(const Expression& expression, const TypeAnnotation& expected);
     Type check_array_method_call(const Type& receiver, const Expression& expression);
     Type check_text_method_call(const Type& receiver, const Expression& expression);
+    void check_format_arguments(const Expression& format, const std::vector<std::unique_ptr<Expression>>& arguments,
+                                std::size_t first_argument, std::string_view feature_name);
 
     bool statement_returns(const Statement& statement) const;
     bool statements_return(const std::vector<Statement>& statements) const;

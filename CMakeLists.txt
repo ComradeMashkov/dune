@@ -219,7 +219,17 @@ add_test(
         ${CMAKE_COMMAND}
         -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/formatted_print.dn
-        -D EXPECTED_OUTPUT="Dune v1\nbool=1, glyph=Z, real=2.5\nplain text still works\n42"
+        -D EXPECTED_OUTPUT="Dune v1\nDune v1 Z\ninline 42\nbool=1, glyph=Z, real=2.5\nplain text still works\n42"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
+    NAME cli_numeric_literals
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/numeric_literals.dn
+        -D EXPECTED_OUTPUT="1000000\n255\n165\n123\n10"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
 )
 
@@ -491,7 +501,18 @@ add_test(
         -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/formatted_print.dn
         -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/formatted_print_native
-        -D EXPECTED_OUTPUT="Dune v1\nbool=1, glyph=Z, real=2.5\nplain text still works\n42"
+        -D EXPECTED_OUTPUT="Dune v1\nDune v1 Z\ninline 42\nbool=1, glyph=Z, real=2.5\nplain text still works\n42"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
+)
+
+add_test(
+    NAME cli_build_native_numeric_literals
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/numeric_literals.dn
+        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/numeric_literals_native
+        -D EXPECTED_OUTPUT="1000000\n255\n165\n123\n10"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
 )
 
