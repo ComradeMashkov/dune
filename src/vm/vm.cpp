@@ -68,6 +68,13 @@ Value make_array(std::vector<Value> values) {
     return result;
 }
 
+Value make_tuple(std::vector<Value> values) {
+    Value result;
+    result.kind = ValueKind::tuple;
+    result.tuple_value = std::make_shared<std::vector<Value>>(std::move(values));
+    return result;
+}
+
 Value make_record(std::vector<Value> values) {
     Value result;
     result.kind = ValueKind::record;
@@ -103,6 +110,7 @@ Value add_values(const Value& left, const Value& right) {
     case ValueKind::text:
     case ValueKind::unit:
     case ValueKind::array:
+    case ValueKind::tuple:
     case ValueKind::record:
     case ValueKind::variant:
         break;
@@ -125,6 +133,7 @@ Value subtract_values(const Value& left, const Value& right) {
     case ValueKind::text:
     case ValueKind::unit:
     case ValueKind::array:
+    case ValueKind::tuple:
     case ValueKind::record:
     case ValueKind::variant:
         break;
@@ -147,6 +156,7 @@ Value multiply_values(const Value& left, const Value& right) {
     case ValueKind::text:
     case ValueKind::unit:
     case ValueKind::array:
+    case ValueKind::tuple:
     case ValueKind::record:
     case ValueKind::variant:
         break;
@@ -181,6 +191,7 @@ Value divide_values(const Value& left, const Value& right) {
     case ValueKind::text:
     case ValueKind::unit:
     case ValueKind::array:
+    case ValueKind::tuple:
     case ValueKind::record:
     case ValueKind::variant:
         break;
@@ -210,6 +221,7 @@ Value modulo_values(const Value& left, const Value& right) {
     case ValueKind::text:
     case ValueKind::unit:
     case ValueKind::array:
+    case ValueKind::tuple:
     case ValueKind::record:
     case ValueKind::variant:
         break;
@@ -231,6 +243,7 @@ Value negate_value(const Value& value) {
     case ValueKind::text:
     case ValueKind::unit:
     case ValueKind::array:
+    case ValueKind::tuple:
     case ValueKind::record:
     case ValueKind::variant:
         break;
@@ -265,6 +278,7 @@ bool values_equal(const Value& left, const Value& right) {
     case ValueKind::unit:
         return true;
     case ValueKind::array:
+    case ValueKind::tuple:
     case ValueKind::record:
     case ValueKind::variant:
         break;
@@ -287,6 +301,7 @@ int compare_values(const Value& left, const Value& right) {
     case ValueKind::text:
     case ValueKind::unit:
     case ValueKind::array:
+    case ValueKind::tuple:
     case ValueKind::record:
     case ValueKind::variant:
         break;
@@ -327,6 +342,8 @@ void print_value(const Value& value, std::ostream& output) {
         throw std::runtime_error("cannot print unit value");
     case ValueKind::array:
         throw std::runtime_error("cannot print array value");
+    case ValueKind::tuple:
+        throw std::runtime_error("cannot print tuple value");
     case ValueKind::record:
         throw std::runtime_error("cannot print record value");
     case ValueKind::variant:
@@ -360,6 +377,8 @@ std::string value_to_text(const Value& value) {
         throw std::runtime_error("cannot print unit value");
     case ValueKind::array:
         throw std::runtime_error("cannot print array value");
+    case ValueKind::tuple:
+        throw std::runtime_error("cannot print tuple value");
     case ValueKind::record:
         throw std::runtime_error("cannot print record value");
     case ValueKind::variant:
@@ -416,6 +435,14 @@ std::vector<Value>& array_elements(const Value& value) {
     return *value.array_value;
 }
 
+std::vector<Value>& tuple_elements(const Value& value) {
+    if (value.kind != ValueKind::tuple || value.tuple_value == nullptr) {
+        throw std::runtime_error("expected tuple value");
+    }
+
+    return *value.tuple_value;
+}
+
 std::vector<Value>& record_fields(const Value& value) {
     if (value.kind != ValueKind::record || value.record_value == nullptr) {
         throw std::runtime_error("expected record value");
@@ -454,6 +481,7 @@ double numeric_argument(const Value& value) {
     case ValueKind::text:
     case ValueKind::unit:
     case ValueKind::array:
+    case ValueKind::tuple:
     case ValueKind::record:
     case ValueKind::variant:
         break;
@@ -477,6 +505,7 @@ Value cast_signed(const Value& value) {
     case ValueKind::text:
     case ValueKind::unit:
     case ValueKind::array:
+    case ValueKind::tuple:
     case ValueKind::record:
     case ValueKind::variant:
         break;
@@ -500,6 +529,7 @@ Value cast_unsigned(const Value& value) {
     case ValueKind::text:
     case ValueKind::unit:
     case ValueKind::array:
+    case ValueKind::tuple:
     case ValueKind::record:
     case ValueKind::variant:
         break;
@@ -523,6 +553,7 @@ Value cast_real(const Value& value) {
     case ValueKind::text:
     case ValueKind::unit:
     case ValueKind::array:
+    case ValueKind::tuple:
     case ValueKind::record:
     case ValueKind::variant:
         break;
@@ -546,6 +577,7 @@ Value cast_bool(const Value& value) {
     case ValueKind::text:
     case ValueKind::unit:
     case ValueKind::array:
+    case ValueKind::tuple:
     case ValueKind::record:
     case ValueKind::variant:
         break;
@@ -569,6 +601,7 @@ Value cast_glyph(const Value& value) {
     case ValueKind::text:
     case ValueKind::unit:
     case ValueKind::array:
+    case ValueKind::tuple:
     case ValueKind::record:
     case ValueKind::variant:
         break;
@@ -754,6 +787,20 @@ void VirtualMachine::run(std::ostream& output) {
             ++frame.ip;
             break;
         }
+        case OpCode::make_tuple: {
+            if (stack_.size() < instruction.operand) {
+                throw std::runtime_error("not enough values on stack for tuple literal");
+            }
+
+            std::vector<Value> elements(instruction.operand);
+            for (std::size_t index = instruction.operand; index > 0; --index) {
+                elements[index - 1] = pop();
+            }
+
+            stack_.push_back(make_tuple(std::move(elements)));
+            ++frame.ip;
+            break;
+        }
         case OpCode::make_record: {
             if (stack_.size() < instruction.operand) {
                 throw std::runtime_error("not enough values on stack for record literal");
@@ -824,6 +871,17 @@ void VirtualMachine::run(std::ostream& output) {
             }
 
             throw std::runtime_error("expected array or text value");
+        }
+        case OpCode::load_tuple_element: {
+            const Value tuple = pop();
+            std::vector<Value>& elements = tuple_elements(tuple);
+            if (instruction.operand >= elements.size()) {
+                throw std::runtime_error("tuple element out of bounds");
+            }
+
+            stack_.push_back(elements[instruction.operand]);
+            ++frame.ip;
+            break;
         }
         case OpCode::load_field: {
             const Value record = pop();

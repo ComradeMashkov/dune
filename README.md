@@ -425,6 +425,21 @@ boxed<T>(value: T): Box<T> {
 answer: Box<int> = boxed(42);
 ```
 
+Tuples group a small fixed number of values without declaring a record. Tuple
+types and literals currently require at least two elements. Tuples are returned,
+passed, and destructured as values; direct element access such as `.0` is a
+future extension.
+
+```dn
+minmax(values: [int]): (int, int) {
+  return (values[0], values[1]);
+}
+
+(lo, hi) = minmax([3, 8]);
+print(lo);
+print(hi);
+```
+
 Records can declare lightweight constructors and explicitly implement contracts.
 Constructors are statically checked functions associated with the record type;
 they must return the enclosing record type and are called with `Record.new(...)`.
@@ -549,10 +564,12 @@ export method<T> [T].first(): T {
 ```
 
 `when` expressions compare a subject against literal patterns or choice variant
-patterns. Arms can use the compact `pattern => expression;` form, or the older
+patterns. They can also destructure records and tuples with irrefutable patterns.
+Arms can use the compact `pattern => expression;` form, or the older
 `is pattern { expression }` form. Literal matches require a `_` fallback arm.
 Choice matches must cover every variant, or include `_` as a fallback. A payload
-variant pattern binds the payload only inside that arm.
+variant pattern binds the payload only inside that arm; record and tuple patterns
+bind their selected fields or elements inside the arm.
 
 ```dn
 label = when answer.value {
@@ -563,6 +580,14 @@ label = when answer.value {
 unwrapped = when value {
   Present(x) => x;
   Absent => 0;
+};
+
+point_sum = when point {
+  Point { x, y } => x + y;
+};
+
+pair_sum = when (lo, hi) {
+  (left, right) => left + right;
 };
 ```
 
@@ -578,6 +603,7 @@ Supported scalar types:
 Supported compound types:
 
 - `[T]` dynamic arrays, for example `[int]` or `[text]`
+- `(T, U)` tuples with two or more elements, for example `(int, text)`
 - `record` records with named fields, for example `Point { x: 1, y: 2 }`
 - generic records, for example `Box<int>`
 - contracts, for example `Shape` as a generic bound
@@ -717,6 +743,7 @@ The current release implements a small compiled language with:
 - generic functions with explicit contract bounds
 - call-site generic instantiation
 - generic records
+- tuple types, tuple literals, and local tuple destructuring
 - record constructors
 - record member visibility
 - contracts and explicit record `with` declarations
@@ -731,7 +758,7 @@ The current release implements a small compiled language with:
 - dynamic arrays
 - records with fields and methods
 - mutable array indexes and record fields
-- `when` expressions with literal and choice variant patterns, including `pattern => expression` arms
+- `when` expressions with literal, choice variant, record, and tuple patterns, including `pattern => expression` arms
 - array methods
 - text methods
 - standard library receiver methods

@@ -711,6 +711,48 @@ bool parses_arrow_style_when_patterns() {
     return passed;
 }
 
+bool parses_tuples_and_destructuring_patterns() {
+    const dune::Program program = parse_source("record Point { x: int, y: int } "
+                                               "minmax(values: [int]): (int, int) { return (values[0], values[1]); } "
+                                               "(lo, hi) = minmax([1, 2]); "
+                                               "point: Point = Point { x: 3, y: 4 }; "
+                                               "sum = when point { Point { x, y } => x + y; }; "
+                                               "pair_sum = when (lo, hi) { (left, right) => left + right; };");
+
+    if (!expect(program.statements.size() == 6, "expected tuple/destructuring program statements")) {
+        return false;
+    }
+
+    bool passed = true;
+    const dune::Statement& function = program.statements[1];
+    passed = expect(function.type.type.kind == dune::ValueType::tuple_type, "expected tuple return type") && passed;
+    passed = expect(function.type.type.arguments.size() == 2, "expected two tuple return elements") && passed;
+    passed = expect(function.body[0].expression->kind == dune::ExpressionKind::tuple, "expected tuple return value") &&
+             passed;
+
+    const dune::Statement& destructuring = program.statements[2];
+    passed =
+        expect(destructuring.target->kind == dune::ExpressionKind::tuple, "expected tuple assignment target") && passed;
+    passed = expect(destructuring.target->arguments.size() == 2, "expected two destructuring bindings") && passed;
+
+    const dune::Expression& record_when = *program.statements[4].expression;
+    passed =
+        expect(record_when.kind == dune::ExpressionKind::when_expression, "expected record when expression") && passed;
+    passed = expect(record_when.arguments[0]->kind == dune::ExpressionKind::struct_literal,
+                    "expected record destructuring pattern") &&
+             passed;
+    passed = expect(record_when.arguments[0]->field_names.size() == 2, "expected two record pattern fields") && passed;
+
+    const dune::Expression& tuple_when = *program.statements[5].expression;
+    passed =
+        expect(tuple_when.left->kind == dune::ExpressionKind::tuple, "expected tuple subject expression") && passed;
+    passed =
+        expect(tuple_when.arguments[0]->kind == dune::ExpressionKind::tuple, "expected tuple destructuring pattern") &&
+        passed;
+
+    return passed;
+}
+
 } // namespace
 
 int main() {
@@ -734,6 +776,7 @@ int main() {
     passed = parses_record_constructors_visibility_and_contracts() && passed;
     passed = parses_choices_and_variant_when() && passed;
     passed = parses_arrow_style_when_patterns() && passed;
+    passed = parses_tuples_and_destructuring_patterns() && passed;
 
     return passed ? 0 : 1;
 }

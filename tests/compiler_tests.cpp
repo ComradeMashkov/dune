@@ -418,6 +418,31 @@ bool compiles_arrow_style_choice_when() {
     return passed;
 }
 
+bool compiles_tuples_and_destructuring() {
+    const dune::Bytecode bytecode = compile_source("minmax(): (int, int) { return (2, 5); } "
+                                                   "(lo, hi) = minmax(); "
+                                                   "sum = when (lo, hi) { (left, right) => left + right; }; "
+                                                   "print(sum);");
+
+    bool saw_make_tuple = false;
+    bool saw_load_tuple_element = false;
+    for (const dune::Instruction& instruction : bytecode.instructions) {
+        saw_make_tuple = saw_make_tuple || instruction.op == dune::OpCode::make_tuple;
+        saw_load_tuple_element = saw_load_tuple_element || instruction.op == dune::OpCode::load_tuple_element;
+    }
+    for (const dune::Bytecode::Function& function : bytecode.functions) {
+        for (const dune::Instruction& instruction : function.instructions) {
+            saw_make_tuple = saw_make_tuple || instruction.op == dune::OpCode::make_tuple;
+            saw_load_tuple_element = saw_load_tuple_element || instruction.op == dune::OpCode::load_tuple_element;
+        }
+    }
+
+    bool passed = true;
+    passed = expect(saw_make_tuple, "expected tuple construction") && passed;
+    passed = expect(saw_load_tuple_element, "expected tuple destructuring loads") && passed;
+    return passed;
+}
+
 bool compiles_autograd_module_as_dune_code() {
     const dune::Bytecode bytecode = compile_source("import autograd; "
                                                    "x = autograd.variable(2.0); "
@@ -518,6 +543,7 @@ int main() {
     passed = compiles_when_expression() && passed;
     passed = compiles_choice_variants_and_when() && passed;
     passed = compiles_arrow_style_choice_when() && passed;
+    passed = compiles_tuples_and_destructuring() && passed;
     passed = compiles_autograd_module_as_dune_code() && passed;
     passed = compiles_matrix_module_as_dune_code() && passed;
 

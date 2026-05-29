@@ -77,6 +77,13 @@ std::unique_ptr<Expression> make_array(std::vector<std::unique_ptr<Expression>> 
     return expression;
 }
 
+std::unique_ptr<Expression> make_tuple(std::vector<std::unique_ptr<Expression>> elements, SourceLocation location) {
+    auto expression = std::make_unique<Expression>(Expression{ExpressionKind::tuple, "", nullptr, nullptr});
+    expression->arguments = std::move(elements);
+    expression->location = location;
+    return expression;
+}
+
 std::unique_ptr<Expression> make_struct_literal(std::string name, std::vector<std::string> field_names,
                                                 std::vector<std::unique_ptr<Expression>> values,
                                                 SourceLocation location) {
@@ -119,6 +126,12 @@ Type make_type(ValueType type) {
 
 Type make_array_type(Type element) {
     return Type{ValueType::array_type, std::make_shared<Type>(std::move(element))};
+}
+
+Type make_tuple_type(std::vector<Type> elements) {
+    Type type{ValueType::tuple_type, nullptr};
+    type.arguments = std::move(elements);
+    return type;
 }
 
 Type make_generic_type(std::string name) {
@@ -275,6 +288,46 @@ bool Parser::looks_like_assignment_statement() const {
                    bracket_depth == 0) {
             return false;
         }
+    }
+
+    return false;
+}
+
+bool Parser::looks_like_tuple_assignment_statement() const {
+    if (!check(TokenType::left_paren)) {
+        return false;
+    }
+
+    std::size_t index = current_ + 1;
+    std::size_t names = 0;
+    bool expect_name = true;
+    while (index < tokens_.size()) {
+        if (expect_name) {
+            if (tokens_[index].type != TokenType::identifier) {
+                return false;
+            }
+            ++names;
+            ++index;
+            expect_name = false;
+            continue;
+        }
+
+        if (tokens_[index].type == TokenType::comma) {
+            ++index;
+            if (index < tokens_.size() && tokens_[index].type == TokenType::right_paren) {
+                ++index;
+                return names >= 2 && index < tokens_.size() && tokens_[index].type == TokenType::equal;
+            }
+            expect_name = true;
+            continue;
+        }
+
+        if (tokens_[index].type == TokenType::right_paren) {
+            ++index;
+            return names >= 2 && index < tokens_.size() && tokens_[index].type == TokenType::equal;
+        }
+
+        return false;
     }
 
     return false;
@@ -513,6 +566,10 @@ Statement Parser::statement() {
         return assignment_statement();
     }
 
+    if (looks_like_tuple_assignment_statement()) {
+        return tuple_assignment_statement();
+    }
+
     if (looks_like_function_declaration()) {
         return function_statement();
     }
@@ -543,6 +600,34 @@ Statement Parser::assignment_statement(bool require_semicolon) {
     Statement statement{StatementKind::assign, std::move(name), std::move(value), {}, {}};
     statement.location = target->location;
     statement.target = std::move(target);
+    return statement;
+}
+
+Statement Parser::tuple_assignment_statement() {
+    const Token& start = consume(TokenType::left_paren, "expected '(' before tuple destructuring target");
+    std::vector<std::unique_ptr<Expression>> targets;
+    auto parse_target = [&]() {
+        const Token& name = consume(TokenType::identifier, "expected binding name in tuple destructuring target");
+        targets.push_back(make_leaf(ExpressionKind::identifier, name.lexeme, location_from_token(name)));
+    };
+
+    parse_target();
+    consume(TokenType::comma, "expected ',' in tuple destructuring target");
+    if (check(TokenType::right_paren)) {
+        throw std::runtime_error("tuple destructuring target needs at least two bindings");
+    }
+    do {
+        parse_target();
+    } while (match(TokenType::comma) && !check(TokenType::right_paren));
+
+    consume(TokenType::right_paren, "expected ')' after tuple destructuring target");
+    consume(TokenType::equal, "expected '=' after tuple destructuring target");
+    std::unique_ptr<Expression> value = expression();
+    consume(TokenType::semicolon, "expected ';' after tuple destructuring assignment");
+
+    Statement statement{StatementKind::assign, "", std::move(value), {}, {}};
+    statement.location = location_from_token(start);
+    statement.target = make_tuple(std::move(targets), location_from_token(start));
     return statement;
 }
 
@@ -1134,6 +1219,20 @@ TypeAnnotation Parser::type_annotation() {
         return TypeAnnotation{true, make_array_type(std::move(element.type))};
     }
 
+    if (match(TokenType::left_paren)) {
+        std::vector<Type> elements;
+        elements.push_back(type_annotation().type);
+        consume(TokenType::comma, "expected ',' in tuple type");
+        if (check(TokenType::right_paren)) {
+            throw std::runtime_error("tuple type needs at least two elements");
+        }
+        do {
+            elements.push_back(type_annotation().type);
+        } while (match(TokenType::comma) && !check(TokenType::right_paren));
+        consume(TokenType::right_paren, "expected ')' after tuple type");
+        return TypeAnnotation{true, make_tuple_type(std::move(elements))};
+    }
+
     if (match(TokenType::identifier)) {
         std::string name = previous().lexeme;
         while (match(TokenType::dot)) {
@@ -1296,12 +1395,7 @@ std::unique_ptr<Expression> Parser::when_expression() {
     while (!check(TokenType::right_brace) && !is_at_end()) {
         std::unique_ptr<Expression> pattern;
         const bool legacy_arm = match(TokenType::is_keyword);
-        if (check(TokenType::identifier) && peek().lexeme == "_") {
-            const Token& wildcard = advance();
-            pattern = make_leaf(ExpressionKind::identifier, "_", location_from_token(wildcard));
-        } else {
-            pattern = expression();
-        }
+        pattern = when_pattern(!legacy_arm);
 
         cases.push_back(std::move(pattern));
 
@@ -1338,6 +1432,54 @@ std::unique_ptr<Expression> Parser::when_expression() {
 
     consume(TokenType::right_brace, "expected '}' after when arms");
     return make_match(std::move(subject), std::move(cases), location_from_token(keyword));
+}
+
+std::unique_ptr<Expression> Parser::when_pattern(bool allow_record_pattern) {
+    if (check(TokenType::identifier) && peek().lexeme == "_") {
+        const Token& wildcard = advance();
+        return make_leaf(ExpressionKind::identifier, "_", location_from_token(wildcard));
+    }
+
+    std::unique_ptr<Expression> pattern = expression();
+    if (allow_record_pattern && can_start_struct_literal(*pattern) && check(TokenType::left_brace)) {
+        const SourceLocation location = pattern->location;
+        const std::string name = expression_to_type_name(*pattern);
+        consume(TokenType::left_brace, "expected '{' before record pattern fields");
+
+        std::vector<std::string> field_names;
+        std::vector<std::unique_ptr<Expression>> bindings;
+        if (!check(TokenType::right_brace)) {
+            while (true) {
+                const Token field = consume(TokenType::identifier, "expected record pattern field name");
+                field_names.push_back(field.lexeme);
+                if (match(TokenType::colon)) {
+                    if (check(TokenType::identifier) && peek().lexeme == "_") {
+                        const Token& wildcard = advance();
+                        bindings.push_back(make_leaf(ExpressionKind::identifier, "_", location_from_token(wildcard)));
+                    } else {
+                        const Token binding = consume(TokenType::identifier, "expected binding name in record pattern");
+                        bindings.push_back(
+                            make_leaf(ExpressionKind::identifier, binding.lexeme, location_from_token(binding)));
+                    }
+                } else {
+                    bindings.push_back(make_leaf(ExpressionKind::identifier, field.lexeme, location_from_token(field)));
+                }
+
+                if (!match(TokenType::comma)) {
+                    break;
+                }
+
+                if (check(TokenType::right_brace)) {
+                    break;
+                }
+            }
+        }
+
+        consume(TokenType::right_brace, "expected '}' after record pattern fields");
+        return make_struct_literal(name, std::move(field_names), std::move(bindings), location);
+    }
+
+    return pattern;
 }
 
 std::unique_ptr<Expression> Parser::call() {
@@ -1472,7 +1614,22 @@ std::unique_ptr<Expression> Parser::primary() {
     }
 
     if (match(TokenType::left_paren)) {
+        const SourceLocation location = location_from_token(previous());
         std::unique_ptr<Expression> expr = expression();
+        if (match(TokenType::comma)) {
+            std::vector<std::unique_ptr<Expression>> elements;
+            elements.push_back(std::move(expr));
+            if (check(TokenType::right_paren)) {
+                throw std::runtime_error("tuple literal needs at least two elements");
+            }
+            do {
+                elements.push_back(expression());
+            } while (match(TokenType::comma) && !check(TokenType::right_paren));
+
+            consume(TokenType::right_paren, "expected ')' after tuple literal");
+            return make_tuple(std::move(elements), location);
+        }
+
         consume(TokenType::right_paren, "expected ')' after expression");
         return expr;
     }

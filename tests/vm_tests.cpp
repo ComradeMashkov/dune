@@ -218,6 +218,14 @@ int main() {
                                   "print(when 2 { 1 => 10; _ => 20; });"),
                        "42\n0\n7\n20\n", "expected arrow-style pattern matching output") &&
              passed;
+    passed = expect_eq(run_source("record Point { x: int, y: int } "
+                                  "minmax(values: [int]): (int, int) { return (values[0], values[1]); } "
+                                  "(lo, hi) = minmax([3, 8]); print(lo); print(hi); "
+                                  "point: Point = Point { x: lo, y: hi }; "
+                                  "print(when point { Point { x, y } => x + y; }); "
+                                  "print(when (lo, hi) { (left, right) => left * right; });"),
+                       "3\n8\n11\n24\n", "expected tuple and record destructuring output") &&
+             passed;
     passed = expect_eq(run_source("contract Shape { area(): real64; } "
                                   "record Circle with Shape { radius: real64, "
                                   "new(radius: real64): Circle { return Circle { radius: radius }; } "

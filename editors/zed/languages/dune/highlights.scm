@@ -87,6 +87,9 @@
 (field_initializer
   name: (identifier) @property)
 
+(record_pattern_field
+  field: (identifier) @property)
+
 (record_field
   name: (identifier) @property)
 

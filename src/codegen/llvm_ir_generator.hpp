@@ -65,6 +65,7 @@ private:
     TypedValue emit_array_method_call_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_text_method_call_expression(const Expression& expression, std::ostream& output);
     TypedValue emit_array_literal(const Expression& expression, std::ostream& output);
+    TypedValue emit_tuple_literal(const Expression& expression, std::ostream& output);
     TypedValue emit_struct_literal(const Expression& expression, std::ostream& output);
     TypedValue emit_variant_constructor(const Expression& expression, std::ostream& output);
     TypedValue emit_member_expression(const Expression& expression, std::ostream& output);
@@ -73,6 +74,7 @@ private:
     TypedValue emit_text_literal(const std::string& lexeme);
     TypedPointer emit_lvalue_pointer(const Expression& expression, std::ostream& output);
     void emit_assignment_target(const Expression& target, const Expression& value, std::ostream& output);
+    void emit_tuple_destructuring_assignment(const Expression& target, const Expression& value, std::ostream& output);
     void emit_function(const Statement& statement, std::ostream& output);
     void emit_extern_declarations(std::ostream& output);
     void emit_memory_runtime(std::ostream& output);

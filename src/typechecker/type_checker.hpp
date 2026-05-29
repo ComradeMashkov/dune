@@ -127,6 +127,7 @@ private:
     Type check_unary_expression(const Expression& expression);
     Type check_cast_expression(const Expression& expression);
     Type check_array_literal(const Expression& expression, const TypeAnnotation& expected);
+    Type check_tuple_literal(const Expression& expression, const TypeAnnotation& expected);
     Type check_struct_literal(const Expression& expression, const TypeAnnotation& expected);
     Type check_index_expression(const Expression& expression);
     Type check_slice_expression(const Expression& expression);
@@ -170,6 +171,12 @@ private:
     bool is_variant_name_for_expected_enum(const std::string& name, const TypeAnnotation& expected) const;
     VariantResolution resolve_variant_pattern(const Expression& pattern, const Type& subject);
     Type check_enum_when_expression(const Expression& expression, const Type& subject, const TypeAnnotation& expected);
+    Type check_record_when_expression(const Expression& expression, const Type& subject,
+                                      const TypeAnnotation& expected);
+    Type check_tuple_when_expression(const Expression& expression, const Type& subject, const TypeAnnotation& expected);
+    void check_tuple_destructuring_assignment(const Expression& target, const Expression& value);
+    void bind_record_pattern(const Expression& pattern, const Type& subject);
+    void bind_tuple_pattern(const Expression& pattern, const Type& subject);
     void check_integer_literal_range(const Expression& expression, const Type& target) const;
     unsigned long long max_integer_literal(ValueType target) const;
     Type coerce_numeric_literal(const Expression& expression, const Type& actual, const Type& target);
@@ -231,6 +238,7 @@ std::string type_name(ValueType type);
 std::string type_name(const Type& type);
 Type make_type(ValueType type);
 Type make_array_type(Type element);
+Type make_tuple_type(std::vector<Type> elements);
 Type make_struct_type(std::string name);
 Type make_struct_type(std::string name, std::vector<Type> arguments);
 Type make_enum_type(std::string name);

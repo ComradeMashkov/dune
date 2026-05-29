@@ -242,6 +242,14 @@ int main() {
                           "fallback: int = when missing { Present(x) => x, _ => 7 };",
                           "expected arrow-style choice when expressions to validate") &&
              passed;
+    passed = expect_valid("record Point { x: int, y: int } "
+                          "minmax(): (int, int) { return (2, 5); } "
+                          "(lo, hi) = minmax(); "
+                          "point: Point = Point { x: lo, y: hi }; "
+                          "sum: int = when point { Point { x, y } => x + y; }; "
+                          "pair_sum: int = when (lo, hi) { (left, right) => left + right; };",
+                          "expected tuples and destructuring patterns to validate") &&
+             passed;
     passed = expect_valid("same<T is comparable>(left: T, right: T): bool { return left == right; } "
                           "lower<T is ordered>(left: T, right: T): bool { return left < right; } "
                           "text_ok: bool = same(\"dune\", \"dune\"); int_ok: bool = lower(1, 2);",
@@ -520,6 +528,24 @@ int main() {
                                    "duplicate when branch for variant 'Present'",
                                    "expected duplicate arrow variant pattern error") &&
              passed;
+    passed = expect_error_contains("pair: (int, int) = (1, 2, 3);", "tuple literal expected 2 elements but got 3",
+                                   "expected tuple literal arity error") &&
+             passed;
+    passed = expect_error_contains("(left, right) = 1;", "expected tuple value but got 'int'",
+                                   "expected non-tuple destructuring error") &&
+             passed;
+    passed =
+        expect_error_contains("left: int = 0; right: int = 0; (left, right) = (1, true);",
+                              "expected type 'int' but got 'bool'", "expected tuple destructuring type mismatch") &&
+        passed;
+    passed = expect_error_contains("record Point { x: int, y: int } point: Point = Point { x: 1, y: 2 }; "
+                                   "sum: int = when point { Point { z } => z; };",
+                                   "record 'Point' has no field 'z'", "expected record pattern field error") &&
+             passed;
+    passed =
+        expect_error_contains("value = (1, 2); sum: int = when value { (left, middle, right) => left; };",
+                              "tuple pattern expected 2 elements but got 3", "expected tuple pattern arity error") &&
+        passed;
     passed = expect_error_contains("record Box<T> { value: T } value = Box { value: 1 };",
                                    "generic record literal 'Box' needs an expected type",
                                    "expected generic record inference error") &&

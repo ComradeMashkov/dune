@@ -41,6 +41,7 @@ module.exports = grammar({
       $.method_declaration,
       $.binding_statement,
       $.const_statement,
+      $.tuple_assignment_statement,
       $.assignment_statement,
       $.print_statement,
       $.return_statement,
@@ -187,6 +188,22 @@ module.exports = grammar({
       ";",
     ),
 
+    tuple_assignment_statement: $ => seq(
+      field("target", $.tuple_destructure_target),
+      "=",
+      field("value", $._expression),
+      ";",
+    ),
+
+    tuple_destructure_target: $ => prec(2, seq(
+      "(",
+      field("name", choice($.identifier, $.wildcard_pattern)),
+      ",",
+      commaSep1(field("name", choice($.identifier, $.wildcard_pattern))),
+      optional(","),
+      ")",
+    )),
+
     print_statement: $ => seq(
       "print",
       "(",
@@ -244,6 +261,7 @@ module.exports = grammar({
 
     _type: $ => choice(
       $.array_type,
+      $.tuple_type,
       $.generic_type,
       $.builtin_type,
       $.qualified_type_identifier,
@@ -251,6 +269,15 @@ module.exports = grammar({
     ),
 
     array_type: $ => seq("[", field("element", $._type), "]"),
+
+    tuple_type: $ => seq(
+      "(",
+      field("element", $._type),
+      ",",
+      commaSep1(field("element", $._type)),
+      optional(","),
+      ")",
+    ),
 
     generic_type: $ => prec(1, seq(
       field("name", choice($.qualified_type_identifier, $.identifier)),
@@ -300,6 +327,7 @@ module.exports = grammar({
     _primary_expression: $ => choice(
       $.array_literal,
       $.record_literal,
+      $.tuple_literal,
       $.parenthesized_expression,
       $.number,
       $.float,
@@ -332,6 +360,8 @@ module.exports = grammar({
 
     _pattern: $ => choice(
       $.wildcard_pattern,
+      $.record_pattern,
+      $.tuple_pattern,
       $.variant_pattern,
       $.number,
       $.float,
@@ -351,6 +381,28 @@ module.exports = grammar({
       ")",
     )),
 
+    record_pattern: $ => prec(2, seq(
+      field("type", choice($.qualified_type_identifier, $.constructor_identifier)),
+      "{",
+      optional(commaSep($.record_pattern_field)),
+      optional(","),
+      "}",
+    )),
+
+    record_pattern_field: $ => seq(
+      field("field", $.identifier),
+      optional(seq(":", field("binding", choice($.identifier, $.wildcard_pattern)))),
+    ),
+
+    tuple_pattern: $ => seq(
+      "(",
+      field("binding", choice($.identifier, $.wildcard_pattern)),
+      ",",
+      commaSep1(field("binding", choice($.identifier, $.wildcard_pattern))),
+      optional(","),
+      ")",
+    ),
+
     array_literal: $ => seq("[", optional(commaSep($._expression)), optional(","), "]"),
 
     record_literal: $ => prec(2, seq(
@@ -362,6 +414,15 @@ module.exports = grammar({
     )),
 
     field_initializer: $ => seq(field("name", $.identifier), ":", field("value", $._expression)),
+
+    tuple_literal: $ => seq(
+      "(",
+      field("element", $._expression),
+      ",",
+      commaSep1(field("element", $._expression)),
+      optional(","),
+      ")",
+    ),
 
     call_expression: $ => prec(PREC.call, seq(
       field("function", choice($.identifier, $.constructor_identifier)),

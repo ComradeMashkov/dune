@@ -31,7 +31,9 @@ private:
     void compile_member_expression(const Expression& expression);
     void compile_when_expression(const Expression& expression);
     void compile_assignment_target(const Expression& target, const Expression& value);
+    void compile_tuple_destructuring_assignment(const Expression& target, const Expression& value);
     void compile_variant_constructor(const Expression& expression);
+    void compile_tuple_literal(const Expression& expression);
     void compile_struct_literal(const Expression& expression);
     void compile_binary_expression(const Expression& expression);
     void compile_cast_expression(const Expression& expression);

@@ -8,6 +8,11 @@ choice Result<T> {
     Failed(text),
 }
 
+record Point {
+    x: int,
+    y: int,
+}
+
 unwrap(value: Maybe<int>, default: int): int {
     return when value {
         Present(x) => x;
@@ -22,15 +27,29 @@ describe(value: Result<int>): text {
     };
 }
 
+minmax(values: [int]): (int, int) {
+    return (values[0], values[1]);
+}
+
 value: Maybe<int> = Present(30);
 missing: Maybe<int> = Absent;
 done: Result<int> = Done(1);
 failed: Result<int> = Failed("bad");
+(lo, hi) = minmax([3, 8]);
+point: Point = Point { x: lo, y: hi };
 
 print(unwrap(value, 0));
 print(unwrap(missing, 7));
 print(describe(done));
 print(describe(failed));
+print(lo);
+print(hi);
+print(when point {
+    Point { x, y } => x + y;
+});
+print(when (lo, hi) {
+    (left, right) => left * right;
+});
 print(when missing {
     Present(x) => x;
     _ => 99;

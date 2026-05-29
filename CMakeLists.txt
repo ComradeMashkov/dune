@@ -359,7 +359,7 @@ add_test(
         ${CMAKE_COMMAND}
         -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/pattern_matching.dn
-        -D EXPECTED_OUTPUT="30\n7\ndone\nbad\n99\n20"
+        -D EXPECTED_OUTPUT="30\n7\ndone\nbad\n3\n8\n11\n24\n99\n20"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
 )
 
@@ -602,7 +602,7 @@ add_test(
         -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/pattern_matching.dn
         -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/pattern_matching_native
-        -D EXPECTED_OUTPUT="30\n7\ndone\nbad\n99\n20"
+        -D EXPECTED_OUTPUT="30\n7\ndone\nbad\n3\n8\n11\n24\n99\n20"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
 )
 
