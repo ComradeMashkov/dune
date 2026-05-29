@@ -260,6 +260,13 @@ int main() {
                                   "print(assert.equals_int(repeated[0], 3));"),
                        "42\n7\nbad\n4\n1\n", "expected record stdlib module output") &&
              passed;
+    passed = expect_eq(run_source("record Config { count: int = 7, name: text = \"default\", values: [int] = [1] } "
+                                  "first: Config = Config {}; second: Config = Config {}; "
+                                  "second.values.push(2); overridden: Config = Config { count: 3 }; "
+                                  "print(first.count); print(first.name); print(first.values.len()); "
+                                  "print(second.values.len()); print(overridden.count); print(overridden.name);"),
+                       "7\ndefault\n1\n2\n3\ndefault\n", "expected record field default output") &&
+             passed;
     passed = expect_eq(run_source("import autograd; "
                                   "x = autograd.variable(2.0); y = autograd.variable(3.0); "
                                   "loss = x.mul(y).add(x.pow(2.0)).add(1.0); loss.backward(); "

@@ -99,7 +99,12 @@ module.exports = grammar({
       "}",
     ),
 
-    record_field: $ => seq(field("name", $.identifier), ":", field("type", $._type)),
+    record_field: $ => seq(
+      field("name", $.identifier),
+      ":",
+      field("type", $._type),
+      optional(seq("=", field("default", $._expression))),
+    ),
 
     record_method: $ => $.function_declaration,
 

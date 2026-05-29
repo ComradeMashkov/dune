@@ -224,6 +224,16 @@ add_test(
 )
 
 add_test(
+    NAME cli_record_defaults
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/record_defaults.dn
+        -D EXPECTED_OUTPUT="0.01\n0\nsgd\n0.1\n0\n0.01\n0.9\n0.2\n0\n10\n1\n20\n2"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
     NAME cli_arithmetic
     COMMAND
         ${CMAKE_COMMAND}
@@ -472,6 +482,17 @@ add_test(
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/formatted_print.dn
         -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/formatted_print_native
         -D EXPECTED_OUTPUT="Dune v1\nbool=1, glyph=Z, real=2.5\nplain text still works\n42"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
+)
+
+add_test(
+    NAME cli_build_native_record_defaults
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/record_defaults.dn
+        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/record_defaults_native
+        -D EXPECTED_OUTPUT="0.01\n0\nsgd\n0.1\n0\n0.01\n0.9\n0.2\n0\n10\n1\n20\n2"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
 )
 

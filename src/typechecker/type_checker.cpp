@@ -127,6 +127,15 @@ std::unique_ptr<Expression> clone_expression_pointer(const std::unique_ptr<Expre
     return clone_expression(*expression);
 }
 
+std::shared_ptr<Expression> clone_expression_pointer(const std::shared_ptr<Expression>& expression) {
+    if (expression == nullptr) {
+        return nullptr;
+    }
+
+    std::unique_ptr<Expression> cloned = clone_expression(*expression);
+    return std::shared_ptr<Expression>(std::move(cloned));
+}
+
 std::unique_ptr<Expression> clone_expression(const Expression& expression) {
     auto result = std::make_unique<Expression>(Expression{expression.kind, expression.lexeme,
                                                           clone_expression_pointer(expression.left),
@@ -167,8 +176,8 @@ Statement clone_statement(const Statement& statement) {
     result.type = clone_type_annotation(statement.type);
     result.parameters.reserve(statement.parameters.size());
     for (const Parameter& parameter : statement.parameters) {
-        result.parameters.push_back(
-            Parameter{parameter.name, clone_type_annotation(parameter.type), parameter.location, parameter.exported});
+        result.parameters.push_back(Parameter{parameter.name, clone_type_annotation(parameter.type), parameter.location,
+                                              parameter.exported, clone_expression_pointer(parameter.default_value)});
     }
 
     result.generic_parameters = statement.generic_parameters;
@@ -195,6 +204,9 @@ void substitute_statement(Statement& statement, const std::unordered_map<std::st
     statement.type = substitute_type_annotation(statement.type, substitutions);
     for (Parameter& parameter : statement.parameters) {
         parameter.type = substitute_type_annotation(parameter.type, substitutions);
+        if (parameter.default_value != nullptr) {
+            substitute_expression(*parameter.default_value, substitutions);
+        }
     }
 
     if (statement.expression != nullptr) {
@@ -445,6 +457,8 @@ void TypeChecker::check(const Program& program) {
     instantiated_functions_.clear();
     instantiated_function_traces_.clear();
     current_module_.clear();
+    current_function_ = nullptr;
+    scopes_.clear();
     loop_depth_ = 0;
 
     for (const Statement& statement : program.statements) {
@@ -502,6 +516,15 @@ void TypeChecker::check(const Program& program) {
             }
 
             imports_.insert(statement.name);
+        }
+    }
+
+    for (const Statement& statement : program.statements) {
+        if (statement.kind == StatementKind::struct_statement) {
+            const std::string previous_module = current_module_;
+            current_module_ = module_name(statement.name);
+            check_struct_field_defaults(statement);
+            current_module_ = previous_module;
         }
     }
 
@@ -635,7 +658,8 @@ void TypeChecker::define_struct(const Statement& statement) {
 
         const std::size_t index = definition->second.fields.size();
         definition->second.field_indices.emplace(field.name, index);
-        definition->second.fields.push_back(StructField{field.name, field_type, field.location, field.exported});
+        definition->second.fields.push_back(
+            StructField{field.name, field_type, field.location, field.exported, field.default_value});
     }
 
     for (const Type& contract : statement.contracts) {
@@ -734,6 +758,29 @@ void TypeChecker::define_contract(const Statement& statement) {
             signature.parameters.push_back(annotation_or_default(parameter.type));
         }
         definition->second.methods.push_back(std::move(signature));
+    }
+}
+
+void TypeChecker::check_struct_field_defaults(const Statement& statement) {
+    const auto definition = structs_.find(statement.name);
+    if (definition == structs_.end()) {
+        throw std::runtime_error(diagnostic(statement.location, "undefined record '" + statement.name + "'"));
+    }
+
+    for (const Parameter& field : statement.parameters) {
+        if (field.default_value == nullptr) {
+            continue;
+        }
+
+        const auto field_index = definition->second.field_indices.find(field.name);
+        if (field_index == definition->second.field_indices.end()) {
+            throw std::runtime_error(
+                diagnostic(field.location, "record '" + statement.name + "' has no field '" + field.name + "'"));
+        }
+
+        const Type& field_type = definition->second.fields[field_index->second].type;
+        expect_type(field_type, check_expression(*field.default_value, expected_type(field_type)),
+                    field.default_value->location);
     }
 }
 
@@ -2453,7 +2500,7 @@ Type TypeChecker::check_struct_literal(const Expression& expression, const TypeA
     }
 
     for (const StructField& field : definition->second.fields) {
-        if (!seen_fields.contains(field.name)) {
+        if (!seen_fields.contains(field.name) && field.default_value == nullptr) {
             throw std::runtime_error(diagnostic(expression.location, "missing field '" + field.name + "' for record '" +
                                                                          expression.lexeme + "'"));
         }

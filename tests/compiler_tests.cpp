@@ -294,6 +294,27 @@ bool compiles_record_literals_fields_and_methods() {
     return passed;
 }
 
+bool compiles_record_field_defaults() {
+    const dune::Bytecode bytecode =
+        compile_source("record Optimizer { lr: real64 = 0.01, momentum: real64 = 0.0, name: text = \"sgd\" } "
+                       "base: Optimizer = Optimizer {}; fast: Optimizer = Optimizer { lr: 0.1 }; "
+                       "print(base.lr); print(fast.momentum); print(fast.name);");
+
+    std::size_t make_record_count = 0;
+    bool saw_load_field = false;
+    for (const dune::Instruction& instruction : bytecode.instructions) {
+        if (instruction.op == dune::OpCode::make_record) {
+            ++make_record_count;
+        }
+        saw_load_field = saw_load_field || instruction.op == dune::OpCode::load_field;
+    }
+
+    bool passed = true;
+    passed = expect(make_record_count == 2, "expected two record literals with defaults") && passed;
+    passed = expect(saw_load_field, "expected defaulted record field loads") && passed;
+    return passed;
+}
+
 bool compiles_record_constructors() {
     const dune::Bytecode bytecode = compile_source("record Point { x: int, y: int, "
                                                    "fn new(x: int, y: int): Point { return Point { x: x, y: y }; } } "
@@ -489,6 +510,7 @@ int main() {
     passed = compiles_generic_functions() && passed;
     passed = compiles_stdlib_receiver_methods() && passed;
     passed = compiles_record_literals_fields_and_methods() && passed;
+    passed = compiles_record_field_defaults() && passed;
     passed = compiles_record_constructors() && passed;
     passed = compiles_assignment_targets() && passed;
     passed = compiles_when_expression() && passed;
