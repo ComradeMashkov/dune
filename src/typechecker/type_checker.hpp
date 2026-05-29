@@ -4,6 +4,7 @@
 
 #include <deque>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -18,6 +19,7 @@ public:
         Type type;
         SourceLocation location;
         bool exported = false;
+        std::shared_ptr<Expression> default_value;
     };
 
     struct StructMethod {
@@ -106,6 +108,7 @@ private:
     void define_enum(const Statement& statement);
     void declare_contract(const Statement& statement);
     void define_contract(const Statement& statement);
+    void check_struct_field_defaults(const Statement& statement);
     void validate_constructor(const Statement& record, const Statement& method,
                               const std::unordered_set<std::string>& generic_names) const;
     void validate_contract_implementations(const Statement& statement) const;
@@ -113,13 +116,17 @@ private:
     void collect_generic_function(const Statement& statement);
     void check_function(const Statement& statement);
     void check_statement(const Statement& statement);
+    void check_for_in_statement(const Statement& statement);
     void check_statements(const std::vector<Statement>& statements);
+    Type check_for_in_iterable(const Expression& expression);
     Type check_assignment_target(const Expression& target, SourceLocation location);
     Type check_member_assignment_target(const Expression& target, SourceLocation location);
     Type check_expression(const Expression& expression, const TypeAnnotation& expected = {});
     Type check_binary_expression(const Expression& expression, const TypeAnnotation& expected);
+    Type check_membership_expression(const Expression& expression);
     Type check_when_expression(const Expression& expression, const TypeAnnotation& expected);
     Type check_call_expression(const Expression& expression, const TypeAnnotation& expected);
+    Type check_format_call_expression(const Expression& expression);
     Type check_method_call_expression(const Expression& expression, const TypeAnnotation& expected);
     Type check_constructor_call_expression(const Expression& expression, const std::string& record_name,
                                            const TypeAnnotation& expected);
@@ -140,6 +147,8 @@ private:
     Type check_receiver_method_call(const Expression& expression, const TypeAnnotation& expected);
     Type check_array_method_call(const Type& receiver, const Expression& expression);
     Type check_text_method_call(const Type& receiver, const Expression& expression);
+    void check_format_arguments(const Expression& format, const std::vector<std::unique_ptr<Expression>>& arguments,
+                                std::size_t first_argument, std::string_view feature_name);
 
     bool statement_returns(const Statement& statement) const;
     bool statements_return(const std::vector<Statement>& statements) const;

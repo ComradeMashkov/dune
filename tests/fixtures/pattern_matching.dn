@@ -13,21 +13,21 @@ record Point {
     y: int,
 }
 
-unwrap(value: Maybe<int>, default: int): int {
+fn unwrap(value: Maybe<int>, default: int): int {
     return when value {
         Present(x) => x;
         Absent => default;
     };
 }
 
-describe(value: Result<int>): text {
+fn describe(value: Result<int>): text {
     return when value {
         Done(value) => "done";
         Failed(error) => error;
     };
 }
 
-minmax(values: [int]): (int, int) {
+fn minmax(values: [int]): (int, int) {
     return (values[0], values[1]);
 }
 

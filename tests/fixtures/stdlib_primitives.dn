@@ -2,7 +2,7 @@ import array;
 import feature_exports;
 import text;
 
-foreign c_sqrt(value: real64): real64 = "sqrt";
+foreign fn c_sqrt(value: real64): real64 = "sqrt";
 
 message: text = "dune language";
 print(message[0]);

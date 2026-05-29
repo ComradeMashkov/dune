@@ -1,20 +1,20 @@
-export singleton_int(value: int): [int] {
+export fn singleton_int(value: int): [int] {
     return [value];
 }
 
-export pair_int(left: int, right: int): [int] {
+export fn pair_int(left: int, right: int): [int] {
     return [left, right];
 }
 
-export singleton_text(value: text): [text] {
+export fn singleton_text(value: text): [text] {
     return [value];
 }
 
-export pair_text(left: text, right: text): [text] {
+export fn pair_text(left: text, right: text): [text] {
     return [left, right];
 }
 
-export repeat_int(value: int, count: int): [int] {
+export fn repeat_int(value: int, count: int): [int] {
     values: [int] = [];
     for index = 0; index < count; index = index + 1 {
         values.push(value);

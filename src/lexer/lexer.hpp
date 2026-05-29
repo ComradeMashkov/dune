@@ -10,6 +10,7 @@ enum class TokenType {
     const_keyword,
     export_keyword,
     foreign_keyword,
+    fn_keyword,
     method_keyword,
     record_keyword,
     contract_keyword,
@@ -23,6 +24,7 @@ enum class TokenType {
     else_keyword,
     while_keyword,
     for_keyword,
+    in_keyword,
     break_keyword,
     continue_keyword,
     to_keyword,
@@ -76,6 +78,7 @@ enum class TokenType {
     colon,
     comma,
     dot,
+    dot_dot,
     semicolon,
     left_paren,
     right_paren,
@@ -112,6 +115,7 @@ private:
     Token number(std::size_t start, std::size_t line, std::size_t column);
     Token character(std::size_t start, std::size_t line, std::size_t column);
     Token string(std::size_t start, std::size_t line, std::size_t column);
+    Token raw_string(std::size_t start, std::size_t line, std::size_t column);
 
     std::string source_;
     std::size_t current_ = 0;

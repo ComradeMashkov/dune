@@ -1,4 +1,4 @@
-add_real(left: real, right: real): real {
+fn add_real(left: real, right: real): real {
     return left + right;
 }
 

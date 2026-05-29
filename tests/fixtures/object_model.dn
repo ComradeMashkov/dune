@@ -1,6 +1,6 @@
 import object_model_api;
 
-area_of<T is object_model_api.Shape>(shape: T): real64 {
+fn area_of<T is object_model_api.Shape>(shape: T): real64 {
     return shape.area();
 }
 
@@ -16,11 +16,11 @@ print(area_of(circle));
 record Box<T> {
     value: T,
 
-    new(value: T): Box<T> {
+    fn new(value: T): Box<T> {
         return Box { value: value };
     }
 
-    get(): T {
+    fn get(): T {
         return this.value;
     }
 }

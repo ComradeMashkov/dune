@@ -4,6 +4,9 @@ mark: glyph = 'Z';
 ratio: real64 = 2.5;
 
 print("{} v{}", name, version);
+message: text = format("{} v{} {}", name, version, mark);
+print(message);
+print(format("inline {}", 42));
 print("bool={}, glyph={}, real={}", true, mark, ratio);
 print("plain text still works");
 print(42);

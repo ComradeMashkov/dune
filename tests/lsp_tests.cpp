@@ -33,8 +33,8 @@ bool has_completion(const std::vector<dune::lsp::CompletionItem>& completions, c
 
 bool diagnoses_valid_source() {
     const std::vector<dune::lsp::Diagnostic> diagnostics =
-        dune::lsp::diagnose_source("add(a: int, b: int): int { return a + b; } "
-                                   "const HIDDEN: int = 7; hidden(): int { return HIDDEN; } "
+        dune::lsp::diagnose_source("fn add(a: int, b: int): int { return a + b; } "
+                                   "const HIDDEN: int = 7; fn hidden(): int { return HIDDEN; } "
                                    "total: int = add(10, hidden());");
 
     return expect(diagnostics.empty(), "expected no diagnostics for valid source");
@@ -59,10 +59,12 @@ bool diagnoses_type_errors_with_range() {
 
 bool completes_keywords_and_local_symbols() {
     const std::vector<dune::lsp::CompletionItem> completions =
-        dune::lsp::complete_source("add(a: int, b: int): int { return a + b; }\ntotal: int = add(10, 20);");
+        dune::lsp::complete_source("fn add(a: int, b: int): int { return a + b; }\ntotal: int = add(10, 20);");
 
     bool passed = true;
     passed = expect(has_completion(completions, "method"), "expected keyword completion") && passed;
+    passed = expect(has_completion(completions, "in"), "expected for-in keyword completion") && passed;
+    passed = expect(has_completion(completions, "fn"), "expected fn keyword completion") && passed;
     passed = expect(has_completion(completions, "real64"), "expected type completion") && passed;
     passed = expect(has_completion(completions, "add"), "expected function completion") && passed;
     passed = expect(has_completion(completions, "total"), "expected local variable completion") && passed;
@@ -98,6 +100,20 @@ bool hovers_local_symbols() {
     passed = expect(hover.has_value(), "expected hover") && passed;
     if (hover.has_value()) {
         passed = expect(hover->contents.find("total: int") != std::string::npos, "expected variable hover") && passed;
+    }
+    return passed;
+}
+
+bool hovers_for_in_loop_variable() {
+    const std::optional<dune::lsp::Hover> hover =
+        dune::lsp::hover_source("values: [int] = [1, 2, 3];\nfor value in values { print(value); }", {}, {}, 1, 30);
+
+    bool passed = true;
+    passed = expect(hover.has_value(), "expected for-in loop variable hover") && passed;
+    if (hover.has_value()) {
+        passed =
+            expect(hover->contents.find("value: int") != std::string::npos, "expected for-in variable hover type") &&
+            passed;
     }
     return passed;
 }
@@ -211,6 +227,7 @@ int main() {
     passed = completes_imported_module_members() && passed;
     passed = completes_typed_record_methods() && passed;
     passed = hovers_local_symbols() && passed;
+    passed = hovers_for_in_loop_variable() && passed;
     passed = hovers_typed_record_methods() && passed;
     passed = hovers_imported_module_members() && passed;
     passed = hovers_inferred_call_assignments() && passed;

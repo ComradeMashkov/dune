@@ -1,5 +1,7 @@
 #include "type_checker.hpp"
 
+#include "ast/literal_utils.hpp"
+
 #include <cstdint>
 #include <limits>
 #include <stdexcept>
@@ -128,6 +130,15 @@ std::unique_ptr<Expression> clone_expression_pointer(const std::unique_ptr<Expre
     return clone_expression(*expression);
 }
 
+std::shared_ptr<Expression> clone_expression_pointer(const std::shared_ptr<Expression>& expression) {
+    if (expression == nullptr) {
+        return nullptr;
+    }
+
+    std::unique_ptr<Expression> cloned = clone_expression(*expression);
+    return std::shared_ptr<Expression>(std::move(cloned));
+}
+
 std::unique_ptr<Expression> clone_expression(const Expression& expression) {
     auto result = std::make_unique<Expression>(Expression{expression.kind, expression.lexeme,
                                                           clone_expression_pointer(expression.left),
@@ -168,8 +179,8 @@ Statement clone_statement(const Statement& statement) {
     result.type = clone_type_annotation(statement.type);
     result.parameters.reserve(statement.parameters.size());
     for (const Parameter& parameter : statement.parameters) {
-        result.parameters.push_back(
-            Parameter{parameter.name, clone_type_annotation(parameter.type), parameter.location, parameter.exported});
+        result.parameters.push_back(Parameter{parameter.name, clone_type_annotation(parameter.type), parameter.location,
+                                              parameter.exported, clone_expression_pointer(parameter.default_value)});
     }
 
     result.generic_parameters = statement.generic_parameters;
@@ -196,6 +207,9 @@ void substitute_statement(Statement& statement, const std::unordered_map<std::st
     statement.type = substitute_type_annotation(statement.type, substitutions);
     for (Parameter& parameter : statement.parameters) {
         parameter.type = substitute_type_annotation(parameter.type, substitutions);
+        if (parameter.default_value != nullptr) {
+            substitute_expression(*parameter.default_value, substitutions);
+        }
     }
 
     if (statement.expression != nullptr) {
@@ -474,6 +488,8 @@ void TypeChecker::check(const Program& program) {
     instantiated_functions_.clear();
     instantiated_function_traces_.clear();
     current_module_.clear();
+    current_function_ = nullptr;
+    scopes_.clear();
     loop_depth_ = 0;
 
     for (const Statement& statement : program.statements) {
@@ -531,6 +547,15 @@ void TypeChecker::check(const Program& program) {
             }
 
             imports_.insert(statement.name);
+        }
+    }
+
+    for (const Statement& statement : program.statements) {
+        if (statement.kind == StatementKind::struct_statement) {
+            const std::string previous_module = current_module_;
+            current_module_ = module_name(statement.name);
+            check_struct_field_defaults(statement);
+            current_module_ = previous_module;
         }
     }
 
@@ -664,7 +689,8 @@ void TypeChecker::define_struct(const Statement& statement) {
 
         const std::size_t index = definition->second.fields.size();
         definition->second.field_indices.emplace(field.name, index);
-        definition->second.fields.push_back(StructField{field.name, field_type, field.location, field.exported});
+        definition->second.fields.push_back(
+            StructField{field.name, field_type, field.location, field.exported, field.default_value});
     }
 
     for (const Type& contract : statement.contracts) {
@@ -763,6 +789,29 @@ void TypeChecker::define_contract(const Statement& statement) {
             signature.parameters.push_back(annotation_or_default(parameter.type));
         }
         definition->second.methods.push_back(std::move(signature));
+    }
+}
+
+void TypeChecker::check_struct_field_defaults(const Statement& statement) {
+    const auto definition = structs_.find(statement.name);
+    if (definition == structs_.end()) {
+        throw std::runtime_error(diagnostic(statement.location, "undefined record '" + statement.name + "'"));
+    }
+
+    for (const Parameter& field : statement.parameters) {
+        if (field.default_value == nullptr) {
+            continue;
+        }
+
+        const auto field_index = definition->second.field_indices.find(field.name);
+        if (field_index == definition->second.field_indices.end()) {
+            throw std::runtime_error(
+                diagnostic(field.location, "record '" + statement.name + "' has no field '" + field.name + "'"));
+        }
+
+        const Type& field_type = definition->second.fields[field_index->second].type;
+        expect_type(field_type, check_expression(*field.default_value, expected_type(field_type)),
+                    field.default_value->location);
     }
 }
 
@@ -1050,31 +1099,7 @@ void TypeChecker::check_statement(const Statement& statement) {
             return;
         }
 
-        if (statement.expression->kind != ExpressionKind::string) {
-            throw std::runtime_error(
-                diagnostic(statement.expression->location, "print format string must be a string literal"));
-        }
-
-        const auto [placeholders, valid_format] = count_format_placeholders(statement.expression->lexeme);
-        if (!valid_format) {
-            throw std::runtime_error(diagnostic(statement.expression->location, "invalid print format placeholder"));
-        }
-
-        if (placeholders != statement.arguments.size()) {
-            throw std::runtime_error(
-                diagnostic(statement.expression->location, "print format string expects " +
-                                                               std::to_string(placeholders) + " arguments but got " +
-                                                               std::to_string(statement.arguments.size())));
-        }
-
-        for (const std::unique_ptr<Expression>& argument : statement.arguments) {
-            const Type argument_type = check_expression(*argument);
-            if (!is_printable_type(argument_type)) {
-                throw std::runtime_error(
-                    diagnostic(argument->location, "cannot print type '" + type_name(argument_type) + "'"));
-            }
-        }
-
+        check_format_arguments(*statement.expression, statement.arguments, 0, "print");
         return;
     }
     case StatementKind::block:
@@ -1119,6 +1144,9 @@ void TypeChecker::check_statement(const Statement& statement) {
         }
         pop_scope();
         return;
+    case StatementKind::for_in_statement:
+        check_for_in_statement(statement);
+        return;
     case StatementKind::break_statement:
         if (loop_depth_ == 0) {
             throw std::runtime_error(diagnostic(statement.location, "break statement outside loop"));
@@ -1159,6 +1187,19 @@ void TypeChecker::check_statement(const Statement& statement) {
     case StatementKind::import_statement:
         throw std::runtime_error(diagnostic(statement.location, "import statements are only allowed at top level"));
     }
+}
+
+void TypeChecker::check_for_in_statement(const Statement& statement) {
+    const Type element_type = check_for_in_iterable(*statement.expression);
+
+    push_scope();
+    declare_binding(statement.name, element_type, true, statement.location);
+    ++loop_depth_;
+    push_scope();
+    check_statements(statement.body);
+    pop_scope();
+    --loop_depth_;
+    pop_scope();
 }
 
 void TypeChecker::check_statements(const std::vector<Statement>& statements) {
@@ -1214,6 +1255,37 @@ void TypeChecker::check_tuple_destructuring_assignment(const Expression& target,
 
         expect_type(variable->type, actual.arguments[index], binding.location);
     }
+}
+
+Type TypeChecker::check_for_in_iterable(const Expression& expression) {
+    if (expression.kind == ExpressionKind::range) {
+        if (expression.left == nullptr || expression.right == nullptr) {
+            throw std::runtime_error(diagnostic(expression.location, "invalid range expression"));
+        }
+
+        Type start = check_expression(*expression.left);
+        Type end = check_expression(*expression.right);
+        if (!same_type(start, end)) {
+            start = coerce_numeric_literal(*expression.left, start, end);
+            end = coerce_numeric_literal(*expression.right, end, start);
+        }
+
+        if (!is_integer_type(start.kind)) {
+            throw std::runtime_error(diagnostic(expression.left->location,
+                                                "expected integer range bound but got '" + type_name(start) + "'"));
+        }
+
+        expect_type(start, end, expression.right->location);
+        expression_types_[&expression] = start;
+        return start;
+    }
+
+    const Type iterable = check_expression(expression);
+    if (iterable.kind == ValueType::array_type && iterable.element != nullptr) {
+        return *iterable.element;
+    }
+
+    throw std::runtime_error(diagnostic(expression.location, "type '" + type_name(iterable) + "' is not iterable"));
 }
 
 Type TypeChecker::check_assignment_target(const Expression& target, SourceLocation location) {
@@ -1275,6 +1347,7 @@ Type TypeChecker::check_assignment_target(const Expression& target, SourceLocati
     case ExpressionKind::unary:
     case ExpressionKind::cast:
     case ExpressionKind::binary:
+    case ExpressionKind::range:
     case ExpressionKind::when_expression:
     case ExpressionKind::call:
     case ExpressionKind::method_call:
@@ -1366,7 +1439,12 @@ Type TypeChecker::check_expression(const Expression& expression, const TypeAnnot
         throw std::runtime_error(diagnostic(expression.location, "undefined variable '" + expression.lexeme + "'"));
     }
     case ExpressionKind::number:
-        actual = expected.has_type && is_numeric_type(expected.type) ? expected.type : make_type(ValueType::int_type);
+        if (TypeAnnotation suffix_type = integer_literal_suffix_type(expression.lexeme); suffix_type.has_type) {
+            actual = suffix_type.type;
+        } else {
+            actual =
+                expected.has_type && is_numeric_type(expected.type) ? expected.type : make_type(ValueType::int_type);
+        }
         check_integer_literal_range(expression, actual);
         break;
     case ExpressionKind::floating:
@@ -1409,6 +1487,8 @@ Type TypeChecker::check_expression(const Expression& expression, const TypeAnnot
     case ExpressionKind::binary:
         actual = check_binary_expression(expression, wanted);
         break;
+    case ExpressionKind::range:
+        throw std::runtime_error(diagnostic(expression.location, "range expressions can only be used in for-in loops"));
     case ExpressionKind::when_expression:
         actual = check_when_expression(expression, wanted);
         break;
@@ -1439,6 +1519,10 @@ Type TypeChecker::check_binary_expression(const Expression& expression, const Ty
         expect_type(make_type(ValueType::bool_type), left, expression.left->location);
         expect_type(make_type(ValueType::bool_type), right, expression.right->location);
         return make_type(ValueType::bool_type);
+    }
+
+    if (expression.lexeme == "in") {
+        return check_membership_expression(expression);
     }
 
     const bool is_arithmetic = expression.lexeme == "+" || expression.lexeme == "-" || expression.lexeme == "*" ||
@@ -1491,6 +1575,41 @@ Type TypeChecker::check_binary_expression(const Expression& expression, const Ty
     }
 
     throw std::runtime_error(diagnostic(expression.location, "unknown binary operator '" + expression.lexeme + "'"));
+}
+
+Type TypeChecker::check_membership_expression(const Expression& expression) {
+    const Type container = check_expression(*expression.right);
+    if (container.kind == ValueType::array_type) {
+        if (container.element == nullptr) {
+            throw std::runtime_error(
+                diagnostic(expression.right->location, "expected array type but got '" + type_name(container) + "'"));
+        }
+
+        if (!is_comparable_type(*container.element) && container.element->kind != ValueType::generic_type) {
+            throw std::runtime_error(
+                diagnostic(expression.right->location, "operator 'in' requires comparable array elements but got '" +
+                                                           type_name(*container.element) + "'"));
+        }
+
+        Type value = check_expression(*expression.left, expected_type(*container.element));
+        if (!same_type(value, *container.element)) {
+            value = coerce_numeric_literal(*expression.left, value, *container.element);
+        }
+
+        expect_type(*container.element, value, expression.left->location);
+        return make_type(ValueType::bool_type);
+    }
+
+    if (container.kind == ValueType::text_type) {
+        expect_type(make_type(ValueType::text_type),
+                    check_expression(*expression.left, expected_type(make_type(ValueType::text_type))),
+                    expression.left->location);
+        return make_type(ValueType::bool_type);
+    }
+
+    throw std::runtime_error(
+        diagnostic(expression.right->location,
+                   "operator 'in' requires array or text container but got '" + type_name(container) + "'"));
 }
 
 Type TypeChecker::check_when_expression(const Expression& expression, const TypeAnnotation& expected) {
@@ -1547,6 +1666,11 @@ Type TypeChecker::check_when_expression(const Expression& expression, const Type
 }
 
 Type TypeChecker::check_call_expression(const Expression& expression, const TypeAnnotation& expected) {
+    if (expression.lexeme == "format") {
+        (void)expected;
+        return check_format_call_expression(expression);
+    }
+
     if (expected.has_type && expected.type.kind == ValueType::enum_type &&
         is_variant_name_for_expected_enum(expression.lexeme, expected)) {
         return check_variant_constructor(expression, expression.lexeme, expression.arguments, expression.location,
@@ -1554,6 +1678,44 @@ Type TypeChecker::check_call_expression(const Expression& expression, const Type
     }
 
     return check_function_call(expression, expression.lexeme, expression.arguments, expression.location, expected);
+}
+
+Type TypeChecker::check_format_call_expression(const Expression& expression) {
+    if (expression.arguments.empty()) {
+        throw std::runtime_error(diagnostic(expression.location, "format expects a format string argument"));
+    }
+
+    check_format_arguments(*expression.arguments[0], expression.arguments, 1, "format");
+    return make_type(ValueType::text_type);
+}
+
+void TypeChecker::check_format_arguments(const Expression& format,
+                                         const std::vector<std::unique_ptr<Expression>>& arguments,
+                                         std::size_t first_argument, std::string_view feature_name) {
+    const std::string label = feature_name == "print" ? "print format" : std::string(feature_name);
+    const std::string action = std::string(feature_name);
+    if (format.kind != ExpressionKind::string) {
+        throw std::runtime_error(diagnostic(format.location, label + " string must be a string literal"));
+    }
+
+    const auto [placeholders, valid_format] = count_format_placeholders(format.lexeme);
+    if (!valid_format) {
+        throw std::runtime_error(diagnostic(format.location, "invalid " + label + " placeholder"));
+    }
+
+    const std::size_t provided = arguments.size() - first_argument;
+    if (placeholders != provided) {
+        throw std::runtime_error(diagnostic(format.location, label + " string expects " + std::to_string(placeholders) +
+                                                                 " arguments but got " + std::to_string(provided)));
+    }
+
+    for (std::size_t index = first_argument; index < arguments.size(); ++index) {
+        const Type argument_type = check_expression(*arguments[index]);
+        if (!is_printable_type(argument_type)) {
+            throw std::runtime_error(diagnostic(arguments[index]->location,
+                                                "cannot " + action + " type '" + type_name(argument_type) + "'"));
+        }
+    }
 }
 
 Type TypeChecker::check_function_call(const Expression& expression, const std::string& name,
@@ -2744,7 +2906,7 @@ Type TypeChecker::check_struct_literal(const Expression& expression, const TypeA
     }
 
     for (const StructField& field : definition->second.fields) {
-        if (!seen_fields.contains(field.name)) {
+        if (!seen_fields.contains(field.name) && field.default_value == nullptr) {
             throw std::runtime_error(diagnostic(expression.location, "missing field '" + field.name + "' for record '" +
                                                                          expression.lexeme + "'"));
         }
@@ -2820,6 +2982,7 @@ bool TypeChecker::statement_returns(const Statement& statement) const {
     case StatementKind::print:
     case StatementKind::while_statement:
     case StatementKind::for_statement:
+    case StatementKind::for_in_statement:
     case StatementKind::function:
     case StatementKind::method_block:
     case StatementKind::struct_statement:
@@ -2985,6 +3148,10 @@ bool TypeChecker::is_cast_allowed(const Type& source, const Type& target) const 
 }
 
 bool TypeChecker::can_coerce_integer_literal(const Expression& expression, const Type& target) const {
+    if (has_integer_literal_suffix(expression.lexeme)) {
+        return false;
+    }
+
     if (expression.kind == ExpressionKind::number && is_numeric_type(target)) {
         return true;
     }
@@ -2997,7 +3164,14 @@ void TypeChecker::check_integer_literal_range(const Expression& expression, cons
         return;
     }
 
-    const unsigned long long value = std::stoull(expression.lexeme);
+    unsigned long long value = 0;
+    try {
+        value = parse_unsigned_integer_literal(expression.lexeme);
+    } catch (const std::out_of_range&) {
+        throw std::runtime_error(
+            diagnostic(expression.location,
+                       "integer literal '" + expression.lexeme + "' does not fit in type '" + type_name(target) + "'"));
+    }
     const unsigned long long max = max_integer_literal(target.kind);
     if (value > max) {
         throw std::runtime_error(

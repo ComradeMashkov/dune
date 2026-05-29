@@ -82,12 +82,15 @@ enum class OpCode {
     array_pop,
     array_clear,
     array_is_empty,
+    array_contains,
     text_len,
     text_contains,
+    text_in,
     text_starts_with,
     text_is_empty,
     print,
     print_format,
+    format_text,
     halt,
 };
 
