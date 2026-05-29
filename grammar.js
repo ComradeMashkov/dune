@@ -320,7 +320,15 @@ module.exports = grammar({
       "}",
     ),
 
-    when_arm: $ => seq("is", field("pattern", $._pattern), field("body", $.block)),
+    when_arm: $ => choice(
+      seq("is", field("pattern", $._pattern), field("body", $.block)),
+      seq(field("pattern", $._pattern), "=>", field("body", $.when_arrow_body), optional(";")),
+    ),
+
+    when_arrow_body: $ => choice(
+      $._expression,
+      seq("{", $._expression, optional(";"), "}"),
+    ),
 
     _pattern: $ => choice(
       $.wildcard_pattern,

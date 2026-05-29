@@ -533,8 +533,8 @@ choice Maybe<T> {
 value: Maybe<int> = Present(42);
 
 answer = when value {
-  is Present(x) { x }
-  is Absent { 0 }
+  Present(x) => x;
+  Absent => 0;
 };
 ```
 
@@ -549,19 +549,20 @@ export method<T> [T].first(): T {
 ```
 
 `when` expressions compare a subject against literal patterns or choice variant
-patterns. Literal matches require a `_` fallback arm. Choice matches must cover
-every variant, or include `_` as a fallback. A payload variant pattern binds the
-payload only inside that arm.
+patterns. Arms can use the compact `pattern => expression;` form, or the older
+`is pattern { expression }` form. Literal matches require a `_` fallback arm.
+Choice matches must cover every variant, or include `_` as a fallback. A payload
+variant pattern binds the payload only inside that arm.
 
 ```dn
 label = when answer.value {
-  is 42 { "answer" }
-  is _ { "other" }
+  42 => "answer";
+  _ => "other";
 };
 
 unwrapped = when value {
-  is Present(x) { x }
-  is Absent { 0 }
+  Present(x) => x;
+  Absent => 0;
 };
 ```
 
@@ -730,7 +731,7 @@ The current release implements a small compiled language with:
 - dynamic arrays
 - records with fields and methods
 - mutable array indexes and record fields
-- `when` expressions with literal and choice variant patterns
+- `when` expressions with literal and choice variant patterns, including `pattern => expression` arms
 - array methods
 - text methods
 - standard library receiver methods

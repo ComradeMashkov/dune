@@ -2300,7 +2300,10 @@ Type TypeChecker::check_enum_when_expression(const Expression& expression, const
             has_wildcard = true;
         } else {
             VariantResolution resolution = resolve_variant_pattern(pattern, subject);
-            covered_tags.insert(resolution.tag);
+            if (!covered_tags.insert(resolution.tag).second) {
+                throw std::runtime_error(diagnostic(pattern.location, "duplicate when branch for variant '" +
+                                                                          base_name(resolution.variant_name) + "'"));
+            }
             if (resolution.binds_payload) {
                 binding_name = resolution.binding_name;
                 binding_type = resolution.payload_type;

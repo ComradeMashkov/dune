@@ -209,6 +209,15 @@ int main() {
                                   "print(when \"dune\" { is \"lang\" { 1 } is _ { 2 } });"),
                        "7\ndone\n70\n2\n", "expected generic records and when output") &&
              passed;
+    passed = expect_eq(run_source("choice Maybe { Present(int), Absent, } "
+                                  "unwrap(value: Maybe): int { return when value { Present(x) => x + 1; "
+                                  "Absent => 0; }; } "
+                                  "value: Maybe = Present(41); missing: Maybe = Absent; "
+                                  "print(unwrap(value)); print(unwrap(missing)); "
+                                  "print(when missing { Present(x) => x; _ => 7; }); "
+                                  "print(when 2 { 1 => 10; _ => 20; });"),
+                       "42\n0\n7\n20\n", "expected arrow-style pattern matching output") &&
+             passed;
     passed = expect_eq(run_source("contract Shape { area(): real64; } "
                                   "record Circle with Shape { radius: real64, "
                                   "new(radius: real64): Circle { return Circle { radius: radius }; } "

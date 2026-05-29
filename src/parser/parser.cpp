@@ -1294,8 +1294,8 @@ std::unique_ptr<Expression> Parser::when_expression() {
 
     std::vector<std::unique_ptr<Expression>> cases;
     while (!check(TokenType::right_brace) && !is_at_end()) {
-        consume(TokenType::is_keyword, "expected 'is' before when pattern");
         std::unique_ptr<Expression> pattern;
+        const bool legacy_arm = match(TokenType::is_keyword);
         if (check(TokenType::identifier) && peek().lexeme == "_") {
             const Token& wildcard = advance();
             pattern = make_leaf(ExpressionKind::identifier, "_", location_from_token(wildcard));
@@ -1303,11 +1303,33 @@ std::unique_ptr<Expression> Parser::when_expression() {
             pattern = expression();
         }
 
-        consume(TokenType::left_brace, "expected '{' before when arm body");
         cases.push_back(std::move(pattern));
-        cases.push_back(expression());
-        match(TokenType::semicolon);
-        consume(TokenType::right_brace, "expected '}' after when arm body");
+
+        if (legacy_arm) {
+            consume(TokenType::left_brace, "expected '{' before when arm body");
+            cases.push_back(expression());
+            match(TokenType::semicolon);
+            consume(TokenType::right_brace, "expected '}' after when arm body");
+
+            if (match(TokenType::comma)) {
+                continue;
+            }
+
+            continue;
+        }
+
+        consume(TokenType::fat_arrow, "expected '=>' after when pattern");
+        if (match(TokenType::left_brace)) {
+            cases.push_back(expression());
+            match(TokenType::semicolon);
+            consume(TokenType::right_brace, "expected '}' after when arm body");
+            match(TokenType::semicolon);
+        } else {
+            cases.push_back(expression());
+            if (!match(TokenType::semicolon) && !match(TokenType::comma) && !check(TokenType::right_brace)) {
+                throw std::runtime_error("expected ';' or ',' after when arm");
+            }
+        }
 
         if (match(TokenType::comma)) {
             continue;

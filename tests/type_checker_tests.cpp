@@ -236,6 +236,12 @@ int main() {
                           "qualified: Maybe<int> = Maybe.Present(9);",
                           "expected choices and variant when expressions to validate") &&
              passed;
+    passed = expect_valid("choice Maybe { Present(int), Absent, } "
+                          "value: Maybe = Present(42); missing: Maybe = Absent; "
+                          "chosen: int = when value { Present(x) => x; Absent => 0; }; "
+                          "fallback: int = when missing { Present(x) => x, _ => 7 };",
+                          "expected arrow-style choice when expressions to validate") &&
+             passed;
     passed = expect_valid("same<T is comparable>(left: T, right: T): bool { return left == right; } "
                           "lower<T is ordered>(left: T, right: T): bool { return left < right; } "
                           "text_ok: bool = same(\"dune\", \"dune\"); int_ok: bool = lower(1, 2);",
@@ -335,6 +341,10 @@ int main() {
     passed = expect_error_contains("choice Maybe { Present(int), Absent, } value: Maybe = Present(1); "
                                    "chosen: int = when value { is Present(x) { x } is Absent { 0 } }; print(x);",
                                    "undefined variable 'x'", "expected when payload scope error") &&
+             passed;
+    passed = expect_error_contains("choice Maybe { Present(int), Absent, } value: Maybe = Present(1); "
+                                   "chosen: int = when value { Present(x) => x; Absent => 0; }; print(x);",
+                                   "undefined variable 'x'", "expected arrow when payload scope error") &&
              passed;
     passed = expect_error_contains("const values: [int] = [1]; values[0] = 2;",
                                    "cannot mutate through constant binding 'values'",
@@ -500,6 +510,15 @@ int main() {
     passed = expect_error_contains("choice Maybe { Present(int), Absent, } value: Maybe = Absent; "
                                    "chosen: int = when value { is Present(x) { x } is Absent(x) { x } };",
                                    "does not have a payload", "expected unit variant payload pattern error") &&
+             passed;
+    passed = expect_error_contains("choice Maybe { Present(int), Absent, } value: Maybe = Absent; "
+                                   "chosen: int = when value { Missing => 0; _ => 1; };",
+                                   "has no variant 'Missing'", "expected unknown arrow variant pattern error") &&
+             passed;
+    passed = expect_error_contains("choice Maybe { Present(int), Absent, } value: Maybe = Absent; "
+                                   "chosen: int = when value { Present(x) => x; Present(y) => y; Absent => 0; };",
+                                   "duplicate when branch for variant 'Present'",
+                                   "expected duplicate arrow variant pattern error") &&
              passed;
     passed = expect_error_contains("record Box<T> { value: T } value = Box { value: 1 };",
                                    "generic record literal 'Box' needs an expected type",
