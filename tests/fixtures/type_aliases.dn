@@ -1,0 +1,10 @@
+export record Point {
+    x: int,
+
+    export fn new(x: int): Point {
+        return Point { x: x };
+    }
+}
+
+export type PointAlias = Point;
+export type PointList = [PointAlias];

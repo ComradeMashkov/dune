@@ -40,6 +40,7 @@ module.exports = grammar({
       $.record_declaration,
       $.contract_declaration,
       $.choice_declaration,
+      $.type_alias_declaration,
       $.method_declaration,
       $.binding_statement,
       $.const_statement,
@@ -64,12 +65,21 @@ module.exports = grammar({
         $.record_declaration,
         $.contract_declaration,
         $.choice_declaration,
+        $.type_alias_declaration,
         $.method_declaration,
         $.const_statement,
       ),
     ),
 
     import_statement: $ => seq("import", field("module", $.identifier), optional(";")),
+
+    type_alias_declaration: $ => seq(
+      "type",
+      field("name", $.identifier),
+      "=",
+      field("type", $._type),
+      ";",
+    ),
 
     function_declaration: $ => prec(2, seq(
       "fn",

@@ -475,6 +475,7 @@ void TypeChecker::check(const Program& program) {
     structs_.clear();
     enums_.clear();
     contracts_.clear();
+    type_aliases_.clear();
     functions_.clear();
     overloads_.clear();
     generic_overloads_.clear();
@@ -505,9 +506,17 @@ void TypeChecker::check(const Program& program) {
         if (statement.kind == StatementKind::contract_statement) {
             declare_contract(statement);
         }
+
+        if (statement.kind == StatementKind::type_alias_statement) {
+            declare_type_alias(statement);
+        }
     }
 
     for (const Statement& statement : program.statements) {
+        if (statement.kind == StatementKind::type_alias_statement) {
+            validate_type_alias(statement);
+        }
+
         if (statement.kind == StatementKind::struct_statement) {
             define_struct(statement);
         }
@@ -566,7 +575,8 @@ void TypeChecker::check(const Program& program) {
     for (const Statement& statement : program.statements) {
         if (statement.kind != StatementKind::function && statement.kind != StatementKind::import_statement &&
             statement.kind != StatementKind::struct_statement && statement.kind != StatementKind::enum_statement &&
-            statement.kind != StatementKind::contract_statement) {
+            statement.kind != StatementKind::contract_statement &&
+            statement.kind != StatementKind::type_alias_statement) {
             const std::string previous_module = current_module_;
             current_module_ = module_name(statement.name);
             check_statement(statement);
@@ -638,7 +648,8 @@ void TypeChecker::declare_struct(const Statement& statement) {
         throw std::runtime_error(diagnostic(statement.location, "record needs a name"));
     }
 
-    if (structs_.contains(statement.name)) {
+    if (structs_.contains(statement.name) || enums_.contains(statement.name) || contracts_.contains(statement.name) ||
+        type_aliases_.contains(statement.name)) {
         throw std::runtime_error(diagnostic(statement.location, "duplicate record '" + statement.name + "'"));
     }
 
@@ -653,7 +664,8 @@ void TypeChecker::declare_enum(const Statement& statement) {
         throw std::runtime_error(diagnostic(statement.location, "choice needs a name"));
     }
 
-    if (enums_.contains(statement.name)) {
+    if (structs_.contains(statement.name) || enums_.contains(statement.name) || contracts_.contains(statement.name) ||
+        type_aliases_.contains(statement.name)) {
         throw std::runtime_error(diagnostic(statement.location, "duplicate choice '" + statement.name + "'"));
     }
 
@@ -763,12 +775,41 @@ void TypeChecker::declare_contract(const Statement& statement) {
         throw std::runtime_error(diagnostic(statement.location, "contract needs a name"));
     }
 
-    if (contracts_.contains(statement.name)) {
+    if (structs_.contains(statement.name) || enums_.contains(statement.name) || contracts_.contains(statement.name) ||
+        type_aliases_.contains(statement.name)) {
         throw std::runtime_error(diagnostic(statement.location, "duplicate contract '" + statement.name + "'"));
     }
 
     collect_known_module(statement.name);
     contracts_.emplace(statement.name, ContractDefinition{statement.name, {}, statement.location});
+}
+
+void TypeChecker::declare_type_alias(const Statement& statement) {
+    if (statement.name.empty()) {
+        throw std::runtime_error(diagnostic(statement.location, "type alias needs a name"));
+    }
+
+    if (!statement.type.has_type) {
+        throw std::runtime_error(diagnostic(statement.location, "type alias '" + statement.name + "' needs a target"));
+    }
+
+    if (structs_.contains(statement.name) || enums_.contains(statement.name) || contracts_.contains(statement.name) ||
+        type_aliases_.contains(statement.name)) {
+        throw std::runtime_error(diagnostic(statement.location, "duplicate type alias '" + statement.name + "'"));
+    }
+
+    collect_known_module(statement.name);
+    type_aliases_.emplace(statement.name,
+                          TypeAliasDefinition{statement.name, clone_type(statement.type.type), statement.location});
+}
+
+void TypeChecker::validate_type_alias(const Statement& statement) const {
+    const auto alias = type_aliases_.find(statement.name);
+    if (alias == type_aliases_.end()) {
+        throw std::runtime_error(diagnostic(statement.location, "undefined type alias '" + statement.name + "'"));
+    }
+
+    validate_known_type(alias->second.target, alias->second.location);
 }
 
 void TypeChecker::define_contract(const Statement& statement) {
@@ -1169,6 +1210,8 @@ void TypeChecker::check_statement(const Statement& statement) {
         throw std::runtime_error(diagnostic(statement.location, "choice declarations are only allowed at top level"));
     case StatementKind::contract_statement:
         throw std::runtime_error(diagnostic(statement.location, "contract declarations are only allowed at top level"));
+    case StatementKind::type_alias_statement:
+        throw std::runtime_error(diagnostic(statement.location, "type aliases are only allowed at top level"));
     case StatementKind::return_statement:
         if (current_function_ == nullptr) {
             throw std::runtime_error(diagnostic(statement.location, "return statement outside function"));
@@ -3014,6 +3057,7 @@ bool TypeChecker::statement_returns(const Statement& statement) const {
     case StatementKind::struct_statement:
     case StatementKind::enum_statement:
     case StatementKind::contract_statement:
+    case StatementKind::type_alias_statement:
     case StatementKind::break_statement:
     case StatementKind::continue_statement:
     case StatementKind::expression_statement:
@@ -3048,10 +3092,17 @@ Type TypeChecker::annotation_or_default(const TypeAnnotation& annotation,
 }
 
 Type TypeChecker::normalize_type(const Type& type, const std::unordered_set<std::string>& generic_parameters) const {
+    std::unordered_set<std::string> resolving_aliases;
+    return normalize_type(type, generic_parameters, resolving_aliases);
+}
+
+Type TypeChecker::normalize_type(const Type& type, const std::unordered_set<std::string>& generic_parameters,
+                                 std::unordered_set<std::string>& resolving_aliases) const {
     if (type.kind == ValueType::array_type) {
         Type result{ValueType::array_type, nullptr};
         if (type.element != nullptr) {
-            result.element = std::make_shared<Type>(normalize_type(*type.element, generic_parameters));
+            result.element =
+                std::make_shared<Type>(normalize_type(*type.element, generic_parameters, resolving_aliases));
         }
         return result;
     }
@@ -3059,7 +3110,26 @@ Type TypeChecker::normalize_type(const Type& type, const std::unordered_set<std:
     std::vector<Type> arguments;
     arguments.reserve(type.arguments.size());
     for (const Type& argument : type.arguments) {
-        arguments.push_back(normalize_type(argument, generic_parameters));
+        arguments.push_back(normalize_type(argument, generic_parameters, resolving_aliases));
+    }
+
+    if (type.kind == ValueType::generic_type && !generic_parameters.contains(type.name)) {
+        const auto alias = type_aliases_.find(type.name);
+        if (alias != type_aliases_.end()) {
+            if (!arguments.empty()) {
+                throw std::runtime_error(diagnostic(alias->second.location, "type alias '" + base_name(type.name) +
+                                                                                "' does not take type arguments"));
+            }
+
+            if (!resolving_aliases.insert(type.name).second) {
+                throw std::runtime_error(
+                    diagnostic(alias->second.location, "cyclic type alias involving '" + base_name(type.name) + "'"));
+            }
+
+            Type resolved = normalize_type(alias->second.target, generic_parameters, resolving_aliases);
+            resolving_aliases.erase(type.name);
+            return resolved;
+        }
     }
 
     if (type.kind == ValueType::generic_type && !generic_parameters.contains(type.name) &&
@@ -3074,6 +3144,74 @@ Type TypeChecker::normalize_type(const Type& type, const std::unordered_set<std:
     Type result = type;
     result.arguments = std::move(arguments);
     return result;
+}
+
+void TypeChecker::validate_known_type(const Type& type, SourceLocation location) const {
+    const Type normalized = normalize_type(type);
+    switch (normalized.kind) {
+    case ValueType::array_type:
+        if (normalized.element != nullptr) {
+            validate_known_type(*normalized.element, location);
+        }
+        return;
+    case ValueType::tuple_type:
+        for (const Type& argument : normalized.arguments) {
+            validate_known_type(argument, location);
+        }
+        return;
+    case ValueType::struct_type: {
+        const auto record = structs_.find(normalized.name);
+        if (record == structs_.end()) {
+            throw std::runtime_error(diagnostic(location, "unknown type '" + normalized.name + "'"));
+        }
+        if (record->second.generic_parameters.size() != normalized.arguments.size()) {
+            throw std::runtime_error(diagnostic(location, "record '" + base_name(normalized.name) + "' expects " +
+                                                              std::to_string(record->second.generic_parameters.size()) +
+                                                              " type argument(s) but got " +
+                                                              std::to_string(normalized.arguments.size())));
+        }
+        for (const Type& argument : normalized.arguments) {
+            validate_known_type(argument, location);
+        }
+        return;
+    }
+    case ValueType::enum_type: {
+        const auto choice = enums_.find(normalized.name);
+        if (choice == enums_.end()) {
+            throw std::runtime_error(diagnostic(location, "unknown type '" + normalized.name + "'"));
+        }
+        if (choice->second.generic_parameters.size() != normalized.arguments.size()) {
+            throw std::runtime_error(diagnostic(location, "choice '" + base_name(normalized.name) + "' expects " +
+                                                              std::to_string(choice->second.generic_parameters.size()) +
+                                                              " type argument(s) but got " +
+                                                              std::to_string(normalized.arguments.size())));
+        }
+        for (const Type& argument : normalized.arguments) {
+            validate_known_type(argument, location);
+        }
+        return;
+    }
+    case ValueType::generic_type:
+        throw std::runtime_error(diagnostic(location, "unknown type '" + normalized.name + "'"));
+    case ValueType::int_type:
+    case ValueType::bool_type:
+    case ValueType::i8_type:
+    case ValueType::i16_type:
+    case ValueType::i32_type:
+    case ValueType::i64_type:
+    case ValueType::isize_type:
+    case ValueType::u8_type:
+    case ValueType::u16_type:
+    case ValueType::u32_type:
+    case ValueType::u64_type:
+    case ValueType::usize_type:
+    case ValueType::real32_type:
+    case ValueType::real_type:
+    case ValueType::glyph_type:
+    case ValueType::text_type:
+    case ValueType::unit_type:
+        return;
+    }
 }
 
 bool TypeChecker::same_type(const Type& left, const Type& right) const {
@@ -3437,7 +3575,8 @@ void TypeChecker::collect_module_export(const Statement& statement) {
     if (!statement.exported ||
         (statement.kind != StatementKind::function && statement.kind != StatementKind::const_statement &&
          statement.kind != StatementKind::struct_statement && statement.kind != StatementKind::enum_statement &&
-         statement.kind != StatementKind::contract_statement)) {
+         statement.kind != StatementKind::contract_statement &&
+         statement.kind != StatementKind::type_alias_statement)) {
         return;
     }
 

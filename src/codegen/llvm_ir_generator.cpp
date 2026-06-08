@@ -84,12 +84,14 @@ void LlvmIrGenerator::generate(const Program& program, std::ostream& output) {
     functions_.clear();
     structs_.clear();
     enums_.clear();
+    type_aliases_.clear();
     global_constants_.clear();
     string_globals_.clear();
     loop_stack_.clear();
     local_scopes_.clear();
     collect_structs(checker.structs());
     collect_enums(checker.enums());
+    collect_type_aliases(program.statements);
     collect_global_constants(program);
     collect_functions(program.statements);
     for (const Statement& statement : instantiated_functions) {
@@ -212,6 +214,14 @@ void LlvmIrGenerator::collect_enums(const std::unordered_map<std::string, TypeCh
     for (const auto& [name, definition] : enums) {
         (void)definition;
         enums_.insert(name);
+    }
+}
+
+void LlvmIrGenerator::collect_type_aliases(const std::vector<Statement>& statements) {
+    for (const Statement& statement : statements) {
+        if (statement.kind == StatementKind::type_alias_statement && statement.type.has_type) {
+            type_aliases_[statement.name] = statement.type.type;
+        }
     }
 }
 
@@ -606,6 +616,7 @@ bool LlvmIrGenerator::emit_statement(const Statement& statement, std::ostream& o
     case StatementKind::struct_statement:
     case StatementKind::enum_statement:
     case StatementKind::contract_statement:
+    case StatementKind::type_alias_statement:
         return false;
     case StatementKind::return_statement: {
         if (statement.expression == nullptr) {
@@ -2441,10 +2452,15 @@ std::string LlvmIrGenerator::extern_function_name(const FunctionSignature& signa
 }
 
 Type LlvmIrGenerator::normalize_type(const Type& type) const {
+    std::unordered_set<std::string> resolving_aliases;
+    return normalize_type(type, resolving_aliases);
+}
+
+Type LlvmIrGenerator::normalize_type(const Type& type, std::unordered_set<std::string>& resolving_aliases) const {
     if (type.kind == ValueType::array_type) {
         Type result{ValueType::array_type, nullptr};
         if (type.element != nullptr) {
-            result.element = std::make_shared<Type>(normalize_type(*type.element));
+            result.element = std::make_shared<Type>(normalize_type(*type.element, resolving_aliases));
         }
         return result;
     }
@@ -2452,7 +2468,16 @@ Type LlvmIrGenerator::normalize_type(const Type& type) const {
     std::vector<Type> arguments;
     arguments.reserve(type.arguments.size());
     for (const Type& argument : type.arguments) {
-        arguments.push_back(normalize_type(argument));
+        arguments.push_back(normalize_type(argument, resolving_aliases));
+    }
+
+    if (type.kind == ValueType::generic_type) {
+        const auto alias = type_aliases_.find(type.name);
+        if (alias != type_aliases_.end() && arguments.empty() && resolving_aliases.insert(type.name).second) {
+            Type resolved = normalize_type(alias->second, resolving_aliases);
+            resolving_aliases.erase(type.name);
+            return resolved;
+        }
     }
 
     if (type.kind == ValueType::generic_type && structs_.contains(type.name)) {

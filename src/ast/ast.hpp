@@ -116,6 +116,7 @@ enum class StatementKind {
     struct_statement,
     enum_statement,
     contract_statement,
+    type_alias_statement,
     return_statement,
     expression_statement,
     import_statement,

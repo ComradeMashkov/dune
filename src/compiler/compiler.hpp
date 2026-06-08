@@ -21,6 +21,7 @@ private:
     void collect_functions(const std::vector<Statement>& statements);
     void collect_structs(const std::unordered_map<std::string, TypeChecker::StructDefinition>& structs);
     void collect_enums(const std::unordered_map<std::string, TypeChecker::EnumDefinition>& enums);
+    void collect_type_aliases(const std::vector<Statement>& statements);
     void collect_global_constants(const std::vector<Statement>& statements);
     void compile_function(const Statement& statement);
     void compile_global_constants();
@@ -50,6 +51,7 @@ private:
     const Type& expression_type(const Expression& expression) const;
     std::size_t resolve_function(const std::string& name) const;
     Type normalize_type(const Type& type) const;
+    Type normalize_type(const Type& type, std::unordered_set<std::string>& resolving_aliases) const;
     void reset_scopes();
     void push_scope();
     void pop_scope();
@@ -80,6 +82,7 @@ private:
     std::unordered_map<std::string, std::size_t> functions_;
     std::unordered_map<std::string, StructLayout> structs_;
     std::unordered_set<std::string> enums_;
+    std::unordered_map<std::string, Type> type_aliases_;
     std::vector<const Statement*> global_constants_;
     std::unordered_map<const Expression*, Type> expression_types_;
     std::unordered_map<const Expression*, std::string> resolved_calls_;

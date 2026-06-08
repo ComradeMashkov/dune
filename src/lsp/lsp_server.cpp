@@ -396,7 +396,7 @@ void add_static_completions(std::vector<CompletionItem>& completions) {
     for (const std::string_view keyword :
          {"break",  "choice", "const",  "continue", "contract", "else",   "export", "fn",     "foreign",
           "for",    "if",     "import", "in",       "is",       "method", "print",  "record", "return",
-          "static", "to",     "when",   "while",    "with",     "true",   "false"}) {
+          "static", "to",     "type",   "when",     "while",    "with",   "true",   "false"}) {
         add_completion(completions, std::string(keyword), "keyword", completion_kind_keyword);
     }
 
@@ -594,7 +594,8 @@ bool module_has_explicit_exports(const Program& program) {
         return statement.exported &&
                (statement.kind == StatementKind::function || statement.kind == StatementKind::const_statement ||
                 statement.kind == StatementKind::struct_statement || statement.kind == StatementKind::enum_statement ||
-                statement.kind == StatementKind::contract_statement || statement.kind == StatementKind::method_block);
+                statement.kind == StatementKind::contract_statement ||
+                statement.kind == StatementKind::type_alias_statement || statement.kind == StatementKind::method_block);
     });
 }
 
@@ -631,6 +632,10 @@ void add_module_members(const Program& program, std::vector<CompletionItem>& com
 
         if (statement.kind == StatementKind::contract_statement && visible) {
             add_completion(completions, statement.name, "contract", completion_kind_interface);
+        }
+
+        if (statement.kind == StatementKind::type_alias_statement && visible) {
+            add_completion(completions, statement.name, "type alias", completion_kind_type_parameter);
         }
 
         if (statement.kind == StatementKind::method_block) {
@@ -1052,6 +1057,8 @@ std::string declaration_hover(const Statement& statement) {
         return code_hover("choice " + statement.name + generic_parameters_text(statement.generic_parameters));
     case StatementKind::contract_statement:
         return code_hover("contract " + statement.name);
+    case StatementKind::type_alias_statement:
+        return code_hover("type " + statement.name + " = " + type_annotation_name(statement.type));
     case StatementKind::method_block:
     case StatementKind::assign:
     case StatementKind::print:
@@ -1501,6 +1508,7 @@ std::optional<std::string> builtin_hover(const Token& token) {
     case TokenType::continue_keyword:
     case TokenType::static_keyword:
     case TokenType::to_keyword:
+    case TokenType::type_keyword:
     case TokenType::is_keyword:
     case TokenType::int_keyword:
     case TokenType::bool_keyword:

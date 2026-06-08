@@ -55,6 +55,12 @@ public:
         SourceLocation location;
     };
 
+    struct TypeAliasDefinition {
+        std::string name;
+        Type target;
+        SourceLocation location;
+    };
+
     struct EnumVariant {
         std::string name;
         bool has_payload = false;
@@ -109,6 +115,8 @@ private:
     void define_enum(const Statement& statement);
     void declare_contract(const Statement& statement);
     void define_contract(const Statement& statement);
+    void declare_type_alias(const Statement& statement);
+    void validate_type_alias(const Statement& statement) const;
     void check_struct_field_defaults(const Statement& statement);
     void validate_constructor(const Statement& record, const Statement& method,
                               const std::unordered_set<std::string>& generic_names) const;
@@ -160,6 +168,9 @@ private:
     Type annotation_or_default(const TypeAnnotation& annotation,
                                const std::unordered_set<std::string>& generic_parameters) const;
     Type normalize_type(const Type& type, const std::unordered_set<std::string>& generic_parameters = {}) const;
+    Type normalize_type(const Type& type, const std::unordered_set<std::string>& generic_parameters,
+                        std::unordered_set<std::string>& resolving_aliases) const;
+    void validate_known_type(const Type& type, SourceLocation location) const;
     bool same_type(const Type& left, const Type& right) const;
     bool is_signed_type(ValueType type) const;
     bool is_integer_type(ValueType type) const;
@@ -229,6 +240,7 @@ private:
     std::unordered_map<std::string, StructDefinition> structs_;
     std::unordered_map<std::string, EnumDefinition> enums_;
     std::unordered_map<std::string, ContractDefinition> contracts_;
+    std::unordered_map<std::string, TypeAliasDefinition> type_aliases_;
     std::unordered_map<std::string, FunctionSignature> functions_;
     std::unordered_map<std::string, std::vector<std::string>> overloads_;
     std::unordered_map<std::string, std::vector<const Statement*>> generic_overloads_;

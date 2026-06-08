@@ -464,6 +464,10 @@ Statement Parser::statement() {
         return import_statement();
     }
 
+    if (match(TokenType::type_keyword)) {
+        return type_alias_statement();
+    }
+
     if (looks_like_binding_declaration()) {
         return binding_statement();
     }
@@ -637,8 +641,14 @@ Statement Parser::export_statement() {
         return statement;
     }
 
+    if (match(TokenType::type_keyword)) {
+        Statement statement = type_alias_statement();
+        statement.exported = true;
+        return statement;
+    }
+
     throw std::runtime_error(
-        "expected fn, foreign function, record, contract, choice, method, or constant after export");
+        "expected fn, foreign function, record, contract, choice, method, constant, or type alias after export");
 }
 
 Statement Parser::extern_statement() {
@@ -961,6 +971,23 @@ Statement Parser::struct_statement() {
     statement.parameters = std::move(fields);
     statement.generic_parameters = std::move(parsed_generics);
     statement.contracts = std::move(contracts);
+    statement.location = location_from_token(keyword);
+    return statement;
+}
+
+Statement Parser::type_alias_statement() {
+    const Token& keyword = previous();
+    const Token& name = consume(TokenType::identifier, "expected type alias name after type");
+    if (check(TokenType::less)) {
+        throw std::runtime_error("generic type aliases are not supported yet");
+    }
+
+    consume(TokenType::equal, "expected '=' after type alias name");
+    TypeAnnotation target_type = type_annotation();
+    consume(TokenType::semicolon, "expected ';' after type alias");
+
+    Statement statement{StatementKind::type_alias_statement, name.lexeme, nullptr, {}, {}};
+    statement.type = std::move(target_type);
     statement.location = location_from_token(keyword);
     return statement;
 }

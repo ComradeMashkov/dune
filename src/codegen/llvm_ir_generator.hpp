@@ -98,6 +98,7 @@ private:
     void collect_function(const Statement& statement);
     void collect_structs(const std::unordered_map<std::string, TypeChecker::StructDefinition>& structs);
     void collect_enums(const std::unordered_map<std::string, TypeChecker::EnumDefinition>& enums);
+    void collect_type_aliases(const std::vector<Statement>& statements);
     void collect_global_constants(const Program& program);
 
     std::string next_register();
@@ -112,6 +113,7 @@ private:
     std::string extern_function_name(const FunctionSignature& signature) const;
     std::string default_value(const Type& type) const;
     Type normalize_type(const Type& type) const;
+    Type normalize_type(const Type& type, std::unordered_set<std::string>& resolving_aliases) const;
     Type substitute_struct_type(const Type& type, const std::unordered_map<std::string, Type>& substitutions) const;
     StructLayout concrete_struct_layout(const Type& type) const;
     std::string decode_glyph_literal(const std::string& lexeme) const;
@@ -140,6 +142,7 @@ private:
     std::unordered_map<std::string, FunctionSignature> functions_;
     std::unordered_map<std::string, StructLayout> structs_;
     std::unordered_set<std::string> enums_;
+    std::unordered_map<std::string, Type> type_aliases_;
     std::unordered_map<std::string, Local> locals_;
     std::vector<std::vector<ScopedLocal>> local_scopes_;
     std::vector<const Statement*> global_constants_;

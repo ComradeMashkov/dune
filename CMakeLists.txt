@@ -394,6 +394,16 @@ add_test(
 )
 
 add_test(
+    NAME cli_type_aliases
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/type_aliases_run.dn
+        -D EXPECTED_OUTPUT="3\n5"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
     NAME cli_records_stdlib
     COMMAND
         ${CMAKE_COMMAND}
@@ -673,6 +683,17 @@ add_test(
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/generics_bounds.dn
         -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/generics_bounds_native
         -D EXPECTED_OUTPUT="42\ndone\nlang\n144\n2.25\n18"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
+)
+
+add_test(
+    NAME cli_build_native_type_aliases
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/type_aliases_run.dn
+        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/type_aliases_native
+        -D EXPECTED_OUTPUT="3\n5"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
 )
 

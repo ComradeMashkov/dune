@@ -75,6 +75,37 @@ bool compiles_unit_call_statement() {
     return passed;
 }
 
+bool compiles_type_aliases() {
+    const dune::Bytecode bytecode =
+        compile_source("type Count = int; fn inc(value: Count): Count { return value + 1; } "
+                       "record Point { x: Count, fn new(x: Count): Point { return Point { x: x }; } } "
+                       "type PointAlias = Point; point: PointAlias = Point.new(inc(4)); print(point.x);");
+
+    bool saw_inc = false;
+    bool saw_constructor = false;
+    bool saw_field_load = false;
+    for (const dune::Bytecode::Function& function : bytecode.functions) {
+        if (function.name == "inc") {
+            saw_inc = true;
+        }
+        if (function.name == "Point.new") {
+            saw_constructor = true;
+        }
+    }
+
+    for (const dune::Instruction& instruction : bytecode.instructions) {
+        if (instruction.op == dune::OpCode::load_field) {
+            saw_field_load = true;
+        }
+    }
+
+    bool passed = true;
+    passed = expect(saw_inc, "expected alias-typed function") && passed;
+    passed = expect(saw_constructor, "expected alias-typed constructor") && passed;
+    passed = expect(saw_field_load, "expected alias-typed record field load") && passed;
+    return passed;
+}
+
 bool compiles_formatted_print() {
     const dune::Bytecode bytecode = compile_source("name: text = \"Dune\"; version: int = 1; "
                                                    "message: text = format(\"{} v{}\", name, version); "
@@ -632,6 +663,7 @@ int main() {
     bool passed = true;
     passed = compiles_function_table_and_call() && passed;
     passed = compiles_unit_call_statement() && passed;
+    passed = compiles_type_aliases() && passed;
     passed = compiles_formatted_print() && passed;
     passed = compiles_arrays_and_module_calls() && passed;
     passed = compiles_module_constants() && passed;
