@@ -1,0 +1,73 @@
+// A collection of unique `text` values.
+//
+// Like `dict`, the first iteration stores items in a single array and
+// scans linearly, which keeps behaviour simple and identical across
+// backends. Insertion order is preserved.
+export record Set {
+    items: [text],
+
+    export fn new(): Set {
+        return Set { items: [] };
+    }
+
+    fn index_of(value: text): int {
+        for index = 0; index < this.items.len(); index = index + 1 {
+            if this.items[index] == value {
+                return index;
+            }
+        }
+
+        return 0 - 1;
+    }
+
+    // Add `value`; duplicates are ignored.
+    export fn add(value: text): unit {
+        if this.index_of(value) < 0 {
+            this.items.push(value);
+        }
+    }
+
+    export fn contains(value: text): bool {
+        return this.index_of(value) >= 0;
+    }
+
+    // Remove `value`; returns whether it was present.
+    export fn remove(value: text): bool {
+        existing = this.index_of(value);
+        if existing < 0 {
+            return false;
+        }
+
+        remaining: [text] = [];
+        for index = 0; index < this.items.len(); index = index + 1 {
+            if index != existing {
+                remaining.push(this.items[index]);
+            }
+        }
+
+        this.items = remaining;
+        return true;
+    }
+
+    export fn len(): int {
+        return this.items.len();
+    }
+
+    export fn is_empty(): bool {
+        return this.items.len() == 0;
+    }
+
+    export fn clear(): unit {
+        this.items = [];
+    }
+
+    // A copy of the values in insertion order.
+    export fn values(): [text] {
+        result: [text] = [];
+        for index = 0; index < this.items.len(); index = index + 1 {
+            result.push(this.items[index]);
+        }
+
+        return result;
+    }
+}

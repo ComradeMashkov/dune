@@ -1,0 +1,43 @@
+import random;
+
+rng: random.Random = random.seed(42);
+print(rng.next_int());
+print(rng.next_int());
+print(rng.next_int());
+
+left: random.Random = random.seed(123);
+right: random.Random = random.seed(123);
+print(left.next_int() == right.next_int());
+
+bounded: random.Random = random.seed(7);
+in_bounds = true;
+for index = 0; index < 1000; index = index + 1 {
+    value = bounded.between(0, 10);
+    if value < 0 {
+        in_bounds = false;
+    }
+
+    if value >= 10 {
+        in_bounds = false;
+    }
+}
+
+print(in_bounds);
+
+samples = random.uniform(random.seed(1), 5, 0.0, 1.0);
+print(samples.len());
+unit_range = true;
+for index = 0; index < samples.len(); index = index + 1 {
+    if samples[index] < 0.0 {
+        unit_range = false;
+    }
+
+    if samples[index] >= 1.0 {
+        unit_range = false;
+    }
+}
+
+print(unit_range);
+
+bell = random.normal(random.seed(2), 100, 0.0, 1.0);
+print(bell.len());

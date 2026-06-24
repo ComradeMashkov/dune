@@ -1,0 +1,37 @@
+import array;
+import dict;
+import set;
+
+scores: dict.Dict<int> = dict.Dict.new();
+scores.set("alice", 10);
+scores.set("bob", 7);
+scores.set("alice", 15);
+
+print(scores.len());
+print(scores.get("alice").value_or(0 - 1));
+print(scores.get("bob").value_or(0 - 1));
+print(scores.get("carol").value_or(0 - 1));
+print(scores.contains("bob"));
+print(scores.contains("zzz"));
+print(scores.keys().len());
+print(scores.values().sum());
+
+print(scores.remove("bob"));
+print(scores.remove("bob"));
+print(scores.len());
+print(scores.is_empty());
+
+seen: set.Set = set.Set.new();
+seen.add("x");
+seen.add("y");
+seen.add("x");
+
+print(seen.len());
+print(seen.contains("x"));
+print(seen.contains("z"));
+print(seen.values().len());
+print(seen.remove("x"));
+print(seen.len());
+
+seen.clear();
+print(seen.is_empty());

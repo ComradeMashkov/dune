@@ -1,0 +1,105 @@
+import maybe;
+
+// A small associative collection mapping `text` keys to `V` values.
+//
+// The first iteration keeps keys as `text` and stores entries in two
+// parallel arrays, so lookups are linear. That is simple, predictable,
+// and identical across backends; hashing can come later without changing
+// this API.
+export record Dict<V> {
+    entry_keys: [text],
+    entry_values: [V],
+
+    export fn new(): Dict<V> {
+        return Dict { entry_keys: [], entry_values: [] };
+    }
+
+    fn index_of(key: text): int {
+        for index = 0; index < this.entry_keys.len(); index = index + 1 {
+            if this.entry_keys[index] == key {
+                return index;
+            }
+        }
+
+        return 0 - 1;
+    }
+
+    // Insert or overwrite the value for `key`.
+    export fn set(key: text, value: V): unit {
+        existing = this.index_of(key);
+        if existing >= 0 {
+            this.entry_values[existing] = value;
+        } else {
+            this.entry_keys.push(key);
+            this.entry_values.push(value);
+        }
+    }
+
+    // Look up `key`, returning `Present(value)` or `Absent`.
+    export fn get(key: text): maybe.Maybe<V> {
+        existing = this.index_of(key);
+        if existing >= 0 {
+            return maybe.present(this.entry_values[existing]);
+        }
+
+        return maybe.Absent;
+    }
+
+    export fn contains(key: text): bool {
+        return this.index_of(key) >= 0;
+    }
+
+    // Remove `key`; returns whether a value was actually removed.
+    export fn remove(key: text): bool {
+        existing = this.index_of(key);
+        if existing < 0 {
+            return false;
+        }
+
+        remaining_keys: [text] = [];
+        remaining_values: [V] = [];
+        for index = 0; index < this.entry_keys.len(); index = index + 1 {
+            if index != existing {
+                remaining_keys.push(this.entry_keys[index]);
+                remaining_values.push(this.entry_values[index]);
+            }
+        }
+
+        this.entry_keys = remaining_keys;
+        this.entry_values = remaining_values;
+        return true;
+    }
+
+    export fn len(): int {
+        return this.entry_keys.len();
+    }
+
+    export fn is_empty(): bool {
+        return this.entry_keys.len() == 0;
+    }
+
+    export fn clear(): unit {
+        this.entry_keys = [];
+        this.entry_values = [];
+    }
+
+    // A copy of the keys in insertion order.
+    export fn keys(): [text] {
+        result: [text] = [];
+        for index = 0; index < this.entry_keys.len(); index = index + 1 {
+            result.push(this.entry_keys[index]);
+        }
+
+        return result;
+    }
+
+    // A copy of the values in insertion order.
+    export fn values(): [V] {
+        result: [V] = [];
+        for index = 0; index < this.entry_values.len(); index = index + 1 {
+            result.push(this.entry_values[index]);
+        }
+
+        return result;
+    }
+}

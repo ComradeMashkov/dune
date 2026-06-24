@@ -1,0 +1,84 @@
+import math;
+import runtime;
+
+// Deterministic, seedable pseudo-random numbers.
+//
+// `Random` uses the Park-Miller "minimal standard" generator
+// (state = 16807 * state mod 2147483647). The multiplication never
+// overflows a 64-bit integer, so the sequence is identical on every
+// backend for a given seed.
+//
+// Method names avoid the reserved type names `int`/`real64`, so the
+// raw-uniform helpers are `next_int`/`next_real` and the bounded
+// integer helper is `between`.
+export record Random {
+    state: int,
+
+    export fn new(seed: int): Random {
+        normalized = seed % 2147483647;
+        if normalized <= 0 {
+            normalized = normalized + 2147483646;
+        }
+
+        return Random { state: normalized };
+    }
+
+    // Advance the generator and return the raw state in [1, 2147483646].
+    export fn next_int(): int {
+        this.state = (16807 * this.state) % 2147483647;
+        return this.state;
+    }
+
+    // Uniform real64 in [0.0, 1.0). Never returns exactly 0.0 or 1.0.
+    export fn next_real(): real64 {
+        return (this.next_int() to real64) / 2147483647.0;
+    }
+
+    // Uniform integer in [lo, hi); `hi` is exclusive.
+    export fn between(lo: int, hi: int): int {
+        if hi <= lo {
+            runtime.panic("random.between requires hi > lo");
+        }
+
+        return lo + this.next_int() % (hi - lo);
+    }
+
+    // Uniform real64 in [lo, hi).
+    export fn real_between(lo: real64, hi: real64): real64 {
+        return lo + this.next_real() * (hi - lo);
+    }
+
+    // One sample from a normal distribution via the Box-Muller transform.
+    export fn normal(mean: real64, stddev: real64): real64 {
+        u1 = this.next_real();
+        u2 = this.next_real();
+        radius = math.sqrt((0.0 - 2.0) * math.ln(u1));
+        angle = 6.283185307179586 * u2;
+        return mean + stddev * radius * math.cos(angle);
+    }
+}
+
+// Convenience constructor matching `random.seed(42)`.
+export fn seed(value: int): Random {
+    return Random.new(value);
+}
+
+// `count` uniform real64 values in [lo, hi).
+export fn uniform(rng: Random, count: int, lo: real64, hi: real64): [real64] {
+    result: [real64] = [];
+    for index = 0; index < count; index = index + 1 {
+        result.push(rng.real_between(lo, hi));
+    }
+
+    return result;
+}
+
+// `count` samples from a normal distribution.
+export fn normal(rng: Random, count: int, mean: real64, stddev: real64): [real64] {
+    result: [real64] = [];
+    for index = 0; index < count; index = index + 1 {
+        result.push(rng.normal(mean, stddev));
+    }
+
+    return result;
+}
