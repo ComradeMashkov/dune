@@ -504,6 +504,26 @@ add_test(
 )
 
 add_test(
+    NAME cli_dict_set
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/dict_set.dn
+        -D EXPECTED_OUTPUT="2\n15\n7\n-1\n1\n0\n2\n22\n1\n0\n1\n0\n2\n1\n0\n2\n1\n1\n1"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
+    NAME cli_random_demo
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/random_demo.dn
+        -D EXPECTED_OUTPUT="705894\n1126542223\n1579310009\n1\n1\n5\n1\n100"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
     NAME cli_matrix_shape_error
     COMMAND
         ${CMAKE_COMMAND}
@@ -804,6 +824,28 @@ add_test(
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/array_api.dn
         -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/array_api_native
         -D EXPECTED_OUTPUT="6\n6\n1\n3\n0\n2\n4\n15\n3\n3\nx\n21\n0\n3\n6\n0\n5\n9\n3\n4\n1\n1\n27\n0\n1\n4"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
+)
+
+add_test(
+    NAME cli_build_native_dict_set
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/dict_set.dn
+        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/dict_set_native
+        -D EXPECTED_OUTPUT="2\n15\n7\n-1\n1\n0\n2\n22\n1\n0\n1\n0\n2\n1\n0\n2\n1\n1\n1"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
+)
+
+add_test(
+    NAME cli_build_native_random_demo
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/random_demo.dn
+        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/random_demo_native
+        -D EXPECTED_OUTPUT="705894\n1126542223\n1579310009\n1\n1\n5\n1\n100"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_native_cli_case.cmake
 )
 

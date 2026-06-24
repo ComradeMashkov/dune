@@ -145,7 +145,8 @@ print(values.first());
 Modules are loaded from `.dn` files. The standard library currently includes
 `stdlib/math.dn`, `stdlib/array.dn`, `stdlib/text.dn`, `stdlib/maybe.dn`,
 `stdlib/outcome.dn`, `stdlib/assert.dn`, `stdlib/collections.dn`,
-`stdlib/runtime.dn`, `stdlib/autograd.dn`, and `stdlib/matrix.dn`. Low-level
+`stdlib/dict.dn`, `stdlib/set.dn`, `stdlib/random.dn`, `stdlib/runtime.dn`,
+`stdlib/autograd.dn`, and `stdlib/matrix.dn`. Low-level
 array and text operations such as `len`, `push`, indexing, and slicing remain
 runtime primitives; higher-level helpers are ordinary Dune functions in the
 standard library.
@@ -730,6 +731,38 @@ Standard library receiver methods are enabled by importing their module:
 - `import maybe;` exposes choice `Maybe<T>`, `present(value)`, `absent(default)`, and `value_or()`
 - `import outcome;` exposes choice `Outcome<T, E>`, `done(value, error_default)`, `failed(value_default, error)`, and `failure_or()`
 - `import collections;` exposes small array builders such as `pair_int()` and `repeat_int()`
+- `import dict;` exposes `Dict<V>` mapping `text` keys to values, with `set()`, `get()`, `contains()`, `remove()`, `keys()`, and `values()`
+- `import set;` exposes `Set` of unique `text` values, with `add()`, `contains()`, `remove()`, and `values()`
+- `import random;` exposes the seedable `Random` generator, with `next_int()`, `next_real()`, `between(lo, hi)`, `normal(mean, stddev)`, plus `uniform()` and `normal()` array helpers
+
+Associative collections and deterministic randomness:
+
+```dn
+import dict;
+import set;
+import random;
+
+scores: dict.Dict<int> = dict.Dict.new();
+scores.set("alice", 10);
+scores.set("bob", 7);
+print(scores.get("alice").value_or(0 - 1)); // 10
+print(scores.contains("bob"));              // 1
+
+seen: set.Set = set.Set.new();
+seen.add("x");
+seen.add("x");
+print(seen.len());                          // 1
+
+rng: random.Random = random.seed(42);
+print(rng.between(0, 100));                 // same value for the same seed
+weights = random.normal(random.seed(1), 100, 0.0, 1.0);
+print(weights.len());                       // 100
+```
+
+`Dict` and `Set` keep entries in insertion order and look them up linearly, so
+behaviour is identical on every backend. `Random` uses the Park-Miller minimal
+standard generator, so a given seed always produces the same sequence in both the
+VM and native builds.
 
 ## Run
 
@@ -861,6 +894,8 @@ The current release implements a small compiled language with:
 - raw text literals and explicit text/glyph escapes
 - `format()` expressions
 - standard library receiver methods
+- associative `dict`/`set` collections
+- seedable, deterministic `random` module
 - text indexing
 - slices
 - imports
