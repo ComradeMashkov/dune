@@ -6,8 +6,11 @@ on:
   pull_request:
 
 jobs:
-  # Required gate: the bytecode VM is the canonical backend, so its tests
-  # (plus the shared front end) must pass on every platform before a merge.
+  # Required gate: the bytecode VM is the canonical backend, so its tests (plus
+  # the shared front end) must pass on every platform. This builds VM-only
+  # (`-D DUNE_ENABLE_NATIVE=OFF`), so it needs no LLVM toolchain — macOS uses the
+  # preinstalled Apple clang instead of `brew install llvm`. Linting still runs
+  # on Linux, where clang-format/clang-tidy are cheap to install.
   build-test:
     strategy:
       fail-fast: false
@@ -23,20 +26,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install LLVM tools on Ubuntu
+      - name: Install tools on Ubuntu
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y clang clang-format clang-tidy ninja-build
 
-      - name: Install LLVM tools on macOS
+      - name: Install tools on macOS
         if: runner.os == 'macOS'
-        run: |
-          brew update
-          brew install llvm ninja
-          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+        run: brew install ninja
 
-      - name: Install LLVM tools on Windows
+      - name: Install tools on Windows
         if: runner.os == 'Windows'
         run: |
           choco install llvm -y
@@ -45,11 +45,11 @@ jobs:
 
       - name: Configure
         run: |
-          lint_flag="-D DUNE_ENABLE_LINT=ON"
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            lint_flag="-D DUNE_ENABLE_LINT=OFF"
+          lint_flag="-D DUNE_ENABLE_LINT=OFF"
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            lint_flag="-D DUNE_ENABLE_LINT=ON"
           fi
-          cmake -S . -B build -G Ninja -D CMAKE_CXX_COMPILER=clang++ "$lint_flag"
+          cmake -S . -B build -G Ninja -D CMAKE_CXX_COMPILER=clang++ -D DUNE_ENABLE_NATIVE=OFF "$lint_flag"
 
       - name: Build
         run: cmake --build build -j
@@ -73,10 +73,10 @@ jobs:
       - name: Install LLVM tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang clang-format clang-tidy ninja-build
+          sudo apt-get install -y clang ninja-build
 
       - name: Configure
-        run: cmake -S . -B build -G Ninja -D CMAKE_CXX_COMPILER=clang++ -D DUNE_ENABLE_LINT=ON
+        run: cmake -S . -B build -G Ninja -D CMAKE_CXX_COMPILER=clang++ -D DUNE_ENABLE_NATIVE=ON -D DUNE_ENABLE_LINT=OFF
 
       - name: Build
         run: cmake --build build -j

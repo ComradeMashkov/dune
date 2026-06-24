@@ -817,6 +817,16 @@ compiling targets. If those tools are not installed locally yet, configure with:
 cmake -S . -B build -D DUNE_ENABLE_LINT=OFF
 ```
 
+The native backend shells out to `clang++` for `dune build`. If you only need the
+VM (`dune <file>`, `dune check`, `dune lsp`) and have no LLVM toolchain, build
+without it:
+
+```bash
+cmake -S . -B build -D DUNE_ENABLE_NATIVE=OFF -D DUNE_ENABLE_LINT=OFF
+```
+
+`dune build` then reports a clear error instead of compiling.
+
 ## Zed
 
 Dune has a Zed extension in `editors/zed`. It provides Tree-sitter syntax

@@ -210,6 +210,11 @@ dune::Program load_program_with_status(const std::string& source_path, const Cli
 void compile_llvm_ir(const std::string& llvm_ir_path, const std::string& output_path) {
     const char* clangxx = std::getenv("DUNE_CLANGXX");
     const std::string compiler = clangxx == nullptr ? DUNE_CLANGXX_PATH : clangxx;
+    if (compiler.empty()) {
+        throw std::runtime_error("native backend unavailable: dune was built without clang++ "
+                                 "(reconfigure with -D DUNE_ENABLE_NATIVE=ON, or set the DUNE_CLANGXX "
+                                 "environment variable to a clang++)");
+    }
     std::string command = shell_quote(compiler) + " " + shell_quote(llvm_ir_path) + " -o " + shell_quote(output_path);
 #if !defined(_WIN32)
     command += " -lm";
