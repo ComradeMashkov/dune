@@ -19,6 +19,7 @@
   "return"
   "static"
   "to"
+  "type"
   "when"
   "while"
   "with"
@@ -67,6 +68,9 @@
   name: (identifier) @function)
 
 (contract_declaration
+  name: (identifier) @type)
+
+(type_alias_declaration
   name: (identifier) @type)
 
 (contract_method

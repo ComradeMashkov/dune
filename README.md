@@ -76,6 +76,27 @@ print(bits);
 Integer literals support `_` separators, `0x` hex, `0b` binary, and explicit
 integer suffixes such as `i32`, `i64`, `u8`, `u64`, and `usize`.
 
+Type aliases provide shorter names for existing types. They are transparent
+compile-time aliases, not new runtime types:
+
+```dn
+import matrix;
+
+type Count = int;
+type Counts = [Count];
+type Vec = matrix.Vector<real64>;
+
+fn inc(value: Count): Count {
+  return value + 1;
+}
+
+values: Counts = [inc(1), 3];
+```
+
+Aliases can target primitive, array, tuple, record, choice, generic, and
+module-qualified types. The first version supports non-generic aliases only;
+`type Vec<T> = ...` is reserved for a later feature.
+
 Formatted output keeps `print(expression)` working and also supports a string
 literal with positional `{}` placeholders. The same formatting is available as
 the `format(...)` expression, which returns `text`:
@@ -675,6 +696,7 @@ Supported compound types:
 - contracts, for example `Shape` as a generic bound
 - generic choices, for example `Maybe<int>` or `Outcome<int, text>`
 - choice variants, for example `Present(42)` or `Absent`
+- transparent type aliases, for example `type Vec = matrix.Vector<real64>;`
 
 Indexing and slicing:
 
@@ -813,6 +835,7 @@ The current release implements a small compiled language with:
 - generic functions with basic bounds
 - generic functions with explicit contract bounds
 - call-site generic instantiation
+- transparent type aliases
 - generic records
 - tuple types, tuple literals, and local tuple destructuring
 - record field defaults

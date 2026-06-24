@@ -224,11 +224,22 @@ int main() {
     passed = expect_valid("fn only_bad<T>(value: T): T { return value + value; } print(only_bad(1));",
                           "expected generic functions to instantiate only used types") &&
              passed;
+    passed = expect_valid("type Count = int; type Counts = [Count]; "
+                          "fn inc(value: Count): Count { return value + 1; } "
+                          "values: Counts = [inc(1), 3]; total: Count = values[0] + values[1];",
+                          "expected primitive and array type aliases to validate") &&
+             passed;
     passed = expect_valid("record Point { x: real64, y: real64, "
                           "fn sum(): real64 { return this.x + this.y; } } "
                           "fn make(x: real64, y: real64): Point { return Point { x: x, y: y }; } "
                           "p: Point = make(1.5, 2.5); total: real64 = p.sum(); x: real64 = p.x;",
                           "expected records, fields, literals, and methods to validate") &&
+             passed;
+    passed = expect_valid("record Point { x: int, fn new(x: int): Point { return Point { x: x }; } } "
+                          "type PointAlias = Point; "
+                          "fn shift(point: PointAlias): PointAlias { return Point.new(point.x + 1); } "
+                          "point: PointAlias = shift(Point.new(2)); x: int = point.x;",
+                          "expected record type aliases to validate") &&
              passed;
     passed = expect_valid("record Optimizer { lr: real64 = 0.01, momentum: real64 = 0.0, name: text = \"sgd\" } "
                           "base: Optimizer = Optimizer {}; fast: Optimizer = Optimizer { lr: 0.1 }; "
@@ -283,6 +294,12 @@ int main() {
                                   "circle: object_model_api.Circle = object_model_api.Circle.new(2.0); "
                                   "area: real64 = area_of(circle);",
                                   "expected exported object model module API to validate") &&
+             passed;
+    passed = expect_fixture_valid("import type_aliases; "
+                                  "point: type_aliases.PointAlias = type_aliases.Point.new(7); "
+                                  "points: type_aliases.PointList = [point]; "
+                                  "again: type_aliases.PointAlias = points[0];",
+                                  "expected exported module type aliases to validate") &&
              passed;
     passed = expect_valid("choice Maybe<T> { Present(T), Absent, } "
                           "value: Maybe<int> = Present(42); missing: Maybe<int> = Absent; "
@@ -469,6 +486,19 @@ int main() {
         passed;
     passed = expect_error_contains("fn bad(): unit { return 1; }", "expected type 'unit' but got 'int'",
                                    "expected unit return mismatch") &&
+             passed;
+    passed = expect_error_contains("type Count = int; type Count = text;", "duplicate type alias 'Count'",
+                                   "expected duplicate type alias error") &&
+             passed;
+    passed = expect_error_contains("type MissingAlias = Missing;", "unknown type 'Missing'",
+                                   "expected unknown type alias target error") &&
+             passed;
+    passed = expect_error_contains("type A = B; type B = A;", "cyclic type alias involving 'B'",
+                                   "expected cyclic type alias error") &&
+             passed;
+    passed = expect_error_contains("type Count = int; value: Count<text> = 1;",
+                                   "type alias 'Count' does not take type arguments",
+                                   "expected non-generic type alias argument error") &&
              passed;
     passed = expect_error_contains("fn bad(): int { return; }", "expected type 'int' but got 'unit'",
                                    "expected missing return value mismatch") &&

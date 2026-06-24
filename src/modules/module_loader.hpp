@@ -26,19 +26,22 @@ private:
                            const std::unordered_set<std::string>& local_functions,
                            const std::unordered_set<std::string>& local_constants,
                            const std::unordered_set<std::string>& local_structs,
+                           const std::unordered_set<std::string>& local_type_aliases,
                            const std::unordered_set<std::string>& local_contracts) const;
     void qualify_expression(Expression& expression, const std::string& module_name,
                             const std::unordered_set<std::string>& local_functions,
                             const std::unordered_set<std::string>& local_constants,
-                            const std::unordered_set<std::string>& local_structs) const;
+                            const std::unordered_set<std::string>& local_structs,
+                            const std::unordered_set<std::string>& local_type_aliases) const;
     void qualify_generic_parameters(std::vector<GenericParameter>& parameters, const std::string& module_name,
                                     const std::unordered_set<std::string>& local_contracts) const;
     void qualify_contracts(std::vector<Type>& contracts, const std::string& module_name,
                            const std::unordered_set<std::string>& local_contracts) const;
     void qualify_type_annotation(TypeAnnotation& annotation, const std::string& module_name,
-                                 const std::unordered_set<std::string>& local_structs) const;
-    void qualify_type(Type& type, const std::string& module_name,
-                      const std::unordered_set<std::string>& local_structs) const;
+                                 const std::unordered_set<std::string>& local_structs,
+                                 const std::unordered_set<std::string>& local_type_aliases) const;
+    void qualify_type(Type& type, const std::string& module_name, const std::unordered_set<std::string>& local_structs,
+                      const std::unordered_set<std::string>& local_type_aliases) const;
 
     std::vector<std::filesystem::path> search_paths_;
     std::unordered_set<std::string> loaded_modules_;

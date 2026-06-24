@@ -57,6 +57,7 @@ private:
     Statement print_statement();
     Statement return_statement();
     Statement struct_statement();
+    Statement type_alias_statement();
     Statement while_statement();
 
     std::vector<Statement> block();

@@ -1,0 +1,22 @@
+type Count = int;
+type Counts = [Count];
+
+fn inc(value: Count): Count {
+    return value + 1;
+}
+
+record Point {
+    x: Count,
+
+    fn new(x: Count): Point {
+        return Point { x: x };
+    }
+}
+
+type PointAlias = Point;
+
+values: Counts = [inc(1), 3, 5];
+point: PointAlias = Point.new(values[0] + values[1]);
+
+print(values.len());
+print(point.x);

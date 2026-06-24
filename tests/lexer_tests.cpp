@@ -726,5 +726,19 @@ int main() {
                            }) &&
              passed;
 
+    passed = expect_tokens("export type Vec = [int];",
+                           {
+                               {export_keyword, "export"},
+                               {type_keyword, "type"},
+                               {identifier, "Vec"},
+                               {equal, "="},
+                               {left_bracket, "["},
+                               {int_keyword, "int"},
+                               {right_bracket, "]"},
+                               {semicolon, ";"},
+                               {eof, ""},
+                           }) &&
+             passed;
+
     return passed ? 0 : 1;
 }

@@ -101,6 +101,11 @@ int main() {
                                   "print(show(41)); print(show(false));"),
                        "42\n20\n", "expected overloaded function dispatch") &&
              passed;
+    passed = expect_eq(run_source("type Count = int; fn inc(value: Count): Count { return value + 1; } "
+                                  "record Point { x: Count, fn new(x: Count): Point { return Point { x: x }; } } "
+                                  "type PointAlias = Point; point: PointAlias = Point.new(inc(4)); print(point.x);"),
+                       "5\n", "expected type alias execution") &&
+             passed;
     passed = expect_eq(run_source("small: u8 = 250; wide: uint64 = 10000000000; "
                                   "total: uint64 = wide + 5; print(small); print(total);"),
                        "250\n10000000005\n", "expected unsigned output") &&

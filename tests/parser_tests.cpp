@@ -265,6 +265,46 @@ bool parses_extended_types() {
     return passed;
 }
 
+bool parses_type_aliases() {
+    const dune::Program program = parse_source("type Count = int; export type Names = [text]; "
+                                               "record Point { x: real64, y: real64 } type PointList = [Point];");
+
+    if (!expect(program.statements.size() == 4, "expected type aliases and record")) {
+        return false;
+    }
+
+    bool passed = true;
+    const dune::Statement& count = program.statements[0];
+    passed = expect(count.kind == dune::StatementKind::type_alias_statement, "expected type alias statement") && passed;
+    passed = expect(count.name == "Count", "expected Count alias name") && passed;
+    passed = expect(count.type.has_type, "expected Count alias target") && passed;
+    passed = expect(count.type.type.kind == dune::ValueType::int_type, "expected Count to alias int") && passed;
+
+    const dune::Statement& names = program.statements[1];
+    passed = expect(names.kind == dune::StatementKind::type_alias_statement, "expected exported type alias") && passed;
+    passed = expect(names.exported, "expected exported type alias flag") && passed;
+    passed = expect(names.type.type.kind == dune::ValueType::array_type, "expected array alias target") && passed;
+    passed = expect(names.type.type.element != nullptr, "expected array alias element") && passed;
+    passed =
+        expect(names.type.type.element->kind == dune::ValueType::text_type, "expected text alias element") && passed;
+
+    const dune::Statement& point_list = program.statements[3];
+    passed =
+        expect(point_list.kind == dune::StatementKind::type_alias_statement, "expected record type alias") && passed;
+    passed = expect(point_list.type.type.kind == dune::ValueType::array_type, "expected record array alias") && passed;
+    passed = expect(point_list.type.type.element != nullptr, "expected record alias element") && passed;
+    passed = expect(point_list.type.type.element->kind == dune::ValueType::generic_type,
+                    "expected parsed record alias target as named type") &&
+             passed;
+    passed = expect(point_list.type.type.element->name == "Point", "expected Point alias element") && passed;
+
+    return passed;
+}
+
+bool rejects_generic_type_aliases() {
+    return expect_parse_error("type Vec<T> = [T];", "expected generic type aliases to be rejected");
+}
+
 bool parses_format_expression_and_numeric_literals() {
     const dune::Program program = parse_source("size = 1_000_000; mask: u64 = 0xffu64; "
                                                "message: text = format(\"{}\", size);");
@@ -935,6 +975,8 @@ int main() {
     passed = parses_functions_and_types() && passed;
     passed = rejects_legacy_function_syntax() && passed;
     passed = parses_extended_types() && passed;
+    passed = parses_type_aliases() && passed;
+    passed = rejects_generic_type_aliases() && passed;
     passed = parses_raw_and_escaped_literals() && passed;
     passed = parses_standard_types_and_unit_calls() && passed;
     passed = parses_arrays_imports_and_module_calls() && passed;

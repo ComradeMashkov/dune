@@ -307,7 +307,9 @@ std::vector<Statement> ModuleLoader::load_module(const std::string& module_name,
     for (Statement& statement : module.statements) {
         if (statement.kind != StatementKind::function && statement.kind != StatementKind::const_statement &&
             statement.kind != StatementKind::struct_statement && statement.kind != StatementKind::enum_statement &&
-            statement.kind != StatementKind::contract_statement && statement.kind != StatementKind::import_statement) {
+            statement.kind != StatementKind::contract_statement &&
+            statement.kind != StatementKind::type_alias_statement &&
+            statement.kind != StatementKind::import_statement) {
             throw std::runtime_error("module '" + module_name +
                                      "' can only contain imports, constants, functions, and "
                                      "types");
@@ -356,6 +358,7 @@ void ModuleLoader::qualify_module_program(Program& program, const std::string& m
     std::unordered_set<std::string> local_functions;
     std::unordered_set<std::string> local_constants;
     std::unordered_set<std::string> local_structs;
+    std::unordered_set<std::string> local_type_aliases;
     std::unordered_set<std::string> local_contracts;
     bool has_explicit_exports = false;
     for (const Statement& statement : program.statements) {
@@ -369,6 +372,10 @@ void ModuleLoader::qualify_module_program(Program& program, const std::string& m
 
         if (statement.kind == StatementKind::contract_statement) {
             local_contracts.insert(statement.name);
+        }
+
+        if (statement.kind == StatementKind::type_alias_statement) {
+            local_type_aliases.insert(statement.name);
         }
 
         if (statement.kind == StatementKind::enum_statement) {
@@ -385,7 +392,8 @@ void ModuleLoader::qualify_module_program(Program& program, const std::string& m
 
         if ((statement.kind == StatementKind::function || statement.kind == StatementKind::const_statement ||
              statement.kind == StatementKind::struct_statement || statement.kind == StatementKind::enum_statement ||
-             statement.kind == StatementKind::contract_statement) &&
+             statement.kind == StatementKind::contract_statement ||
+             statement.kind == StatementKind::type_alias_statement) &&
             statement.exported) {
             has_explicit_exports = true;
         }
@@ -393,7 +401,8 @@ void ModuleLoader::qualify_module_program(Program& program, const std::string& m
 
     for (Statement& statement : program.statements) {
         if (statement.kind == StatementKind::const_statement) {
-            qualify_statement(statement, module_name, local_functions, local_constants, local_structs, local_contracts);
+            qualify_statement(statement, module_name, local_functions, local_constants, local_structs,
+                              local_type_aliases, local_contracts);
             if (!has_explicit_exports) {
                 statement.exported = true;
             }
@@ -401,7 +410,8 @@ void ModuleLoader::qualify_module_program(Program& program, const std::string& m
         }
 
         if (statement.kind == StatementKind::function) {
-            qualify_statement(statement, module_name, local_functions, local_constants, local_structs, local_contracts);
+            qualify_statement(statement, module_name, local_functions, local_constants, local_structs,
+                              local_type_aliases, local_contracts);
             if (statement.is_extern && statement.extern_symbol.empty()) {
                 statement.extern_symbol = statement.name;
             }
@@ -415,7 +425,8 @@ void ModuleLoader::qualify_module_program(Program& program, const std::string& m
         }
 
         if (statement.kind == StatementKind::struct_statement) {
-            qualify_statement(statement, module_name, local_functions, local_constants, local_structs, local_contracts);
+            qualify_statement(statement, module_name, local_functions, local_constants, local_structs,
+                              local_type_aliases, local_contracts);
             if (!has_explicit_exports) {
                 statement.exported = true;
             }
@@ -423,7 +434,8 @@ void ModuleLoader::qualify_module_program(Program& program, const std::string& m
         }
 
         if (statement.kind == StatementKind::enum_statement) {
-            qualify_statement(statement, module_name, local_functions, local_constants, local_structs, local_contracts);
+            qualify_statement(statement, module_name, local_functions, local_constants, local_structs,
+                              local_type_aliases, local_contracts);
             if (!has_explicit_exports) {
                 statement.exported = true;
             }
@@ -434,7 +446,17 @@ void ModuleLoader::qualify_module_program(Program& program, const std::string& m
         }
 
         if (statement.kind == StatementKind::contract_statement) {
-            qualify_statement(statement, module_name, local_functions, local_constants, local_structs, local_contracts);
+            qualify_statement(statement, module_name, local_functions, local_constants, local_structs,
+                              local_type_aliases, local_contracts);
+            if (!has_explicit_exports) {
+                statement.exported = true;
+            }
+            statement.name = module_name + "." + statement.name;
+        }
+
+        if (statement.kind == StatementKind::type_alias_statement) {
+            qualify_statement(statement, module_name, local_functions, local_constants, local_structs,
+                              local_type_aliases, local_contracts);
             if (!has_explicit_exports) {
                 statement.exported = true;
             }
@@ -444,26 +466,29 @@ void ModuleLoader::qualify_module_program(Program& program, const std::string& m
 }
 
 void ModuleLoader::qualify_type_annotation(TypeAnnotation& annotation, const std::string& module_name,
-                                           const std::unordered_set<std::string>& local_structs) const {
+                                           const std::unordered_set<std::string>& local_structs,
+                                           const std::unordered_set<std::string>& local_type_aliases) const {
     if (!annotation.has_type) {
         return;
     }
 
-    qualify_type(annotation.type, module_name, local_structs);
+    qualify_type(annotation.type, module_name, local_structs, local_type_aliases);
 }
 
 void ModuleLoader::qualify_type(Type& type, const std::string& module_name,
-                                const std::unordered_set<std::string>& local_structs) const {
+                                const std::unordered_set<std::string>& local_structs,
+                                const std::unordered_set<std::string>& local_type_aliases) const {
     if (type.kind == ValueType::array_type && type.element != nullptr) {
-        qualify_type(*type.element, module_name, local_structs);
+        qualify_type(*type.element, module_name, local_structs, local_type_aliases);
         return;
     }
 
     for (Type& argument : type.arguments) {
-        qualify_type(argument, module_name, local_structs);
+        qualify_type(argument, module_name, local_structs, local_type_aliases);
     }
 
-    if (type.kind == ValueType::generic_type && local_structs.contains(type.name)) {
+    if (type.kind == ValueType::generic_type &&
+        (local_structs.contains(type.name) || local_type_aliases.contains(type.name))) {
         type.name = module_name + "." + type.name;
     }
 }
@@ -490,49 +515,55 @@ void ModuleLoader::qualify_statement(Statement& statement, const std::string& mo
                                      const std::unordered_set<std::string>& local_functions,
                                      const std::unordered_set<std::string>& local_constants,
                                      const std::unordered_set<std::string>& local_structs,
+                                     const std::unordered_set<std::string>& local_type_aliases,
                                      const std::unordered_set<std::string>& local_contracts) const {
     qualify_generic_parameters(statement.generic_parameters, module_name, local_contracts);
     qualify_contracts(statement.contracts, module_name, local_contracts);
-    qualify_type_annotation(statement.type, module_name, local_structs);
+    qualify_type_annotation(statement.type, module_name, local_structs, local_type_aliases);
     for (Parameter& parameter : statement.parameters) {
-        qualify_type_annotation(parameter.type, module_name, local_structs);
+        qualify_type_annotation(parameter.type, module_name, local_structs, local_type_aliases);
         if (parameter.default_value != nullptr) {
-            qualify_expression(*parameter.default_value, module_name, local_functions, local_constants, local_structs);
+            qualify_expression(*parameter.default_value, module_name, local_functions, local_constants, local_structs,
+                               local_type_aliases);
         }
     }
 
     if (statement.expression != nullptr) {
-        qualify_expression(*statement.expression, module_name, local_functions, local_constants, local_structs);
+        qualify_expression(*statement.expression, module_name, local_functions, local_constants, local_structs,
+                           local_type_aliases);
     }
 
     for (std::unique_ptr<Expression>& argument : statement.arguments) {
-        qualify_expression(*argument, module_name, local_functions, local_constants, local_structs);
+        qualify_expression(*argument, module_name, local_functions, local_constants, local_structs, local_type_aliases);
     }
 
     for (Statement& child : statement.body) {
-        qualify_statement(child, module_name, local_functions, local_constants, local_structs, local_contracts);
+        qualify_statement(child, module_name, local_functions, local_constants, local_structs, local_type_aliases,
+                          local_contracts);
     }
 
     for (Statement& child : statement.else_body) {
-        qualify_statement(child, module_name, local_functions, local_constants, local_structs, local_contracts);
+        qualify_statement(child, module_name, local_functions, local_constants, local_structs, local_type_aliases,
+                          local_contracts);
     }
 
     if (statement.initializer != nullptr) {
         qualify_statement(*statement.initializer, module_name, local_functions, local_constants, local_structs,
-                          local_contracts);
+                          local_type_aliases, local_contracts);
     }
 
     if (statement.increment != nullptr) {
         qualify_statement(*statement.increment, module_name, local_functions, local_constants, local_structs,
-                          local_contracts);
+                          local_type_aliases, local_contracts);
     }
 }
 
 void ModuleLoader::qualify_expression(Expression& expression, const std::string& module_name,
                                       const std::unordered_set<std::string>& local_functions,
                                       const std::unordered_set<std::string>& local_constants,
-                                      const std::unordered_set<std::string>& local_structs) const {
-    qualify_type_annotation(expression.type, module_name, local_structs);
+                                      const std::unordered_set<std::string>& local_structs,
+                                      const std::unordered_set<std::string>& local_type_aliases) const {
+    qualify_type_annotation(expression.type, module_name, local_structs, local_type_aliases);
 
     if (expression.kind == ExpressionKind::call && local_functions.contains(expression.lexeme)) {
         expression.lexeme = module_name + "." + expression.lexeme;
@@ -552,16 +583,19 @@ void ModuleLoader::qualify_expression(Expression& expression, const std::string&
     }
 
     if (expression.left != nullptr) {
-        qualify_expression(*expression.left, module_name, local_functions, local_constants, local_structs);
+        qualify_expression(*expression.left, module_name, local_functions, local_constants, local_structs,
+                           local_type_aliases);
     }
 
     if (expression.right != nullptr) {
-        qualify_expression(*expression.right, module_name, local_functions, local_constants, local_structs);
+        qualify_expression(*expression.right, module_name, local_functions, local_constants, local_structs,
+                           local_type_aliases);
     }
 
     for (std::unique_ptr<Expression>& argument : expression.arguments) {
         if (argument != nullptr) {
-            qualify_expression(*argument, module_name, local_functions, local_constants, local_structs);
+            qualify_expression(*argument, module_name, local_functions, local_constants, local_structs,
+                               local_type_aliases);
         }
     }
 }

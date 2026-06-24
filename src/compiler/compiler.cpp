@@ -220,6 +220,7 @@ Bytecode Compiler::compile(const Program& program) {
     functions_.clear();
     structs_.clear();
     enums_.clear();
+    type_aliases_.clear();
     global_constants_.clear();
     loop_stack_.clear();
     temporary_count_ = 0;
@@ -228,6 +229,7 @@ Bytecode Compiler::compile(const Program& program) {
     resolved_variants_ = type_checker.resolved_variants();
     collect_structs(type_checker.structs());
     collect_enums(type_checker.enums());
+    collect_type_aliases(program.statements);
     const auto& instantiated_functions = type_checker.instantiated_functions();
     instructions_ = &bytecode_.instructions;
     local_count_ = 0;
@@ -298,6 +300,14 @@ void Compiler::collect_enums(const std::unordered_map<std::string, TypeChecker::
     for (const auto& [name, definition] : enums) {
         (void)definition;
         enums_.insert(name);
+    }
+}
+
+void Compiler::collect_type_aliases(const std::vector<Statement>& statements) {
+    for (const Statement& statement : statements) {
+        if (statement.kind == StatementKind::type_alias_statement && statement.type.has_type) {
+            type_aliases_[statement.name] = statement.type.type;
+        }
     }
 }
 
@@ -525,6 +535,7 @@ void Compiler::compile_statement(const Statement& statement) {
     case StatementKind::struct_statement:
     case StatementKind::enum_statement:
     case StatementKind::contract_statement:
+    case StatementKind::type_alias_statement:
         return;
     case StatementKind::return_statement:
         if (statement.expression == nullptr) {
@@ -1343,10 +1354,15 @@ const Type& Compiler::expression_type(const Expression& expression) const {
 }
 
 Type Compiler::normalize_type(const Type& type) const {
+    std::unordered_set<std::string> resolving_aliases;
+    return normalize_type(type, resolving_aliases);
+}
+
+Type Compiler::normalize_type(const Type& type, std::unordered_set<std::string>& resolving_aliases) const {
     if (type.kind == ValueType::array_type) {
         Type result{ValueType::array_type, nullptr};
         if (type.element != nullptr) {
-            result.element = std::make_shared<Type>(normalize_type(*type.element));
+            result.element = std::make_shared<Type>(normalize_type(*type.element, resolving_aliases));
         }
         return result;
     }
@@ -1354,7 +1370,16 @@ Type Compiler::normalize_type(const Type& type) const {
     std::vector<Type> arguments;
     arguments.reserve(type.arguments.size());
     for (const Type& argument : type.arguments) {
-        arguments.push_back(normalize_type(argument));
+        arguments.push_back(normalize_type(argument, resolving_aliases));
+    }
+
+    if (type.kind == ValueType::generic_type) {
+        const auto alias = type_aliases_.find(type.name);
+        if (alias != type_aliases_.end() && arguments.empty() && resolving_aliases.insert(type.name).second) {
+            Type resolved = normalize_type(alias->second, resolving_aliases);
+            resolving_aliases.erase(type.name);
+            return resolved;
+        }
     }
 
     if (type.kind == ValueType::generic_type && structs_.contains(type.name)) {
