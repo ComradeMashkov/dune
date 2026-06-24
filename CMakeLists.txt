@@ -7,11 +7,21 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(DUNE_ENABLE_LINT "Run clang-format and clang-tidy checks before building targets" ON)
+option(DUNE_ENABLE_NATIVE "Require clang++ so `dune build` can produce native binaries" ON)
 
 find_program(DUNE_CLANGXX_EXE NAMES clang++ HINTS /opt/homebrew/opt/llvm/bin /usr/local/opt/llvm/bin)
 
-if(NOT DUNE_CLANGXX_EXE)
-    message(FATAL_ERROR "clang++ is required for the LLVM backend")
+# The native backend shells out to clang++ at runtime. When DUNE_ENABLE_NATIVE
+# is OFF the VM, type checker, and LSP still build and run without any LLVM
+# toolchain; `dune build` then reports a clear error instead of compiling.
+if(DUNE_ENABLE_NATIVE)
+    if(NOT DUNE_CLANGXX_EXE)
+        message(FATAL_ERROR "clang++ is required for the native LLVM backend; install it or reconfigure with -D DUNE_ENABLE_NATIVE=OFF")
+    endif()
+
+    set(DUNE_NATIVE_CLANGXX "${DUNE_CLANGXX_EXE}")
+else()
+    set(DUNE_NATIVE_CLANGXX "")
 endif()
 
 file(GLOB_RECURSE DUNE_CXX_FORMAT_FILES CONFIGURE_DEPENDS
@@ -141,7 +151,7 @@ target_link_libraries(dune_vm
 
 add_executable(dune src/main.cpp)
 target_link_libraries(dune PRIVATE dune_codegen dune_lsp dune_modules dune_vm)
-target_compile_definitions(dune PRIVATE DUNE_CLANGXX_PATH="${DUNE_CLANGXX_EXE}")
+target_compile_definitions(dune PRIVATE DUNE_CLANGXX_PATH="${DUNE_NATIVE_CLANGXX}")
 dune_add_lint_dependencies(dune)
 
 add_executable(lexer_tests tests/lexer_tests.cpp)
@@ -184,7 +194,7 @@ add_test(NAME cli_check_type_error COMMAND dune check ${CMAKE_CURRENT_SOURCE_DIR
 set_tests_properties(cli_check_type_error PROPERTIES WILL_FAIL TRUE)
 
 add_test(
-    NAME cli_build_status
+    NAME cli_build_native_status
     COMMAND
         ${CMAKE_COMMAND}
         -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>

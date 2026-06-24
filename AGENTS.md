@@ -65,6 +65,12 @@ Policy:
 - Name native backend tests `cli_build_native_<case>` so CI can separate them
   with `ctest -R cli_build_native` / `-E cli_build_native`.
 
+The native backend is gated by the `DUNE_ENABLE_NATIVE` CMake option (default
+`ON`). With `-D DUNE_ENABLE_NATIVE=OFF` the build needs no `clang++` and skips
+the native toolchain entirely — the VM, type checker, and LSP still build and
+run, while `dune build` reports a clear error. The required CI gate uses this to
+build VM-only on every platform.
+
 ---
 
 ## Build
@@ -73,6 +79,14 @@ Policy:
 cmake -S . -B build
 cmake --build build -j
 ctest --test-dir build --output-on-failure
+```
+
+VM-only build (no LLVM toolchain required, native `dune build` disabled):
+
+```bash
+cmake -S . -B build -D DUNE_ENABLE_NATIVE=OFF -D DUNE_ENABLE_LINT=OFF
+cmake --build build -j
+ctest --test-dir build -E cli_build_native --output-on-failure
 ```
 
 ---
