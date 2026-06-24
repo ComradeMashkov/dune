@@ -6,6 +6,8 @@ on:
   pull_request:
 
 jobs:
+  # Required gate: the bytecode VM is the canonical backend, so its tests
+  # (plus the shared front end) must pass on every platform before a merge.
   build-test:
     strategy:
       fail-fast: false
@@ -52,5 +54,32 @@ jobs:
       - name: Build
         run: cmake --build build -j
 
-      - name: Test
-        run: ctest --test-dir build --output-on-failure
+      - name: Test (VM / core)
+        run: ctest --test-dir build -E cli_build_native --output-on-failure
+
+  # Best-effort: the native LLVM backend may lag the VM, so its tests run on a
+  # single platform and never block a merge (see AGENTS.md "Backends").
+  native-backend:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install LLVM tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang clang-format clang-tidy ninja-build
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -D CMAKE_CXX_COMPILER=clang++ -D DUNE_ENABLE_LINT=ON
+
+      - name: Build
+        run: cmake --build build -j
+
+      - name: Native backend tests
+        run: ctest --test-dir build -R cli_build_native --output-on-failure

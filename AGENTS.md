@@ -41,6 +41,32 @@ Expected output:
 
 ---
 
+## Backends
+
+Dune has two execution backends that share the same front end (lexer, parser,
+type checker, module loader):
+
+- The **bytecode VM** (`src/compiler`, `src/vm`) is the **canonical** backend.
+  It needs no external toolchain, powers `dune <file>` and `dune check`, and is
+  the basis for the planned REPL.
+- The **native LLVM backend** (`src/codegen`) emits textual LLVM IR that
+  `clang++` turns into a native binary for `dune build`. It is **best-effort**.
+
+Policy:
+
+- Every language feature must work in the **VM and type checker first** — that
+  is what gates a pull request.
+- The native backend may lag. It is fine to land a feature in the VM and follow
+  up on native support later; prefer a clear "not supported in the native
+  backend yet" error over silently diverging from the VM.
+- CI reflects this: the `build-test` job (VM / core tests, all platforms) is the
+  required gate; the `native-backend` job runs the native backend tests
+  best-effort and never blocks a merge.
+- Name native backend tests `cli_build_native_<case>` so CI can separate them
+  with `ctest -R cli_build_native` / `-E cli_build_native`.
+
+---
+
 ## Build
 
 ```bash
