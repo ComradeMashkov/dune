@@ -61,16 +61,26 @@
 (string) @string
 (character) @string.special
 
+; Definitions
 (function_declaration
   name: (identifier) @function)
 
 (foreign_function_declaration
   name: (identifier) @function)
 
+(record_declaration
+  name: (identifier) @type)
+
+(choice_declaration
+  name: (identifier) @type)
+
 (contract_declaration
   name: (identifier) @type)
 
 (type_alias_declaration
+  name: (identifier) @type)
+
+(generic_parameter
   name: (identifier) @type)
 
 (contract_method
@@ -81,6 +91,10 @@
 
 (parameter
   name: (identifier) @variable.parameter)
+
+; References
+(import_statement
+  module: (identifier) @namespace)
 
 (call_expression
   function: (identifier) @function)
@@ -102,6 +116,9 @@
 
 (choice_variant
   name: (identifier) @variant)
+
+((identifier) @variable.special
+  (#match? @variable.special "^(this|self)$"))
 
 (identifier) @variable
 
