@@ -356,6 +356,7 @@ module.exports = grammar({
     ),
 
     _primary_expression: $ => choice(
+      $.array_comprehension,
       $.array_literal,
       $.record_literal,
       $.tuple_literal,
@@ -435,6 +436,17 @@ module.exports = grammar({
     ),
 
     array_literal: $ => seq("[", optional(commaSep($._expression)), optional(","), "]"),
+
+    array_comprehension: $ => seq(
+      "[",
+      field("body", $._expression),
+      "for",
+      field("variable", $.identifier),
+      "in",
+      field("iterable", $._expression),
+      optional(seq("if", field("condition", $._expression))),
+      "]",
+    ),
 
     record_literal: $ => prec(2, seq(
       field("type", choice($.qualified_type_identifier, $.constructor_identifier)),

@@ -534,6 +534,16 @@ add_test(
 )
 
 add_test(
+    NAME cli_comprehensions
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/comprehensions.dn
+        -D EXPECTED_OUTPUT="5\n1\n25\n2\n2\n4\n5\n0\n8\n0\n2\nbb\nccc\n3\n1\n2\n3\n2"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
     NAME cli_matrix_shape_error
     COMMAND
         ${CMAKE_COMMAND}

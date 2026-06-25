@@ -74,6 +74,7 @@ enum class ExpressionKind {
     string,
     boolean,
     array,
+    array_comprehension,
     tuple,
     struct_literal,
     index,

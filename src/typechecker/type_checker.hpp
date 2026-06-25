@@ -145,6 +145,7 @@ private:
     Type check_unary_expression(const Expression& expression);
     Type check_cast_expression(const Expression& expression);
     Type check_array_literal(const Expression& expression, const TypeAnnotation& expected);
+    Type check_array_comprehension(const Expression& expression, const TypeAnnotation& expected);
     Type check_tuple_literal(const Expression& expression, const TypeAnnotation& expected);
     Type check_struct_literal(const Expression& expression, const TypeAnnotation& expected);
     Type check_index_expression(const Expression& expression);

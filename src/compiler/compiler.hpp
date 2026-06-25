@@ -30,6 +30,9 @@ private:
     void compile_for_in_statement(const Statement& statement);
     void compile_range_for_in_statement(const Statement& statement, const Type& element_type);
     void compile_array_for_in_statement(const Statement& statement, const Type& iterable_type);
+    void compile_array_comprehension(const Expression& expression);
+    void compile_comprehension_body(const Expression& comprehension, std::size_t result_slot,
+                                    const Expression* condition);
     void compile_expression(const Expression& expression);
     void compile_method_call_expression(const Expression& expression);
     void compile_format_expression(const Expression& expression);

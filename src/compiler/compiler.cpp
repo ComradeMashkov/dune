@@ -658,6 +658,111 @@ void Compiler::compile_array_for_in_statement(const Statement& statement, const 
     }
 }
 
+void Compiler::compile_comprehension_body(const Expression& comprehension, std::size_t result_slot,
+                                          const Expression* condition) {
+    std::size_t skip_jump = 0;
+    const bool has_condition = condition != nullptr;
+    if (has_condition) {
+        compile_expression(*condition);
+        skip_jump = emit(OpCode::jump_if_false);
+    }
+
+    emit(OpCode::load_local, result_slot);
+    compile_expression(*comprehension.left);
+    emit(OpCode::array_push);
+    emit(OpCode::pop);
+
+    if (has_condition) {
+        patch_operand(skip_jump, instructions_->size());
+    }
+}
+
+void Compiler::compile_array_comprehension(const Expression& expression) {
+    const Type result_type = expression_type(expression);
+    const Expression& iterable = *expression.right;
+    const Type iterable_type = expression_type(iterable);
+    const Expression* condition = expression.arguments.empty() ? nullptr : expression.arguments.front().get();
+
+    push_scope();
+
+    emit(OpCode::make_array, 0);
+    const std::size_t result_slot =
+        declare_scoped_local("__comp_result_" + std::to_string(temporary_count_++), result_type);
+    emit(OpCode::store_local, result_slot);
+
+    if (iterable.kind == ExpressionKind::range) {
+        const Type& element_type = iterable_type;
+        compile_expression(*iterable.left);
+        const std::size_t current_slot =
+            declare_scoped_local("__comp_current_" + std::to_string(temporary_count_++), element_type);
+        emit(OpCode::store_local, current_slot);
+
+        compile_expression(*iterable.right);
+        const std::size_t end_slot =
+            declare_scoped_local("__comp_end_" + std::to_string(temporary_count_++), element_type);
+        emit(OpCode::store_local, end_slot);
+
+        const std::size_t item_slot = declare_scoped_local(expression.lexeme, element_type);
+        const std::size_t loop_start = instructions_->size();
+        emit(OpCode::load_local, current_slot);
+        emit(OpCode::load_local, end_slot);
+        emit(OpCode::less);
+        const std::size_t loop_exit = emit(OpCode::jump_if_false);
+
+        emit(OpCode::load_local, current_slot);
+        emit(OpCode::store_local, item_slot);
+
+        compile_comprehension_body(expression, result_slot, condition);
+
+        emit(OpCode::load_local, current_slot);
+        emit(OpCode::push_constant, add_constant(make_number("1", element_type)));
+        emit(OpCode::add);
+        emit(OpCode::store_local, current_slot);
+        emit(OpCode::jump, loop_start);
+        patch_operand(loop_exit, instructions_->size());
+    } else {
+        if (iterable_type.kind != ValueType::array_type || iterable_type.element == nullptr) {
+            throw std::runtime_error("array comprehension used with non-array type");
+        }
+
+        compile_expression(iterable);
+        const std::size_t iterable_slot =
+            declare_scoped_local("__comp_iterable_" + std::to_string(temporary_count_++), iterable_type);
+        emit(OpCode::store_local, iterable_slot);
+
+        const Type index_type = make_type(ValueType::int_type);
+        emit(OpCode::push_constant, add_constant(make_signed(0)));
+        const std::size_t index_slot =
+            declare_scoped_local("__comp_index_" + std::to_string(temporary_count_++), index_type);
+        emit(OpCode::store_local, index_slot);
+
+        const std::size_t item_slot = declare_scoped_local(expression.lexeme, *iterable_type.element);
+        const std::size_t loop_start = instructions_->size();
+        emit(OpCode::load_local, index_slot);
+        emit(OpCode::load_local, iterable_slot);
+        emit(OpCode::array_len);
+        emit(OpCode::less);
+        const std::size_t exit_jump = emit(OpCode::jump_if_false);
+
+        emit(OpCode::load_local, iterable_slot);
+        emit(OpCode::load_local, index_slot);
+        emit(OpCode::load_index);
+        emit(OpCode::store_local, item_slot);
+
+        compile_comprehension_body(expression, result_slot, condition);
+
+        emit(OpCode::load_local, index_slot);
+        emit(OpCode::push_constant, add_constant(make_signed(1)));
+        emit(OpCode::add);
+        emit(OpCode::store_local, index_slot);
+        emit(OpCode::jump, loop_start);
+        patch_operand(exit_jump, instructions_->size());
+    }
+
+    emit(OpCode::load_local, result_slot);
+    pop_scope();
+}
+
 void Compiler::compile_expression(const Expression& expression) {
     if (resolved_variants_.contains(&expression)) {
         compile_variant_constructor(expression);
@@ -689,6 +794,9 @@ void Compiler::compile_expression(const Expression& expression) {
         }
 
         emit(OpCode::make_array, expression.arguments.size());
+        return;
+    case ExpressionKind::array_comprehension:
+        compile_array_comprehension(expression);
         return;
     case ExpressionKind::tuple:
         compile_tuple_literal(expression);
@@ -921,6 +1029,7 @@ void Compiler::compile_assignment_target(const Expression& target, const Express
     case ExpressionKind::string:
     case ExpressionKind::boolean:
     case ExpressionKind::array:
+    case ExpressionKind::array_comprehension:
     case ExpressionKind::tuple:
     case ExpressionKind::struct_literal:
     case ExpressionKind::slice:

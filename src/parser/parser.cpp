@@ -84,6 +84,19 @@ std::unique_ptr<Expression> make_array(std::vector<std::unique_ptr<Expression>> 
     return expression;
 }
 
+std::unique_ptr<Expression> make_array_comprehension(std::unique_ptr<Expression> body, std::string variable,
+                                                     std::unique_ptr<Expression> iterable,
+                                                     std::unique_ptr<Expression> condition, SourceLocation location) {
+    auto expression = std::make_unique<Expression>(
+        Expression{ExpressionKind::array_comprehension, std::move(variable), std::move(body), std::move(iterable)});
+    if (condition != nullptr) {
+        expression->arguments.push_back(std::move(condition));
+    }
+
+    expression->location = location;
+    return expression;
+}
+
 std::unique_ptr<Expression> make_tuple(std::vector<std::unique_ptr<Expression>> elements, SourceLocation location) {
     auto expression = std::make_unique<Expression>(Expression{ExpressionKind::tuple, "", nullptr, nullptr});
     expression->arguments = std::move(elements);
@@ -1618,11 +1631,24 @@ std::unique_ptr<Expression> Parser::primary() {
         const SourceLocation location = location_from_token(previous());
         std::vector<std::unique_ptr<Expression>> elements;
         if (!check(TokenType::right_bracket)) {
-            while (true) {
-                elements.push_back(expression());
-                if (!match(TokenType::comma)) {
-                    break;
+            elements.push_back(expression());
+
+            if (match(TokenType::for_keyword)) {
+                const Token variable = consume_identifier_like("expected comprehension variable after 'for'");
+                consume(TokenType::in_keyword, "expected 'in' after comprehension variable");
+                std::unique_ptr<Expression> iterable = expression();
+                std::unique_ptr<Expression> condition;
+                if (match(TokenType::if_keyword)) {
+                    condition = expression();
                 }
+
+                consume(TokenType::right_bracket, "expected ']' after array comprehension");
+                return make_array_comprehension(std::move(elements.front()), variable.lexeme, std::move(iterable),
+                                                std::move(condition), location);
+            }
+
+            while (match(TokenType::comma)) {
+                elements.push_back(expression());
             }
         }
 

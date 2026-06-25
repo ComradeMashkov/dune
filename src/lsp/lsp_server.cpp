@@ -913,6 +913,7 @@ std::optional<std::string> literal_expression_type(const Expression& expression)
         return "(unknown, unknown)";
     case ExpressionKind::struct_literal:
         return expression.lexeme;
+    case ExpressionKind::array_comprehension:
     case ExpressionKind::identifier:
     case ExpressionKind::index:
     case ExpressionKind::slice:

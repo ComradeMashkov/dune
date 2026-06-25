@@ -1386,6 +1386,7 @@ Type TypeChecker::check_assignment_target(const Expression& target, SourceLocati
     case ExpressionKind::string:
     case ExpressionKind::boolean:
     case ExpressionKind::array:
+    case ExpressionKind::array_comprehension:
     case ExpressionKind::tuple:
     case ExpressionKind::struct_literal:
     case ExpressionKind::slice:
@@ -1507,6 +1508,9 @@ Type TypeChecker::check_expression(const Expression& expression, const TypeAnnot
         break;
     case ExpressionKind::array:
         actual = check_array_literal(expression, wanted);
+        break;
+    case ExpressionKind::array_comprehension:
+        actual = check_array_comprehension(expression, wanted);
         break;
     case ExpressionKind::tuple:
         actual = check_tuple_literal(expression, wanted);
@@ -2883,6 +2887,29 @@ Type TypeChecker::check_array_literal(const Expression& expression, const TypeAn
     }
 
     return make_array_type(element_type);
+}
+
+Type TypeChecker::check_array_comprehension(const Expression& expression, const TypeAnnotation& expected) {
+    const Type element_type = check_for_in_iterable(*expression.right);
+
+    push_scope();
+    declare_binding(expression.lexeme, element_type, true, expression.location);
+
+    if (!expression.arguments.empty()) {
+        const Type condition =
+            check_expression(*expression.arguments.front(), expected_type(make_type(ValueType::bool_type)));
+        expect_type(make_type(ValueType::bool_type), condition, expression.arguments.front()->location);
+    }
+
+    TypeAnnotation body_expected;
+    if (expected.has_type && expected.type.kind == ValueType::array_type && expected.type.element != nullptr) {
+        body_expected = expected_type(*expected.type.element);
+    }
+
+    const Type body_type = check_expression(*expression.left, body_expected);
+    pop_scope();
+
+    return make_array_type(body_type);
 }
 
 Type TypeChecker::check_tuple_literal(const Expression& expression, const TypeAnnotation& expected) {

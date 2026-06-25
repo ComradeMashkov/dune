@@ -705,6 +705,8 @@ Indexing and slicing:
 - arrays: `values[index]`, `values[start:end]`, `values[:end]`, `values[start:]`
 - array iteration: `for value in values { ... }`
 - integer ranges: `for i in 0..values.len() { ... }`
+- array comprehensions build a new array from an iterable: `[value * value for value in values]`
+- comprehensions accept an optional filter and also work over ranges: `[i for i in 0..10 if i % 2 == 0]`
 - membership: `value in values`, `"lang" in message`
 - text is zero-based: `message[0]` returns the first `glyph`
 - text slices return `text`
@@ -896,6 +898,7 @@ The current release implements a small compiled language with:
 - glyph and text values
 - unit-returning functions
 - dynamic arrays
+- array comprehensions with optional filters
 - records with fields and methods
 - mutable array indexes and record fields
 - `when` expressions with literal, choice variant, record, and tuple patterns, including `pattern => expression` arms
