@@ -961,6 +961,51 @@ bool parses_tuples_and_destructuring_patterns() {
     return passed;
 }
 
+bool parses_array_comprehensions() {
+    const dune::Program program = parse_source("nums = [1, 2, 3];\n"
+                                               "squares = [n * n for n in nums];\n"
+                                               "evens = [n for n in nums if n > 1];\n");
+
+    if (!expect(program.statements.size() == 3, "expected three statements")) {
+        return false;
+    }
+
+    bool passed = true;
+
+    const dune::Expression& squares = *program.statements[1].expression;
+    passed =
+        expect(squares.kind == dune::ExpressionKind::array_comprehension, "expected array comprehension expression") &&
+        passed;
+    passed = expect(squares.lexeme == "n", "expected comprehension variable 'n'") && passed;
+    passed = expect(squares.left != nullptr && squares.left->kind == dune::ExpressionKind::binary,
+                    "expected comprehension body to be a binary expression") &&
+             passed;
+    passed = expect(squares.right != nullptr && squares.right->kind == dune::ExpressionKind::identifier &&
+                        squares.right->lexeme == "nums",
+                    "expected comprehension iterable to be 'nums'") &&
+             passed;
+    passed = expect(squares.arguments.empty(), "expected no filter on squares comprehension") && passed;
+
+    const dune::Expression& evens = *program.statements[2].expression;
+    passed = expect(evens.kind == dune::ExpressionKind::array_comprehension, "expected filtered array comprehension") &&
+             passed;
+    passed = expect(evens.arguments.size() == 1, "expected one filter expression on evens comprehension") && passed;
+    passed = expect(evens.arguments.front()->kind == dune::ExpressionKind::binary,
+                    "expected filter to be a binary comparison") &&
+             passed;
+
+    return passed;
+}
+
+bool parses_array_literals_without_comprehension() {
+    const dune::Program program = parse_source("xs = [1, 2, 3];\n");
+    bool passed = expect(program.statements.size() == 1, "expected one statement");
+    const dune::Expression& array = *program.statements[0].expression;
+    passed = expect(array.kind == dune::ExpressionKind::array, "expected plain array literal") && passed;
+    passed = expect(array.arguments.size() == 3, "expected three array elements") && passed;
+    return passed;
+}
+
 } // namespace
 
 int main() {
@@ -993,6 +1038,8 @@ int main() {
     passed = parses_choices_and_variant_when() && passed;
     passed = parses_arrow_style_when_patterns() && passed;
     passed = parses_tuples_and_destructuring_patterns() && passed;
+    passed = parses_array_comprehensions() && passed;
+    passed = parses_array_literals_without_comprehension() && passed;
 
     return passed ? 0 : 1;
 }

@@ -743,5 +743,25 @@ int main() {
              passed;
     passed = expect_error_contains("import time;", "unknown module 'time'", "expected unknown module error") && passed;
 
+    passed = expect_valid("nums: [int] = [1, 2, 3]; squares: [int] = [n * n for n in nums]; "
+                          "first: int = squares[0]; print(first);",
+                          "expected array comprehension to validate") &&
+             passed;
+    passed = expect_valid("evens: [int] = [i for i in 0..10 if i % 2 == 0]; print(evens.len());",
+                          "expected range comprehension with filter to validate") &&
+             passed;
+    passed = expect_error_contains("nums: [int] = [1, 2, 3]; bad: [int] = [n for n in nums if n + 1];",
+                                   "expected type 'bool'", "expected non-boolean comprehension filter error") &&
+             passed;
+    passed = expect_error_contains("bad: [int] = [n for n in 42];", "is not iterable",
+                                   "expected non-iterable comprehension error") &&
+             passed;
+    passed = expect_error_contains("nums: [int] = [1, 2, 3]; bad: [text] = [n for n in nums];", "expected type 'text'",
+                                   "expected comprehension element type mismatch error") &&
+             passed;
+    passed = expect_error_contains("nums: [int] = [1, 2, 3]; xs: [int] = [n for n in nums]; print(n);",
+                                   "undefined variable 'n'", "expected comprehension variable to be scoped") &&
+             passed;
+
     return passed ? 0 : 1;
 }

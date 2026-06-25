@@ -810,6 +810,8 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_expression(const Expression& e
         return TypedValue{expression.lexeme == "true" ? "1" : "0", make_type(ValueType::bool_type)};
     case ExpressionKind::array:
         return emit_array_literal(expression, output);
+    case ExpressionKind::array_comprehension:
+        throw std::runtime_error("array comprehensions are not supported in the native backend yet");
     case ExpressionKind::tuple:
         return emit_tuple_literal(expression, output);
     case ExpressionKind::struct_literal:
@@ -1893,6 +1895,7 @@ LlvmIrGenerator::TypedPointer LlvmIrGenerator::emit_lvalue_pointer(const Express
     case ExpressionKind::string:
     case ExpressionKind::boolean:
     case ExpressionKind::array:
+    case ExpressionKind::array_comprehension:
     case ExpressionKind::tuple:
     case ExpressionKind::struct_literal:
     case ExpressionKind::slice:
