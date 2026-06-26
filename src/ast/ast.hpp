@@ -81,6 +81,7 @@ enum class ExpressionKind {
     slice,
     member,
     unary,
+    try_expression,
     cast,
     binary,
     range,

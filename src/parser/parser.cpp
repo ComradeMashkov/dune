@@ -43,6 +43,13 @@ std::unique_ptr<Expression> make_unary(std::string lexeme, std::unique_ptr<Expre
     return std::make_unique<Expression>(std::move(expression));
 }
 
+std::unique_ptr<Expression> make_try(std::unique_ptr<Expression> operand, SourceLocation location) {
+    auto expression =
+        std::make_unique<Expression>(Expression{ExpressionKind::try_expression, "?", std::move(operand), nullptr});
+    expression->location = location;
+    return expression;
+}
+
 std::unique_ptr<Expression> make_cast(std::unique_ptr<Expression> value, TypeAnnotation target_type,
                                       SourceLocation location) {
     auto expression = std::make_unique<Expression>(Expression{ExpressionKind::cast, "", std::move(value), nullptr});
@@ -1593,6 +1600,12 @@ std::unique_ptr<Expression> Parser::call() {
 
             consume(TokenType::right_bracket, "expected ']' after array index");
             expr = make_index(std::move(expr), std::move(start), location);
+            continue;
+        }
+
+        if (match(TokenType::question)) {
+            const SourceLocation location = expr->location;
+            expr = make_try(std::move(expr), location);
             continue;
         }
 

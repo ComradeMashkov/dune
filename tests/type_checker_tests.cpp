@@ -763,5 +763,26 @@ int main() {
                                    "undefined variable 'n'", "expected comprehension variable to be scoped") &&
              passed;
 
+    passed = expect_valid("import outcome; "
+                          "fn pipe(): outcome.Outcome<int, text> { "
+                          "value: int = outcome.done_int(41)? + 1; return outcome.done_int(value); }",
+                          "expected '?' on Outcome to validate") &&
+             passed;
+    passed =
+        expect_error_contains("fn f(): int { value: int = 5; return value?; }",
+                              "'?' can only be applied to an 'outcome.Outcome'", "expected '?' on non-Outcome error") &&
+        passed;
+    passed = expect_error_contains("import outcome; fn f(): int { return outcome.done_int(1)?; }",
+                                   "'?' requires the enclosing function to return 'outcome.Outcome'",
+                                   "expected '?' in non-Outcome function error") &&
+             passed;
+    passed =
+        expect_error_contains("import outcome; fn f(): outcome.Outcome<int, int> { return outcome.done_int(1)?; }",
+                              "does not match the function error type", "expected '?' error-type mismatch error") &&
+        passed;
+    passed = expect_error_contains("import outcome; value: int = outcome.done_int(1)?;",
+                                   "'?' can only be used inside a function", "expected '?' at top-level error") &&
+             passed;
+
     return passed ? 0 : 1;
 }

@@ -544,6 +544,16 @@ add_test(
 )
 
 add_test(
+    NAME cli_try_operator
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/try_operator.dn
+        -D EXPECTED_OUTPUT="1\n7\nok\n0\n-1\nnot positive\n0\n-1\nnot positive\n1\n107\nok\n0\n-1\nnot positive"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
     NAME cli_matrix_shape_error
     COMMAND
         ${CMAKE_COMMAND}

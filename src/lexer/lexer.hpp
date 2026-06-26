@@ -81,6 +81,7 @@ enum class TokenType {
     comma,
     dot,
     dot_dot,
+    question,
     semicolon,
     left_paren,
     right_paren,
