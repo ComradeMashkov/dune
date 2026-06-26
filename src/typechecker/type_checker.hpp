@@ -87,10 +87,15 @@ public:
         bool binds_payload = false;
     };
 
+    struct TryResolution {
+        std::size_t failed_tag = 0;
+    };
+
     void check(const Program& program);
     const std::unordered_map<const Expression*, Type>& expression_types() const;
     const std::unordered_map<const Expression*, std::string>& resolved_calls() const;
     const std::unordered_map<const Expression*, VariantResolution>& resolved_variants() const;
+    const std::unordered_map<const Expression*, TryResolution>& resolved_tries() const;
     const std::deque<Statement>& instantiated_functions() const;
     const std::unordered_map<std::string, StructDefinition>& structs() const;
     const std::unordered_map<std::string, EnumDefinition>& enums() const;
@@ -146,6 +151,7 @@ private:
     Type check_cast_expression(const Expression& expression);
     Type check_array_literal(const Expression& expression, const TypeAnnotation& expected);
     Type check_array_comprehension(const Expression& expression, const TypeAnnotation& expected);
+    Type check_try_expression(const Expression& expression);
     Type check_tuple_literal(const Expression& expression, const TypeAnnotation& expected);
     Type check_struct_literal(const Expression& expression, const TypeAnnotation& expected);
     Type check_index_expression(const Expression& expression);
@@ -255,6 +261,7 @@ private:
     std::unordered_map<const Expression*, Type> expression_types_;
     std::unordered_map<const Expression*, std::string> resolved_calls_;
     std::unordered_map<const Expression*, VariantResolution> resolved_variants_;
+    std::unordered_map<const Expression*, TryResolution> resolved_tries_;
     std::unordered_set<std::string> imports_;
     const FunctionSignature* current_function_ = nullptr;
     std::string current_module_;

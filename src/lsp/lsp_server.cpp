@@ -919,6 +919,7 @@ std::optional<std::string> literal_expression_type(const Expression& expression)
     case ExpressionKind::slice:
     case ExpressionKind::member:
     case ExpressionKind::unary:
+    case ExpressionKind::try_expression:
     case ExpressionKind::cast:
     case ExpressionKind::binary:
     case ExpressionKind::range:
@@ -1478,6 +1479,7 @@ std::optional<std::string> builtin_hover(const Token& token) {
     case TokenType::comma:
     case TokenType::dot:
     case TokenType::dot_dot:
+    case TokenType::question:
     case TokenType::semicolon:
     case TokenType::left_paren:
     case TokenType::right_paren:

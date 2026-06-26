@@ -1,0 +1,32 @@
+import outcome;
+
+fn checked(value: int): outcome.Outcome<int, text> {
+    if value > 0 {
+        return outcome.done_int(value);
+    }
+
+    return outcome.failed_int("not positive");
+}
+
+fn add_checked(a: int, b: int): outcome.Outcome<int, text> {
+    first: int = checked(a)?;
+    second: int = checked(b)?;
+    return outcome.done_int(first + second);
+}
+
+fn sum_in_expression(a: int, b: int): outcome.Outcome<int, text> {
+    total: int = 100 + checked(a)? + checked(b)?;
+    return outcome.done_int(total);
+}
+
+fn report(result: outcome.Outcome<int, text>): unit {
+    print(result.is_done());
+    print(result.value_or(0 - 1));
+    print(result.failure_or("ok"));
+}
+
+report(add_checked(3, 4));
+report(add_checked(0 - 1, 4));
+report(add_checked(3, 0 - 2));
+report(sum_in_expression(3, 4));
+report(sum_in_expression(3, 0 - 9));

@@ -631,6 +631,10 @@ const std::unordered_map<const Expression*, TypeChecker::VariantResolution>& Typ
     return resolved_variants_;
 }
 
+const std::unordered_map<const Expression*, TypeChecker::TryResolution>& TypeChecker::resolved_tries() const {
+    return resolved_tries_;
+}
+
 const std::deque<Statement>& TypeChecker::instantiated_functions() const {
     return instantiated_functions_;
 }
@@ -1391,6 +1395,7 @@ Type TypeChecker::check_assignment_target(const Expression& target, SourceLocati
     case ExpressionKind::struct_literal:
     case ExpressionKind::slice:
     case ExpressionKind::unary:
+    case ExpressionKind::try_expression:
     case ExpressionKind::cast:
     case ExpressionKind::binary:
     case ExpressionKind::range:
@@ -1529,6 +1534,9 @@ Type TypeChecker::check_expression(const Expression& expression, const TypeAnnot
         break;
     case ExpressionKind::unary:
         actual = check_unary_expression(expression);
+        break;
+    case ExpressionKind::try_expression:
+        actual = check_try_expression(expression);
         break;
     case ExpressionKind::cast:
         actual = check_cast_expression(expression);
@@ -2910,6 +2918,47 @@ Type TypeChecker::check_array_comprehension(const Expression& expression, const 
     pop_scope();
 
     return make_array_type(body_type);
+}
+
+Type TypeChecker::check_try_expression(const Expression& expression) {
+    const Type operand = check_expression(*expression.left);
+
+    if (operand.kind != ValueType::enum_type || operand.name != "outcome.Outcome" || operand.arguments.size() != 2) {
+        throw std::runtime_error(
+            diagnostic(expression.location,
+                       "'?' can only be applied to an 'outcome.Outcome' value but got '" + type_name(operand) + "'"));
+    }
+
+    if (current_function_ == nullptr) {
+        throw std::runtime_error(diagnostic(expression.location, "'?' can only be used inside a function"));
+    }
+
+    const Type& return_type = current_function_->return_type;
+    if (return_type.kind != ValueType::enum_type || return_type.name != "outcome.Outcome" ||
+        return_type.arguments.size() != 2) {
+        throw std::runtime_error(diagnostic(
+            expression.location, "'?' requires the enclosing function to return 'outcome.Outcome' but it returns '" +
+                                     type_name(return_type) + "'"));
+    }
+
+    if (!same_type(operand.arguments[1], return_type.arguments[1])) {
+        throw std::runtime_error(diagnostic(expression.location, "'?' error type '" + type_name(operand.arguments[1]) +
+                                                                     "' does not match the function error type '" +
+                                                                     type_name(return_type.arguments[1]) + "'"));
+    }
+
+    const auto definition = enums_.find(operand.name);
+    if (definition == enums_.end()) {
+        throw std::runtime_error(diagnostic(expression.location, "unknown choice '" + operand.name + "'"));
+    }
+
+    const EnumVariant* failed = find_enum_variant(definition->second, "Failed");
+    if (failed == nullptr) {
+        throw std::runtime_error(diagnostic(expression.location, "choice 'outcome.Outcome' has no variant 'Failed'"));
+    }
+
+    resolved_tries_[&expression] = TryResolution{failed->tag};
+    return operand.arguments[0];
 }
 
 Type TypeChecker::check_tuple_literal(const Expression& expression, const TypeAnnotation& expected) {

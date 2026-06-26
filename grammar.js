@@ -1,6 +1,7 @@
 const PREC = {
   call: 12,
   member: 11,
+  try: 11,
   unary: 10,
   cast: 9,
   multiplicative: 8,
@@ -351,6 +352,7 @@ module.exports = grammar({
       $.range_expression,
       $.binary_expression,
       $.unary_expression,
+      $.try_expression,
       $.cast_expression,
       $._primary_expression,
     ),
@@ -520,6 +522,11 @@ module.exports = grammar({
     unary_expression: $ => prec(PREC.unary, seq(
       field("operator", choice("-", "!")),
       field("argument", $._expression),
+    )),
+
+    try_expression: $ => prec.left(PREC.try, seq(
+      field("operand", $._expression),
+      "?",
     )),
 
     cast_expression: $ => prec.left(PREC.cast, seq(

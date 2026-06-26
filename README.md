@@ -679,6 +679,26 @@ pair_sum = when (lo, hi) {
 };
 ```
 
+Inside a function that returns `outcome.Outcome<T, E>`, the postfix `?` operator
+unwraps a successful `Outcome`, or returns early with the error. It is shorthand
+for matching `Done`/`Failed`:
+
+```dune
+import outcome;
+
+fn add_checked(a: int, b: int): outcome.Outcome<int, text> {
+  first: int = checked(a)?;   // unwraps Done(int), or returns Failed(text)
+  second: int = checked(b)?;
+  return outcome.done_int(first + second);
+}
+```
+
+The operand of `?` must be an `outcome.Outcome<T, E>` and the enclosing function
+must return an `outcome.Outcome<R, E>` with the same error type `E`. `?` may be
+used anywhere an expression is allowed, including inside a larger expression. The
+bytecode VM is the canonical backend for `?`; the native backend reports a clear
+"not supported yet" error.
+
 Supported scalar types:
 
 - `int`, `bool`
@@ -902,6 +922,7 @@ The current release implements a small compiled language with:
 - records with fields and methods
 - mutable array indexes and record fields
 - `when` expressions with literal, choice variant, record, and tuple patterns, including `pattern => expression` arms
+- postfix `?` operator for early-return error handling with `outcome.Outcome`
 - array methods
 - text methods
 - raw text literals and explicit text/glyph escapes

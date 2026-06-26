@@ -33,6 +33,7 @@ private:
     void compile_array_comprehension(const Expression& expression);
     void compile_comprehension_body(const Expression& comprehension, std::size_t result_slot,
                                     const Expression* condition);
+    void compile_try_expression(const Expression& expression);
     void compile_expression(const Expression& expression);
     void compile_method_call_expression(const Expression& expression);
     void compile_format_expression(const Expression& expression);
@@ -90,6 +91,7 @@ private:
     std::unordered_map<const Expression*, Type> expression_types_;
     std::unordered_map<const Expression*, std::string> resolved_calls_;
     std::unordered_map<const Expression*, TypeChecker::VariantResolution> resolved_variants_;
+    std::unordered_map<const Expression*, TypeChecker::TryResolution> resolved_tries_;
     std::vector<LoopJumps> loop_stack_;
     std::vector<Instruction>* instructions_ = nullptr;
     std::size_t temporary_count_ = 0;

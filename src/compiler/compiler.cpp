@@ -227,6 +227,7 @@ Bytecode Compiler::compile(const Program& program) {
     expression_types_ = type_checker.expression_types();
     resolved_calls_ = type_checker.resolved_calls();
     resolved_variants_ = type_checker.resolved_variants();
+    resolved_tries_ = type_checker.resolved_tries();
     collect_structs(type_checker.structs());
     collect_enums(type_checker.enums());
     collect_type_aliases(program.statements);
@@ -763,6 +764,32 @@ void Compiler::compile_array_comprehension(const Expression& expression) {
     pop_scope();
 }
 
+void Compiler::compile_try_expression(const Expression& expression) {
+    const TypeChecker::TryResolution& resolution = resolved_tries_.at(&expression);
+    const Type outcome_type = expression_type(*expression.left);
+
+    // Evaluate the Outcome operand once and stash it in a temporary.
+    compile_expression(*expression.left);
+    const std::size_t outcome_slot =
+        declare_scoped_local("__try_outcome_" + std::to_string(temporary_count_++), outcome_type);
+    emit(OpCode::store_local, outcome_slot);
+
+    // If it is the Failed variant, return it from the enclosing function unchanged.
+    emit(OpCode::load_local, outcome_slot);
+    emit(OpCode::load_variant_tag);
+    emit(OpCode::push_constant, add_constant(make_unsigned(resolution.failed_tag)));
+    emit(OpCode::equal);
+    const std::size_t ok_jump = emit(OpCode::jump_if_false);
+
+    emit(OpCode::load_local, outcome_slot);
+    emit(OpCode::return_value);
+
+    // Otherwise unwrap the Done payload as the value of the expression.
+    patch_operand(ok_jump, instructions_->size());
+    emit(OpCode::load_local, outcome_slot);
+    emit(OpCode::load_variant_payload);
+}
+
 void Compiler::compile_expression(const Expression& expression) {
     if (resolved_variants_.contains(&expression)) {
         compile_variant_constructor(expression);
@@ -828,6 +855,9 @@ void Compiler::compile_expression(const Expression& expression) {
         }
 
         throw std::runtime_error("unknown unary operator '" + expression.lexeme + "'");
+    case ExpressionKind::try_expression:
+        compile_try_expression(expression);
+        return;
     case ExpressionKind::cast:
         compile_cast_expression(expression);
         return;
@@ -1034,6 +1064,7 @@ void Compiler::compile_assignment_target(const Expression& target, const Express
     case ExpressionKind::struct_literal:
     case ExpressionKind::slice:
     case ExpressionKind::unary:
+    case ExpressionKind::try_expression:
     case ExpressionKind::cast:
     case ExpressionKind::binary:
     case ExpressionKind::range:

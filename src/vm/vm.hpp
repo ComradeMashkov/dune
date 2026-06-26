@@ -18,6 +18,7 @@ private:
         const std::vector<Instruction>* instructions = nullptr;
         std::size_t ip = 0;
         std::vector<Value> locals;
+        std::size_t stack_base = 0;
     };
 
     void call_function(std::size_t function_index);

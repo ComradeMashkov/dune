@@ -997,6 +997,30 @@ bool parses_array_comprehensions() {
     return passed;
 }
 
+bool parses_try_operator() {
+    const dune::Program program = parse_source("value = parse_value(text)?;\n");
+    bool passed = expect(program.statements.size() == 1, "expected one statement");
+    const dune::Expression& value = *program.statements[0].expression;
+    passed = expect(value.kind == dune::ExpressionKind::try_expression, "expected try expression") && passed;
+    passed = expect(value.lexeme == "?", "expected '?' lexeme") && passed;
+    passed = expect(value.left != nullptr && value.left->kind == dune::ExpressionKind::call,
+                    "expected call operand for '?'") &&
+             passed;
+    return passed;
+}
+
+bool parses_try_operator_binds_tighter_than_binary() {
+    const dune::Program program = parse_source("total = 1 + read()?;\n");
+    bool passed = expect(program.statements.size() == 1, "expected one statement");
+    const dune::Expression& total = *program.statements[0].expression;
+    passed = expect(total.kind == dune::ExpressionKind::binary, "expected binary root expression") && passed;
+    passed = expect(total.lexeme == "+", "expected '+' at root") && passed;
+    passed = expect(total.right != nullptr && total.right->kind == dune::ExpressionKind::try_expression,
+                    "expected '?' to bind tighter than '+'") &&
+             passed;
+    return passed;
+}
+
 bool parses_array_literals_without_comprehension() {
     const dune::Program program = parse_source("xs = [1, 2, 3];\n");
     bool passed = expect(program.statements.size() == 1, "expected one statement");
@@ -1040,6 +1064,8 @@ int main() {
     passed = parses_tuples_and_destructuring_patterns() && passed;
     passed = parses_array_comprehensions() && passed;
     passed = parses_array_literals_without_comprehension() && passed;
+    passed = parses_try_operator() && passed;
+    passed = parses_try_operator_binds_tighter_than_binary() && passed;
 
     return passed ? 0 : 1;
 }

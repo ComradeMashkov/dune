@@ -824,6 +824,8 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_expression(const Expression& e
         return emit_member_expression(expression, output);
     case ExpressionKind::unary:
         return emit_unary_expression(expression, output);
+    case ExpressionKind::try_expression:
+        throw std::runtime_error("the '?' operator is not supported in the native backend yet");
     case ExpressionKind::cast:
         return emit_cast_expression(expression, output);
     case ExpressionKind::binary:
@@ -1900,6 +1902,7 @@ LlvmIrGenerator::TypedPointer LlvmIrGenerator::emit_lvalue_pointer(const Express
     case ExpressionKind::struct_literal:
     case ExpressionKind::slice:
     case ExpressionKind::unary:
+    case ExpressionKind::try_expression:
     case ExpressionKind::cast:
     case ExpressionKind::binary:
     case ExpressionKind::range:

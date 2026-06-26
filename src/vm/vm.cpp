@@ -622,7 +622,7 @@ VirtualMachine::VirtualMachine(Bytecode bytecode) : bytecode_(std::move(bytecode
 void VirtualMachine::run(std::ostream& output) {
     stack_.clear();
     frames_.clear();
-    frames_.push_back(CallFrame{&bytecode_.instructions, 0, std::vector<Value>(bytecode_.local_count)});
+    frames_.push_back(CallFrame{&bytecode_.instructions, 0, std::vector<Value>(bytecode_.local_count), 0});
 
     while (!frames_.empty()) {
         CallFrame& frame = frames_.back();
@@ -766,9 +766,16 @@ void VirtualMachine::run(std::ostream& output) {
             break;
         case OpCode::return_value: {
             const Value result = pop();
+            const std::size_t base = frames_.back().stack_base;
             frames_.pop_back();
             if (frames_.empty()) {
                 return;
+            }
+
+            // Discard any operands the returning frame left on the shared stack
+            // (an early `?` return can unwind mid-expression with values still pushed).
+            if (stack_.size() > base) {
+                stack_.resize(base);
             }
 
             stack_.push_back(result);
@@ -1130,7 +1137,8 @@ void VirtualMachine::call_function(std::size_t function_index) {
         locals[index - 1] = pop();
     }
 
-    frames_.push_back(CallFrame{&function.instructions, 0, std::move(locals)});
+    const std::size_t base = stack_.size();
+    frames_.push_back(CallFrame{&function.instructions, 0, std::move(locals), base});
 }
 
 Value VirtualMachine::call_extern_function(const Bytecode::Function& function, std::vector<Value> arguments) {
