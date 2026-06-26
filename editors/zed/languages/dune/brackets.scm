@@ -6,6 +6,7 @@
 (record_literal "{" @open "}" @close)
 (record_pattern "{" @open "}" @close)
 (array_literal "[" @open "]" @close)
+(array_comprehension "[" @open "]" @close)
 (index_expression "[" @open "]" @close)
 (slice_expression "[" @open "]" @close)
 (array_type "[" @open "]" @close)
