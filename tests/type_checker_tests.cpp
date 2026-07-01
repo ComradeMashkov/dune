@@ -798,5 +798,13 @@ int main() {
                                    "expected __write_file arity error") &&
              passed;
 
+    passed = expect_valid("record Point { x: int, fn to_text(): text { return format(\"{}\", this.x); } } "
+                          "p: Point = Point { x: 1 }; print(p); print(\"{}\", p); label: text = format(\"{}\", p);",
+                          "expected record with to_text to be printable") &&
+             passed;
+    passed = expect_error_contains("record Bare { x: int } b: Bare = Bare { x: 1 }; print(b);",
+                                   "add a 'to_text(): text' method", "expected non-printable record error") &&
+             passed;
+
     return passed ? 0 : 1;
 }

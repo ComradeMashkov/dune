@@ -339,6 +339,12 @@ print('\0' to int);)dune"),
                                   "print(circle.area()); print(area_of(circle));"),
                        "12\n12\n", "expected constructors, contracts, and static contract-bound calls") &&
              passed;
+    passed = expect_eq(run_source("record Point { x: int, y: int, "
+                                  "fn to_text(): text { return format(\"({}, {})\", this.x, this.y); } } "
+                                  "p: Point = Point { x: 1, y: 2 }; "
+                                  "print(p); print(\"p = {}\", p); print(format(\"[{}]\", p));"),
+                       "(1, 2)\np = (1, 2)\n[(1, 2)]\n", "expected Display record printing via to_text") &&
+             passed;
     passed = expect_eq(run_source("choice Maybe { Present(int), Absent, } "
                                   "x = 99; value: Maybe = Present(30); missing: Maybe = Absent; "
                                   "print(when value { is Present(x) { x + 1 } is Absent { 0 } }); "
