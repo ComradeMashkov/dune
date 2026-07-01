@@ -310,8 +310,8 @@ std::vector<Statement> ModuleLoader::load_module(const std::string& module_name,
             statement.kind != StatementKind::contract_statement &&
             statement.kind != StatementKind::type_alias_statement &&
             statement.kind != StatementKind::import_statement) {
-            throw std::runtime_error("module '" + module_name +
-                                     "' can only contain imports, constants, functions, and "
+            throw std::runtime_error("module '" + module_name + "' (" + module_path.string() +
+                                     ") can only contain imports, constants, functions, and "
                                      "types");
         }
 
@@ -328,21 +328,46 @@ std::filesystem::path ModuleLoader::find_module(const std::string& module_name,
     }
 
     const std::filesystem::path module_path = std::filesystem::path(module_name).replace_extension(".dn");
-    std::vector<std::filesystem::path> candidates;
-    if (!importer_directory.empty()) {
-        candidates.push_back(importer_directory / module_path);
-    }
 
+    // Standard library modules form a reserved namespace: they always resolve to
+    // the search paths, and a same-named local file is rejected rather than
+    // silently shadowing (or being shadowed by) the standard library.
+    std::filesystem::path stdlib_match;
     for (const std::filesystem::path& search_path : search_paths_) {
-        candidates.push_back(search_path / module_path);
+        const std::filesystem::path candidate = search_path / module_path;
+        if (std::filesystem::exists(candidate)) {
+            stdlib_match = candidate;
+            break;
+        }
     }
 
-    candidates.push_back(std::filesystem::current_path() / module_path);
-
-    for (const std::filesystem::path& candidate : candidates) {
-        if (std::filesystem::exists(candidate)) {
-            return candidate;
+    // Local modules resolve relative to the importing file, then the working
+    // directory.
+    std::filesystem::path local_match;
+    for (const std::filesystem::path& directory : {importer_directory, std::filesystem::current_path()}) {
+        if (directory.empty()) {
+            continue;
         }
+
+        const std::filesystem::path candidate = directory / module_path;
+        if (std::filesystem::exists(candidate)) {
+            local_match = candidate;
+            break;
+        }
+    }
+
+    if (!stdlib_match.empty() && !local_match.empty() && !std::filesystem::equivalent(stdlib_match, local_match)) {
+        throw std::runtime_error("module '" + module_name + "' is a standard library module; the local file '" +
+                                 local_match.string() +
+                                 "' shadows it — rename the local module to avoid the collision");
+    }
+
+    if (!local_match.empty()) {
+        return local_match;
+    }
+
+    if (!stdlib_match.empty()) {
+        return stdlib_match;
     }
 
     throw std::runtime_error("unknown module '" + module_name + "'");

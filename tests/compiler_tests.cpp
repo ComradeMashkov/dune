@@ -3,8 +3,11 @@
 #include "modules/module_loader.hpp"
 #include "parser/parser.hpp"
 
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
+#include <system_error>
 
 namespace {
 
@@ -694,6 +697,42 @@ bool stdlib_stays_pure_dune_except_panic() {
     return passed;
 }
 
+// Standard library module names are reserved: a local file that shadows one is
+// rejected with a clear error instead of silently overriding it (or producing a
+// confusing downstream error).
+bool rejects_local_module_shadowing_stdlib() {
+    namespace fs = std::filesystem;
+    std::error_code error;
+    const fs::path root = fs::temp_directory_path() / "dune_shadow_test";
+    const fs::path stdlib_dir = root / "stdlib";
+    const fs::path local_dir = root / "local";
+    fs::remove_all(root, error);
+    fs::create_directories(stdlib_dir, error);
+    fs::create_directories(local_dir, error);
+    std::ofstream(stdlib_dir / "math.dn") << "export fn answer(): int { return 1; }";
+    std::ofstream(local_dir / "math.dn") << "export fn answer(): int { return 2; }";
+
+    dune::Lexer lexer("import math; print(math.answer());");
+    dune::Parser parser(lexer.tokenize());
+    dune::ModuleLoader loader({stdlib_dir});
+
+    bool threw = false;
+    std::string message;
+    try {
+        loader.resolve(parser.parse(), local_dir);
+    } catch (const std::exception& caught) {
+        threw = true;
+        message = caught.what();
+    }
+
+    fs::remove_all(root, error);
+
+    bool passed = true;
+    passed = expect(threw, "expected a local module shadowing stdlib to be rejected") && passed;
+    passed = expect(message.find("shadows") != std::string::npos, "expected a shadowing diagnostic") && passed;
+    return passed;
+}
+
 } // namespace
 
 int main() {
@@ -722,6 +761,7 @@ int main() {
     passed = compiles_autograd_module_as_dune_code() && passed;
     passed = compiles_matrix_module_as_dune_code() && passed;
     passed = stdlib_stays_pure_dune_except_panic() && passed;
+    passed = rejects_local_module_shadowing_stdlib() && passed;
 
     return passed ? 0 : 1;
 }
