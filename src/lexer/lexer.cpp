@@ -295,6 +295,10 @@ Token Lexer::identifier(std::size_t start, std::size_t line, std::size_t column)
         return Token{TokenType::with_keyword, lexeme, line, column};
     }
 
+    if (lexeme == "derive") {
+        return Token{TokenType::derive_keyword, lexeme, line, column};
+    }
+
     if (lexeme == "choice") {
         return Token{TokenType::choice_keyword, lexeme, line, column};
     }

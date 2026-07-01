@@ -658,6 +658,23 @@ int main() {
                       }) &&
         passed;
 
+    passed = expect_tokens("record Point derive eq, copy { x: int }",
+                           {
+                               {record_keyword, "record"},
+                               {identifier, "Point"},
+                               {derive_keyword, "derive"},
+                               {identifier, "eq"},
+                               {comma, ","},
+                               {identifier, "copy"},
+                               {left_brace, "{"},
+                               {identifier, "x"},
+                               {colon, ":"},
+                               {int_keyword, "int"},
+                               {right_brace, "}"},
+                               {eof, ""},
+                           }) &&
+             passed;
+
     passed = expect_tokens("out = when value { is 1 { 10 } is _ { 20 } };",
                            {
                                {identifier, "out"},
