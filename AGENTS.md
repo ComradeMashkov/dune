@@ -130,6 +130,22 @@ Prefer:
 - integration tests
 - golden tests
 
+Test fixtures live under `tests/fixtures/`, grouped by area:
+- `language/` — core syntax and semantics (control flow, functions, operators,
+  pattern matching, comprehensions, literals, scopes, escapes)
+- `types/` — the type system (generics, type aliases, records, object model,
+  static associated functions)
+- `stdlib/` — standard-library usage (arrays, dict/set, matrix, autograd,
+  random, formatting, module exports)
+- `errors/` — programs expected to fail (type errors, invalid escapes, shape
+  and bounds errors)
+- `golden/` — expected `.out` output for golden CLI runs
+
+When one fixture imports another as a module, keep both in the same subfolder so
+the module loader resolves it from the importer's directory. Curated,
+documented showcase programs live in the top-level `examples/` directory (with
+their golden output under `examples/golden/`); they double as golden tests.
+
 ---
 
 ## Pull Requests
