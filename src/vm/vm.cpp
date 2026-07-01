@@ -2,11 +2,15 @@
 
 #include <cmath>
 #include <cstddef>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <memory>
 #include <ostream>
 #include <sstream>
 #include <stdexcept>
+#include <string>
 #include <utility>
 
 namespace dune {
@@ -619,6 +623,9 @@ Value cast_glyph(const Value& value) {
 
 VirtualMachine::VirtualMachine(Bytecode bytecode) : bytecode_(std::move(bytecode)) {}
 
+VirtualMachine::VirtualMachine(Bytecode bytecode, std::vector<std::string> program_arguments)
+    : bytecode_(std::move(bytecode)), program_arguments_(std::move(program_arguments)) {}
+
 void VirtualMachine::run(std::ostream& output) {
     stack_.clear();
     frames_.clear();
@@ -1073,6 +1080,96 @@ void VirtualMachine::run(std::ostream& output) {
             }
 
             stack_.push_back(make_bool(text.text_value.starts_with(prefix.text_value)));
+            ++frame.ip;
+            break;
+        }
+        case OpCode::read_file: {
+            const Value path = pop();
+            if (path.kind != ValueKind::text) {
+                throw std::runtime_error("read_file expects a text path");
+            }
+
+            std::ifstream input(path.text_value, std::ios::binary);
+            std::vector<Value> result(2);
+            if (!input) {
+                result[0] = make_bool(false);
+                result[1] = make_text("could not open '" + path.text_value + "' for reading");
+            } else {
+                std::ostringstream buffer;
+                buffer << input.rdbuf();
+                result[0] = make_bool(true);
+                result[1] = make_text(buffer.str());
+            }
+
+            stack_.push_back(make_tuple(std::move(result)));
+            ++frame.ip;
+            break;
+        }
+        case OpCode::write_file: {
+            const Value content = pop();
+            const Value path = pop();
+            if (path.kind != ValueKind::text || content.kind != ValueKind::text) {
+                throw std::runtime_error("write_file expects text path and content");
+            }
+
+            std::ofstream file(path.text_value, std::ios::binary | std::ios::trunc);
+            std::vector<Value> result(2);
+            if (!file) {
+                result[0] = make_bool(false);
+                result[1] = make_text("could not open '" + path.text_value + "' for writing");
+            } else {
+                file << content.text_value;
+                if (!file) {
+                    result[0] = make_bool(false);
+                    result[1] = make_text("could not write to '" + path.text_value + "'");
+                } else {
+                    result[0] = make_bool(true);
+                    result[1] = make_text("");
+                }
+            }
+
+            stack_.push_back(make_tuple(std::move(result)));
+            ++frame.ip;
+            break;
+        }
+        case OpCode::env_get: {
+            const Value name = pop();
+            if (name.kind != ValueKind::text) {
+                throw std::runtime_error("env_get expects a text name");
+            }
+
+            const char* value = std::getenv(name.text_value.c_str());
+            std::vector<Value> result(2);
+            result[0] = make_bool(value != nullptr);
+            result[1] = make_text(value == nullptr ? std::string() : std::string(value));
+            stack_.push_back(make_tuple(std::move(result)));
+            ++frame.ip;
+            break;
+        }
+        case OpCode::process_args: {
+            std::vector<Value> values;
+            values.reserve(program_arguments_.size());
+            for (const std::string& argument : program_arguments_) {
+                values.push_back(make_text(argument));
+            }
+
+            stack_.push_back(make_array(std::move(values)));
+            ++frame.ip;
+            break;
+        }
+        case OpCode::process_cwd: {
+            std::vector<Value> result(2);
+            std::error_code error;
+            const std::filesystem::path directory = std::filesystem::current_path(error);
+            if (error) {
+                result[0] = make_bool(false);
+                result[1] = make_text(error.message());
+            } else {
+                result[0] = make_bool(true);
+                result[1] = make_text(directory.string());
+            }
+
+            stack_.push_back(make_tuple(std::move(result)));
             ++frame.ip;
             break;
         }

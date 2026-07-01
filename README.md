@@ -146,10 +146,14 @@ Modules are loaded from `.dn` files. The standard library currently includes
 `stdlib/math.dn`, `stdlib/array.dn`, `stdlib/text.dn`, `stdlib/maybe.dn`,
 `stdlib/outcome.dn`, `stdlib/assert.dn`, `stdlib/collections.dn`,
 `stdlib/dict.dn`, `stdlib/set.dn`, `stdlib/random.dn`, `stdlib/runtime.dn`,
-`stdlib/autograd.dn`, and `stdlib/matrix.dn`. Low-level
+`stdlib/autograd.dn`, `stdlib/matrix.dn`, `stdlib/process.dn`, `stdlib/fs.dn`,
+and `stdlib/csv.dn`. Low-level
 array and text operations such as `len`, `push`, indexing, and slicing remain
 runtime primitives; higher-level helpers are ordinary Dune functions in the
-standard library.
+standard library. Operating-system access (reading and writing files,
+command-line arguments, environment variables) is provided the same way: the
+`fs` and `process` modules are plain Dune that wrap dedicated VM opcodes rather
+than C/C++ foreign functions.
 
 The standard library can expose receiver methods with `method` declarations. For
 example, importing `array` makes both `array.first(values)` and `values.first()`
@@ -756,6 +760,9 @@ Standard library receiver methods are enabled by importing their module:
 - `import dict;` exposes `Dict<V>` mapping `text` keys to values, with `set()`, `get()`, `contains()`, `remove()`, `keys()`, and `values()`
 - `import set;` exposes `Set` of unique `text` values, with `add()`, `contains()`, `remove()`, and `values()`
 - `import random;` exposes the seedable `Random` generator, with `next_int()`, `next_real()`, `between(lo, hi)`, `normal(mean, stddev)`, plus `uniform()` and `normal()` array helpers
+- `import process;` exposes `args()`, `arg_count()`, `arg(index)`, `env(name)`, `env_or(name, default)`, and `cwd()`
+- `import fs;` exposes `read_text(path)` and `write_text(path, content)`, each returning an `Outcome`
+- `import csv;` exposes `parse_rows(content)` and `read_rows(path)` for comma-separated data
 
 Associative collections and deterministic randomness:
 
@@ -786,12 +793,39 @@ behaviour is identical on every backend. `Random` uses the Park-Miller minimal
 standard generator, so a given seed always produces the same sequence in both the
 VM and native builds.
 
+Files, arguments, and environment variables let Dune scripts do real work.
+Errors are explicit through `Outcome`, so they compose with the `?` operator:
+
+```dn
+import process;
+import fs;
+import outcome;
+
+fn save_greeting(): outcome.Outcome<text, text> {
+    name = process.env_or("USER", "world");
+    return fs.write_text("greeting.txt", format("hello, {}", name));
+}
+
+print(process.arg_count());          // arguments after `dune script.dn`
+save_greeting();
+print(fs.read_text("greeting.txt").value_or("<missing>"));
+```
+
+File and OS access runs on the bytecode VM (`dune <file>`); the best-effort
+native backend does not support it yet and reports a clear error.
+
 ## Run
 
 ```bash
 cmake -S . -B build
 cmake --build build -j
 ./build/dune hello.dn
+```
+
+Arguments after the script are exposed to the program through `process.args()`:
+
+```bash
+./build/dune script.dn alpha beta
 ```
 
 Compile to a native output file through generated LLVM IR:
@@ -930,6 +964,8 @@ The current release implements a small compiled language with:
 - standard library receiver methods
 - associative `dict`/`set` collections
 - seedable, deterministic `random` module
+- file, argument, and environment access via `fs`/`process`
+- minimal `csv` parsing
 - text indexing
 - slices
 - imports

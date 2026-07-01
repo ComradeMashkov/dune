@@ -1,0 +1,63 @@
+import fs;
+import outcome;
+import text;
+
+// Minimal CSV support, layered purely on top of `fs` and `text` — no new VM
+// primitives. The first iteration handles comma-separated cells and
+// newline-separated rows (LF or CRLF); quoting and escaping are a follow-up.
+
+fn strip_cr(line: text): text {
+    length = line.len();
+    if length > 0 {
+        if line[length - 1] == '\r' {
+            return line[:length - 1];
+        }
+    }
+
+    return line;
+}
+
+// Split one line into its comma-separated cells.
+fn split_cells(line: text): [text] {
+    cells: [text] = [];
+    start = 0;
+    for index = 0; index < line.len(); index = index + 1 {
+        if line[index] == ',' {
+            cells.push(line[start:index]);
+            start = index + 1;
+        }
+    }
+
+    cells.push(line[start:]);
+    return cells;
+}
+
+// Parse CSV `content` into rows of text cells. A trailing newline is ignored.
+export fn parse_rows(content: text): [[text]] {
+    rows: [[text]] = [];
+    start = 0;
+    for index = 0; index < content.len(); index = index + 1 {
+        if content[index] == '\n' {
+            rows.push(split_cells(strip_cr(content[start:index])));
+            start = index + 1;
+        }
+    }
+
+    if start < content.len() {
+        rows.push(split_cells(strip_cr(content[start:])));
+    }
+
+    return rows;
+}
+
+// Read a CSV file into rows of text cells.
+// On success returns `Done(rows)`, otherwise `Failed(message)`.
+export fn read_rows(path: text): outcome.Outcome<[[text]], text> {
+    result = fs.read_text(path);
+    if result.is_done() {
+        return outcome.done(parse_rows(result.value_or("")), "");
+    }
+
+    empty: [[text]] = [];
+    return outcome.failed(empty, result.failure_or(""));
+}

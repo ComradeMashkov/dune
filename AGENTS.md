@@ -73,6 +73,24 @@ build VM-only on every platform.
 
 ---
 
+## Standard library
+
+The `stdlib/*.dn` modules are **self-hosted in pure Dune**. They are read from
+disk (`DUNE_STDLIB_PATH`) and run through the same lexer → parser → type checker
+→ compiler → VM pipeline as user code — there is no embedded C runtime.
+
+- Write stdlib modules in Dune. `math` (series / Newton), `random` (Park–Miller),
+  `dict`/`set`, `matrix`, `autograd`, etc. are all plain Dune with no native
+  backing.
+- The **only** sanctioned native primitive is `runtime.panic` (`= "dune_panic"`),
+  which aborts execution and cannot be expressed in Dune.
+- Do **not** add new `foreign fn` declarations to the stdlib. The C/C++ FFI
+  (`foreign fn name(...): T = "symbol"`) stays as a user-facing feature for C
+  interop, but our own modules must not depend on it. This is enforced by the
+  `stdlib_stays_pure_dune_except_panic` guard in `tests/compiler_tests.cpp`.
+
+---
+
 ## Build
 
 ```bash

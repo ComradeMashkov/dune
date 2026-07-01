@@ -1728,6 +1728,11 @@ Type TypeChecker::check_call_expression(const Expression& expression, const Type
         return check_format_call_expression(expression);
     }
 
+    if (is_io_builtin(expression.lexeme)) {
+        (void)expected;
+        return check_io_builtin_call(expression);
+    }
+
     if (expected.has_type && expected.type.kind == ValueType::enum_type &&
         is_variant_name_for_expected_enum(expression.lexeme, expected)) {
         return check_variant_constructor(expression, expression.lexeme, expression.arguments, expression.location,
@@ -1744,6 +1749,41 @@ Type TypeChecker::check_format_call_expression(const Expression& expression) {
 
     check_format_arguments(*expression.arguments[0], expression.arguments, 1, "format");
     return make_type(ValueType::text_type);
+}
+
+// Low-level OS intrinsics. These are the only compiler-known primitives behind
+// the pure-Dune `fs`/`process` stdlib modules; they lower to dedicated VM
+// opcodes instead of C/C++ foreign functions. Each returns primitives (a tuple
+// or array) so the Dune wrappers can shape the result into Outcome/Maybe.
+bool TypeChecker::is_io_builtin(const std::string& name) {
+    return name == "__read_file" || name == "__write_file" || name == "__env_get" || name == "__process_args" ||
+           name == "__process_cwd";
+}
+
+Type TypeChecker::check_io_builtin_call(const Expression& expression) {
+    const std::string& name = expression.lexeme;
+    std::size_t expected_arguments = 0;
+    if (name == "__read_file" || name == "__env_get") {
+        expected_arguments = 1;
+    } else if (name == "__write_file") {
+        expected_arguments = 2;
+    }
+
+    if (expression.arguments.size() != expected_arguments) {
+        throw std::runtime_error(
+            diagnostic(expression.location, name + " expects " + std::to_string(expected_arguments) +
+                                                " arguments but got " + std::to_string(expression.arguments.size())));
+    }
+
+    for (const std::unique_ptr<Expression>& argument : expression.arguments) {
+        expect_type(make_type(ValueType::text_type), check_expression(*argument), argument->location);
+    }
+
+    if (name == "__process_args") {
+        return make_array_type(make_type(ValueType::text_type));
+    }
+
+    return make_tuple_type({make_type(ValueType::bool_type), make_type(ValueType::text_type)});
 }
 
 void TypeChecker::check_format_arguments(const Expression& format,

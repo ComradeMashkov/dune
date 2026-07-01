@@ -3,6 +3,7 @@
 #include "compiler/bytecode.hpp"
 
 #include <iosfwd>
+#include <string>
 #include <vector>
 
 namespace dune {
@@ -10,6 +11,7 @@ namespace dune {
 class VirtualMachine {
 public:
     explicit VirtualMachine(Bytecode bytecode);
+    VirtualMachine(Bytecode bytecode, std::vector<std::string> program_arguments);
 
     void run(std::ostream& output);
 
@@ -26,6 +28,7 @@ private:
     Value pop();
 
     Bytecode bytecode_;
+    std::vector<std::string> program_arguments_;
     std::vector<Value> stack_;
     std::vector<CallFrame> frames_;
 };
