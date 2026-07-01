@@ -135,7 +135,9 @@ print("at {}", p);     // at (1, 2)
 ```
 
 Printing a record without a `to_text(): text` method is a type error that
-suggests adding one.
+suggests adding one. `import display;` provides the matching `Display` contract
+(so a record can declare `with display.Display`) and a `show(value)` helper that
+renders any Display value to text.
 
 Text and glyph literals support explicit escapes. Normal `text` literals decode
 `\n`, `\t`, `\r`, `\\`, `\"`, and `\0`; `glyph` literals decode `\n`, `\t`,
@@ -169,7 +171,7 @@ Modules are loaded from `.dn` files. The standard library currently includes
 `stdlib/outcome.dn`, `stdlib/assert.dn`, `stdlib/collections.dn`,
 `stdlib/dict.dn`, `stdlib/set.dn`, `stdlib/random.dn`, `stdlib/runtime.dn`,
 `stdlib/autograd.dn`, `stdlib/matrix.dn`, `stdlib/process.dn`, `stdlib/fs.dn`,
-and `stdlib/csv.dn`. Low-level
+`stdlib/csv.dn`, and `stdlib/display.dn`. Low-level
 array and text operations such as `len`, `push`, indexing, and slicing remain
 runtime primitives; higher-level helpers are ordinary Dune functions in the
 standard library. Operating-system access (reading and writing files,
@@ -785,6 +787,7 @@ Standard library receiver methods are enabled by importing their module:
 - `import process;` exposes `args()`, `arg_count()`, `arg(index)`, `env(name)`, `env_or(name, default)`, and `cwd()`
 - `import fs;` exposes `read_text(path)` and `write_text(path, content)`, each returning an `Outcome`
 - `import csv;` exposes `parse_rows(content)` and `read_rows(path)` for comma-separated data
+- `import display;` exposes the `Display` contract and `show(value)` for rendering records to `text`
 
 Associative collections and deterministic randomness:
 

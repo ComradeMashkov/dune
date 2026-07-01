@@ -345,6 +345,13 @@ print('\0' to int);)dune"),
                                   "print(p); print(\"p = {}\", p); print(format(\"[{}]\", p));"),
                        "(1, 2)\np = (1, 2)\n[(1, 2)]\n", "expected Display record printing via to_text") &&
              passed;
+    passed = expect_eq(run_source("import display; "
+                                  "record Tag with display.Display { name: text, "
+                                  "fn to_text(): text { return format(\"#{}\", this.name); } } "
+                                  "t: Tag = Tag { name: \"note\" }; "
+                                  "print(t); print(display.show(t));"),
+                       "#note\n#note\n", "expected Display contract print and show helper") &&
+             passed;
     passed = expect_eq(run_source("choice Maybe { Present(int), Absent, } "
                                   "x = 99; value: Maybe = Present(30); missing: Maybe = Absent; "
                                   "print(when value { is Present(x) { x + 1 } is Absent { 0 } }); "

@@ -1,0 +1,15 @@
+// The Display contract marks a type that can render itself as text.
+//
+// `print(value)` and `format("{}", value)` already accept any record that
+// provides a `to_text(): text` method, so declaring `with display.Display` is
+// optional. It documents the intent and lets generic functions require the
+// capability through a `T is Display` bound.
+export contract Display {
+    to_text(): text;
+}
+
+// Render any Display value to text. Useful when a function wants the text
+// instead of printing it directly.
+export fn show<T is Display>(value: T): text {
+    return value.to_text();
+}
