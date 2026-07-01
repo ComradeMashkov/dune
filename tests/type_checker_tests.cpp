@@ -19,11 +19,19 @@ void check_source(const std::string& source) {
 }
 
 void check_fixture_source(const std::string& source) {
+    const std::filesystem::path fixtures = std::filesystem::current_path().parent_path() / "tests" / "fixtures";
     dune::Lexer lexer(source);
     dune::Parser parser(lexer.tokenize());
-    dune::ModuleLoader loader;
+    // Importable module fixtures now live under category subfolders. Search the
+    // ones that hold them, plus the standard library so their nested imports and
+    // any stdlib imports in the test source still resolve.
+    dune::ModuleLoader loader({
+        std::filesystem::path(DUNE_STDLIB_PATH),
+        fixtures / "types",
+        fixtures / "stdlib",
+    });
     dune::TypeChecker checker;
-    checker.check(loader.resolve(parser.parse(), std::filesystem::current_path().parent_path() / "tests" / "fixtures"));
+    checker.check(loader.resolve(parser.parse()));
 }
 
 bool expect_valid(const std::string& source, const char* message) {
