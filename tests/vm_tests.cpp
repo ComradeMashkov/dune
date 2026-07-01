@@ -352,6 +352,22 @@ print('\0' to int);)dune"),
                                   "print(t); print(display.show(t));"),
                        "#note\n#note\n", "expected Display contract print and show helper") &&
              passed;
+    passed = expect_eq(run_source("record Point derive eq, copy, debug { x: int, y: int } "
+                                  "a: Point = Point { x: 1, y: 2 }; b: Point = Point { x: 1, y: 2 }; "
+                                  "c: Point = Point { x: 9, y: 9 }; d: Point = a.copy(); "
+                                  "print(a); print(a.equals(b)); print(a.equals(c)); print(d.equals(a));"),
+                       "Point(x: 1, y: 2)\n1\n0\n1\n", "expected derive eq/copy/debug output") &&
+             passed;
+    passed = expect_eq(run_source("record Wrap<T> derive eq, copy { value: T } "
+                                  "one: Wrap<int> = Wrap { value: 7 }; two: Wrap<int> = one.copy(); "
+                                  "print(one.equals(two)); print(two.value);"),
+                       "1\n7\n", "expected derive on generic record") &&
+             passed;
+    passed = expect_eq(run_source("record Point derive eq, debug { x: int, y: int, "
+                                  "fn to_text(): text { return format(\"P{},{}\", this.x, this.y); } } "
+                                  "p: Point = Point { x: 3, y: 4 }; print(p);"),
+                       "P3,4\n", "expected explicit to_text to override derive debug") &&
+             passed;
     passed = expect_eq(run_source("choice Maybe { Present(int), Absent, } "
                                   "x = 99; value: Maybe = Present(30); missing: Maybe = Absent; "
                                   "print(when value { is Present(x) { x + 1 } is Absent { 0 } }); "

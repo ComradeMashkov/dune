@@ -455,6 +455,32 @@ point: Point = Point { x: 1.5, y: 2.5 };
 print(point.sum());
 ```
 
+A record can `derive` common boilerplate methods instead of writing them by
+hand. The `derive` clause lists one or more of `eq`, `copy`, and `debug` after
+the record name (and after any `with` contracts):
+
+```dn
+record Point derive eq, copy, debug {
+  x: int,
+  y: int,
+}
+
+a: Point = Point { x: 1, y: 2 };
+b: Point = Point { x: 1, y: 2 };
+print(a);              // Point(x: 1, y: 2)   (debug -> to_text)
+print(a.equals(b));    // 1                   (eq -> equals)
+c: Point = a.copy();   // copy -> a fresh shallow copy
+```
+
+- `eq` generates `equals(other: Name): bool` comparing every field with `==`.
+- `copy` generates `copy(): Name` returning a shallow copy of the record.
+- `debug` generates `to_text(): text` (the Display contract), so the record is
+  printable as `Name(field: value, ...)`.
+
+`derive` is pure sugar: each entry expands to an ordinary record method. If the
+record already defines a method with the same name (`equals`, `copy`, or
+`to_text`), the hand-written version wins and nothing is generated for it.
+
 Functions can be overloaded by parameter types:
 
 ```dn

@@ -182,6 +182,100 @@ Type make_named_type(std::string name, const std::vector<GenericParameter>& gene
     return with_type_arguments(make_generic_type(std::move(name)), std::move(arguments));
 }
 
+// --- `derive` support -------------------------------------------------------
+// Derived methods are synthesised as ordinary record methods, so the type
+// checker and compiler need no special cases: `derive` is pure sugar.
+
+std::unique_ptr<Expression> make_field_access(std::string receiver, std::string field, SourceLocation location) {
+    return make_member(make_leaf(ExpressionKind::identifier, std::move(receiver), location), std::move(field),
+                       location);
+}
+
+Statement make_return_method(std::string name, std::vector<Parameter> parameters, TypeAnnotation return_type,
+                             std::unique_ptr<Expression> return_value, SourceLocation location) {
+    Statement return_statement{StatementKind::return_statement, "", std::move(return_value), {}, {}};
+    return_statement.location = location;
+
+    Statement method{StatementKind::function, std::move(name), nullptr, {}, {}};
+    method.parameters = std::move(parameters);
+    method.type = std::move(return_type);
+    method.body.push_back(std::move(return_statement));
+    method.exported = true;
+    method.location = location;
+    return method;
+}
+
+bool record_defines_method(const std::vector<Statement>& methods, const std::string& name) {
+    for (const Statement& method : methods) {
+        if (method.kind == StatementKind::function && method.name == name) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// `derive debug` -> `to_text(): text { return format("Name(f: {}, ...)", this.f, ...); }`
+// Braces are avoided because the format string only understands `{}` placeholders.
+Statement make_derived_to_text(const std::string& record_name, const std::vector<Parameter>& fields,
+                               SourceLocation location) {
+    std::string format = "\"" + record_name + "(";
+    for (std::size_t index = 0; index < fields.size(); ++index) {
+        if (index > 0) {
+            format += ", ";
+        }
+
+        format += fields[index].name + ": {}";
+    }
+    format += ")\"";
+
+    std::vector<std::unique_ptr<Expression>> arguments;
+    arguments.push_back(make_leaf(ExpressionKind::string, std::move(format), location));
+    for (const Parameter& field : fields) {
+        arguments.push_back(make_field_access("this", field.name, location));
+    }
+
+    return make_return_method("to_text", {}, TypeAnnotation{true, make_type(ValueType::text_type)},
+                              make_call("format", std::move(arguments), location), location);
+}
+
+// `derive eq` -> `equals(other: Name): bool { return this.f == other.f && ...; }`
+Statement make_derived_equals(const std::string& record_name, const std::vector<GenericParameter>& generics,
+                              const std::vector<Parameter>& fields, SourceLocation location) {
+    std::unique_ptr<Expression> condition;
+    for (const Parameter& field : fields) {
+        std::unique_ptr<Expression> comparison =
+            make_binary(make_field_access("this", field.name, location),
+                        "==", make_field_access("other", field.name, location), location);
+        condition = condition == nullptr ? std::move(comparison)
+                                         : make_binary(std::move(condition), "&&", std::move(comparison), location);
+    }
+
+    if (condition == nullptr) {
+        condition = make_leaf(ExpressionKind::boolean, "true", location);
+    }
+
+    std::vector<Parameter> parameters;
+    parameters.push_back(Parameter{"other", TypeAnnotation{true, make_named_type(record_name, generics)}, location});
+    return make_return_method("equals", std::move(parameters), TypeAnnotation{true, make_type(ValueType::bool_type)},
+                              std::move(condition), location);
+}
+
+// `derive copy` -> `copy(): Name { return Name { f: this.f, ... }; }` (shallow copy)
+Statement make_derived_copy(const std::string& record_name, const std::vector<GenericParameter>& generics,
+                            const std::vector<Parameter>& fields, SourceLocation location) {
+    std::vector<std::string> field_names;
+    std::vector<std::unique_ptr<Expression>> values;
+    for (const Parameter& field : fields) {
+        field_names.push_back(field.name);
+        values.push_back(make_field_access("this", field.name, location));
+    }
+
+    return make_return_method("copy", {}, TypeAnnotation{true, make_named_type(record_name, generics)},
+                              make_struct_literal(record_name, std::move(field_names), std::move(values), location),
+                              location);
+}
+
 std::string expression_to_type_name(const Expression& expression) {
     if (expression.kind == ExpressionKind::identifier) {
         return expression.lexeme;
@@ -947,6 +1041,21 @@ Statement Parser::struct_statement() {
         }
     }
 
+    std::vector<std::string> derives;
+    if (match(TokenType::derive_keyword)) {
+        while (true) {
+            const Token& derive_name = consume(TokenType::identifier, "expected derive name after 'derive'");
+            if (derive_name.lexeme != "eq" && derive_name.lexeme != "copy" && derive_name.lexeme != "debug") {
+                throw std::runtime_error("unknown derive '" + derive_name.lexeme + "' (expected eq, copy, or debug)");
+            }
+
+            derives.push_back(derive_name.lexeme);
+            if (!match(TokenType::comma)) {
+                break;
+            }
+        }
+    }
+
     consume(TokenType::left_brace, "expected '{' before record fields");
 
     std::vector<Parameter> fields;
@@ -985,6 +1094,17 @@ Statement Parser::struct_statement() {
     }
 
     consume(TokenType::right_brace, "expected '}' after record fields");
+
+    const SourceLocation record_location = location_from_token(name);
+    for (const std::string& derive : derives) {
+        if (derive == "eq" && !record_defines_method(methods, "equals")) {
+            methods.push_back(make_derived_equals(name.lexeme, parsed_generics, fields, record_location));
+        } else if (derive == "copy" && !record_defines_method(methods, "copy")) {
+            methods.push_back(make_derived_copy(name.lexeme, parsed_generics, fields, record_location));
+        } else if (derive == "debug" && !record_defines_method(methods, "to_text")) {
+            methods.push_back(make_derived_to_text(name.lexeme, fields, record_location));
+        }
+    }
 
     Statement statement{StatementKind::struct_statement, name.lexeme, nullptr, {}, {}};
     statement.body = std::move(methods);

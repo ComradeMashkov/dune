@@ -704,6 +704,50 @@ bool parses_records_and_record_literals() {
     return passed;
 }
 
+bool has_method(const dune::Statement& record, const std::string& name) {
+    for (const dune::Statement& member : record.body) {
+        if (member.kind == dune::StatementKind::function && member.name == name) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool parses_derive_and_generates_methods() {
+    const dune::Program program = parse_source("record Point derive eq, copy, debug { x: int, y: int }");
+
+    if (!expect(program.statements.size() == 1, "expected a single record statement")) {
+        return false;
+    }
+
+    bool passed = true;
+    const dune::Statement& record = program.statements[0];
+    passed = expect(record.kind == dune::StatementKind::struct_statement, "expected record statement") && passed;
+    passed = expect(record.body.size() == 3, "expected three derived methods") && passed;
+    passed = expect(has_method(record, "equals"), "expected derived equals method") && passed;
+    passed = expect(has_method(record, "copy"), "expected derived copy method") && passed;
+    passed = expect(has_method(record, "to_text"), "expected derived to_text method") && passed;
+    return passed;
+}
+
+bool derive_does_not_override_explicit_method() {
+    const dune::Program program = parse_source("record Point derive eq, debug { x: int, y: int, "
+                                               "fn to_text(): text { return format(\"P{}\", this.x); } }");
+
+    bool passed = true;
+    const dune::Statement& record = program.statements[0];
+    // equals is generated, but the hand-written to_text is kept (not duplicated).
+    passed = expect(record.body.size() == 2, "expected explicit to_text plus a single derived equals") && passed;
+    passed = expect(has_method(record, "equals"), "expected derived equals alongside explicit to_text") && passed;
+    passed = expect(has_method(record, "to_text"), "expected explicit to_text to be preserved") && passed;
+    return passed;
+}
+
+bool rejects_unknown_derive() {
+    return expect_parse_error("record Point derive ordering { x: int }", "expected unknown derive to be rejected");
+}
+
 bool parses_record_field_defaults() {
     const dune::Program program =
         parse_source("record Optimizer { lr: real64 = 0.01, momentum: real64 = 0.0, name: text = \"sgd\" } "
@@ -1056,6 +1100,9 @@ int main() {
     passed = parses_generic_functions() && passed;
     passed = parses_receiver_methods() && passed;
     passed = parses_records_and_record_literals() && passed;
+    passed = parses_derive_and_generates_methods() && passed;
+    passed = derive_does_not_override_explicit_method() && passed;
+    passed = rejects_unknown_derive() && passed;
     passed = parses_record_field_defaults() && passed;
     passed = parses_generic_records_and_when() && passed;
     passed = parses_record_constructors_visibility_and_contracts() && passed;

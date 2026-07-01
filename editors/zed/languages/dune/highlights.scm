@@ -4,6 +4,7 @@
   "const"
   "continue"
   "contract"
+  "derive"
   "else"
   "export"
   "fn"
@@ -70,6 +71,9 @@
 
 (record_declaration
   name: (identifier) @type)
+
+(record_declaration
+  derive: (identifier) @attribute)
 
 (choice_declaration
   name: (identifier) @type)

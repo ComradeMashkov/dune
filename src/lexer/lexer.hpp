@@ -15,6 +15,7 @@ enum class TokenType {
     record_keyword,
     contract_keyword,
     with_keyword,
+    derive_keyword,
     choice_keyword,
     import_keyword,
     when_keyword,

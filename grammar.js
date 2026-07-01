@@ -107,6 +107,7 @@ module.exports = grammar({
       field("name", $.identifier),
       optional($.generic_parameters),
       optional(seq("with", commaSep1($.qualified_name))),
+      optional(seq("derive", commaSep1(field("derive", $.identifier)))),
       "{",
       repeat(seq(
         choice($.record_field, $.record_method, $.exported_record_field, $.exported_record_method),
