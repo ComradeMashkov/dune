@@ -665,7 +665,7 @@ bool stdlib_stays_pure_dune_except_panic() {
     const std::string source = "import math; import random; import matrix; import autograd; "
                                "import dict; import set; import array; import text; "
                                "import collections; import maybe; import outcome; "
-                               "import fs; import process; import csv; "
+                               "import fs; import process; import csv; import display; "
                                "import assert; import runtime; print(0);";
 
     dune::Lexer lexer(source);
