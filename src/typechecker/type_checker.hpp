@@ -141,6 +141,8 @@ private:
     Type check_when_expression(const Expression& expression, const TypeAnnotation& expected);
     Type check_call_expression(const Expression& expression, const TypeAnnotation& expected);
     Type check_format_call_expression(const Expression& expression);
+    static bool is_io_builtin(const std::string& name);
+    Type check_io_builtin_call(const Expression& expression);
     Type check_method_call_expression(const Expression& expression, const TypeAnnotation& expected);
     Type check_constructor_call_expression(const Expression& expression, const std::string& record_name,
                                            const TypeAnnotation& expected);

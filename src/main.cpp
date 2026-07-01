@@ -228,8 +228,9 @@ void compile_llvm_ir(const std::string& llvm_ir_path, const std::string& output_
     }
 }
 
-int run_source_file(const std::string& path) {
-    dune::VirtualMachine vm(compile_bytecode(parse_source(read_file(path), std::filesystem::path(path).parent_path())));
+int run_source_file(const std::string& path, std::vector<std::string> script_arguments) {
+    dune::VirtualMachine vm(compile_bytecode(parse_source(read_file(path), std::filesystem::path(path).parent_path())),
+                            std::move(script_arguments));
     vm.run(std::cout);
 
     return 0;
@@ -280,24 +281,31 @@ int main(int argc, char* argv[]) {
     }
 
     try {
-        if (argc == 2) {
-            if (std::string(argv[1]) == "lsp") {
+        if (argc >= 2) {
+            const std::string command = argv[1];
+
+            if (command == "lsp" && argc == 2) {
                 return dune::lsp::run(std::cin, std::cout);
             }
 
-            return run_source_file(argv[1]);
-        }
+            if (command == "check" && argc == 3) {
+                return check_source_file(argv[2]);
+            }
 
-        if (argc == 3 && std::string(argv[1]) == "check") {
-            return check_source_file(argv[2]);
-        }
+            if (command == "build" && argc == 5 && std::string(argv[3]) == "-o") {
+                return build_native_file(argv[2], argv[4]);
+            }
 
-        if (argc == 5 && std::string(argv[1]) == "build" && std::string(argv[3]) == "-o") {
-            return build_native_file(argv[2], argv[4]);
-        }
+            if (command == "llvm" && argc == 5 && std::string(argv[3]) == "-o") {
+                return emit_llvm_file(argv[2], argv[4]);
+            }
 
-        if (argc == 5 && std::string(argv[1]) == "llvm" && std::string(argv[3]) == "-o") {
-            return emit_llvm_file(argv[2], argv[4]);
+            // `dune <file.dn> [args...]` runs a script; args are exposed via process.args().
+            const bool is_subcommand =
+                command == "lsp" || command == "check" || command == "build" || command == "llvm";
+            if (!is_subcommand) {
+                return run_source_file(command, std::vector<std::string>(argv + 2, argv + argc));
+            }
         }
 
         print_usage();

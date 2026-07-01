@@ -784,5 +784,19 @@ int main() {
                                    "'?' can only be used inside a function", "expected '?' at top-level error") &&
              passed;
 
+    passed = expect_valid("import fs; import process; import csv; "
+                          "r = fs.read_text(\"a.txt\"); print(r.is_done()); "
+                          "print(process.env_or(\"HOME\", \"none\")); "
+                          "print(process.arg_count()); "
+                          "print(csv.parse_rows(\"a,b\").len());",
+                          "expected fs/process/csv modules to type check") &&
+             passed;
+    passed = expect_error_contains("x = __read_file(1);", "expected type 'text' but got 'int'",
+                                   "expected __read_file argument type error") &&
+             passed;
+    passed = expect_error_contains("x = __write_file(\"a.txt\");", "__write_file expects 2 arguments but got 1",
+                                   "expected __write_file arity error") &&
+             passed;
+
     return passed ? 0 : 1;
 }

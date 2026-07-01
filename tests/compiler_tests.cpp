@@ -657,6 +657,43 @@ bool compiles_matrix_module_as_dune_code() {
     return passed;
 }
 
+// The stdlib is self-hosted in pure Dune: our own modules must not lean on the
+// C/C++ FFI. The single sanctioned native primitive is `runtime.panic`
+// ("dune_panic"), which aborts execution and cannot be expressed in Dune. This
+// guard fails if any other `foreign fn` sneaks into the standard library.
+bool stdlib_stays_pure_dune_except_panic() {
+    const std::string source = "import math; import random; import matrix; import autograd; "
+                               "import dict; import set; import array; import text; "
+                               "import collections; import maybe; import outcome; "
+                               "import fs; import process; import csv; "
+                               "import assert; import runtime; print(0);";
+
+    dune::Lexer lexer(source);
+    dune::Parser parser(lexer.tokenize());
+    dune::ModuleLoader loader;
+    const dune::Program program = loader.resolve(parser.parse());
+
+    bool passed = true;
+    bool saw_panic_extern = false;
+    for (const dune::Statement& statement : program.statements) {
+        if (statement.kind != dune::StatementKind::function || !statement.is_extern) {
+            continue;
+        }
+
+        if (statement.extern_symbol == "dune_panic") {
+            saw_panic_extern = true;
+            continue;
+        }
+
+        std::cerr << "unexpected stdlib foreign function: " << statement.name << " = \"" << statement.extern_symbol
+                  << "\"\n";
+        passed = false;
+    }
+
+    passed = expect(saw_panic_extern, "expected runtime.panic to remain the only stdlib foreign function") && passed;
+    return passed;
+}
+
 } // namespace
 
 int main() {
@@ -684,6 +721,7 @@ int main() {
     passed = compiles_tuples_and_destructuring() && passed;
     passed = compiles_autograd_module_as_dune_code() && passed;
     passed = compiles_matrix_module_as_dune_code() && passed;
+    passed = stdlib_stays_pure_dune_except_panic() && passed;
 
     return passed ? 0 : 1;
 }

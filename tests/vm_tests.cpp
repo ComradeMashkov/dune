@@ -4,10 +4,15 @@
 #include "parser/parser.hpp"
 #include "vm/vm.hpp"
 
+#include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <system_error>
+#include <utility>
+#include <vector>
 
 namespace {
 
@@ -17,6 +22,18 @@ std::string run_source(const std::string& source) {
     dune::ModuleLoader loader;
     dune::Compiler compiler;
     dune::VirtualMachine vm(compiler.compile(loader.resolve(parser.parse())));
+
+    std::ostringstream output;
+    vm.run(output);
+    return output.str();
+}
+
+std::string run_source_with_args(const std::string& source, std::vector<std::string> arguments) {
+    dune::Lexer lexer(source);
+    dune::Parser parser(lexer.tokenize());
+    dune::ModuleLoader loader;
+    dune::Compiler compiler;
+    dune::VirtualMachine vm(compiler.compile(loader.resolve(parser.parse())), std::move(arguments));
 
     std::ostringstream output;
     vm.run(output);
@@ -58,6 +75,57 @@ bool expect_error_contains(const std::string& source, const std::string& expecte
 
     std::cerr << message << '\n';
     return false;
+}
+
+bool runs_process_stdlib() {
+    bool passed = true;
+    passed = expect_eq(run_source("import process; print(process.env_or(\"DUNE_UNSET_VAR_XYZ_123\", \"fallback\"));"),
+                       "fallback\n", "expected process.env_or default for unset variable") &&
+             passed;
+    passed = expect_eq(run_source_with_args("import process; print(process.arg_count()); "
+                                            "for a in process.args() { print(a); } "
+                                            "print(process.arg(1).value_or(\"none\")); "
+                                            "print(process.arg(9).value_or(\"none\"));",
+                                            {"alpha", "beta"}),
+                       "2\nalpha\nbeta\nbeta\nnone\n", "expected process args API") &&
+             passed;
+    passed = expect_eq(run_source("import process; print(process.cwd().has_value());"), "1\n",
+                       "expected process.cwd to be present") &&
+             passed;
+    return passed;
+}
+
+bool runs_fs_stdlib() {
+    std::error_code error;
+    const std::filesystem::path file = std::filesystem::temp_directory_path() / "dune_vm_fs_test.txt";
+    const std::filesystem::path missing = std::filesystem::temp_directory_path() / "dune_vm_fs_missing_xyz.txt";
+    std::filesystem::remove(file, error);
+    std::filesystem::remove(missing, error);
+
+    const std::string source = "import fs; "
+                               "w = fs.write_text(\"" +
+                               file.generic_string() +
+                               "\", \"io-content\"); "
+                               "print(w.is_done()); "
+                               "r = fs.read_text(\"" +
+                               file.generic_string() +
+                               "\"); "
+                               "print(r.value_or(\"<none>\")); "
+                               "m = fs.read_text(\"" +
+                               missing.generic_string() +
+                               "\"); "
+                               "print(m.is_failed());";
+
+    const bool passed = expect_eq(run_source(source), "1\nio-content\n1\n", "expected fs write/read/missing output");
+    std::filesystem::remove(file, error);
+    return passed;
+}
+
+bool runs_csv_stdlib() {
+    return expect_eq(run_source("import csv; "
+                                "rows = csv.parse_rows(\"a,b,c\\nd,e,f\"); "
+                                "print(rows.len()); print(rows[0][1]); print(rows[1][2]);"),
+                     "2\nb\nf\n", "expected csv parse_rows output");
 }
 
 } // namespace
@@ -400,6 +468,10 @@ print('\0' to int);)dune"),
     passed =
         expect_error_contains("x: int = true;", "expected type 'int' but got 'bool'", "expected static type error") &&
         passed;
+
+    passed = runs_process_stdlib() && passed;
+    passed = runs_fs_stdlib() && passed;
+    passed = runs_csv_stdlib() && passed;
 
     return passed ? 0 : 1;
 }

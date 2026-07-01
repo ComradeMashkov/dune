@@ -867,6 +867,10 @@ void Compiler::compile_expression(const Expression& expression) {
             return;
         }
 
+        if (compile_io_builtin_expression(expression)) {
+            return;
+        }
+
         for (const std::unique_ptr<Expression>& argument : expression.arguments) {
             compile_expression(*argument);
         }
@@ -893,6 +897,33 @@ void Compiler::compile_format_expression(const Expression& expression) {
     }
 
     emit(OpCode::format_text, expression.arguments.size() - 1);
+}
+
+// Lower the low-level OS intrinsics (see TypeChecker::is_io_builtin) to their
+// dedicated opcodes. Returns false for any non-intrinsic call so the normal
+// resolved-call path handles it.
+bool Compiler::compile_io_builtin_expression(const Expression& expression) {
+    OpCode op = OpCode::halt;
+    if (expression.lexeme == "__read_file") {
+        op = OpCode::read_file;
+    } else if (expression.lexeme == "__write_file") {
+        op = OpCode::write_file;
+    } else if (expression.lexeme == "__env_get") {
+        op = OpCode::env_get;
+    } else if (expression.lexeme == "__process_args") {
+        op = OpCode::process_args;
+    } else if (expression.lexeme == "__process_cwd") {
+        op = OpCode::process_cwd;
+    } else {
+        return false;
+    }
+
+    for (const std::unique_ptr<Expression>& argument : expression.arguments) {
+        compile_expression(*argument);
+    }
+
+    emit(op);
+    return true;
 }
 
 void Compiler::compile_when_expression(const Expression& expression) {

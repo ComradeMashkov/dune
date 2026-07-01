@@ -838,6 +838,11 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_expression(const Expression& e
         if (expression.lexeme == "format") {
             return emit_format_expression(expression, output);
         }
+        if (expression.lexeme == "__read_file" || expression.lexeme == "__write_file" ||
+            expression.lexeme == "__env_get" || expression.lexeme == "__process_args" ||
+            expression.lexeme == "__process_cwd") {
+            throw std::runtime_error("fs/process I/O is not supported in the native backend yet");
+        }
         return emit_call_expression(expression, output);
     case ExpressionKind::method_call:
         return emit_method_call_expression(expression, output);

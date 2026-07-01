@@ -1,0 +1,62 @@
+import maybe;
+
+// Access to command-line arguments and environment variables.
+//
+// The heavy lifting is done by the `__process_args`, `__env_get`, and
+// `__process_cwd` VM intrinsics (dedicated opcodes, not C/C++ foreign
+// functions). This module is pure Dune: it only shapes the primitive
+// results into the `Maybe` type.
+
+// The arguments passed after the script path (`dune script.dn a b c`).
+export fn args(): [text] {
+    return __process_args();
+}
+
+// The number of command-line arguments.
+export fn arg_count(): int {
+    return __process_args().len();
+}
+
+// The argument at `index`, or `Absent` when out of range.
+export fn arg(index: int): maybe.Maybe<text> {
+    values = __process_args();
+    if index < 0 {
+        return maybe.Absent;
+    }
+
+    if index >= values.len() {
+        return maybe.Absent;
+    }
+
+    return maybe.present(values[index]);
+}
+
+// The value of environment variable `name`, or `Absent` when unset.
+export fn env(name: text): maybe.Maybe<text> {
+    (present, value) = __env_get(name);
+    if present {
+        return maybe.present(value);
+    }
+
+    return maybe.Absent;
+}
+
+// The value of environment variable `name`, or `default` when unset.
+export fn env_or(name: text, default: text): text {
+    (present, value) = __env_get(name);
+    if present {
+        return value;
+    }
+
+    return default;
+}
+
+// The current working directory, or `Absent` when it cannot be determined.
+export fn cwd(): maybe.Maybe<text> {
+    (ok, value) = __process_cwd();
+    if ok {
+        return maybe.present(value);
+    }
+
+    return maybe.Absent;
+}
