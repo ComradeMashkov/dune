@@ -37,6 +37,7 @@ private:
     void compile_expression(const Expression& expression);
     void compile_method_call_expression(const Expression& expression);
     void compile_format_expression(const Expression& expression);
+    void compile_printable_argument(const Expression& argument);
     bool compile_io_builtin_expression(const Expression& expression);
     void compile_member_expression(const Expression& expression);
     void compile_when_expression(const Expression& expression);

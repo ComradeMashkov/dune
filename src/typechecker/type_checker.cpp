@@ -1137,9 +1137,13 @@ void TypeChecker::check_statement(const Statement& statement) {
     }
     case StatementKind::print: {
         const Type type = check_expression(*statement.expression);
-        if (!is_printable_type(type)) {
-            throw std::runtime_error(
-                diagnostic(statement.expression->location, "cannot print type '" + type_name(type) + "'"));
+        if (!is_printable_type(type) && !record_has_display(type)) {
+            std::string message = "cannot print type '" + type_name(type) + "'";
+            if (type.kind == ValueType::struct_type) {
+                message += "; add a 'to_text(): text' method to make it printable";
+            }
+
+            throw std::runtime_error(diagnostic(statement.expression->location, message));
         }
 
         if (statement.arguments.empty()) {
@@ -1786,6 +1790,29 @@ Type TypeChecker::check_io_builtin_call(const Expression& expression) {
     return make_tuple_type({make_type(ValueType::bool_type), make_type(ValueType::text_type)});
 }
 
+// A record satisfies the Display contract when it provides an instance method
+// `to_text(): text`. Such records can be printed and formatted; the compiler
+// lowers `print(record)` / `format("{}", record)` to a `to_text()` call.
+bool TypeChecker::record_has_display(const Type& type) const {
+    if (type.kind != ValueType::struct_type) {
+        return false;
+    }
+
+    const auto record = structs_.find(type.name);
+    if (record == structs_.end()) {
+        return false;
+    }
+
+    for (const StructMethod& method : record->second.methods) {
+        if (method.name == "to_text" && !method.is_static && !method.is_constructor && method.parameters.empty() &&
+            method.return_type.kind == ValueType::text_type) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void TypeChecker::check_format_arguments(const Expression& format,
                                          const std::vector<std::unique_ptr<Expression>>& arguments,
                                          std::size_t first_argument, std::string_view feature_name) {
@@ -1808,9 +1835,13 @@ void TypeChecker::check_format_arguments(const Expression& format,
 
     for (std::size_t index = first_argument; index < arguments.size(); ++index) {
         const Type argument_type = check_expression(*arguments[index]);
-        if (!is_printable_type(argument_type)) {
-            throw std::runtime_error(diagnostic(arguments[index]->location,
-                                                "cannot " + action + " type '" + type_name(argument_type) + "'"));
+        if (!is_printable_type(argument_type) && !record_has_display(argument_type)) {
+            std::string message = "cannot " + action + " type '" + type_name(argument_type) + "'";
+            if (argument_type.kind == ValueType::struct_type) {
+                message += "; add a 'to_text(): text' method to make it printable";
+            }
+
+            throw std::runtime_error(diagnostic(arguments[index]->location, message));
         }
     }
 }

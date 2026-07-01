@@ -115,6 +115,28 @@ and the number of placeholders must match the number of following arguments.
 Printable values are the scalar types: integer and unsigned integer types,
 `real32`/`real64`, `bool`, `glyph`, and `text`.
 
+A record is printable too when it provides a `to_text(): text` method (the
+Display contract). `print(record)` and `format("{}", record)` call `to_text()`
+to render it, so records format just like scalars:
+
+```dn
+record Point {
+    x: int,
+    y: int,
+
+    fn to_text(): text {
+        return format("({}, {})", this.x, this.y);
+    }
+}
+
+p: Point = Point { x: 1, y: 2 };
+print(p);              // (1, 2)
+print("at {}", p);     // at (1, 2)
+```
+
+Printing a record without a `to_text(): text` method is a type error that
+suggests adding one.
+
 Text and glyph literals support explicit escapes. Normal `text` literals decode
 `\n`, `\t`, `\r`, `\\`, `\"`, and `\0`; `glyph` literals decode `\n`, `\t`,
 `\r`, `\\`, `\'`, and `\0`. Unknown escapes are compile-time errors. Raw
@@ -966,6 +988,7 @@ The current release implements a small compiled language with:
 - seedable, deterministic `random` module
 - file, argument, and environment access via `fs`/`process`
 - minimal `csv` parsing
+- printable records via a `to_text(): text` method
 - text indexing
 - slices
 - imports

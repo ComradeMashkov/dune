@@ -431,15 +431,16 @@ void Compiler::compile_statement(const Statement& statement) {
         return;
     }
     case StatementKind::print:
-        compile_expression(*statement.expression);
-        for (const std::unique_ptr<Expression>& argument : statement.arguments) {
-            compile_expression(*argument);
-        }
-        if (!statement.arguments.empty()) {
-            emit(OpCode::print_format, statement.arguments.size());
+        if (statement.arguments.empty()) {
+            compile_printable_argument(*statement.expression);
+            emit(OpCode::print);
             return;
         }
-        emit(OpCode::print);
+        compile_expression(*statement.expression);
+        for (const std::unique_ptr<Expression>& argument : statement.arguments) {
+            compile_printable_argument(*argument);
+        }
+        emit(OpCode::print_format, statement.arguments.size());
         return;
     case StatementKind::block:
         push_scope();
@@ -892,11 +893,33 @@ void Compiler::compile_expression(const Expression& expression) {
 }
 
 void Compiler::compile_format_expression(const Expression& expression) {
-    for (const std::unique_ptr<Expression>& argument : expression.arguments) {
-        compile_expression(*argument);
+    for (std::size_t index = 0; index < expression.arguments.size(); ++index) {
+        // arguments[0] is the format string; the rest are the values to render.
+        if (index == 0) {
+            compile_expression(*expression.arguments[index]);
+        } else {
+            compile_printable_argument(*expression.arguments[index]);
+        }
     }
 
     emit(OpCode::format_text, expression.arguments.size() - 1);
+}
+
+// Compile a value for `print`/`format`. A record that implements the Display
+// contract (a `to_text(): text` method) is lowered to a `to_text()` call so a
+// text value reaches the print/format opcodes; everything else compiles as-is.
+void Compiler::compile_printable_argument(const Expression& argument) {
+    const Type& type = expression_type(argument);
+    if (type.kind == ValueType::struct_type) {
+        const auto to_text = functions_.find(function_key("to_text", {type}));
+        if (to_text != functions_.end()) {
+            compile_expression(argument);
+            emit(OpCode::call, to_text->second);
+            return;
+        }
+    }
+
+    compile_expression(argument);
 }
 
 // Lower the low-level OS intrinsics (see TypeChecker::is_io_builtin) to their
