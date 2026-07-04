@@ -94,6 +94,13 @@ Value make_variant(std::size_t tag, std::shared_ptr<Value> payload) {
     return result;
 }
 
+Value make_callable(std::size_t function_index) {
+    Value result;
+    result.kind = ValueKind::callable;
+    result.function_index = function_index;
+    return result;
+}
+
 void expect_same_kind(const Value& left, const Value& right) {
     if (left.kind != right.kind) {
         throw std::runtime_error("runtime type mismatch");
@@ -117,6 +124,7 @@ Value add_values(const Value& left, const Value& right) {
     case ValueKind::tuple:
     case ValueKind::record:
     case ValueKind::variant:
+    case ValueKind::callable:
         break;
     }
 
@@ -140,6 +148,7 @@ Value subtract_values(const Value& left, const Value& right) {
     case ValueKind::tuple:
     case ValueKind::record:
     case ValueKind::variant:
+    case ValueKind::callable:
         break;
     }
 
@@ -163,6 +172,7 @@ Value multiply_values(const Value& left, const Value& right) {
     case ValueKind::tuple:
     case ValueKind::record:
     case ValueKind::variant:
+    case ValueKind::callable:
         break;
     }
 
@@ -198,6 +208,7 @@ Value divide_values(const Value& left, const Value& right) {
     case ValueKind::tuple:
     case ValueKind::record:
     case ValueKind::variant:
+    case ValueKind::callable:
         break;
     }
 
@@ -228,6 +239,7 @@ Value modulo_values(const Value& left, const Value& right) {
     case ValueKind::tuple:
     case ValueKind::record:
     case ValueKind::variant:
+    case ValueKind::callable:
         break;
     }
 
@@ -250,6 +262,7 @@ Value negate_value(const Value& value) {
     case ValueKind::tuple:
     case ValueKind::record:
     case ValueKind::variant:
+    case ValueKind::callable:
         break;
     }
 
@@ -285,6 +298,7 @@ bool values_equal(const Value& left, const Value& right) {
     case ValueKind::tuple:
     case ValueKind::record:
     case ValueKind::variant:
+    case ValueKind::callable:
         break;
     }
 
@@ -308,6 +322,7 @@ int compare_values(const Value& left, const Value& right) {
     case ValueKind::tuple:
     case ValueKind::record:
     case ValueKind::variant:
+    case ValueKind::callable:
         break;
     }
 
@@ -352,6 +367,8 @@ void print_value(const Value& value, std::ostream& output) {
         throw std::runtime_error("cannot print record value");
     case ValueKind::variant:
         throw std::runtime_error("cannot print choice value");
+    case ValueKind::callable:
+        throw std::runtime_error("cannot print function value");
     }
 
     throw std::runtime_error("cannot print unknown value");
@@ -387,6 +404,8 @@ std::string value_to_text(const Value& value) {
         throw std::runtime_error("cannot print record value");
     case ValueKind::variant:
         throw std::runtime_error("cannot print choice value");
+    case ValueKind::callable:
+        throw std::runtime_error("cannot print function value");
     }
 
     throw std::runtime_error("cannot print unknown value");
@@ -493,6 +512,7 @@ double numeric_argument(const Value& value) {
     case ValueKind::tuple:
     case ValueKind::record:
     case ValueKind::variant:
+    case ValueKind::callable:
         break;
     }
 
@@ -517,6 +537,7 @@ Value cast_signed(const Value& value) {
     case ValueKind::tuple:
     case ValueKind::record:
     case ValueKind::variant:
+    case ValueKind::callable:
         break;
     }
 
@@ -541,6 +562,7 @@ Value cast_unsigned(const Value& value) {
     case ValueKind::tuple:
     case ValueKind::record:
     case ValueKind::variant:
+    case ValueKind::callable:
         break;
     }
 
@@ -565,6 +587,7 @@ Value cast_real(const Value& value) {
     case ValueKind::tuple:
     case ValueKind::record:
     case ValueKind::variant:
+    case ValueKind::callable:
         break;
     }
 
@@ -589,6 +612,7 @@ Value cast_bool(const Value& value) {
     case ValueKind::tuple:
     case ValueKind::record:
     case ValueKind::variant:
+    case ValueKind::callable:
         break;
     }
 
@@ -613,6 +637,7 @@ Value cast_glyph(const Value& value) {
     case ValueKind::tuple:
     case ValueKind::record:
     case ValueKind::variant:
+    case ValueKind::callable:
         break;
     }
 
@@ -771,6 +796,22 @@ void VirtualMachine::run(std::ostream& output) {
             ++frame.ip;
             call_function(instruction.operand);
             break;
+        case OpCode::push_function:
+            stack_.push_back(make_callable(instruction.operand));
+            ++frame.ip;
+            break;
+        case OpCode::call_value: {
+            const Value callable = pop();
+            if (callable.kind != ValueKind::callable) {
+                throw std::runtime_error("attempted to call a non-function value");
+            }
+
+            // Increment before pushing the callee frame: call_function may
+            // reallocate frames_ and invalidate `frame`.
+            ++frame.ip;
+            call_function(callable.function_index);
+            break;
+        }
         case OpCode::return_value: {
             const Value result = pop();
             const std::size_t base = frames_.back().stack_base;

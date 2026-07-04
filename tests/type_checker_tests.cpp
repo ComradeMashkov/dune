@@ -814,5 +814,47 @@ int main() {
                                    "add a 'to_text(): text' method", "expected non-printable record error") &&
              passed;
 
+    // --- First-class function values and method chaining --------------------
+    passed = expect_valid("import array; "
+                          "fn square(x: int): int { return x * x; } "
+                          "fn is_positive(x: int): bool { return x > 0; } "
+                          "values = [0 - 1, 2, 3]; "
+                          "total: int = values.filter(is_positive).map(square).sum(); print(total);",
+                          "expected filter/map/sum chain to type check") &&
+             passed;
+    passed = expect_valid("fn add(acc: int, x: int): int { return acc + x; } "
+                          "method<T, Acc> [T].fold_left(initial: Acc, combine: fn(Acc, T): Acc): Acc { "
+                          "result: Acc = initial; "
+                          "for i = 0; i < this.len(); i = i + 1 { result = combine(result, this[i]); } "
+                          "return result; } "
+                          "sum: int = [1, 2, 3].fold_left(0, add); print(sum);",
+                          "expected user-defined higher-order method to type check") &&
+             passed;
+    // The callback signature must match the element type: `square` is fn(int): int
+    // but a [bool] receiver needs fn(bool): U, so the diagnostic names both.
+    passed = expect_error_contains("import array; fn square(x: int): int { return x * x; } "
+                                   "flags = [true, false]; bad = flags.map(square);",
+                                   "has no method 'map' matching argument types (fn(int): int)",
+                                   "expected mismatched-callback diagnostic") &&
+             passed;
+    // Passing a non-function where a callback is expected is reported too.
+    passed = expect_error_contains("import array; values = [1, 2, 3]; bad = values.filter(7);",
+                                   "has no method 'filter' matching argument types (int)",
+                                   "expected non-function callback diagnostic") &&
+             passed;
+    // Calling a function value with the wrong arity is a clear error.
+    passed = expect_error_contains("fn takes_two(a: int, b: int): int { return a + b; } "
+                                   "method<T> [T].run_on_first(f: fn(T): T): T { return f(this[0]); } "
+                                   "x: int = [1, 2].run_on_first(takes_two);",
+                                   "has no method 'run_on_first' matching argument types (fn(int, int): int)",
+                                   "expected callback-arity diagnostic") &&
+             passed;
+    // A generic function cannot be captured as a plain value without a call site.
+    passed = expect_error_contains("fn identity<T>(value: T): T { return value; } "
+                                   "grab = identity;",
+                                   "generic function 'identity' cannot be used as a value",
+                                   "expected generic-function-as-value diagnostic") &&
+             passed;
+
     return passed ? 0 : 1;
 }

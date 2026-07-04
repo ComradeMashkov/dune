@@ -140,6 +140,8 @@ private:
     Type check_membership_expression(const Expression& expression);
     Type check_when_expression(const Expression& expression, const TypeAnnotation& expected);
     Type check_call_expression(const Expression& expression, const TypeAnnotation& expected);
+    Type check_indirect_call(const Expression& expression, const Type& function_type);
+    bool resolve_function_reference(const Expression& expression, const TypeAnnotation& expected, Type& result);
     Type check_format_call_expression(const Expression& expression);
     static bool is_io_builtin(const std::string& name);
     Type check_io_builtin_call(const Expression& expression);
@@ -280,6 +282,7 @@ Type make_struct_type(std::string name);
 Type make_struct_type(std::string name, std::vector<Type> arguments);
 Type make_enum_type(std::string name);
 Type make_enum_type(std::string name, std::vector<Type> arguments);
+Type make_function_type(std::vector<Type> parameters, Type return_type);
 std::string type_key(const Type& type);
 std::string function_key(const std::string& name, const std::vector<Type>& parameters);
 

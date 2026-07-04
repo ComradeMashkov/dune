@@ -2304,6 +2304,8 @@ std::string LlvmIrGenerator::llvm_type(const Type& type) const {
         return "ptr";
     case ValueType::unit_type:
         return "i8";
+    case ValueType::function_type:
+        throw std::runtime_error("function values are not supported in the native backend yet");
     case ValueType::generic_type:
         break;
     }
@@ -2340,6 +2342,7 @@ std::size_t LlvmIrGenerator::llvm_bit_width(const Type& type) const {
     case ValueType::generic_type:
     case ValueType::struct_type:
     case ValueType::enum_type:
+    case ValueType::function_type:
         break;
     }
 
@@ -2375,6 +2378,7 @@ std::string LlvmIrGenerator::printf_format_name(const Type& type) const {
     case ValueType::generic_type:
     case ValueType::struct_type:
     case ValueType::enum_type:
+    case ValueType::function_type:
         break;
     }
 
@@ -2410,6 +2414,7 @@ std::string LlvmIrGenerator::printf_fragment_format_name(const Type& type) const
     case ValueType::generic_type:
     case ValueType::struct_type:
     case ValueType::enum_type:
+    case ValueType::function_type:
         break;
     }
 
@@ -2441,9 +2446,11 @@ std::string LlvmIrGenerator::printf_fragment_format_text(const Type& type) const
         return "%s";
     case ValueType::unit_type:
     case ValueType::array_type:
+    case ValueType::tuple_type:
     case ValueType::generic_type:
     case ValueType::struct_type:
     case ValueType::enum_type:
+    case ValueType::function_type:
         break;
     }
 
@@ -2612,6 +2619,7 @@ std::size_t LlvmIrGenerator::llvm_size(const Type& type) const {
     case ValueType::enum_type:
         return 8;
     case ValueType::generic_type:
+    case ValueType::function_type:
         break;
     }
 

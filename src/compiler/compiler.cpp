@@ -799,6 +799,13 @@ void Compiler::compile_expression(const Expression& expression) {
 
     switch (expression.kind) {
     case ExpressionKind::identifier:
+        // A bare identifier that resolved to a function is a function reference:
+        // push a callable value rather than loading a local slot.
+        if (resolved_calls_.contains(&expression)) {
+            emit(OpCode::push_function, resolve_function(resolved_calls_.at(&expression)));
+            return;
+        }
+
         emit(OpCode::load_local, resolve_local(expression.lexeme));
         return;
     case ExpressionKind::number:
@@ -874,6 +881,14 @@ void Compiler::compile_expression(const Expression& expression) {
 
         for (const std::unique_ptr<Expression>& argument : expression.arguments) {
             compile_expression(*argument);
+        }
+
+        // A call the type checker did not bind to a concrete function is a call
+        // through a function value: load the callable and dispatch dynamically.
+        if (!resolved_calls_.contains(&expression)) {
+            emit(OpCode::load_local, resolve_local(expression.lexeme));
+            emit(OpCode::call_value);
+            return;
         }
 
         emit(OpCode::call, resolve_function(resolved_calls_.at(&expression)));

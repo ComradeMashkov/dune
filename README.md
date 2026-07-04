@@ -800,9 +800,36 @@ Built-in receiver methods:
 - raw text literals: `r"..."` keeps backslashes without escape decoding
 - format expression: `format("{} {}", left, right)` returns `text`
 
+Function values and method chaining:
+
+A named function can be passed by name as a first-class value wherever a function
+type `fn(P1, P2): R` is expected (the return clause is optional and defaults to
+`unit`). This powers the higher-order array methods, which chain fluently across
+lines:
+
+```dn
+import array;
+
+fn square(x: int): int { return x * x; }
+fn is_positive(x: int): bool { return x > 0; }
+
+result = values
+    .filter(is_positive)   // fn(int): bool
+    .map(square)           // fn(int): int
+    .sum();
+```
+
+`import array;` supplies `map(fn(T): U)`, `filter(fn(T): bool)`,
+`fold(initial, fn(Acc, T): Acc)`, `reduce(fn(T, T): T)`, `any(fn(T): bool)`,
+`all(fn(T): bool)`, and `count_where(fn(T): bool)`. Each returns a fresh array or
+a scalar and never mutates the receiver. A callback whose signature does not match
+the element type is a compile-time error that names the offending function type.
+Function values run on the bytecode VM; the native LLVM backend does not support
+them yet.
+
 Standard library receiver methods are enabled by importing their module:
 
-- `import array;` enables helpers such as `values.first()` and `values.reverse()`
+- `import array;` enables helpers such as `values.first()` and `values.reverse()`, plus the higher-order pipeline `map`, `filter`, `fold`, `reduce`, `any`, `all`, and `count_where` (see below)
 - `import text;` enables helpers such as `message.trim()` and `message.ends_with("x")`
 - `import maybe;` exposes choice `Maybe<T>`, `present(value)`, `absent(default)`, and `value_or()`
 - `import outcome;` exposes choice `Outcome<T, E>`, `done(value, error_default)`, `failed(value_default, error)`, and `failure_or()`
@@ -1010,6 +1037,7 @@ The current release implements a small compiled language with:
 - mutable array indexes and record fields
 - `when` expressions with literal, choice variant, record, and tuple patterns, including `pattern => expression` arms
 - postfix `?` operator for early-return error handling with `outcome.Outcome`
+- first-class function values (`fn(...)` types) and higher-order methods
 - array methods
 - text methods
 - raw text literals and explicit text/glyph escapes

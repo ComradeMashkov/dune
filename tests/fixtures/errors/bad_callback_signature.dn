@@ -1,0 +1,10 @@
+// A callback whose signature does not match the receiver's element type must be
+// rejected with a diagnostic that names the offending function type.
+import array;
+
+// `square` is fn(int): int, but a [bool] receiver needs fn(bool): U.
+fn square(x: int): int { return x * x; }
+
+flags = [true, false, true];
+bad = flags.map(square);
+print(bad.len());
