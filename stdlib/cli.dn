@@ -1,0 +1,816 @@
+import maybe;
+import outcome;
+import text;
+import fmt;
+
+// A command-line option that accepts a text value.
+export record OptionSpec {
+    name: text,
+    short: text,
+    about_text: text,
+    default_value: maybe.Maybe<text>,
+    required: bool,
+}
+
+// A command-line flag that is either present or absent.
+export record FlagSpec {
+    name: text,
+    short: text,
+    about_text: text,
+}
+
+// A positional argument accepted after options and flags.
+export record PositionalSpec {
+    name: text,
+    about_text: text,
+    required: bool,
+}
+
+// Parsed value for a named option.
+export record ParsedValue {
+    name: text,
+    value: text,
+    present: bool,
+    seen: bool,
+}
+
+// Parsed value for a named flag.
+export record ParsedFlag {
+    name: text,
+    value: bool,
+}
+
+// Parsed value for a positional argument.
+export record ParsedPositional {
+    name: text,
+    value: text,
+}
+
+// Result returned by Command.parse().
+export record ParseResult {
+    values: [ParsedValue],
+    flags: [ParsedFlag],
+    positionals: [ParsedPositional],
+    help_requested: bool,
+    version_requested: bool,
+    output: text,
+
+    // Return the option value named `name`, if it was supplied or defaulted.
+    export fn text(name: text): maybe.Maybe<text> {
+        index = parsed_value_index(this.values, name);
+        if index < 0 {
+            return maybe.absent_text();
+        }
+
+        value = this.values[index];
+        if value.present {
+            return maybe.present(value.value);
+        }
+
+        return maybe.absent_text();
+    }
+
+    // Parse a named option as an int. Invalid or absent values return Absent.
+    export fn as_int(name: text): maybe.Maybe<int> {
+        value = this.text(name);
+        if value.has_value() {
+            return parse_int_value(value.value_or(""));
+        }
+
+        return maybe.absent_int();
+    }
+
+    // Parse a named option or flag as a bool.
+    export fn as_bool(name: text): maybe.Maybe<bool> {
+        flag_index = parsed_flag_index(this.flags, name);
+        if flag_index >= 0 {
+            return maybe.present(this.flags[flag_index].value);
+        }
+
+        value = this.text(name);
+        if value.has_value() {
+            return parse_bool_value(value.value_or(""));
+        }
+
+        return maybe.absent(false);
+    }
+
+    // Parse a named option as a real64. Invalid or absent values return Absent.
+    export fn as_real64(name: text): maybe.Maybe<real64> {
+        value = this.text(name);
+        if value.has_value() {
+            return parse_real64_value(value.value_or(""));
+        }
+
+        return maybe.absent(0.0);
+    }
+
+    // True when a flag was supplied.
+    export fn flag(name: text): bool {
+        index = parsed_flag_index(this.flags, name);
+        if index < 0 {
+            return false;
+        }
+
+        return this.flags[index].value;
+    }
+
+    // Positional value by index.
+    export fn positional(index: int): maybe.Maybe<text> {
+        if index < 0 {
+            return maybe.absent_text();
+        }
+
+        if index >= this.positionals.len() {
+            return maybe.absent_text();
+        }
+
+        return maybe.present(this.positionals[index].value);
+    }
+
+    // Positional value by declared name.
+    export fn positional(name: text): maybe.Maybe<text> {
+        for index = 0; index < this.positionals.len(); index = index + 1 {
+            value = this.positionals[index];
+            if value.name == name {
+                return maybe.present(value.value);
+            }
+        }
+
+        return maybe.absent_text();
+    }
+
+    // True when parsing stopped for --help or -h.
+    export fn is_help(): bool {
+        return this.help_requested;
+    }
+
+    // True when parsing stopped for --version.
+    export fn is_version(): bool {
+        return this.version_requested;
+    }
+
+    // Help or version text produced by --help / --version.
+    export fn output_text(): text {
+        return this.output;
+    }
+}
+
+// Builder for command-line parsers.
+export record Command {
+    name: text,
+    about_text: text,
+    version_text: text,
+    options: [OptionSpec],
+    flags: [FlagSpec],
+    positionals: [PositionalSpec],
+
+    // Set one-line command help.
+    export fn about(description: text): Command {
+        return Command {
+            name: this.name,
+            about_text: description,
+            version_text: this.version_text,
+            options: copy_options(this.options),
+            flags: copy_flags(this.flags),
+            positionals: copy_positionals(this.positionals),
+        };
+    }
+
+    // Set version output returned by --version.
+    export fn version(version_text: text): Command {
+        return Command {
+            name: this.name,
+            about_text: this.about_text,
+            version_text: version_text,
+            options: copy_options(this.options),
+            flags: copy_flags(this.flags),
+            positionals: copy_positionals(this.positionals),
+        };
+    }
+
+    // Add an option with a default value.
+    export fn option(name: text, short: text, description: text, default_value: text): Command {
+        options = copy_options(this.options);
+        options.push(OptionSpec {
+            name: name,
+            short: short,
+            about_text: description,
+            default_value: maybe.present(default_value),
+            required: false,
+        });
+
+        return Command {
+            name: this.name,
+            about_text: this.about_text,
+            version_text: this.version_text,
+            options: options,
+            flags: copy_flags(this.flags),
+            positionals: copy_positionals(this.positionals),
+        };
+    }
+
+    // Add a required option that has no default.
+    export fn required_option(name: text, short: text, description: text): Command {
+        options = copy_options(this.options);
+        options.push(OptionSpec {
+            name: name,
+            short: short,
+            about_text: description,
+            default_value: maybe.absent_text(),
+            required: true,
+        });
+
+        return Command {
+            name: this.name,
+            about_text: this.about_text,
+            version_text: this.version_text,
+            options: options,
+            flags: copy_flags(this.flags),
+            positionals: copy_positionals(this.positionals),
+        };
+    }
+
+    // Add a boolean flag.
+    export fn flag(name: text, short: text, description: text): Command {
+        flags = copy_flags(this.flags);
+        flags.push(FlagSpec { name: name, short: short, about_text: description });
+
+        return Command {
+            name: this.name,
+            about_text: this.about_text,
+            version_text: this.version_text,
+            options: copy_options(this.options),
+            flags: flags,
+            positionals: copy_positionals(this.positionals),
+        };
+    }
+
+    // Add a required positional argument.
+    export fn positional(name: text, description: text): Command {
+        positionals = copy_positionals(this.positionals);
+        positionals.push(PositionalSpec { name: name, about_text: description, required: true });
+
+        return Command {
+            name: this.name,
+            about_text: this.about_text,
+            version_text: this.version_text,
+            options: copy_options(this.options),
+            flags: copy_flags(this.flags),
+            positionals: positionals,
+        };
+    }
+
+    // Add an optional positional argument.
+    export fn optional_positional(name: text, description: text): Command {
+        positionals = copy_positionals(this.positionals);
+        positionals.push(PositionalSpec { name: name, about_text: description, required: false });
+
+        return Command {
+            name: this.name,
+            about_text: this.about_text,
+            version_text: this.version_text,
+            options: copy_options(this.options),
+            flags: copy_flags(this.flags),
+            positionals: positionals,
+        };
+    }
+
+    // Deterministic help text for this command.
+    export fn help_text(): text {
+        message = cat(this.name, "\n");
+        if this.about_text != "" {
+            message = cat3(message, this.about_text, "\n");
+        }
+
+        message = cat(message, "\n");
+        message = cat3(message, usage_text(this), "\n");
+
+        if this.positionals.len() > 0 {
+            message = cat(message, "\nArguments:\n");
+            for index = 0; index < this.positionals.len(); index = index + 1 {
+                spec = this.positionals[index];
+                message = cat5(message, "  ", spec.name, "  ", spec.about_text);
+                if !spec.required {
+                    message = cat(message, " [optional]");
+                }
+                message = cat(message, "\n");
+            }
+        }
+
+        message = cat(message, "\nOptions:\n");
+        for index = 0; index < this.options.len(); index = index + 1 {
+            spec = this.options[index];
+            message = cat(message, "  ");
+            if spec.short != "" {
+                message = cat4(message, "-", spec.short, ", ");
+            } else {
+                message = cat(message, "    ");
+            }
+            message = cat5(message, "--", spec.name, " <value>  ", spec.about_text);
+            if spec.default_value.has_value() {
+                message = cat4(message, " [default: ", spec.default_value.value_or(""), "]");
+            }
+            if spec.required {
+                message = cat(message, " [required]");
+            }
+            message = cat(message, "\n");
+        }
+
+        for index = 0; index < this.flags.len(); index = index + 1 {
+            spec = this.flags[index];
+            message = cat(message, "  ");
+            if spec.short != "" {
+                message = cat4(message, "-", spec.short, ", ");
+            } else {
+                message = cat(message, "    ");
+            }
+            message = cat5(message, "--", spec.name, "  ", spec.about_text);
+            message = cat(message, "\n");
+        }
+
+        message = cat(message, "  -h, --help  Show this help message\n");
+        if this.version_text != "" {
+            message = cat(message, "      --version  Show version information\n");
+        }
+
+        return message;
+    }
+
+    // Deterministic version text for this command.
+    export fn version_output(): text {
+        if this.version_text == "" {
+            return this.name;
+        }
+
+        return cat3(this.name, " ", this.version_text);
+    }
+
+    // Parse command-line arguments.
+    export fn parse(args: [text]): outcome.Outcome<ParseResult, text> {
+        values = default_values(this.options);
+        parsed_flags = default_flags(this.flags);
+        parsed_positionals: [ParsedPositional] = [];
+
+        arg_index = 0;
+        positional_index = 0;
+        while arg_index < args.len() {
+            arg = args[arg_index];
+
+            if arg == "--help" || arg == "-h" {
+                return outcome.done(ParseResult {
+                    values: values,
+                    flags: parsed_flags,
+                    positionals: parsed_positionals,
+                    help_requested: true,
+                    version_requested: false,
+                    output: this.help_text(),
+                }, "");
+            }
+
+            if arg == "--version" {
+                return outcome.done(ParseResult {
+                    values: values,
+                    flags: parsed_flags,
+                    positionals: parsed_positionals,
+                    help_requested: false,
+                    version_requested: true,
+                    output: this.version_output(),
+                }, "");
+            }
+
+            if arg == "--" {
+                arg_index = arg_index + 1;
+                while arg_index < args.len() {
+                    positional = add_positional(this.positionals, parsed_positionals, positional_index, args[arg_index]);
+                    if positional.is_failed() {
+                        return outcome.failed(empty_parse_result(), positional.failure_or(""));
+                    }
+
+                    parsed_positionals = positional.value_or(parsed_positionals);
+                    positional_index = positional_index + 1;
+                    arg_index = arg_index + 1;
+                }
+                break;
+            }
+
+            if arg.starts_with("--") {
+                raw = arg[2:];
+                equal_index = index_of(raw, '=');
+                name = raw;
+                inline_value = false;
+                option_value = "";
+                if equal_index >= 0 {
+                    name = raw[:equal_index];
+                    option_value = raw[equal_index + 1:];
+                    inline_value = true;
+                }
+
+                flag_index = flag_spec_index(this.flags, name);
+                if flag_index >= 0 {
+                    if inline_value {
+                        return outcome.failed(empty_parse_result(), cat3("flag '--", name, "' does not take a value"));
+                    }
+
+                    parsed_flags[flag_index] = ParsedFlag { name: parsed_flags[flag_index].name, value: true };
+                    arg_index = arg_index + 1;
+                    continue;
+                }
+
+                option_index = option_spec_index(this.options, name);
+                if option_index >= 0 {
+                    if !inline_value {
+                        if arg_index + 1 >= args.len() {
+                            return outcome.failed(empty_parse_result(), cat3("missing value for option '--", name, "'"));
+                        }
+
+                        arg_index = arg_index + 1;
+                        option_value = args[arg_index];
+                    }
+
+                    values[option_index] = ParsedValue {
+                        name: values[option_index].name,
+                        value: option_value,
+                        present: true,
+                        seen: true,
+                    };
+                    arg_index = arg_index + 1;
+                    continue;
+                }
+
+                return outcome.failed(empty_parse_result(), cat3("unknown option '--", name, "'"));
+            }
+
+            if arg.starts_with("-") && arg.len() > 1 {
+                short = arg[1:];
+                if short.len() != 1 {
+                    return outcome.failed(empty_parse_result(), cat3("unknown short option '", arg, "'"));
+                }
+
+                flag_index = flag_spec_short_index(this.flags, short);
+                if flag_index >= 0 {
+                    parsed_flags[flag_index] = ParsedFlag { name: parsed_flags[flag_index].name, value: true };
+                    arg_index = arg_index + 1;
+                    continue;
+                }
+
+                option_index = option_spec_short_index(this.options, short);
+                if option_index >= 0 {
+                    if arg_index + 1 >= args.len() {
+                        return outcome.failed(empty_parse_result(), cat3("missing value for option '-", short, "'"));
+                    }
+
+                    arg_index = arg_index + 1;
+                    values[option_index] = ParsedValue {
+                        name: values[option_index].name,
+                        value: args[arg_index],
+                        present: true,
+                        seen: true,
+                    };
+                    arg_index = arg_index + 1;
+                    continue;
+                }
+
+                return outcome.failed(empty_parse_result(), cat3("unknown short option '-", short, "'"));
+            }
+
+            positional = add_positional(this.positionals, parsed_positionals, positional_index, arg);
+            if positional.is_failed() {
+                return outcome.failed(empty_parse_result(), positional.failure_or(""));
+            }
+
+            parsed_positionals = positional.value_or(parsed_positionals);
+            positional_index = positional_index + 1;
+            arg_index = arg_index + 1;
+        }
+
+        for index = 0; index < this.options.len(); index = index + 1 {
+            spec = this.options[index];
+            value = values[index];
+            if spec.required && !value.seen {
+                return outcome.failed(empty_parse_result(), cat3("missing required option '--", spec.name, "'"));
+            }
+        }
+
+        for index = parsed_positionals.len(); index < this.positionals.len(); index = index + 1 {
+            spec = this.positionals[index];
+            if spec.required {
+                return outcome.failed(empty_parse_result(), cat3("missing positional argument '", spec.name, "'"));
+            }
+        }
+
+        return outcome.done(ParseResult {
+            values: values,
+            flags: parsed_flags,
+            positionals: parsed_positionals,
+            help_requested: false,
+            version_requested: false,
+            output: "",
+        }, "");
+    }
+}
+
+// Start a builder for a named command.
+export fn command(name: text): Command {
+    return Command {
+        name: name,
+        about_text: "",
+        version_text: "",
+        options: [],
+        flags: [],
+        positionals: [],
+    };
+}
+
+// Empty parse result useful as a value_or fallback.
+export fn empty_result(): ParseResult {
+    return empty_parse_result();
+}
+
+fn copy_options(values: [OptionSpec]): [OptionSpec] {
+    result: [OptionSpec] = [];
+    for index = 0; index < values.len(); index = index + 1 {
+        result.push(values[index]);
+    }
+
+    return result;
+}
+
+fn copy_flags(values: [FlagSpec]): [FlagSpec] {
+    result: [FlagSpec] = [];
+    for index = 0; index < values.len(); index = index + 1 {
+        result.push(values[index]);
+    }
+
+    return result;
+}
+
+fn copy_positionals(values: [PositionalSpec]): [PositionalSpec] {
+    result: [PositionalSpec] = [];
+    for index = 0; index < values.len(); index = index + 1 {
+        result.push(values[index]);
+    }
+
+    return result;
+}
+
+fn default_values(options: [OptionSpec]): [ParsedValue] {
+    values: [ParsedValue] = [];
+    for index = 0; index < options.len(); index = index + 1 {
+        spec = options[index];
+        present = spec.default_value.has_value();
+        values.push(ParsedValue {
+            name: spec.name,
+            value: spec.default_value.value_or(""),
+            present: present,
+            seen: false,
+        });
+    }
+
+    return values;
+}
+
+fn default_flags(flags: [FlagSpec]): [ParsedFlag] {
+    values: [ParsedFlag] = [];
+    for index = 0; index < flags.len(); index = index + 1 {
+        values.push(ParsedFlag { name: flags[index].name, value: false });
+    }
+
+    return values;
+}
+
+fn empty_parse_result(): ParseResult {
+    return ParseResult {
+        values: [],
+        flags: [],
+        positionals: [],
+        help_requested: false,
+        version_requested: false,
+        output: "",
+    };
+}
+
+fn usage_text(command: Command): text {
+    message = cat("Usage:\n  ", command.name);
+    if command.options.len() > 0 || command.flags.len() > 0 || command.version_text != "" {
+        message = cat(message, " [options]");
+    }
+
+    for index = 0; index < command.positionals.len(); index = index + 1 {
+        spec = command.positionals[index];
+        if spec.required {
+            message = cat4(message, " <", spec.name, ">");
+        } else {
+            message = cat4(message, " [", spec.name, "]");
+        }
+    }
+
+    return message;
+}
+
+fn add_positional(specs: [PositionalSpec], values: [ParsedPositional], index: int, value: text):
+    outcome.Outcome<[ParsedPositional], text> {
+    if index >= specs.len() {
+        return outcome.failed(values, cat3("unexpected positional argument '", value, "'"));
+    }
+
+    result: [ParsedPositional] = [];
+    for item = 0; item < values.len(); item = item + 1 {
+        result.push(values[item]);
+    }
+
+    result.push(ParsedPositional { name: specs[index].name, value: value });
+    return outcome.done(result, "");
+}
+
+fn option_spec_index(options: [OptionSpec], name: text): int {
+    for index = 0; index < options.len(); index = index + 1 {
+        if options[index].name == name {
+            return index;
+        }
+    }
+
+    return 0 - 1;
+}
+
+fn option_spec_short_index(options: [OptionSpec], short: text): int {
+    for index = 0; index < options.len(); index = index + 1 {
+        if options[index].short == short && short != "" {
+            return index;
+        }
+    }
+
+    return 0 - 1;
+}
+
+fn flag_spec_index(flags: [FlagSpec], name: text): int {
+    for index = 0; index < flags.len(); index = index + 1 {
+        if flags[index].name == name {
+            return index;
+        }
+    }
+
+    return 0 - 1;
+}
+
+fn flag_spec_short_index(flags: [FlagSpec], short: text): int {
+    for index = 0; index < flags.len(); index = index + 1 {
+        if flags[index].short == short && short != "" {
+            return index;
+        }
+    }
+
+    return 0 - 1;
+}
+
+fn parsed_value_index(values: [ParsedValue], name: text): int {
+    for index = 0; index < values.len(); index = index + 1 {
+        if values[index].name == name {
+            return index;
+        }
+    }
+
+    return 0 - 1;
+}
+
+fn parsed_flag_index(flags: [ParsedFlag], name: text): int {
+    for index = 0; index < flags.len(); index = index + 1 {
+        if flags[index].name == name {
+            return index;
+        }
+    }
+
+    return 0 - 1;
+}
+
+fn index_of(value: text, needle: glyph): int {
+    for index = 0; index < value.len(); index = index + 1 {
+        if value[index] == needle {
+            return index;
+        }
+    }
+
+    return 0 - 1;
+}
+
+fn parse_int_value(value: text): maybe.Maybe<int> {
+    if value.len() == 0 {
+        return maybe.absent_int();
+    }
+
+    index = 0;
+    negative = false;
+    if value[0] == '-' {
+        negative = true;
+        index = 1;
+    } else {
+        if value[0] == '+' {
+            index = 1;
+        }
+    }
+
+    result = 0;
+    seen_digit = false;
+    while index < value.len() {
+        digit = value[index];
+        if !text.is_digit(digit) {
+            return maybe.absent_int();
+        }
+
+        result = result * 10 + ((digit to int) - ('0' to int));
+        seen_digit = true;
+        index = index + 1;
+    }
+
+    if !seen_digit {
+        return maybe.absent_int();
+    }
+
+    if negative {
+        return maybe.present(0 - result);
+    }
+
+    return maybe.present(result);
+}
+
+fn parse_bool_value(value: text): maybe.Maybe<bool> {
+    if value == "true" || value == "1" || value == "yes" || value == "on" {
+        return maybe.present(true);
+    }
+
+    if value == "false" || value == "0" || value == "no" || value == "off" {
+        return maybe.present(false);
+    }
+
+    return maybe.absent(false);
+}
+
+fn parse_real64_value(value: text): maybe.Maybe<real64> {
+    n = value.len();
+    if n == 0 {
+        return maybe.absent(0.0);
+    }
+
+    index = 0;
+    sign: real64 = 1.0;
+    if value[0] == '-' {
+        sign = 0.0 - 1.0;
+        index = 1;
+    } else {
+        if value[0] == '+' {
+            index = 1;
+        }
+    }
+
+    integer: real64 = 0.0;
+    seen_digit = false;
+    while index < n && value[index] != '.' {
+        digit = value[index];
+        if !text.is_digit(digit) {
+            return maybe.absent(0.0);
+        }
+
+        integer = integer * 10.0 + ((digit to int) - ('0' to int)) to real64;
+        seen_digit = true;
+        index = index + 1;
+    }
+
+    fraction: real64 = 0.0;
+    scale: real64 = 1.0;
+    if index < n && value[index] == '.' {
+        index = index + 1;
+        while index < n {
+            digit = value[index];
+            if !text.is_digit(digit) {
+                return maybe.absent(0.0);
+            }
+
+            scale = scale / 10.0;
+            fraction = fraction + (((digit to int) - ('0' to int)) to real64) * scale;
+            seen_digit = true;
+            index = index + 1;
+        }
+    }
+
+    if !seen_digit {
+        return maybe.absent(0.0);
+    }
+
+    return maybe.present(sign * (integer + fraction));
+}
+
+fn cat(left: text, right: text): text {
+    return fmt.format("{}{}", left, right);
+}
+
+fn cat3(first: text, second: text, third: text): text {
+    return fmt.format("{}{}{}", first, second, third);
+}
+
+fn cat4(first: text, second: text, third: text, fourth: text): text {
+    return fmt.format("{}{}{}{}", first, second, third, fourth);
+}
+
+fn cat5(first: text, second: text, third: text, fourth: text, fifth: text): text {
+    return fmt.format("{}{}{}{}{}", first, second, third, fourth, fifth);
+}

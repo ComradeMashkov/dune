@@ -1,0 +1,44 @@
+import cli;
+import io;
+
+app = cli.command("demo")
+    .about("Simple demo")
+    .version("1.2.3")
+    .option("name", "n", "Name", "world")
+    .option("count", "c", "Count", "1")
+    .option("scale", "", "Scale", "1.0")
+    .option("dry", "", "Dry run", "false")
+    .flag("verbose", "v", "Verbose output")
+    .positional("input", "Input file");
+
+parsed = app.parse(["--name", "dune", "-v", "--count", "3", "--scale=2.5", "--dry", "true", "input.txt"]);
+io.println(parsed.is_done());
+
+matches = parsed.value_or(cli.empty_result());
+io.println(matches.text("name").value_or(""));
+io.println(matches.flag("verbose"));
+io.println(matches.positional("input").value_or(""));
+io.println(matches.as_int("count").value_or(0));
+io.println(matches.as_real64("scale").value_or(0.0));
+io.println(matches.as_bool("dry").value_or(false));
+
+defaults = app.parse(["input.txt"]).value_or(cli.empty_result());
+io.println(defaults.text("name").value_or(""));
+io.println(defaults.flag("verbose"));
+
+missing_positional = app.parse(["--name", "dune"]);
+io.println(missing_positional.is_failed());
+io.println(missing_positional.failure_or(""));
+
+required = cli.command("deploy").required_option("config", "c", "Config file");
+empty_args: [text] = [];
+missing_required = required.parse(empty_args);
+io.println(missing_required.failure_or(""));
+
+help = app.parse(["--help"]).value_or(cli.empty_result());
+io.println(help.is_help());
+io.println(help.output_text());
+
+version = app.parse(["--version"]).value_or(cli.empty_result());
+io.println(version.is_version());
+io.println(version.output_text());
