@@ -7,6 +7,21 @@ few free predicate functions on `glyph` (a single character). Several
 methods simply forward to the VM's native text operations of the same name;
 others are written in Dune on top of indexing and slicing.
 
+`text` adds string-style helpers to the built-in `text` type and predicate helpers for `glyph` values. Some methods forward to VM text operations, while others are implemented in Dune using indexing and slicing.
+
+Use it for length checks, substring tests, slicing, trimming whitespace, glyph search/counting, and ASCII character classification. Importing the module enables receiver-style calls such as `value.trim()` and `value.starts_with(...)`.
+
+```dn
+import text;
+
+raw = "  dune language  ";
+clean = raw.trim();
+
+print(clean.starts_with("dune"));
+print(clean.index_of('g'));
+print(text.is_alpha(clean.char_at(0)));
+```
+
 > Auto-generated from `stdlib/text.dn` by `tools/gen_stdlib_docs.py`.
 
 ### `method text.len(): int`

@@ -22,6 +22,7 @@ import re
 REPO = pathlib.Path(__file__).resolve().parent.parent
 STDLIB = REPO / "stdlib"
 OUT = REPO / "docs" / "src" / "stdlib"
+DESCRIPTIONS = REPO / "docs" / "stdlib_descriptions"
 
 DECL_RE = re.compile(r"^(?:export\s+)?(?:foreign\s+)?(?:static\s+)?(fn|const|record|choice|type|method)\b")
 FIELD_RE = re.compile(r"^export\s+[A-Za-z_]\w*\s*:")
@@ -78,6 +79,11 @@ def first_line(text: str) -> str:
         if line.strip():
             return line.strip()
     return ""
+
+
+def load_description(stem: str) -> str:
+    path = DESCRIPTIONS / f"{stem}.md"
+    return path.read_text().strip() if path.exists() else ""
 
 
 def parse_module(path: pathlib.Path) -> tuple[str, list[dict]]:
@@ -145,6 +151,9 @@ def render(stem: str, module_doc: str, entries: list[dict]) -> str:
         out += [blurb, ""]
     if module_doc:
         out += [module_doc, ""]
+    description = load_description(stem)
+    if description:
+        out += [description, ""]
     out += [f"> Auto-generated from `stdlib/{stem}.dn` by `tools/gen_stdlib_docs.py`.", ""]
 
     if not entries:
