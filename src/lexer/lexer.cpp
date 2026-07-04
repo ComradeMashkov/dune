@@ -405,6 +405,10 @@ Token Lexer::identifier(std::size_t start, std::size_t line, std::size_t column)
         return Token{TokenType::export_keyword, lexeme, line, column};
     }
 
+    if (lexeme == "foreknown") {
+        return Token{TokenType::foreknown_keyword, lexeme, line, column};
+    }
+
     if (lexeme == "foreign") {
         return Token{TokenType::foreign_keyword, lexeme, line, column};
     }

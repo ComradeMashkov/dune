@@ -464,6 +464,38 @@ int main() {
                            }) &&
              passed;
 
+    passed = expect_tokens("export foreknown const KB: int = 1024; foreknown fn scale(n: int): int { return n * KB; }",
+                           {
+                               {export_keyword, "export"},
+                               {foreknown_keyword, "foreknown"},
+                               {const_keyword, "const"},
+                               {identifier, "KB"},
+                               {colon, ":"},
+                               {int_keyword, "int"},
+                               {equal, "="},
+                               {number, "1024"},
+                               {semicolon, ";"},
+                               {foreknown_keyword, "foreknown"},
+                               {fn_keyword, "fn"},
+                               {identifier, "scale"},
+                               {left_paren, "("},
+                               {identifier, "n"},
+                               {colon, ":"},
+                               {int_keyword, "int"},
+                               {right_paren, ")"},
+                               {colon, ":"},
+                               {int_keyword, "int"},
+                               {left_brace, "{"},
+                               {return_keyword, "return"},
+                               {identifier, "n"},
+                               {star, "*"},
+                               {identifier, "KB"},
+                               {semicolon, ";"},
+                               {right_brace, "}"},
+                               {eof, ""},
+                           }) &&
+             passed;
+
     passed = expect_tokens("done: bool = !false && true || (17 % 5 == 2); x: real64 = 17 to real64;",
                            {
                                {identifier, "done"},

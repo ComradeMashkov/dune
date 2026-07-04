@@ -23,6 +23,7 @@ private:
     void collect_enums(const std::unordered_map<std::string, TypeChecker::EnumDefinition>& enums);
     void collect_type_aliases(const std::vector<Statement>& statements);
     void collect_global_constants(const std::vector<Statement>& statements);
+    void evaluate_foreknown_constants();
     void compile_function(const Statement& statement);
     void compile_test(const Statement& statement);
     void compile_global_constants();
@@ -91,6 +92,8 @@ private:
     std::unordered_map<std::string, Type> local_types_;
     std::vector<std::vector<ScopedLocal>> local_scopes_;
     std::unordered_map<std::string, std::size_t> functions_;
+    std::unordered_map<std::string, const Statement*> foreknown_functions_;
+    std::unordered_map<std::string, Value> foreknown_values_;
     std::unordered_map<std::string, StructLayout> structs_;
     std::unordered_set<std::string> enums_;
     std::unordered_map<std::string, Type> type_aliases_;

@@ -868,6 +868,26 @@ int main() {
                                    "'?' can only be used inside a function", "expected '?' at top-level error") &&
              passed;
 
+    // --- Foreknown compile-time declarations --------------------------------
+    passed = expect_valid("foreknown const KB: int = 1024; "
+                          "foreknown fn scale(n: int): int { return n * KB; } "
+                          "foreknown const SIZE: int = scale(4); io.println(SIZE);",
+                          "expected foreknown constants and function to type check") &&
+             passed;
+    passed =
+        expect_error_contains("fn runtime_value(): int { return 1; } "
+                              "foreknown const BAD: int = runtime_value();",
+                              "function 'runtime_value' is not foreknown", "expected non-foreknown call diagnostic") &&
+        passed;
+    passed = expect_error_contains("fn side_effect(): int { return 1; } "
+                                   "foreknown fn bad(): int { return side_effect(); }",
+                                   "is not foreknown", "expected foreknown body diagnostic") &&
+             passed;
+    passed = expect_error_contains("foreknown fn identity<T>(value: T): T { return value; }",
+                                   "generic foreknown functions are not supported yet",
+                                   "expected generic foreknown diagnostic") &&
+             passed;
+
     passed = expect_valid("import fs; import process; import csv; "
                           "r = fs.read_text(\"a.txt\"); io.println(r.is_done()); "
                           "io.println(process.env_or(\"HOME\", \"none\")); "
