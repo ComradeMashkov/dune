@@ -49,4 +49,3 @@
 - [Writing tests](guides/testing.md)
 - [Editor integration](guides/editor.md)
 - [Examples](guides/examples.md)
-- [Plot gallery](guides/plot_gallery.md)
