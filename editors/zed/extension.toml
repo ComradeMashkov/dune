@@ -8,7 +8,7 @@ repository = "https://github.com/ComradeMashkov/dune"
 
 [grammars.dune]
 repository = "https://github.com/ComradeMashkov/dune"
-rev = "f98d3d967772aba809fee04cc4aada11052c5b0e"
+rev = "d75cd4d6d43798f3273040405206fb2787bd85f4"
 
 [language_servers.dune-lsp]
 name = "Dune LSP"
