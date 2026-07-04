@@ -83,6 +83,8 @@ export record ParseResult {
     }
 
     // Parse a named option or flag as a bool.
+    // Read an option's value parsed as a bool ("true"/"false"), or absent.
+    // example: cli.command("t").option("wide", "w", "", "false").parse(["--wide", "true"]).value_or(cli.empty_result()).as_bool("wide").value_or(false)  // 1
     export fn as_bool(name: text): maybe.Maybe<bool> {
         flag_index = parsed_flag_index(this.flags, name);
         if flag_index >= 0 {
@@ -98,6 +100,8 @@ export record ParseResult {
     }
 
     // Parse a named option as a real64. Invalid or absent values return Absent.
+    // Read an option's value parsed as a real64, or absent.
+    // example: cli.command("t").option("ratio", "r", "", "1.0").parse(["--ratio", "2.5"]).value_or(cli.empty_result()).as_real64("ratio").value_or(0.0)  // 2.5
     export fn as_real64(name: text): maybe.Maybe<real64> {
         value = this.text(name);
         if value.has_value() {
@@ -119,6 +123,8 @@ export record ParseResult {
     }
 
     // Positional value by index.
+    // Read a positional argument by zero-based position, or absent.
+    // example: cli.command("t").positional("path", "").parse(["src"]).value_or(cli.empty_result()).positional(0).value_or("?")  // src
     export fn positional(index: int): maybe.Maybe<text> {
         if index < 0 {
             return maybe.absent_text();
@@ -132,6 +138,8 @@ export record ParseResult {
     }
 
     // Positional value by declared name.
+    // Read a positional argument by its declared name, or absent.
+    // example: cli.command("t").positional("path", "").parse(["src"]).value_or(cli.empty_result()).positional("path").value_or("?")  // src
     export fn positional(name: text): maybe.Maybe<text> {
         for index = 0; index < this.positionals.len(); index = index + 1 {
             value = this.positionals[index];
@@ -144,16 +152,22 @@ export record ParseResult {
     }
 
     // True when parsing stopped for --help or -h.
+    // True when parsing saw `--help`/`-h`; print `output_text()` and exit.
+    // example: cli.command("t").parse(["--help"]).value_or(cli.empty_result()).is_help()  // 1
     export fn is_help(): bool {
         return this.help_requested;
     }
 
     // True when parsing stopped for --version.
+    // True when parsing saw `--version`/`-V`; print `output_text()` and exit.
+    // example: cli.command("t").version("1.0").parse(["--version"]).value_or(cli.empty_result()).is_version()  // 1
     export fn is_version(): bool {
         return this.version_requested;
     }
 
     // Help or version text produced by --help / --version.
+    // The help or version text to print when `is_help()`/`is_version()` is true.
+    // example: cli.command("greet").version("1.0.0").parse(["--version"]).value_or(cli.empty_result()).output_text()  // greet 1.0.0
     export fn output_text(): text {
         return this.output;
     }
@@ -168,7 +182,8 @@ export record Command {
     flags: [FlagSpec],
     positionals: [PositionalSpec],
 
-    // Set one-line command help.
+    // Set the one-line command summary shown at the top of `--help`.
+    // example: cli.command("greet").about("Greet someone by name")
     export fn about(description: text): Command {
         return Command {
             name: this.name,
@@ -180,7 +195,8 @@ export record Command {
         };
     }
 
-    // Set version output returned by --version.
+    // Set the version string; `--version` prints "<name> <version>".
+    // example: cli.command("greet").version("1.0.0").version_output()  // greet 1.0.0
     export fn version(version_text: text): Command {
         return Command {
             name: this.name,
@@ -251,7 +267,8 @@ export record Command {
         };
     }
 
-    // Add a required positional argument.
+    // Add a required positional argument, read back by name or index.
+    // example: cli.command("greet").positional("count", "How many times to greet")
     export fn positional(name: text, description: text): Command {
         positionals = copy_positionals(this.positionals);
         positionals.push(PositionalSpec { name: name, about_text: description, required: true });
@@ -266,7 +283,8 @@ export record Command {
         };
     }
 
-    // Add an optional positional argument.
+    // Add an optional positional argument (no parse error when omitted).
+    // example: cli.command("greet").optional_positional("suffix", "Optional suffix")
     export fn optional_positional(name: text, description: text): Command {
         positionals = copy_positionals(this.positionals);
         positionals.push(PositionalSpec { name: name, about_text: description, required: false });
