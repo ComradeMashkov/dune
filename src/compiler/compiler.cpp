@@ -938,9 +938,9 @@ void Compiler::compile_printable_argument(const Expression& argument) {
     compile_expression(argument);
 }
 
-// Lower the low-level OS intrinsics (see TypeChecker::is_io_builtin) to their
-// dedicated opcodes. Returns false for any non-intrinsic call so the normal
-// resolved-call path handles it.
+// Lower the low-level stdlib intrinsics (see TypeChecker::is_io_builtin) to
+// their dedicated opcodes. Returns false for any non-intrinsic call so the
+// normal resolved-call path handles it.
 bool Compiler::compile_io_builtin_expression(const Expression& expression) {
     OpCode op = OpCode::halt;
     if (expression.lexeme == "__read_file") {
@@ -953,6 +953,10 @@ bool Compiler::compile_io_builtin_expression(const Expression& expression) {
         op = OpCode::process_args;
     } else if (expression.lexeme == "__process_cwd") {
         op = OpCode::process_cwd;
+    } else if (expression.lexeme == "__plot_backend_get") {
+        op = OpCode::plot_backend_get;
+    } else if (expression.lexeme == "__plot_backend_set") {
+        op = OpCode::plot_backend_set;
     } else {
         return false;
     }

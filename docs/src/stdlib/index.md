@@ -14,6 +14,7 @@ The standard library is ordinary Dune loaded from `.dn` files. Each page below i
 - [`matrix`](matrix.md) — A small NumPy-style foundation: vectors and matrices.
 - [`maybe`](maybe.md) — The optional `Maybe<T>` choice and helpers.
 - [`outcome`](outcome.md) — The result-style `Outcome<T, E>` choice and helpers.
+- [`plot`](plot.md) — Deterministic SVG/HTML chart rendering.
 - [`process`](process.md) — Process access: arguments and environment.
 - [`random`](random.md) — A small deterministic pseudo-random generator.
 - [`runtime`](runtime.md) — Runtime helpers such as `panic`.

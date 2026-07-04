@@ -567,6 +567,16 @@ add_test(
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
 )
 
+add_test(
+    NAME cli_plot_svg
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/stdlib/plot_svg.dn
+        -D EXPECTED_OUTPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/golden/plot_svg.out
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
 # First-class function values / higher-order array pipeline. The native LLVM
 # backend does not support function values yet (it reports a clear error); this
 # runs on the canonical VM only, with a native follow-up tracked separately.

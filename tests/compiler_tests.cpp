@@ -660,6 +660,52 @@ bool compiles_matrix_module_as_dune_code() {
     return passed;
 }
 
+bool compiles_plot_module_as_dune_code() {
+    const dune::Bytecode bytecode = compile_source("import plot; import text; "
+                                                   "chart = plot.line([1.0, 2.0], [3.0, 4.0]).title(\"demo\"); "
+                                                   "plot.use_backend(\"svg\"); "
+                                                   "print(plot.backend()); "
+                                                   "print(plot.svg(chart).contains(\"<svg\"));");
+
+    bool saw_line = false;
+    bool saw_render_svg = false;
+    bool saw_make_record = false;
+    bool saw_field_load = false;
+    bool saw_backend_get = false;
+    bool saw_backend_set = false;
+    bool saw_plot_extern = false;
+
+    auto inspect = [&](const std::vector<dune::Instruction>& instructions) {
+        for (const dune::Instruction& instruction : instructions) {
+            saw_make_record = saw_make_record || instruction.op == dune::OpCode::make_record;
+            saw_field_load = saw_field_load || instruction.op == dune::OpCode::load_field;
+            saw_backend_get = saw_backend_get || instruction.op == dune::OpCode::plot_backend_get;
+            saw_backend_set = saw_backend_set || instruction.op == dune::OpCode::plot_backend_set;
+        }
+    };
+
+    inspect(bytecode.instructions);
+    for (const dune::Bytecode::Function& function : bytecode.functions) {
+        if (function.name.rfind("plot.", 0) == 0 && function.is_extern) {
+            saw_plot_extern = true;
+        }
+
+        saw_line = saw_line || (function.name == "plot.line" && !function.is_extern);
+        saw_render_svg = saw_render_svg || (function.name == "plot.render_svg" && !function.is_extern);
+        inspect(function.instructions);
+    }
+
+    bool passed = true;
+    passed = expect(saw_line, "expected plot.line Dune function") && passed;
+    passed = expect(saw_render_svg, "expected plot.render_svg Dune function") && passed;
+    passed = expect(!saw_plot_extern, "expected no plot foreign functions") && passed;
+    passed = expect(saw_make_record, "expected plot record construction") && passed;
+    passed = expect(saw_field_load, "expected plot field access") && passed;
+    passed = expect(saw_backend_get, "expected plot backend getter opcode") && passed;
+    passed = expect(saw_backend_set, "expected plot backend setter opcode") && passed;
+    return passed;
+}
+
 // The stdlib is self-hosted in pure Dune: our own modules must not lean on the
 // C/C++ FFI. The single sanctioned native primitive is `runtime.panic`
 // ("dune_panic"), which aborts execution and cannot be expressed in Dune. This
@@ -668,7 +714,7 @@ bool stdlib_stays_pure_dune_except_panic() {
     const std::string source = "import math; import random; import matrix; import autograd; "
                                "import dict; import set; import array; import text; "
                                "import collections; import maybe; import outcome; "
-                               "import fs; import process; import csv; import display; "
+                               "import fs; import process; import csv; import display; import plot; "
                                "import assert; import runtime; print(0);";
 
     dune::Lexer lexer(source);
@@ -760,6 +806,7 @@ int main() {
     passed = compiles_tuples_and_destructuring() && passed;
     passed = compiles_autograd_module_as_dune_code() && passed;
     passed = compiles_matrix_module_as_dune_code() && passed;
+    passed = compiles_plot_module_as_dune_code() && passed;
     passed = stdlib_stays_pure_dune_except_panic() && passed;
     passed = rejects_local_module_shadowing_stdlib() && passed;
 

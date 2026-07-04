@@ -1885,19 +1885,18 @@ Type TypeChecker::check_format_call_expression(const Expression& expression) {
     return make_type(ValueType::text_type);
 }
 
-// Low-level OS intrinsics. These are the only compiler-known primitives behind
-// the pure-Dune `fs`/`process` stdlib modules; they lower to dedicated VM
-// opcodes instead of C/C++ foreign functions. Each returns primitives (a tuple
-// or array) so the Dune wrappers can shape the result into Outcome/Maybe.
+// Low-level stdlib intrinsics. These are the compiler-known primitives behind
+// pure-Dune wrappers such as `fs`, `process`, and `plot`; they lower to
+// dedicated VM opcodes instead of C/C++ foreign functions.
 bool TypeChecker::is_io_builtin(const std::string& name) {
     return name == "__read_file" || name == "__write_file" || name == "__env_get" || name == "__process_args" ||
-           name == "__process_cwd";
+           name == "__process_cwd" || name == "__plot_backend_get" || name == "__plot_backend_set";
 }
 
 Type TypeChecker::check_io_builtin_call(const Expression& expression) {
     const std::string& name = expression.lexeme;
     std::size_t expected_arguments = 0;
-    if (name == "__read_file" || name == "__env_get") {
+    if (name == "__read_file" || name == "__env_get" || name == "__plot_backend_set") {
         expected_arguments = 1;
     } else if (name == "__write_file") {
         expected_arguments = 2;
@@ -1915,6 +1914,14 @@ Type TypeChecker::check_io_builtin_call(const Expression& expression) {
 
     if (name == "__process_args") {
         return make_array_type(make_type(ValueType::text_type));
+    }
+
+    if (name == "__plot_backend_get") {
+        return make_type(ValueType::text_type);
+    }
+
+    if (name == "__plot_backend_set") {
+        return make_type(ValueType::unit_type);
     }
 
     return make_tuple_type({make_type(ValueType::bool_type), make_type(ValueType::text_type)});

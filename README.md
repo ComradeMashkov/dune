@@ -175,7 +175,7 @@ Modules are loaded from `.dn` files. The standard library currently includes
 `stdlib/outcome.dn`, `stdlib/assert.dn`, `stdlib/collections.dn`,
 `stdlib/dict.dn`, `stdlib/set.dn`, `stdlib/random.dn`, `stdlib/runtime.dn`,
 `stdlib/autograd.dn`, `stdlib/matrix.dn`, `stdlib/process.dn`, `stdlib/fs.dn`,
-`stdlib/csv.dn`, and `stdlib/display.dn`. Low-level
+`stdlib/csv.dn`, `stdlib/display.dn`, and `stdlib/plot.dn`. Low-level
 array and text operations such as `len`, `push`, indexing, and slicing remain
 runtime primitives; higher-level helpers are ordinary Dune functions in the
 standard library. Operating-system access (reading and writing files,
@@ -904,6 +904,7 @@ Standard library receiver methods are enabled by importing their module:
 - `import fs;` exposes `read_text(path)` and `write_text(path, content)`, each returning an `Outcome`
 - `import csv;` reads and writes comma-separated data: `parse_rows(content)` and `read_rows(path)` yield text grids, `read_matrix_real64(path)`/`read_matrix_int(path)` parse a rectangular file straight into a `matrix.Matrix<T>` (trimming cells and failing on ragged rows or non-numeric data), and `write_rows(path, rows)`/`write_matrix_real64(path, data)` serialize back out — every path-based call returns an `Outcome`
 - `import display;` exposes the `Display` contract and `show(value)` for rendering records to `text`
+- `import plot;` builds deterministic SVG/HTML line, scatter, bar, and histogram charts with `svg()`, `html()`, `save_svg()`, `save_html()`, and headless-safe `show()`
 
 Associative collections and deterministic randomness:
 
@@ -954,6 +955,25 @@ print(fs.read_text("greeting.txt").value_or("<missing>"));
 
 File and OS access runs on the bytecode VM (`dune <file>`); the best-effort
 native backend does not support it yet and reports a clear error.
+
+Plotting starts with pure Dune chart specs and deterministic renderers. The
+default display backend is `none`, so `plot.show(chart)` returns a clear
+`Outcome` failure instead of trying to open a GUI in headless runs. Set
+`plot.use_backend("svg")`, `plot.use_backend("html")`, or
+`DUNE_PLOT_BACKEND=svg|html|none` to choose display-capture behavior.
+
+```dn
+import plot;
+
+chart = plot.line([1.0, 2.0, 3.0], [2.0, 4.0, 8.0])
+    .title("growth")
+    .x_label("x")
+    .y_label("value");
+
+plot.save_svg(chart, "growth.svg");
+plot.use_backend("svg");
+print(plot.show(chart).is_done());
+```
 
 ## Run
 

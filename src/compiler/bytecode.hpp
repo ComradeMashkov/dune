@@ -98,6 +98,8 @@ enum class OpCode {
     env_get,
     process_args,
     process_cwd,
+    plot_backend_get,
+    plot_backend_set,
     print,
     print_format,
     format_text,

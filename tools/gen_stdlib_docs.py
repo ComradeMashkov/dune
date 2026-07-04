@@ -44,6 +44,7 @@ MODULE_BLURBS = {
     "process": "Process access: arguments and environment.",
     "csv": "CSV parsing and numeric-matrix I/O.",
     "display": "The `Display` contract and `show` helper.",
+    "plot": "Deterministic SVG/HTML chart rendering.",
     "collections": "Shared collection utilities.",
     "assert": "Assertion helpers for tests.",
 }

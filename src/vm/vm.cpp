@@ -1214,6 +1214,21 @@ void VirtualMachine::run(std::ostream& output) {
             ++frame.ip;
             break;
         }
+        case OpCode::plot_backend_get:
+            stack_.push_back(make_text(plot_backend_));
+            ++frame.ip;
+            break;
+        case OpCode::plot_backend_set: {
+            const Value name = pop();
+            if (name.kind != ValueKind::text) {
+                throw std::runtime_error("plot_backend_set expects a text name");
+            }
+
+            plot_backend_ = name.text_value;
+            stack_.push_back(make_unit());
+            ++frame.ip;
+            break;
+        }
         case OpCode::print:
             print_value(pop(), output);
             ++frame.ip;

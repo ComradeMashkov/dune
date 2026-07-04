@@ -29,6 +29,7 @@ private:
 
     Bytecode bytecode_;
     std::vector<std::string> program_arguments_;
+    std::string plot_backend_ = "none";
     std::vector<Value> stack_;
     std::vector<CallFrame> frames_;
 };

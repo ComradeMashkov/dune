@@ -1,0 +1,30 @@
+// Exercises the plot stdlib module: deterministic SVG rendering, escaped text,
+// file backends, and headless-safe display backend selection.
+import fs;
+import plot;
+import text;
+
+chart = plot.line([1.0, 2.0, 3.0], [2.0, 4.0, 8.0])
+    .label("series & one")
+    .add_scatter([1.0, 2.0, 3.0], [1.5, 3.0, 7.0])
+    .label("points <two>")
+    .add_bar([1.0, 2.0, 3.0], [1.0, 2.0, 3.0])
+    .label("bars \"three\"")
+    .title("growth <&>")
+    .x_label("x axis")
+    .y_label("value \"y\"")
+    .legend(true);
+
+print(plot.svg(chart).trim_end());
+
+print(plot.save_svg(chart, "plot_svg_fixture.svg").is_done());
+print(plot.save_html(chart, "plot_svg_fixture.html").is_done());
+print(fs.read_text("plot_svg_fixture.svg").value_or("").contains("series &amp; one"));
+
+print(plot.show(chart).failure_or("").contains("no display backend"));
+plot.use_backend("svg");
+print(plot.show(chart).value_or("").contains("<polyline"));
+plot.use_backend("html");
+print(plot.show(chart).value_or("").contains("<!doctype html>"));
+print(plot.available_backends().len());
+print(plot.svg(plot.histogram([0.0, 1.0, 2.0, 3.0], 2)).contains("series bar"));
