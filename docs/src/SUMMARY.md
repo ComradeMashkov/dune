@@ -29,6 +29,7 @@
   - [matrix](stdlib/matrix.md)
   - [maybe](stdlib/maybe.md)
   - [outcome](stdlib/outcome.md)
+  - [plot](stdlib/plot.md)
   - [process](stdlib/process.md)
   - [random](stdlib/random.md)
   - [regex](stdlib/regex.md)

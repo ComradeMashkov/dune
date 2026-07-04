@@ -815,11 +815,23 @@ int main() {
                           "io.println(csv.parse_rows(\"a,b\").len());",
                           "expected fs/process/csv modules to type check") &&
              passed;
+    passed = expect_valid("import plot; import text; "
+                          "chart = plot.line([1.0, 2.0], [3.0, 4.0]).title(\"demo\").x_label(\"x\"); "
+                          "print(plot.svg(chart).contains(\"<svg\")); "
+                          "plot.use_backend(\"svg\"); print(plot.backend()); print(plot.show(chart).is_done());",
+                          "expected plot module to type check") &&
+             passed;
     passed = expect_error_contains("x = __read_file(1);", "expected type 'text' but got 'int'",
                                    "expected __read_file argument type error") &&
              passed;
     passed = expect_error_contains("x = __write_file(\"a.txt\");", "__write_file expects 2 arguments but got 1",
                                    "expected __write_file arity error") &&
+             passed;
+    passed = expect_error_contains("x = __plot_backend_get(\"svg\");", "__plot_backend_get expects 0 arguments",
+                                   "expected __plot_backend_get arity error") &&
+             passed;
+    passed = expect_error_contains("__plot_backend_set(1);", "expected type 'text' but got 'int'",
+                                   "expected __plot_backend_set argument type error") &&
              passed;
 
     passed = expect_valid("record Point { x: int, fn to_text(): text { return fmt.format(\"{}\", this.x); } } "

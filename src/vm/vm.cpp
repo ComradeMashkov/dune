@@ -1363,6 +1363,21 @@ void VirtualMachine::execute(std::ostream& output, std::ostream& error, std::ist
             stack_.push_back(make_signed(log_level_));
             ++frame.ip;
             break;
+        case OpCode::plot_backend_get:
+            stack_.push_back(make_text(plot_backend_));
+            ++frame.ip;
+            break;
+        case OpCode::plot_backend_set: {
+            const Value name = pop();
+            if (name.kind != ValueKind::text) {
+                throw std::runtime_error("plot_backend_set expects a text name");
+            }
+
+            plot_backend_ = name.text_value;
+            stack_.push_back(make_unit());
+            ++frame.ip;
+            break;
+        }
         case OpCode::format_text: {
             std::vector<Value> arguments(instruction.operand);
             for (std::size_t index = instruction.operand; index > 0; --index) {

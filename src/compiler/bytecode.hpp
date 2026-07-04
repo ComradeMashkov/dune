@@ -106,6 +106,8 @@ enum class OpCode {
     log_emit,
     log_set_level,
     log_level,
+    plot_backend_get,
+    plot_backend_set,
     format_text,
     halt,
 };
