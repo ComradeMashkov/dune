@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <iostream>
 #include <memory>
 #include <ostream>
 #include <sstream>
@@ -337,43 +338,6 @@ bool is_false(const Value& value) {
     return !value.bool_value;
 }
 
-void print_value(const Value& value, std::ostream& output) {
-    switch (value.kind) {
-    case ValueKind::signed_integer:
-        output << value.signed_value << '\n';
-        return;
-    case ValueKind::unsigned_integer:
-        output << value.unsigned_value << '\n';
-        return;
-    case ValueKind::real:
-        output << std::setprecision(15) << value.real_value << '\n';
-        return;
-    case ValueKind::boolean:
-        output << (value.bool_value ? 1 : 0) << '\n';
-        return;
-    case ValueKind::glyph:
-        output << value.glyph_value << '\n';
-        return;
-    case ValueKind::text:
-        output << value.text_value << '\n';
-        return;
-    case ValueKind::unit:
-        throw std::runtime_error("cannot print unit value");
-    case ValueKind::array:
-        throw std::runtime_error("cannot print array value");
-    case ValueKind::tuple:
-        throw std::runtime_error("cannot print tuple value");
-    case ValueKind::record:
-        throw std::runtime_error("cannot print record value");
-    case ValueKind::variant:
-        throw std::runtime_error("cannot print choice value");
-    case ValueKind::callable:
-        throw std::runtime_error("cannot print function value");
-    }
-
-    throw std::runtime_error("cannot print unknown value");
-}
-
 std::string value_to_text(const Value& value) {
     std::ostringstream output;
     switch (value.kind) {
@@ -395,20 +359,20 @@ std::string value_to_text(const Value& value) {
     case ValueKind::text:
         return value.text_value;
     case ValueKind::unit:
-        throw std::runtime_error("cannot print unit value");
+        throw std::runtime_error("cannot format unit value");
     case ValueKind::array:
-        throw std::runtime_error("cannot print array value");
+        throw std::runtime_error("cannot format array value");
     case ValueKind::tuple:
-        throw std::runtime_error("cannot print tuple value");
+        throw std::runtime_error("cannot format tuple value");
     case ValueKind::record:
-        throw std::runtime_error("cannot print record value");
+        throw std::runtime_error("cannot format record value");
     case ValueKind::variant:
-        throw std::runtime_error("cannot print choice value");
+        throw std::runtime_error("cannot format choice value");
     case ValueKind::callable:
-        throw std::runtime_error("cannot print function value");
+        throw std::runtime_error("cannot format function value");
     }
 
-    throw std::runtime_error("cannot print unknown value");
+    throw std::runtime_error("cannot format unknown value");
 }
 
 std::string format_value(const std::string& format, const std::vector<Value>& arguments) {
@@ -433,10 +397,6 @@ std::string format_value(const std::string& format, const std::vector<Value>& ar
     }
 
     return output.str();
-}
-
-void print_formatted_value(const std::string& format, const std::vector<Value>& arguments, std::ostream& output) {
-    output << format_value(format, arguments) << '\n';
 }
 
 std::size_t index_value(const Value& value) {
@@ -652,10 +612,14 @@ VirtualMachine::VirtualMachine(Bytecode bytecode, std::vector<std::string> progr
     : bytecode_(std::move(bytecode)), program_arguments_(std::move(program_arguments)) {}
 
 void VirtualMachine::run(std::ostream& output) {
+    run(output, std::cerr, std::cin);
+}
+
+void VirtualMachine::run(std::ostream& output, std::ostream& error, std::istream& input) {
     stack_.clear();
     frames_.clear();
     frames_.push_back(CallFrame{&bytecode_.instructions, 0, std::vector<Value>(bytecode_.local_count), 0});
-    execute(output);
+    execute(output, error, input);
 }
 
 // Runs a single compiled test chunk to completion. The caller (`dune test`)
@@ -667,10 +631,10 @@ void VirtualMachine::run_test(std::size_t function_index, std::ostream& output) 
     stack_.clear();
     frames_.clear();
     frames_.push_back(CallFrame{&function.instructions, 0, std::vector<Value>(function.local_count), 0});
-    execute(output);
+    execute(output, std::cerr, std::cin);
 }
 
-void VirtualMachine::execute(std::ostream& output) {
+void VirtualMachine::execute(std::ostream& output, std::ostream& error, std::istream& input) {
     while (!frames_.empty()) {
         CallFrame& frame = frames_.back();
         if (frame.ip >= frame.instructions->size()) {
@@ -1188,6 +1152,94 @@ void VirtualMachine::execute(std::ostream& output) {
             ++frame.ip;
             break;
         }
+        case OpCode::stdout_write: {
+            const Value text = pop();
+            if (text.kind != ValueKind::text) {
+                throw std::runtime_error("stdout_write expects text");
+            }
+
+            output << text.text_value;
+            std::vector<Value> result(2);
+            if (output) {
+                result[0] = make_bool(true);
+                result[1] = make_text("");
+            } else {
+                result[0] = make_bool(false);
+                result[1] = make_text("could not write to stdout");
+            }
+
+            stack_.push_back(make_tuple(std::move(result)));
+            ++frame.ip;
+            break;
+        }
+        case OpCode::stderr_write: {
+            const Value text = pop();
+            if (text.kind != ValueKind::text) {
+                throw std::runtime_error("stderr_write expects text");
+            }
+
+            error << text.text_value;
+            std::vector<Value> result(2);
+            if (error) {
+                result[0] = make_bool(true);
+                result[1] = make_text("");
+            } else {
+                result[0] = make_bool(false);
+                result[1] = make_text("could not write to stderr");
+            }
+
+            stack_.push_back(make_tuple(std::move(result)));
+            ++frame.ip;
+            break;
+        }
+        case OpCode::stdout_flush: {
+            output.flush();
+            std::vector<Value> result(2);
+            if (output) {
+                result[0] = make_bool(true);
+                result[1] = make_text("");
+            } else {
+                result[0] = make_bool(false);
+                result[1] = make_text("could not flush stdout");
+            }
+
+            stack_.push_back(make_tuple(std::move(result)));
+            ++frame.ip;
+            break;
+        }
+        case OpCode::stderr_flush: {
+            error.flush();
+            std::vector<Value> result(2);
+            if (error) {
+                result[0] = make_bool(true);
+                result[1] = make_text("");
+            } else {
+                result[0] = make_bool(false);
+                result[1] = make_text("could not flush stderr");
+            }
+
+            stack_.push_back(make_tuple(std::move(result)));
+            ++frame.ip;
+            break;
+        }
+        case OpCode::stdin_read_line: {
+            std::string line;
+            std::vector<Value> result(2);
+            if (std::getline(input, line)) {
+                result[0] = make_bool(true);
+                result[1] = make_text(std::move(line));
+            } else if (input.eof()) {
+                result[0] = make_bool(false);
+                result[1] = make_text("end of input");
+            } else {
+                result[0] = make_bool(false);
+                result[1] = make_text("could not read from stdin");
+            }
+
+            stack_.push_back(make_tuple(std::move(result)));
+            ++frame.ip;
+            break;
+        }
         case OpCode::env_get: {
             const Value name = pop();
             if (name.kind != ValueKind::text) {
@@ -1226,25 +1278,6 @@ void VirtualMachine::execute(std::ostream& output) {
             }
 
             stack_.push_back(make_tuple(std::move(result)));
-            ++frame.ip;
-            break;
-        }
-        case OpCode::print:
-            print_value(pop(), output);
-            ++frame.ip;
-            break;
-        case OpCode::print_format: {
-            std::vector<Value> arguments(instruction.operand);
-            for (std::size_t index = instruction.operand; index > 0; --index) {
-                arguments[index - 1] = pop();
-            }
-
-            const Value format = pop();
-            if (format.kind != ValueKind::text) {
-                throw std::runtime_error("print format string must be text");
-            }
-
-            print_formatted_value(format.text_value, arguments, output);
             ++frame.ip;
             break;
         }

@@ -1,3 +1,4 @@
+import io;
 // Showcases every comment form Dune understands and how documentation comments
 // attach to declarations. Hover any documented name in an editor with the Dune
 // LSP to see its doc-comment rendered next to the signature.
@@ -30,7 +31,7 @@ record Point {
 p: Point = Point { x: 3, y: 4 };
 
 // `square` is documented above; hover it to read the brief/param/returns tags.
-print(square(p.x));            // 9
+io.println(square(p.x));            // 9
 
 // Hover `x` or `magnitude_squared` to see the record member documentation.
-print(p.magnitude_squared());  // 25
+io.println(p.magnitude_squared());  // 25

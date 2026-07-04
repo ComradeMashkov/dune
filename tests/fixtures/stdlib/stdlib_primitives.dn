@@ -1,3 +1,4 @@
+import io;
 // Exercises core primitives: string/array slicing, the text module, foreign
 // functions, loop control flow, and importing another module's exports.
 import array;
@@ -9,25 +10,25 @@ foreign fn c_sqrt(value: real64): real64 = "sqrt";
 
 // text value used to demonstrate glyph indexing and slice syntax.
 message: text = "dune language";
-print(message[0]);         // index a text value -> glyph 'd'
-print(message[5:13]);      // slice [5:13] -> "language"
-print(message[:4]);        // open-start slice -> "dune"
-print(message[5:]);        // open-end slice -> "language"
+io.println(message[0]);         // index a text value -> glyph 'd'
+io.println(message[5:13]);      // slice [5:13] -> "language"
+io.println(message[:4]);        // open-start slice -> "dune"
+io.println(message[5:]);        // open-end slice -> "language"
 
 // Array slicing mirrors text slicing.
 values: [int] = [1, 2, 3, 4, 5];
 middle: [int] = values[1:4];  // slice -> [2, 3, 4]
-print(middle.len());       // sliced length -> 3
-print(middle[0]);          // first element of the slice -> 2
-print(middle[2]);          // last element of the slice -> 4
-print(array.sum(middle));  // array.sum free function form -> 9
-print(array.contains(middle, 3));   // array.contains -> true
-print(array.index_of(middle, 4));   // array.index_of: position of 4 -> 2
+io.println(middle.len());       // sliced length -> 3
+io.println(middle[0]);          // first element of the slice -> 2
+io.println(middle[2]);          // last element of the slice -> 4
+io.println(array.sum(middle));  // array.sum free function form -> 9
+io.println(array.contains(middle, 3));   // array.contains -> true
+io.println(array.index_of(middle, 4));   // array.index_of: position of 4 -> 2
 reversed: [int] = array.reverse(middle);  // array.reverse -> [4, 3, 2]
-print(array.first(reversed));       // array.first -> 4
-print(array.last(reversed));        // array.last -> 2
+io.println(array.first(reversed));       // array.first -> 4
+io.println(array.last(reversed));        // array.last -> 2
 ranged: [int] = array.range(2, 5);  // array.range(2,5) -> [2, 3, 4]
-print(array.sum(ranged));           // sum of the range -> 9
+io.println(array.sum(ranged));           // sum of the range -> 9
 
 // Loop control flow: continue skips i==1, break stops at i==4.
 total = 0;
@@ -42,12 +43,12 @@ for i = 0; i < 6; i = i + 1 {
 
     total = total + i;     // accumulates 0 + 2 + 3
 }
-print(total);              // sum of 0,2,3 -> 5
+io.println(total);              // sum of 0,2,3 -> 5
 
-print(c_sqrt(81.0));       // call the foreign C sqrt -> 9
-print(text.ends_with(message, "language"));  // text.ends_with -> true
-print(text.index_of(message, 'g'));  // text.index_of: first 'g' -> 8
-print(text.count(message, 'a'));     // text.count: occurrences of 'a' -> 2
-print(text.trim("  dune  "));        // text.trim: strip surrounding spaces -> "dune"
-print(feature_exports.ANSWER);       // read the imported exported constant -> 42
-print(feature_exports.public());     // call the imported exported function -> 7
+io.println(c_sqrt(81.0));       // call the foreign C sqrt -> 9
+io.println(text.ends_with(message, "language"));  // text.ends_with -> true
+io.println(text.index_of(message, 'g'));  // text.index_of: first 'g' -> 8
+io.println(text.count(message, 'a'));     // text.count: occurrences of 'a' -> 2
+io.println(text.trim("  dune  "));        // text.trim: strip surrounding spaces -> "dune"
+io.println(feature_exports.ANSWER);       // read the imported exported constant -> 42
+io.println(feature_exports.public());     // call the imported exported function -> 7

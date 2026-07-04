@@ -10,8 +10,12 @@
 
 namespace {
 
+std::string test_source(const std::string& source) {
+    return "import io; import fmt; " + source;
+}
+
 void check_source(const std::string& source) {
-    dune::Lexer lexer(source);
+    dune::Lexer lexer(test_source(source));
     dune::Parser parser(lexer.tokenize());
     dune::ModuleLoader loader;
     dune::TypeChecker checker;
@@ -19,8 +23,8 @@ void check_source(const std::string& source) {
 }
 
 void check_fixture_source(const std::string& source) {
-    const std::filesystem::path fixtures = std::filesystem::current_path().parent_path() / "tests" / "fixtures";
-    dune::Lexer lexer(source);
+    const std::filesystem::path fixtures = std::filesystem::path(DUNE_FIXTURES_PATH);
+    dune::Lexer lexer(test_source(source));
     dune::Parser parser(lexer.tokenize());
     // Importable module fixtures now live under category subfolders. Search the
     // ones that hold them, plus the standard library so their nested imports and
@@ -96,14 +100,14 @@ int main() {
     bool passed = true;
 
     passed = expect_valid("fn add(a: int, b: int): int { return a + b; } "
-                          "total: int = add(10, 20); done: bool = total == 30; print(done);",
+                          "total: int = add(10, 20); done: bool = total == 30; io.println(done);",
                           "expected typed functions to validate") &&
              passed;
     passed = expect_valid("fn widen(value: u64): u64 { return value + 1; } "
                           "amount: uint64 = widen(41); ratio: real = 1 + 2.5; mark: glyph = 'x';",
                           "expected extended types to validate") &&
              passed;
-    passed = expect_valid("fn log(message: text): unit { print(message); return; } "
+    passed = expect_valid("fn log(message: text): unit { io.println(message); return; } "
                           "fn noop(): unit { } "
                           "tiny: i8 = 127; small: i16 = 32767; mid: i32 = 2147483647; "
                           "wide: i64 = 9000000000; index: usize = 5; offset: isize = 6; "
@@ -111,13 +115,14 @@ int main() {
                           "same: bool = \"done\" == \"done\"; log(\"done\"); noop();",
                           "expected standard scalar types to validate") &&
              passed;
-    passed = expect_valid("name: text = \"Dune\"; version: int = 1; print(\"{} v{}\", name, version); "
-                          "print(\"bool={}, glyph={}, real={}\", true, 'x', 2.5);",
+    passed = expect_valid("name: text = \"Dune\"; version: int = 1; "
+                          "io.println(fmt.format(\"{} v{}\", name, version)); "
+                          "io.println(fmt.format(\"bool={}, glyph={}, real={}\", true, 'x', 2.5));",
                           "expected formatted print to validate") &&
              passed;
     passed = expect_valid("name: text = \"Dune\"; version: int = 1; "
-                          "message: text = format(\"{} v{}\", name, version); "
-                          "print(format(\"{}: {}\", \"answer\", 42)); print(message);",
+                          "message: text = fmt.format(\"{} v{}\", name, version); "
+                          "io.println(fmt.format(\"{}: {}\", \"answer\", 42)); io.println(message);",
                           "expected format expression to validate") &&
              passed;
     passed = expect_valid("size: int = 1_000_000; mask: u64 = 0xffu64; bits: u8 = 0b1010_0101u8; "
@@ -135,26 +140,37 @@ int main() {
     passed = expect_error_contains(R"(bad: glyph = '\x';)", R"(unknown glyph escape '\x')",
                                    "expected invalid glyph escape error") &&
              passed;
-    passed = expect_error_contains("print(\"{} {}\", 1);", "print format string expects 2 arguments but got 1",
-                                   "expected missing print format argument error") &&
+    passed = expect_error_contains("print(1);", "print is not available globally",
+                                   "expected bare print to require io import and qualification") &&
              passed;
-    passed = expect_error_contains("print(\"{}\", 1, 2);", "print format string expects 1 arguments but got 2",
-                                   "expected extra print format argument error") &&
+    passed = expect_error_contains("format(\"{}\", 1);", "format is not available globally",
+                                   "expected bare format to require fmt import and qualification") &&
              passed;
-    passed =
-        expect_error_contains("format: text = \"{}\"; print(format, 1);",
-                              "print format string must be a string literal", "expected literal print format error") &&
-        passed;
-    passed = expect_error_contains("print(\"{name}\", 1);", "invalid print format placeholder",
-                                   "expected invalid print placeholder error") &&
+    passed = expect_valid("fn print(value: int): unit { return; } print(1);",
+                          "expected user-defined print function to validate") &&
              passed;
-    passed = expect_error_contains("format(\"{} {}\", 1);", "format string expects 2 arguments but got 1",
+    passed = expect_valid("fn format(value: int): text { return \"#\"; } label: text = format(1);",
+                          "expected user-defined format function to validate") &&
+             passed;
+    passed = expect_error_contains("fmt.format(\"{} {}\", 1);", "format string expects 2 arguments but got 1",
                                    "expected missing format argument error") &&
              passed;
-    passed = expect_error_contains("format(\"{}\", 1, 2);", "format string expects 1 arguments but got 2",
+    passed = expect_error_contains("fmt.format(\"{}\", 1, 2);", "format string expects 1 arguments but got 2",
                                    "expected extra format argument error") &&
              passed;
-    passed = expect_error_contains("format: text = \"{}\"; message: text = format(format, 1);",
+    passed = expect_error_contains("format: text = \"{}\"; fmt.format(format, 1);",
+                                   "format string must be a string literal", "expected literal format error") &&
+             passed;
+    passed = expect_error_contains("fmt.format(\"{name}\", 1);", "invalid format placeholder",
+                                   "expected invalid format placeholder error") &&
+             passed;
+    passed = expect_error_contains("fmt.format(\"{} {}\", 1);", "format string expects 2 arguments but got 1",
+                                   "expected missing format argument error") &&
+             passed;
+    passed = expect_error_contains("fmt.format(\"{}\", 1, 2);", "format string expects 1 arguments but got 2",
+                                   "expected extra format argument error") &&
+             passed;
+    passed = expect_error_contains("format: text = \"{}\"; message: text = fmt.format(format, 1);",
                                    "format string must be a string literal", "expected literal format error") &&
              passed;
     passed = expect_error_contains("value: i32 = 42u64;", "expected type 'i32' but got 'u64'",
@@ -229,7 +245,7 @@ int main() {
                           "doubled: int = twice(9);",
                           "expected generic functions and stdlib generics to validate") &&
              passed;
-    passed = expect_valid("fn only_bad<T>(value: T): T { return value + value; } print(only_bad(1));",
+    passed = expect_valid("fn only_bad<T>(value: T): T { return value + value; } io.println(only_bad(1));",
                           "expected generic functions to instantiate only used types") &&
              passed;
     passed = expect_valid("type Count = int; type Counts = [Count]; "
@@ -397,7 +413,7 @@ int main() {
     passed = expect_valid("const HIDDEN: int = 7; fn hidden(): int { return HIDDEN; } value: int = hidden();",
                           "expected top-level constants to be visible inside functions") &&
              passed;
-    passed = expect_valid("x = 1; { x: int = 2; y = x + 1; } print(x); "
+    passed = expect_valid("x = 1; { x: int = 2; y = x + 1; } io.println(x); "
                           "total = 0; for i = 0; i < 3; i = i + 1 { total = total + i; } "
                           "choice Maybe { Present(int), Absent, } value: Maybe = Present(5); "
                           "chosen: int = when value { is Present(x) { x } is Absent { 0 } };",
@@ -433,10 +449,10 @@ int main() {
     passed = expect_error_contains("const x: int = 1; { x: int = 2; }", "cannot shadow constant 'x'",
                                    "expected const shadowing error") &&
              passed;
-    passed = expect_error_contains("for i = 0; i < 1; i = i + 1 { } print(i);", "undefined variable 'i'",
+    passed = expect_error_contains("for i = 0; i < 1; i = i + 1 { } io.println(i);", "undefined variable 'i'",
                                    "expected for variable scope error") &&
              passed;
-    passed = expect_error_contains("for value in 42 { print(value); }", "type 'int' is not iterable",
+    passed = expect_error_contains("for value in 42 { io.println(value); }", "type 'int' is not iterable",
                                    "expected non-iterable for-in error") &&
              passed;
     passed = expect_error_contains("for value in [1, 2] { value = value + 1; }", "cannot assign to constant 'value'",
@@ -445,15 +461,15 @@ int main() {
     passed = expect_error_contains("value = 0..3;", "range expressions can only be used in for-in loops",
                                    "expected range value error") &&
              passed;
-    passed = expect_error_contains("for i in 0.0..3.0 { print(i); }", "expected integer range bound but got 'real'",
+    passed = expect_error_contains("for i in 0.0..3.0 { io.println(i); }", "expected integer range bound but got 'real'",
                                    "expected real range bound error") &&
              passed;
     passed = expect_error_contains("choice Maybe { Present(int), Absent, } value: Maybe = Present(1); "
-                                   "chosen: int = when value { is Present(x) { x } is Absent { 0 } }; print(x);",
+                                   "chosen: int = when value { is Present(x) { x } is Absent { 0 } }; io.println(x);",
                                    "undefined variable 'x'", "expected when payload scope error") &&
              passed;
     passed = expect_error_contains("choice Maybe { Present(int), Absent, } value: Maybe = Present(1); "
-                                   "chosen: int = when value { Present(x) => x; Absent => 0; }; print(x);",
+                                   "chosen: int = when value { Present(x) => x; Absent => 0; }; io.println(x);",
                                    "undefined variable 'x'", "expected arrow when payload scope error") &&
              passed;
     passed = expect_error_contains("const values: [int] = [1]; values[0] = 2;",
@@ -463,13 +479,13 @@ int main() {
     passed = expect_valid("const values: [int] = [1]; alias = values; alias[0] = 2;",
                           "expected const array alias mutation to validate") &&
              passed;
-    passed = expect_error_contains("print(true + 1);", "expected numeric type but got 'bool'",
+    passed = expect_error_contains("io.println(true + 1);", "expected numeric type but got 'bool'",
                                    "expected invalid binary operation") &&
              passed;
-    passed = expect_error_contains("print(1.5 % 1.0);", "expected integer type but got 'real'",
+    passed = expect_error_contains("io.println(1.5 % 1.0);", "expected integer type but got 'real'",
                                    "expected invalid modulo operation") &&
              passed;
-    passed = expect_error_contains("print(!1);", "expected type 'bool' but got 'int'", "expected invalid unary not") &&
+    passed = expect_error_contains("io.println(!1);", "expected type 'bool' but got 'int'", "expected invalid unary not") &&
              passed;
     passed = expect_error_contains("value: int = \"7\" to int;", "cannot cast from 'text' to 'int'",
                                    "expected invalid cast") &&
@@ -477,7 +493,7 @@ int main() {
     passed = expect_error_contains("fn bad(): bool { return 1; }", "expected type 'bool' but got 'int'",
                                    "expected return type mismatch") &&
              passed;
-    passed = expect_error_contains("fn is_done(value: bool): bool { return value; } print(is_done(1));",
+    passed = expect_error_contains("fn is_done(value: bool): bool { return value; } io.println(is_done(1));",
                                    "no overload for function 'is_done' with argument types (int)",
                                    "expected call argument mismatch") &&
              passed;
@@ -532,7 +548,7 @@ int main() {
                                    "operator 'in' requires comparable array elements but got 'Point'",
                                    "expected non-comparable membership error") &&
              passed;
-    passed = expect_error_contains("values: [int] = [1]; print(math.square(values[0]));", "undefined variable 'math'",
+    passed = expect_error_contains("values: [int] = [1]; io.println(math.square(values[0]));", "undefined variable 'math'",
                                    "expected missing math import") &&
              passed;
     passed = expect_error_contains("values: [int] = [1]; values.push(true);", "expected type 'int' but got 'bool'",
@@ -569,45 +585,45 @@ int main() {
     passed =
         expect_error_contains("continue;", "continue statement outside loop", "expected continue outside loop error") &&
         passed;
-    passed = expect_error_contains("message: text = \"done\"; print(message[true]);",
+    passed = expect_error_contains("message: text = \"done\"; io.println(message[true]);",
                                    "expected integer index but got 'bool'", "expected text index type error") &&
              passed;
     passed =
         expect_error_contains("values: [int] = [1, 2]; part: [int] = values[0:true];",
                               "expected integer slice bound but got 'bool'", "expected array slice bound type error") &&
         passed;
-    passed = expect_fixture_error_contains("import feature_exports; print(feature_exports.hidden());",
+    passed = expect_fixture_error_contains("import feature_exports; io.println(feature_exports.hidden());",
                                            "module 'feature_exports' does not export 'hidden'",
                                            "expected hidden module function error") &&
              passed;
-    passed = expect_fixture_error_contains("import feature_exports; print(feature_exports.HIDDEN);",
+    passed = expect_fixture_error_contains("import feature_exports; io.println(feature_exports.HIDDEN);",
                                            "module 'feature_exports' does not export 'HIDDEN'",
                                            "expected hidden module constant error") &&
              passed;
-    passed = expect_error_contains("import array; print(array.contains([1, 2], true));",
+    passed = expect_error_contains("import array; io.println(array.contains([1, 2], true));",
                                    "no overload for function 'array.contains' with argument types ([int], bool)",
                                    "expected array stdlib mismatch") &&
              passed;
-    passed = expect_error_contains("import text; print(text.nope(\"x\"));", "module 'text' does not export 'nope'",
+    passed = expect_error_contains("import text; io.println(text.nope(\"x\"));", "module 'text' does not export 'nope'",
                                    "expected missing text module export") &&
              passed;
     passed = expect_error_contains("import matrix; bad = matrix.vector([\"x\"]);",
                                    "no overload for function 'matrix.vector' with argument types ([text])",
                                    "expected matrix numeric bound error") &&
              passed;
-    passed = expect_error_contains("import matrix; v = matrix.vector([1, 2]); print(v.data);",
+    passed = expect_error_contains("import matrix; v = matrix.vector([1, 2]); io.println(v.data);",
                                    "field 'data' of record 'Vector' is private",
                                    "expected private vector data field error") &&
              passed;
-    passed = expect_error_contains("import math; print(math.square(true));",
+    passed = expect_error_contains("import math; io.println(math.square(true));",
                                    "no overload for function 'math.square' with argument types (bool)",
                                    "expected math.square type mismatch") &&
              passed;
-    passed = expect_error_contains("import math; print(math.clamp(1, 2));",
+    passed = expect_error_contains("import math; io.println(math.clamp(1, 2));",
                                    "no overload for function 'math.clamp' with argument types (int, int)",
                                    "expected math.clamp arity mismatch") &&
              passed;
-    passed = expect_error_contains("fn bad<T is nope>(value: T): T { return value; } print(bad(1));",
+    passed = expect_error_contains("fn bad<T is nope>(value: T): T { return value; } io.println(bad(1));",
                                    "unknown generic bound 'nope'", "expected unknown generic bound error") &&
              passed;
     passed = expect_error_contains("record Point { x: int, y: int } p: Point = Point { x: 1 };",
@@ -629,16 +645,16 @@ int main() {
     passed = expect_error_contains("record Point { x: int } p: Point = Point { x: true };",
                                    "expected type 'int' but got 'bool'", "expected record field type mismatch") &&
              passed;
-    passed = expect_error_contains("record Point { x: int } p: Point = Point { x: 1 }; print(p.y);",
+    passed = expect_error_contains("record Point { x: int } p: Point = Point { x: 1 }; io.println(p.y);",
                                    "record 'Point' has no field 'y'", "expected missing record member") &&
              passed;
     passed = expect_error_contains("fn same<T is comparable>(left: T, right: T): bool { return left == right; } "
-                                   "values: [int] = [1]; print(same(values, values));",
+                                   "values: [int] = [1]; io.println(same(values, values));",
                                    "no overload for function 'same' with argument types ([int], [int])",
                                    "expected comparable bound mismatch") &&
              passed;
     passed = expect_error_contains("fn invalid<T>(left: T, right: T): bool { return left == right; } "
-                                   "values: [int] = [1]; print(invalid(values, values));",
+                                   "values: [int] = [1]; io.println(invalid(values, values));",
                                    "while instantiating invalid<T = [int]>", "expected generic instantiation trace") &&
              passed;
     passed = expect_error_contains("value: int = when 1 { is 1 { 10 } };", "when expression needs a '_' fallback arm",
@@ -700,7 +716,7 @@ int main() {
              passed;
     passed = expect_fixture_error_contains("import object_model_api; "
                                            "counter: object_model_api.Counter = object_model_api.Counter.new(); "
-                                           "print(counter.value);",
+                                           "io.println(counter.value);",
                                            "field 'value' of record 'Counter' is private",
                                            "expected private record field error") &&
              passed;
@@ -738,11 +754,11 @@ int main() {
     passed = expect_error_contains("record Circle with Shape { }", "unknown contract 'Shape'",
                                    "expected unknown contract error") &&
              passed;
-    passed = expect_error_contains("import math; print(math.UNKNOWN);", "module 'math' does not export 'UNKNOWN'",
+    passed = expect_error_contains("import math; io.println(math.UNKNOWN);", "module 'math' does not export 'UNKNOWN'",
                                    "expected missing module value") &&
              passed;
     passed = expect_error_contains("fn choose(value: i64): i64 { return value; } "
-                                   "fn choose(value: u64): u64 { return value; } print(choose(1));",
+                                   "fn choose(value: u64): u64 { return value; } io.println(choose(1));",
                                    "ambiguous overload for function 'choose'", "expected ambiguous overload") &&
              passed;
     passed = expect_error_contains("fn same(value: int): int { return value; } "
@@ -752,10 +768,10 @@ int main() {
     passed = expect_error_contains("import time;", "unknown module 'time'", "expected unknown module error") && passed;
 
     passed = expect_valid("nums: [int] = [1, 2, 3]; squares: [int] = [n * n for n in nums]; "
-                          "first: int = squares[0]; print(first);",
+                          "first: int = squares[0]; io.println(first);",
                           "expected array comprehension to validate") &&
              passed;
-    passed = expect_valid("evens: [int] = [i for i in 0..10 if i % 2 == 0]; print(evens.len());",
+    passed = expect_valid("evens: [int] = [i for i in 0..10 if i % 2 == 0]; io.println(evens.len());",
                           "expected range comprehension with filter to validate") &&
              passed;
     passed = expect_error_contains("nums: [int] = [1, 2, 3]; bad: [int] = [n for n in nums if n + 1];",
@@ -767,7 +783,7 @@ int main() {
     passed = expect_error_contains("nums: [int] = [1, 2, 3]; bad: [text] = [n for n in nums];", "expected type 'text'",
                                    "expected comprehension element type mismatch error") &&
              passed;
-    passed = expect_error_contains("nums: [int] = [1, 2, 3]; xs: [int] = [n for n in nums]; print(n);",
+    passed = expect_error_contains("nums: [int] = [1, 2, 3]; xs: [int] = [n for n in nums]; io.println(n);",
                                    "undefined variable 'n'", "expected comprehension variable to be scoped") &&
              passed;
 
@@ -793,10 +809,10 @@ int main() {
              passed;
 
     passed = expect_valid("import fs; import process; import csv; "
-                          "r = fs.read_text(\"a.txt\"); print(r.is_done()); "
-                          "print(process.env_or(\"HOME\", \"none\")); "
-                          "print(process.arg_count()); "
-                          "print(csv.parse_rows(\"a,b\").len());",
+                          "r = fs.read_text(\"a.txt\"); io.println(r.is_done()); "
+                          "io.println(process.env_or(\"HOME\", \"none\")); "
+                          "io.println(process.arg_count()); "
+                          "io.println(csv.parse_rows(\"a,b\").len());",
                           "expected fs/process/csv modules to type check") &&
              passed;
     passed = expect_error_contains("x = __read_file(1);", "expected type 'text' but got 'int'",
@@ -806,11 +822,12 @@ int main() {
                                    "expected __write_file arity error") &&
              passed;
 
-    passed = expect_valid("record Point { x: int, fn to_text(): text { return format(\"{}\", this.x); } } "
-                          "p: Point = Point { x: 1 }; print(p); print(\"{}\", p); label: text = format(\"{}\", p);",
+    passed = expect_valid("record Point { x: int, fn to_text(): text { return fmt.format(\"{}\", this.x); } } "
+                          "p: Point = Point { x: 1 }; io.println(p); io.println(fmt.format(\"{}\", p)); "
+                          "label: text = fmt.format(\"{}\", p);",
                           "expected record with to_text to be printable") &&
              passed;
-    passed = expect_error_contains("record Bare { x: int } b: Bare = Bare { x: 1 }; print(b);",
+    passed = expect_error_contains("record Bare { x: int } b: Bare = Bare { x: 1 }; io.println(b);",
                                    "add a 'to_text(): text' method", "expected non-printable record error") &&
              passed;
 
@@ -819,7 +836,7 @@ int main() {
                           "fn square(x: int): int { return x * x; } "
                           "fn is_positive(x: int): bool { return x > 0; } "
                           "values = [0 - 1, 2, 3]; "
-                          "total: int = values.filter(is_positive).map(square).sum(); print(total);",
+                          "total: int = values.filter(is_positive).map(square).sum(); io.println(total);",
                           "expected filter/map/sum chain to type check") &&
              passed;
     passed = expect_valid("fn add(acc: int, x: int): int { return acc + x; } "
@@ -827,7 +844,7 @@ int main() {
                           "result: Acc = initial; "
                           "for i = 0; i < this.len(); i = i + 1 { result = combine(result, this[i]); } "
                           "return result; } "
-                          "sum: int = [1, 2, 3].fold_left(0, add); print(sum);",
+                          "sum: int = [1, 2, 3].fold_left(0, add); io.println(sum);",
                           "expected user-defined higher-order method to type check") &&
              passed;
     // The callback signature must match the element type: `square` is fn(int): int
@@ -858,40 +875,40 @@ int main() {
 
     // --- Modules v2: aliases, selective / grouped imports, visibility ---------
     passed = expect_valid("import math as m; from array import range, sum; "
-                          "total: int = sum(range(1, 4)); ok: bool = m.PI > 3.0; print(total); print(ok);",
+                          "total: int = sum(range(1, 4)); ok: bool = m.PI > 3.0; io.println(total); io.println(ok);",
                           "expected alias + selective/grouped stdlib imports to type check") &&
              passed;
     passed = expect_fixture_valid("module app; import shapes as sh; from shapes import Point, manhattan; "
                                   "a = Point { x: 1, y: 2 }; b = sh.Point { x: 4, y: 6 }; "
-                                  "d: int = manhattan(a, b); print(d); print(sh.quadrant_sum(a));",
+                                  "d: int = manhattan(a, b); io.println(d); io.println(sh.quadrant_sum(a));",
                                   "expected local module with alias + selective import to type check") &&
              passed;
-    passed = expect_error_contains("import math as m; import array as m; print(m.PI);",
+    passed = expect_error_contains("import math as m; import array as m; io.println(m.PI);",
                                    "import alias 'm' is already bound to module 'math'",
                                    "expected duplicate-alias diagnostic") &&
              passed;
-    passed = expect_error_contains("import array; import math as array; print(1);",
+    passed = expect_error_contains("import array; import math as array; io.println(1);",
                                    "import alias 'array' conflicts with imported module 'array'",
                                    "expected alias-vs-module diagnostic") &&
              passed;
-    passed = expect_error_contains("from math import definitely_missing; print(1);",
+    passed = expect_error_contains("from math import definitely_missing; io.println(1);",
                                    "module 'math' does not export 'definitely_missing'",
                                    "expected unknown-exported-symbol diagnostic") &&
              passed;
     // A private (non-exported) symbol cannot be selectively imported.
-    passed = expect_fixture_error_contains("from feature_exports import hidden; print(hidden());",
+    passed = expect_fixture_error_contains("from feature_exports import hidden; io.println(hidden());",
                                            "module 'feature_exports' does not export 'hidden'",
                                            "expected private-symbol import diagnostic") &&
              passed;
     // Non-exported members stay invisible even when the module is imported plainly.
-    passed = expect_fixture_error_contains("import feature_exports; print(feature_exports.hidden());",
+    passed = expect_fixture_error_contains("import feature_exports; io.println(feature_exports.hidden());",
                                            "module 'feature_exports' does not export 'hidden'",
                                            "expected private-member access diagnostic") &&
              passed;
 
     // A top-level test block sees globals and functions; its body is a normal block.
-    passed = expect_valid("const LIMIT: int = 3; fn twice(x: int): int { return x + x; } "
-                          "test \"uses globals\" { total: int = twice(LIMIT); print(total); }",
+    passed = expect_valid("import io; const LIMIT: int = 3; fn twice(x: int): int { return x + x; } "
+                          "test \"uses globals\" { total: int = twice(LIMIT); io.println(total); }",
                           "expected a top-level test block to type-check") &&
              passed;
     // Test blocks are only allowed at the top level.

@@ -1,3 +1,4 @@
+import io;
 // Function over the default real type (real is the platform's standard float alias).
 fn add_real(left: real, right: real): real {
     // Simple addition of two real values.
@@ -16,10 +17,10 @@ ratio: real = add_real(1.25, 2.5);
 mark: glyph = 'Q';
 
 // Print the u8 value.
-print(small);
+io.println(small);
 // Print the uint64 sum.
-print(total);
+io.println(total);
 // Print the real ratio.
-print(ratio);
+io.println(ratio);
 // Print the glyph.
-print(mark);
+io.println(mark);

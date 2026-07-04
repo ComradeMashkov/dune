@@ -1,16 +1,17 @@
+import io;
 // Exercises the random stdlib module: seeded RNG, bounded ints, and sample arrays.
 import random;
 
 // random.seed: create a deterministic RNG from a seed.
 rng: random.Random = random.seed(42);
-print(rng.next_int());     // random.next_int: pseudo-random int (advances state)
-print(rng.next_int());     // next draw differs from the previous
-print(rng.next_int());     // and again, showing state progression
+io.println(rng.next_int());     // random.next_int: pseudo-random int (advances state)
+io.println(rng.next_int());     // next draw differs from the previous
+io.println(rng.next_int());     // and again, showing state progression
 
 // Two RNGs seeded identically must produce identical streams.
 left: random.Random = random.seed(123);
 right: random.Random = random.seed(123);
-print(left.next_int() == right.next_int());  // determinism check -> true
+io.println(left.next_int() == right.next_int());  // determinism check -> true
 
 // random.between(lo, hi): draw ints and confirm they stay in [0, 10).
 bounded: random.Random = random.seed(7);
@@ -26,11 +27,11 @@ for index = 0; index < 1000; index = index + 1 {
     }
 }
 
-print(in_bounds);          // stays true if all 1000 draws were in range
+io.println(in_bounds);          // stays true if all 1000 draws were in range
 
 // random.uniform(rng, count, lo, hi): array of reals in [0.0, 1.0).
 samples = random.uniform(random.seed(1), 5, 0.0, 1.0);
-print(samples.len());      // requested count -> 5
+io.println(samples.len());      // requested count -> 5
 unit_range = true;
 for index = 0; index < samples.len(); index = index + 1 {
     if samples[index] < 0.0 {
@@ -42,8 +43,8 @@ for index = 0; index < samples.len(); index = index + 1 {
     }
 }
 
-print(unit_range);         // true if every sample fell in [0.0, 1.0)
+io.println(unit_range);         // true if every sample fell in [0.0, 1.0)
 
 // random.normal(rng, count, mean, stddev): array of Gaussian samples.
 bell = random.normal(random.seed(2), 100, 0.0, 1.0);
-print(bell.len());         // requested count -> 100
+io.println(bell.len());         // requested count -> 100

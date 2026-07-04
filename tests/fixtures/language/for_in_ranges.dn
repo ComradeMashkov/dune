@@ -1,3 +1,4 @@
+import io;
 // Array of ints to iterate over.
 values: [int] = [1, 2, 3, 4];
 
@@ -25,8 +26,8 @@ for i in 5..2 {
 }
 
 // Prints 10.
-print(sum);
+io.println(sum);
 // Prints 20.
-print(weighted);
+io.println(weighted);
 // Prints 9 (unchanged by the empty-range loop).
-print(empty);
+io.println(empty);

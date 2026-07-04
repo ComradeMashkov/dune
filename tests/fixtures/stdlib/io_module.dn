@@ -1,0 +1,10 @@
+import io;
+
+io.print("name: ");
+name = io.read_line();
+io.println(name.value_or("<eof>"));
+io.eprintln("warning");
+
+missing = io.read_line();
+io.println(missing.is_failed());
+io.println(missing.failure_or("ok"));

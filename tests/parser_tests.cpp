@@ -34,7 +34,7 @@ bool expect_parse_error(const std::string& source, const char* message) {
 }
 
 bool parses_binding_and_print() {
-    const dune::Program program = parse_source("x = 40 + 2;\nprint(x);");
+    const dune::Program program = parse_source("x = 40 + 2;\nio.println(x);");
 
     if (!expect(program.statements.size() == 2, "expected two statements")) {
         return false;
@@ -59,18 +59,26 @@ bool parses_binding_and_print() {
     passed = expect(assignment_statement.expression->right->lexeme == "2", "expected right number lexeme") && passed;
 
     const dune::Statement& print_statement = program.statements[1];
-    passed = expect(print_statement.kind == dune::StatementKind::print, "expected print statement") && passed;
-    passed =
-        expect(print_statement.expression->kind == dune::ExpressionKind::identifier, "expected print identifier") &&
-        passed;
-    passed = expect(print_statement.expression->lexeme == "x", "expected print identifier lexeme") && passed;
+    passed = expect(print_statement.kind == dune::StatementKind::expression_statement,
+                    "expected io.println expression statement") &&
+             passed;
+    passed = expect(print_statement.expression->kind == dune::ExpressionKind::method_call,
+                    "expected io.println method call") &&
+             passed;
+    passed = expect(print_statement.expression->lexeme == "println", "expected println method") && passed;
+    passed = expect(print_statement.expression->arguments.size() == 1, "expected one println argument") && passed;
+    passed = expect(print_statement.expression->arguments[0]->kind == dune::ExpressionKind::identifier,
+                    "expected printed identifier") &&
+             passed;
+    passed = expect(print_statement.expression->arguments[0]->lexeme == "x", "expected printed identifier lexeme") &&
+             passed;
 
     return passed;
 }
 
 bool parses_formatted_print() {
     const dune::Program program = parse_source("name: text = \"Dune\";\nversion: int = 1;\n"
-                                               "print(\"{} v{}\", name, version);");
+                                               "io.println(fmt.format(\"{} v{}\", name, version));");
 
     if (!expect(program.statements.size() == 3, "expected three statements")) {
         return false;
@@ -78,15 +86,20 @@ bool parses_formatted_print() {
 
     bool passed = true;
     const dune::Statement& print_statement = program.statements[2];
-    passed = expect(print_statement.kind == dune::StatementKind::print, "expected print statement") && passed;
-    passed =
-        expect(print_statement.expression->kind == dune::ExpressionKind::string, "expected format literal") && passed;
-    passed = expect(print_statement.arguments.size() == 2, "expected two print format arguments") && passed;
-    passed = expect(print_statement.arguments[0]->kind == dune::ExpressionKind::identifier,
-                    "expected first format argument") &&
+    passed = expect(print_statement.kind == dune::StatementKind::expression_statement,
+                    "expected io.println expression statement") &&
              passed;
-    passed = expect(print_statement.arguments[0]->lexeme == "name", "expected name argument") && passed;
-    passed = expect(print_statement.arguments[1]->lexeme == "version", "expected version argument") && passed;
+    passed = expect(print_statement.expression->kind == dune::ExpressionKind::method_call,
+                    "expected io.println method call") &&
+             passed;
+    const dune::Expression& format_call = *print_statement.expression->arguments[0];
+    passed = expect(format_call.kind == dune::ExpressionKind::method_call, "expected fmt.format call") && passed;
+    passed = expect(format_call.lexeme == "format", "expected format method") && passed;
+    passed = expect(format_call.arguments.size() == 3, "expected format string and two arguments") && passed;
+    passed = expect(format_call.arguments[0]->kind == dune::ExpressionKind::string, "expected format literal") &&
+             passed;
+    passed = expect(format_call.arguments[1]->lexeme == "name", "expected name argument") && passed;
+    passed = expect(format_call.arguments[2]->lexeme == "version", "expected version argument") && passed;
     return passed;
 }
 
@@ -134,7 +147,7 @@ bool parses_membership_operator_precedence() {
 
 bool parses_control_flow() {
     const dune::Program program = parse_source("x = 3; while x > 0 { x = x - 1; } "
-                                               "if x == 0 { print(true); } else { print(false); }");
+                                               "if x == 0 { io.println(true); } else { io.println(false); }");
 
     if (!expect(program.statements.size() == 3, "expected three statements")) {
         return false;
@@ -156,15 +169,15 @@ bool parses_control_flow() {
     passed = expect(if_statement.expression->lexeme == "==", "expected equality comparison") && passed;
     passed = expect(if_statement.body.size() == 1, "expected one then statement") && passed;
     passed = expect(if_statement.else_body.size() == 1, "expected one else statement") && passed;
-    passed =
-        expect(if_statement.body[0].expression->kind == dune::ExpressionKind::boolean, "expected boolean literal") &&
-        passed;
+    passed = expect(if_statement.body[0].expression->arguments[0]->kind == dune::ExpressionKind::boolean,
+                    "expected boolean literal") &&
+             passed;
 
     return passed;
 }
 
 bool parses_test_block() {
-    const dune::Program program = parse_source("test \"adds up\" { x = 1 + 1; print(x); }");
+    const dune::Program program = parse_source("test \"adds up\" { x = 1 + 1; io.println(x); }");
 
     if (!expect(program.statements.size() == 1, "expected one test statement")) {
         return false;
@@ -176,7 +189,9 @@ bool parses_test_block() {
     passed = expect(test.name == "adds up", "expected the decoded test name") && passed;
     passed = expect(test.body.size() == 2, "expected two statements in the test body") && passed;
     passed = expect(test.body[0].kind == dune::StatementKind::assign, "expected assignment in test body") && passed;
-    passed = expect(test.body[1].kind == dune::StatementKind::print, "expected print in test body") && passed;
+    passed = expect(test.body[1].kind == dune::StatementKind::expression_statement,
+                    "expected an expression statement in the test body") &&
+             passed;
 
     return passed;
 }
@@ -224,7 +239,7 @@ bool parses_assignment_targets() {
 
 bool parses_functions_and_types() {
     const dune::Program program = parse_source("fn add(a: int, b: int): int { return a + b; } "
-                                               "total: int = add(10, 20); print(total);");
+                                               "total: int = add(10, 20); io.println(total);");
 
     if (!expect(program.statements.size() == 3, "expected function, binding, and print statements")) {
         return false;
@@ -335,7 +350,7 @@ bool parses_module_declaration_and_import_forms() {
              passed;
 
     // `from`/`module`/`as` stay usable as ordinary identifiers.
-    const dune::Program identifiers = parse_source("from = 1; module = from + 1; print(module);");
+    const dune::Program identifiers = parse_source("from = 1; module = from + 1; io.println(module);");
     passed = expect(identifiers.statements.size() == 3, "expected soft keywords to remain valid identifiers") && passed;
 
     return passed;
@@ -437,7 +452,7 @@ bool rejects_generic_type_aliases() {
 
 bool parses_format_expression_and_numeric_literals() {
     const dune::Program program = parse_source("size = 1_000_000; mask: u64 = 0xffu64; "
-                                               "message: text = format(\"{}\", size);");
+                                               "message: text = fmt.format(\"{}\", size);");
 
     if (!expect(program.statements.size() == 3, "expected numeric and format statements")) {
         return false;
@@ -451,7 +466,7 @@ bool parses_format_expression_and_numeric_literals() {
         expect(program.statements[0].expression->lexeme == "1_000_000", "expected decimal separator lexeme") && passed;
     passed = expect(program.statements[1].expression->lexeme == "0xffu64", "expected hex suffix lexeme") && passed;
     const dune::Expression& call = *program.statements[2].expression;
-    passed = expect(call.kind == dune::ExpressionKind::call, "expected format call") && passed;
+    passed = expect(call.kind == dune::ExpressionKind::method_call, "expected fmt.format call") && passed;
     passed = expect(call.lexeme == "format", "expected format callee") && passed;
     passed = expect(call.arguments.size() == 2, "expected format string and one argument") && passed;
     return passed;
@@ -492,7 +507,7 @@ bool parses_raw_and_escaped_literals() {
 }
 
 bool parses_standard_types_and_unit_calls() {
-    const dune::Program program = parse_source("fn log(message: text): unit { print(message); return; } "
+    const dune::Program program = parse_source("fn log(message: text): unit { io.println(message); return; } "
                                                "fn noop(): unit { } "
                                                "tiny: i8 = 1; wide: i64 = 2; "
                                                "index: usize = 3; offset: isize = 4; "
@@ -535,7 +550,7 @@ bool parses_standard_types_and_unit_calls() {
 
 bool parses_arrays_imports_and_module_calls() {
     const dune::Program program = parse_source("import math; values: [int] = [1, math.square(2)]; "
-                                               "values.push(9); print(values.len()); print(values[1]);");
+                                               "values.push(9); io.println(values.len()); io.println(values[1]);");
 
     if (!expect(program.statements.size() == 5, "expected import, array binding, calls, and print statements")) {
         return false;
@@ -568,24 +583,23 @@ bool parses_arrays_imports_and_module_calls() {
     passed = expect(push_statement.expression->lexeme == "push", "expected push method") && passed;
 
     const dune::Statement& len_statement = program.statements[3];
-    passed = expect(len_statement.expression->kind == dune::ExpressionKind::method_call, "expected len method call") &&
+    const dune::Expression& len_value = *len_statement.expression->arguments[0];
+    passed = expect(len_value.kind == dune::ExpressionKind::method_call, "expected len method call") &&
              passed;
-    passed = expect(len_statement.expression->lexeme == "len", "expected len method") && passed;
+    passed = expect(len_value.lexeme == "len", "expected len method") && passed;
 
     const dune::Statement& print_statement = program.statements[4];
-    passed =
-        expect(print_statement.expression->kind == dune::ExpressionKind::index, "expected index expression") && passed;
-    passed =
-        expect(print_statement.expression->left->kind == dune::ExpressionKind::identifier, "expected indexed name") &&
-        passed;
+    const dune::Expression& printed_value = *print_statement.expression->arguments[0];
+    passed = expect(printed_value.kind == dune::ExpressionKind::index, "expected index expression") && passed;
+    passed = expect(printed_value.left->kind == dune::ExpressionKind::identifier, "expected indexed name") && passed;
 
     return passed;
 }
 
 bool parses_constants_and_module_members() {
-    const dune::Program program = parse_source("import math; const tau: real64 = math.PI * 2.0; print(math.PI);");
+    const dune::Program program = parse_source("import math; const tau: real64 = math.PI * 2.0; io.println(math.PI);");
 
-    if (!expect(program.statements.size() == 3, "expected import, const, and print statements")) {
+    if (!expect(program.statements.size() == 3, "expected import, const, and io.println statements")) {
         return false;
     }
 
@@ -606,9 +620,9 @@ bool parses_constants_and_module_members() {
     passed = expect(const_statement.expression->left->left->lexeme == "math", "expected math receiver") && passed;
 
     const dune::Statement& print_statement = program.statements[2];
-    passed =
-        expect(print_statement.expression->kind == dune::ExpressionKind::member, "expected print member") && passed;
-    passed = expect(print_statement.expression->lexeme == "PI", "expected print PI member") && passed;
+    const dune::Expression& printed_value = *print_statement.expression->arguments[0];
+    passed = expect(printed_value.kind == dune::ExpressionKind::member, "expected printed member") && passed;
+    passed = expect(printed_value.lexeme == "PI", "expected printed PI member") && passed;
 
     return passed;
 }
@@ -617,7 +631,7 @@ bool parses_casts_unary_logical_and_methods() {
     const dune::Program program = parse_source("done: bool = !false && true || (17 % 5 == 2); "
                                                "exact: real64 = 17 to real64; "
                                                "values: [int] = [1, 2]; values.pop(); "
-                                               "message: text = \"dune\"; print(message.contains(\"du\"));");
+                                               "message: text = \"dune\"; io.println(message.contains(\"du\"));");
 
     if (!expect(program.statements.size() == 6, "expected operators and methods statements")) {
         return false;
@@ -644,10 +658,9 @@ bool parses_casts_unary_logical_and_methods() {
     passed = expect(pop_statement.expression->lexeme == "pop", "expected pop method") && passed;
 
     const dune::Statement& print_statement = program.statements[5];
-    passed =
-        expect(print_statement.expression->kind == dune::ExpressionKind::method_call, "expected text method call") &&
-        passed;
-    passed = expect(print_statement.expression->lexeme == "contains", "expected contains method") && passed;
+    const dune::Expression& printed_value = *print_statement.expression->arguments[0];
+    passed = expect(printed_value.kind == dune::ExpressionKind::method_call, "expected text method call") && passed;
+    passed = expect(printed_value.lexeme == "contains", "expected contains method") && passed;
 
     return passed;
 }
@@ -655,7 +668,7 @@ bool parses_casts_unary_logical_and_methods() {
 bool parses_stdlib_primitives() {
     const dune::Program program = parse_source("import text; "
                                                "export foreign fn c_sqrt(value: real64): real64 = \"sqrt\"; "
-                                               "message: text = \"dune\"; print(message[1:3]); print(message[:2]); "
+                                               "message: text = \"dune\"; io.println(message[1:3]); io.println(message[:2]); "
                                                "for i = 0; i < 3; i = i + 1 { "
                                                "if i == 1 { continue; } break; }");
 
@@ -675,14 +688,16 @@ bool parses_stdlib_primitives() {
     passed = expect(external.extern_symbol == "sqrt", "expected foreign symbol") && passed;
 
     const dune::Statement& first_print = program.statements[3];
-    passed = expect(first_print.expression->kind == dune::ExpressionKind::slice, "expected text slice") && passed;
-    passed = expect(first_print.expression->arguments[0] != nullptr, "expected explicit slice start") && passed;
-    passed = expect(first_print.expression->arguments[1] != nullptr, "expected explicit slice end") && passed;
+    const dune::Expression& first_printed_value = *first_print.expression->arguments[0];
+    passed = expect(first_printed_value.kind == dune::ExpressionKind::slice, "expected text slice") && passed;
+    passed = expect(first_printed_value.arguments[0] != nullptr, "expected explicit slice start") && passed;
+    passed = expect(first_printed_value.arguments[1] != nullptr, "expected explicit slice end") && passed;
 
     const dune::Statement& second_print = program.statements[4];
-    passed = expect(second_print.expression->kind == dune::ExpressionKind::slice, "expected prefix slice") && passed;
-    passed = expect(second_print.expression->arguments[0] == nullptr, "expected omitted slice start") && passed;
-    passed = expect(second_print.expression->arguments[1] != nullptr, "expected prefix slice end") && passed;
+    const dune::Expression& second_printed_value = *second_print.expression->arguments[0];
+    passed = expect(second_printed_value.kind == dune::ExpressionKind::slice, "expected prefix slice") && passed;
+    passed = expect(second_printed_value.arguments[0] == nullptr, "expected omitted slice start") && passed;
+    passed = expect(second_printed_value.arguments[1] != nullptr, "expected prefix slice end") && passed;
 
     const dune::Statement& loop = program.statements[5];
     passed = expect(loop.kind == dune::StatementKind::for_statement, "expected for statement") && passed;
@@ -699,8 +714,8 @@ bool parses_stdlib_primitives() {
 
 bool parses_for_in_and_ranges() {
     const dune::Program program = parse_source("values: [int] = [1, 2, 3]; "
-                                               "for value in values { print(value); } "
-                                               "for i in 0..values.len() { print(values[i]); }");
+                                               "for value in values { io.println(value); } "
+                                               "for i in 0..values.len() { io.println(values[i]); }");
 
     if (!expect(program.statements.size() == 3, "expected binding and two for-in statements")) {
         return false;
@@ -731,7 +746,7 @@ bool parses_for_in_and_ranges() {
 bool parses_generic_functions() {
     const dune::Program program =
         parse_source("fn choose<T, R is real, U is numeric>(left: T, middle: R, right: U): U { "
-                     "return right; } print(choose(\"x\", 1.5, 7));");
+                     "return right; } io.println(choose(\"x\", 1.5, 7));");
 
     if (!expect(program.statements.size() == 2, "expected generic function and print statements")) {
         return false;
@@ -800,7 +815,7 @@ bool parses_receiver_methods() {
 bool parses_records_and_record_literals() {
     const dune::Program program = parse_source("record Point { x: real64, y: real64, "
                                                "fn sum(): real64 { return this.x + this.y; } } "
-                                               "p: Point = Point { x: 1.5, y: 2.5 }; print(p.sum());");
+                                               "p: Point = Point { x: 1.5, y: 2.5 }; io.println(p.sum());");
 
     if (!expect(program.statements.size() == 3, "expected record, binding, and print")) {
         return false;
@@ -827,7 +842,7 @@ bool parses_records_and_record_literals() {
     passed =
         expect(literal.arguments[1]->kind == dune::ExpressionKind::floating, "expected floating field value") && passed;
 
-    const dune::Expression& call = *program.statements[2].expression;
+    const dune::Expression& call = *program.statements[2].expression->arguments[0];
     passed = expect(call.kind == dune::ExpressionKind::method_call, "expected record method call") && passed;
     passed = expect(call.lexeme == "sum", "expected method name") && passed;
 
@@ -863,7 +878,7 @@ bool parses_derive_and_generates_methods() {
 
 bool derive_does_not_override_explicit_method() {
     const dune::Program program = parse_source("record Point derive eq, debug { x: int, y: int, "
-                                               "fn to_text(): text { return format(\"P{}\", this.x); } }");
+                                               "fn to_text(): text { return fmt.format(\"P{}\", this.x); } }");
 
     bool passed = true;
     const dune::Statement& record = program.statements[0];

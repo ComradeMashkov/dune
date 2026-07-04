@@ -1329,7 +1329,6 @@ std::string declaration_hover(const Statement& statement) {
         break;
     case StatementKind::method_block:
     case StatementKind::assign:
-    case StatementKind::print:
     case StatementKind::block:
     case StatementKind::if_statement:
     case StatementKind::while_statement:
@@ -1808,7 +1807,6 @@ std::optional<std::string> builtin_hover(const Token& token) {
     case TokenType::import_keyword:
     case TokenType::when_keyword:
     case TokenType::return_keyword:
-    case TokenType::print:
     case TokenType::if_keyword:
     case TokenType::else_keyword:
     case TokenType::while_keyword:

@@ -187,7 +187,10 @@ add_executable(type_checker_tests tests/type_checker_tests.cpp)
 target_link_libraries(type_checker_tests PRIVATE dune_modules dune_typechecker)
 # Lets the fixture helper build module search paths that include the standard
 # library alongside the category subfolders that hold importable module fixtures.
-target_compile_definitions(type_checker_tests PRIVATE DUNE_STDLIB_PATH="${CMAKE_CURRENT_SOURCE_DIR}/stdlib")
+target_compile_definitions(type_checker_tests PRIVATE
+    DUNE_STDLIB_PATH="${CMAKE_CURRENT_SOURCE_DIR}/stdlib"
+    DUNE_FIXTURES_PATH="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures"
+)
 dune_add_lint_dependencies(type_checker_tests)
 
 add_executable(vm_tests tests/vm_tests.cpp)
@@ -471,6 +474,18 @@ add_test(
         -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/stdlib/stdlib_primitives.dn
         -D EXPECTED_OUTPUT="d\nlanguage\ndune\nlanguage\n3\n2\n4\n9\n1\n2\n4\n2\n9\n5\n9\n1\n8\n2\ndune\n42\n7"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
+    NAME cli_io_module
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/stdlib/io_module.dn
+        -D INPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/stdlib/io_module.in
+        -D EXPECTED_OUTPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/golden/io_module.out
+        -D EXPECTED_ERROR_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/golden/io_module.err
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
 )
 

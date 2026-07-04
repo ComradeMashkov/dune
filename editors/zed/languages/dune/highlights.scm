@@ -18,7 +18,6 @@
   "is"
   "method"
   "module"
-  "print"
   "record"
   "return"
   "static"

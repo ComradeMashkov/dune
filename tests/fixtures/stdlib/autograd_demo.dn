@@ -1,3 +1,4 @@
+import io;
 // Exercises the autograd stdlib module: reverse-mode automatic differentiation.
 import autograd;
 
@@ -7,23 +8,23 @@ y = autograd.variable(3.0);
 // Build the graph loss = x*y + x^2 + 1 using autograd ops (mul, add, pow).
 loss = x.mul(y).add(x.pow(2.0)).add(1.0);
 loss.backward();            // autograd.backward: propagate gradients from loss
-print(loss.data);           // .data: forward value = 2*3 + 4 + 1 -> 11
-print(x.grad);              // d(loss)/dx = y + 2x = 3 + 4 -> 7
-print(y.grad);              // d(loss)/dy = x -> 2
+io.println(loss.data);           // .data: forward value = 2*3 + 4 + 1 -> 11
+io.println(x.grad);              // d(loss)/dx = y + 2x = 3 + 4 -> 7
+io.println(y.grad);              // d(loss)/dy = x -> 2
 
 // Reuse of a shared node to show the graph accumulates its contributions.
 a = autograd.variable(3.0);
 shared = a.mul(a);          // shared = a^2 (a appears twice in this node)
 doubled = shared.add(shared);  // doubled = 2*a^2
 doubled.backward();         // backward through the reused subgraph
-print(doubled.data);        // 2 * 9 -> 18
-print(a.grad);              // d(2a^2)/da = 4a = 12
+io.println(doubled.data);        // 2 * 9 -> 18
+io.println(a.grad);              // d(2a^2)/da = 4a = 12
 doubled.backward();         // second backward accumulates onto existing grads
-print(a.grad);              // grad now doubled by accumulation -> 24
+io.println(a.grad);              // grad now doubled by accumulation -> 24
 
 // relu on a negative input: value clipped to 0, gradient blocked.
 negative = autograd.variable(0.0 - 2.0);
 clipped = negative.relu();  // autograd.relu: max(0, x)
 clipped.backward();         // propagate through the relu
-print(clipped.data);        // relu(-2) -> 0
-print(negative.grad);       // relu gradient is 0 for negative input -> 0
+io.println(clipped.data);        // relu(-2) -> 0
+io.println(negative.grad);       // relu gradient is 0 for negative input -> 0

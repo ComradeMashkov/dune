@@ -457,18 +457,6 @@ void Compiler::compile_statement(const Statement& statement) {
         }
         return;
     }
-    case StatementKind::print:
-        if (statement.arguments.empty()) {
-            compile_printable_argument(*statement.expression);
-            emit(OpCode::print);
-            return;
-        }
-        compile_expression(*statement.expression);
-        for (const std::unique_ptr<Expression>& argument : statement.arguments) {
-            compile_printable_argument(*argument);
-        }
-        emit(OpCode::print_format, statement.arguments.size());
-        return;
     case StatementKind::block:
         push_scope();
         compile_statements(statement.body);
@@ -901,11 +889,6 @@ void Compiler::compile_expression(const Expression& expression) {
         compile_cast_expression(expression);
         return;
     case ExpressionKind::call:
-        if (expression.lexeme == "format") {
-            compile_format_expression(expression);
-            return;
-        }
-
         if (compile_io_builtin_expression(expression)) {
             return;
         }
@@ -951,9 +934,9 @@ void Compiler::compile_format_expression(const Expression& expression) {
     emit(OpCode::format_text, expression.arguments.size() - 1);
 }
 
-// Compile a value for `print`/`format`. A record that implements the Display
+// Compile a value for `fmt.format`. A record that implements the Display
 // contract (a `to_text(): text` method) is lowered to a `to_text()` call so a
-// text value reaches the print/format opcodes; everything else compiles as-is.
+// text value reaches the formatting opcode; everything else compiles as-is.
 void Compiler::compile_printable_argument(const Expression& argument) {
     const Type& type = expression_type(argument);
     if (type.kind == ValueType::struct_type) {
@@ -977,6 +960,16 @@ bool Compiler::compile_io_builtin_expression(const Expression& expression) {
         op = OpCode::read_file;
     } else if (expression.lexeme == "__write_file") {
         op = OpCode::write_file;
+    } else if (expression.lexeme == "__stdout_write") {
+        op = OpCode::stdout_write;
+    } else if (expression.lexeme == "__stderr_write") {
+        op = OpCode::stderr_write;
+    } else if (expression.lexeme == "__stdout_flush") {
+        op = OpCode::stdout_flush;
+    } else if (expression.lexeme == "__stderr_flush") {
+        op = OpCode::stderr_flush;
+    } else if (expression.lexeme == "__stdin_read_line") {
+        op = OpCode::stdin_read_line;
     } else if (expression.lexeme == "__env_get") {
         op = OpCode::env_get;
     } else if (expression.lexeme == "__process_args") {
@@ -1279,6 +1272,12 @@ void Compiler::compile_struct_literal(const Expression& expression) {
 }
 
 void Compiler::compile_method_call_expression(const Expression& expression) {
+    if (expression.left != nullptr && expression.left->kind == ExpressionKind::identifier &&
+        expression.left->lexeme == "fmt" && expression.lexeme == "format") {
+        compile_format_expression(expression);
+        return;
+    }
+
     if (resolved_calls_.contains(&expression)) {
         const std::size_t function_index = resolve_function(resolved_calls_.at(&expression));
         const Bytecode::Function& function = bytecode_.functions.at(function_index);

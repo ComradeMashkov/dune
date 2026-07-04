@@ -60,7 +60,6 @@ private:
     Statement if_statement();
     Statement binding_statement();
     Statement method_statement();
-    Statement print_statement();
     Statement return_statement();
     Statement struct_statement();
     Statement type_alias_statement();

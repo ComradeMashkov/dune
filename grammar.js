@@ -54,7 +54,6 @@ module.exports = grammar({
       $.const_statement,
       $.tuple_assignment_statement,
       $.assignment_statement,
-      $.print_statement,
       $.return_statement,
       $.if_statement,
       $.while_statement,
@@ -250,15 +249,6 @@ module.exports = grammar({
       optional(","),
       ")",
     )),
-
-    print_statement: $ => seq(
-      "print",
-      "(",
-      field("value", $._expression),
-      repeat(seq(",", field("argument", $._expression))),
-      ")",
-      ";"
-    ),
 
     return_statement: $ => seq("return", optional($._expression), ";"),
 

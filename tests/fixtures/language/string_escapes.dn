@@ -1,22 +1,23 @@
+import io;
 // Raw string literal (r"..."): backslashes are literal, not escape sequences.
 path: text = r"C:\Users\name\data.csv";
 // Prints the raw path with backslashes intact.
-print(path);
+io.println(path);
 // \n escape produces a newline, splitting output across "hello" and "world".
-print("hello\nworld");
+io.println("hello\nworld");
 // \" escapes embed literal double-quote characters -> quote "ok".
-print("quote \"ok\"");
+io.println("quote \"ok\"");
 // \\ escapes a single literal backslash -> slash \ ok.
-print("slash \\ ok");
+io.println("slash \\ ok");
 // glyph literal '\n' cast to its int code point -> 10 (newline).
-print('\n' to int);
+io.println('\n' to int);
 // glyph literal '\t' cast to int -> 9 (tab).
-print('\t' to int);
+io.println('\t' to int);
 // glyph literal '\r' cast to int -> 13 (carriage return).
-print('\r' to int);
+io.println('\r' to int);
 // glyph literal for a single backslash character.
-print('\\');
+io.println('\\');
 // glyph literal for a single-quote character.
-print('\'');
+io.println('\'');
 // glyph literal '\0' (null) cast to int -> 0.
-print('\0' to int);
+io.println('\0' to int);

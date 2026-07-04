@@ -222,7 +222,7 @@ bool record_defines_method(const std::vector<Statement>& methods, const std::str
     return false;
 }
 
-// `derive debug` -> `to_text(): text { return format("Name(f: {}, ...)", this.f, ...); }`
+// `derive debug` -> `to_text(): text { return fmt.format("Name(f: {}, ...)", this.f, ...); }`
 // Braces are avoided because the format string only understands `{}` placeholders.
 Statement make_derived_to_text(const std::string& record_name, const std::vector<Parameter>& fields,
                                SourceLocation location) {
@@ -242,8 +242,11 @@ Statement make_derived_to_text(const std::string& record_name, const std::vector
         arguments.push_back(make_field_access("this", field.name, location));
     }
 
-    return make_return_method("to_text", {}, TypeAnnotation{true, make_type(ValueType::text_type)},
-                              make_call("format", std::move(arguments), location), location);
+    return make_return_method(
+        "to_text", {}, TypeAnnotation{true, make_type(ValueType::text_type)},
+        make_method_call(make_leaf(ExpressionKind::identifier, "fmt", location), "format", std::move(arguments),
+                         location),
+        location);
 }
 
 // `derive eq` -> `equals(other: Name): bool { return this.f == other.f && ...; }`
@@ -636,10 +639,6 @@ Statement Parser::statement_dispatch() {
 
     if (match(TokenType::return_keyword)) {
         return return_statement();
-    }
-
-    if (match(TokenType::print)) {
-        return print_statement();
     }
 
     if (match(TokenType::if_keyword)) {
@@ -1077,23 +1076,6 @@ Statement Parser::binding_statement() {
     Statement statement{StatementKind::binding, name.lexeme, std::move(value), {}, {}};
     statement.type = declared_type;
     statement.location = location_from_token(name);
-    return statement;
-}
-
-Statement Parser::print_statement() {
-    const Token& keyword = previous();
-    consume(TokenType::left_paren, "expected '(' after print");
-    std::unique_ptr<Expression> value = expression();
-    std::vector<std::unique_ptr<Expression>> arguments;
-    while (match(TokenType::comma)) {
-        arguments.push_back(expression());
-    }
-    consume(TokenType::right_paren, "expected ')' after print expression");
-    consume(TokenType::semicolon, "expected ';' after print statement");
-
-    Statement statement{StatementKind::print, "", std::move(value), {}, {}};
-    statement.arguments = std::move(arguments);
-    statement.location = location_from_token(keyword);
     return statement;
 }
 

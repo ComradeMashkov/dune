@@ -1,4 +1,5 @@
+import io;
 // Bind x to the constant-folded sum 40 + 2 = 42 (int inferred).
 x = 40 + 2;
 // Print 42 to stdout.
-print(x);
+io.println(x);

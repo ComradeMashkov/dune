@@ -1,0 +1,113 @@
+// Text-oriented console I/O built on dedicated VM intrinsics. This module is
+// pure Dune: it shapes primitive `(ok, payload)` tuples into Outcome values and
+// provides convenient print-style wrappers for scripts and examples.
+import outcome;
+import fmt;
+
+// Write text to stdout without adding a newline.
+export fn write(message: text): outcome.Outcome<text, text> {
+    (ok, error) = __stdout_write(message);
+    if ok {
+        return outcome.done_text(message);
+    }
+
+    return outcome.failed_text(error);
+}
+
+// Write text to stdout followed by `\n`.
+export fn writeln(message: text): outcome.Outcome<text, text> {
+    write(message)?;
+    (ok, error) = __stdout_write("\n");
+    if ok {
+        return outcome.done_text(message);
+    }
+
+    return outcome.failed_text(error);
+}
+
+// Write text to stderr without adding a newline.
+export fn err_write(message: text): outcome.Outcome<text, text> {
+    (ok, error) = __stderr_write(message);
+    if ok {
+        return outcome.done_text(message);
+    }
+
+    return outcome.failed_text(error);
+}
+
+// Write text to stderr followed by `\n`.
+export fn err_writeln(message: text): outcome.Outcome<text, text> {
+    err_write(message)?;
+    (ok, error) = __stderr_write("\n");
+    if ok {
+        return outcome.done_text(message);
+    }
+
+    return outcome.failed_text(error);
+}
+
+// Flush stdout.
+export fn flush(): outcome.Outcome<text, text> {
+    (ok, error) = __stdout_flush();
+    if ok {
+        return outcome.done_text("");
+    }
+
+    return outcome.failed_text(error);
+}
+
+// Flush stderr.
+export fn flush_err(): outcome.Outcome<text, text> {
+    (ok, error) = __stderr_flush();
+    if ok {
+        return outcome.done_text("");
+    }
+
+    return outcome.failed_text(error);
+}
+
+// Read one line from stdin without the trailing newline.
+//
+// EOF is reported as `Failed("end of input")`; other stream errors are
+// reported as `Failed("could not read from stdin")`.
+export fn read_line(): outcome.Outcome<text, text> {
+    (ok, payload) = __stdin_read_line();
+    if ok {
+        return outcome.done_text(payload);
+    }
+
+    return outcome.failed_text(payload);
+}
+
+// Print a printable value to stdout without newline, ignoring output errors for
+// convenience.
+export fn print<T>(value: T): unit {
+    write(fmt.format("{}", value));
+    return;
+}
+
+// Print a printable value to stdout with a trailing newline, ignoring output
+// errors.
+export fn println<T>(value: T): unit {
+    writeln(fmt.format("{}", value));
+    return;
+}
+
+// Print a printable value to stderr without newline, ignoring output errors.
+export fn eprint<T>(value: T): unit {
+    err_write(fmt.format("{}", value));
+    return;
+}
+
+// Print a printable value to stderr with a trailing newline, ignoring output
+// errors.
+export fn eprintln<T>(value: T): unit {
+    err_writeln(fmt.format("{}", value));
+    return;
+}
+
+// Write a prompt to stdout, then read one line from stdin.
+export fn prompt(message: text): outcome.Outcome<text, text> {
+    write(message)?;
+    return read_line();
+}

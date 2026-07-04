@@ -1,56 +1,57 @@
+import io;
 // Array literal of ints; the [int] annotation means array-of-int.
 nums: [int] = [1, 2, 3, 4, 5];
 
 // Array comprehension: square each element n of nums -> [1,4,9,16,25].
 squares: [int] = [n * n for n in nums];
 // .len() method returns the element count (5).
-print(squares.len());
+io.println(squares.len());
 // Indexing (0-based): first element -> 1.
-print(squares[0]);
+io.println(squares[0]);
 // Last element at index 4 -> 25.
-print(squares[4]);
+io.println(squares[4]);
 
 // Comprehension with an 'if' filter clause: keep only even n -> [2, 4].
 evens: [int] = [n for n in nums if n % 2 == 0];
 // Length of the filtered result (2).
-print(evens.len());
+io.println(evens.len());
 // evens[0] -> 2.
-print(evens[0]);
+io.println(evens[0]);
 // evens[1] -> 4.
-print(evens[1]);
+io.println(evens[1]);
 
 // Comprehension over a range 0..5 (0,1,2,3,4), doubling each -> [0,2,4,6,8].
 ranged: [int] = [i * 2 for i in 0..5];
 // Length (5).
-print(ranged.len());
+io.println(ranged.len());
 // ranged[0] -> 0.
-print(ranged[0]);
+io.println(ranged[0]);
 // ranged[4] -> 8.
-print(ranged[4]);
+io.println(ranged[4]);
 
 // Filter that matches nothing (no n > 100) -> empty array.
 empty: [int] = [n for n in nums if n > 100];
 // Length of the empty array (0).
-print(empty.len());
+io.println(empty.len());
 
 // Comprehension over a text-literal array, keeping words whose length > 1.
 words: [text] = [w for w in ["a", "bb", "ccc"] if w.len() > 1];
 // Two words pass the filter: "bb" and "ccc".
-print(words.len());
+io.println(words.len());
 // words[0] -> "bb".
-print(words[0]);
+io.println(words[0]);
 // words[1] -> "ccc".
-print(words[1]);
+io.println(words[1]);
 
 // Nested comprehension: for each r in 1..4 build an inner list [x for x in 0..r].
 nested: [[int]] = [[x for x in 0..r] for r in 1..4];
 // Outer length: r ranges over 1,2,3 -> 3 inner lists.
-print(nested.len());
+io.println(nested.len());
 // Inner list for r=1 is [0], length 1.
-print(nested[0].len());
+io.println(nested[0].len());
 // Inner list for r=2 is [0,1], length 2.
-print(nested[1].len());
+io.println(nested[1].len());
 // Inner list for r=3 is [0,1,2], length 3.
-print(nested[2].len());
+io.println(nested[2].len());
 // Last inner list's last element (nested[2][2]) -> 2.
-print(nested[2][2]);
+io.println(nested[2][2]);

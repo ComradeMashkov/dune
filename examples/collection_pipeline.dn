@@ -1,3 +1,4 @@
+import io;
 // Collection pipelines: first-class function values let data-processing code read
 // as a fluent chain of `.filter(...).map(...).reduce(...)` steps instead of a
 // stack of manual loops and temporaries. Named functions are passed by name as
@@ -27,15 +28,15 @@ positives_energy = readings
     .map(square)
     .fold(0, add);
 // 3^2 + 6^2 + 5^2 + 8^2 = 9 + 36 + 25 + 64 = 134.
-print(positives_energy);
+io.println(positives_energy);
 
 // --- Predicate reductions ---------------------------------------------------
 // Does any reading exceed zero? (true -> 1)
-print(readings.any(is_positive));
+io.println(readings.any(is_positive));
 // Are all readings positive? (false -> 0)
-print(readings.all(is_positive));
+io.println(readings.all(is_positive));
 // How many readings are even? (-4, 6, -2, 8 -> 4)
-print(readings.count_where(is_even));
+io.println(readings.count_where(is_even));
 
 // --- Building and transforming a range --------------------------------------
 // range(1, 8) is [1..7]; square each, keep the even squares, and sum them.
@@ -44,10 +45,10 @@ even_square_total = array.range(1, 8)
     .filter(is_even)
     .fold(0, add);
 // squares 1,4,9,16,25,36,49 -> evens 4,16,36 -> 56.
-print(even_square_total);
+io.println(even_square_total);
 
 // --- Mapping to a different element type ------------------------------------
 // map(int -> bool) produces a mask; count how many entries are even.
 mask = array.range(1, 11).map(is_even);
 // 2,4,6,8,10 -> 5 even numbers in 1..10.
-print(mask.count_value(true));
+io.println(mask.count_value(true));
