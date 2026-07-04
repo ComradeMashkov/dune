@@ -289,6 +289,77 @@ bool defines_receiver_method() {
     return passed;
 }
 
+bool defines_module_from_from_import() {
+    // Regression: `from array import ...` must register `array` as a module so
+    // go-to-definition on the module name opens the module file.
+    const std::optional<dune::lsp::DefinitionLocation> definition =
+        dune::lsp::definition_source("from array import range, sum;\nprint(range(1, 3));", {}, {}, 0, 6);
+
+    bool passed = true;
+    passed = expect(definition.has_value(), "expected definition for from-import module name") && passed;
+    if (definition.has_value()) {
+        passed = expect(definition->uri.find("array.dn") != std::string::npos, "expected array module uri") && passed;
+        passed = expect(definition->line == 1, "expected array module file top") && passed;
+    }
+    return passed;
+}
+
+bool defines_selective_import_symbol() {
+    // Go-to-definition on a symbol pulled in unqualified by `from array import`
+    // lands on its declaration in the module file.
+    const std::optional<dune::lsp::DefinitionLocation> definition =
+        dune::lsp::definition_source("from array import range, sum;\nvalues = range(1, 3);", {}, {}, 1, 10);
+
+    bool passed = true;
+    passed = expect(definition.has_value(), "expected definition for selective import symbol") && passed;
+    if (definition.has_value()) {
+        passed =
+            expect(definition->uri.find("array.dn") != std::string::npos, "expected selective symbol module uri") &&
+            passed;
+    }
+    return passed;
+}
+
+bool hovers_selective_import_symbol() {
+    const std::optional<dune::lsp::Hover> hover =
+        dune::lsp::hover_source("from array import range, sum;\nvalues = range(1, 3);", {}, {}, 1, 10);
+
+    bool passed = true;
+    passed = expect(hover.has_value(), "expected hover for selective import symbol") && passed;
+    if (hover.has_value()) {
+        passed =
+            expect(hover->contents.find("range(") != std::string::npos, "expected range signature in hover") && passed;
+    }
+    return passed;
+}
+
+bool defines_aliased_module_name() {
+    // `import math as m;` — go-to-definition on the alias opens the module file.
+    const std::optional<dune::lsp::DefinitionLocation> definition =
+        dune::lsp::definition_source("import math as m;\nprint(m.square(3));", {}, {}, 0, 15);
+
+    bool passed = true;
+    passed = expect(definition.has_value(), "expected definition for module alias") && passed;
+    if (definition.has_value()) {
+        passed = expect(definition->uri.find("math.dn") != std::string::npos, "expected aliased module uri") && passed;
+    }
+    return passed;
+}
+
+bool hovers_aliased_module_member() {
+    const std::optional<dune::lsp::Hover> hover =
+        dune::lsp::hover_source("import math as m;\nprint(m.square(3));", {}, {}, 1, 9);
+
+    bool passed = true;
+    passed = expect(hover.has_value(), "expected hover for aliased module member") && passed;
+    if (hover.has_value()) {
+        passed = expect(hover->contents.find("square<T is numeric>(value: T): T") != std::string::npos,
+                        "expected aliased module function hover") &&
+                 passed;
+    }
+    return passed;
+}
+
 bool serves_lsp_definition() {
     const std::string uri = "file:///tmp/main.dn";
     const std::string source = "fn value(): int { return 7; }\\nprint(value());";
@@ -396,6 +467,11 @@ int main() {
     passed = defines_module_from_import() && passed;
     passed = defines_module_member() && passed;
     passed = defines_receiver_method() && passed;
+    passed = defines_module_from_from_import() && passed;
+    passed = defines_selective_import_symbol() && passed;
+    passed = hovers_selective_import_symbol() && passed;
+    passed = defines_aliased_module_name() && passed;
+    passed = hovers_aliased_module_member() && passed;
     passed = serves_lsp_definition() && passed;
     passed = publishes_lsp_diagnostics() && passed;
     passed = serves_lsp_completions_and_hover() && passed;
