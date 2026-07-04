@@ -1904,7 +1904,7 @@ bool TypeChecker::is_io_builtin(const std::string& name) {
            name == "__stdin_read_line" || name == "__env_get" || name == "__process_args" ||
            name == "__process_cwd" || name == "__log_emit" || name == "__log_set_level" ||
            name == "__log_level" || name == "__plot_backend_get" || name == "__plot_backend_set" ||
-           name == "__plot_show_native";
+           name == "__plot_show_native" || name == "__canvas_show_native";
 }
 
 Type TypeChecker::check_io_builtin_call(const Expression& expression) {
@@ -1913,7 +1913,7 @@ Type TypeChecker::check_io_builtin_call(const Expression& expression) {
     if (name == "__read_file" || name == "__env_get" || name == "__stdout_write" || name == "__stderr_write" ||
         name == "__plot_backend_set" || name == "__plot_show_native") {
         expected_arguments = 1;
-    } else if (name == "__write_file") {
+    } else if (name == "__write_file" || name == "__canvas_show_native") {
         expected_arguments = 2;
     } else if (name == "__log_emit") {
         expected_arguments = 3;

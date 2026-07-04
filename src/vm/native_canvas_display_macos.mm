@@ -1,4 +1,4 @@
-#include "native_plot_display.hpp"
+#include "native_canvas_display.hpp"
 
 #import <Cocoa/Cocoa.h>
 #import <WebKit/WebKit.h>
@@ -6,17 +6,18 @@
 #include <cstring>
 #include <string>
 
-// A polished native viewer for Dune plots/canvases on macOS.
+// A polished native viewer for Dune plots and canvas scenes on macOS.
 //
-// The chart is a deterministic SVG produced by the stdlib. Rather than dropping
-// the raw SVG into a bare WKWebView (which pins it top-left and offers no
-// interaction), we wrap it in a small self-contained HTML document that centres
-// the chart on a themed backdrop and adds Matplotlib-style tooling — grid,
-// pan/zoom, crosshair with a live coordinate readout — implemented in JS so it
-// tracks the transformed content correctly. A native unified toolbar drives
-// that JS through `evaluateJavaScript:`, and the page reports the cursor back
-// through a script-message handler so the status bar can display coordinates.
-// Everything is inline; no network or external assets are used.
+// Both plot charts and canvas scenes are deterministic SVG produced by the
+// stdlib. Rather than dropping the raw SVG into a bare WKWebView (which pins it
+// top-left and offers no interaction), we wrap it in a small self-contained HTML
+// document that centres the artwork on a themed backdrop and adds Matplotlib-
+// style tooling — grid, pan/zoom, actual-size, crosshair with a live coordinate
+// readout, keyboard shortcuts — implemented in JS so it tracks the transformed
+// content correctly. A native unified toolbar drives that JS through
+// `evaluateJavaScript:`, and the page reports the cursor back through a
+// script-message handler so the status bar can display coordinates. Everything
+// is inline; no network or external assets are used.
 
 namespace {
 
@@ -169,7 +170,7 @@ std::string build_document(const std::string& svg) {
     report('zoom', { zoom: Math.round(state.base * state.zoom * 100) });
   }
 
-  // Scale the card so the chart fits the viewport with a comfortable margin.
+  // Scale the card so the artwork fits the viewport with a comfortable margin.
   function fit() {
     if (!svg) return;
     var vw = window.innerWidth, vh = window.innerHeight;
@@ -182,6 +183,12 @@ std::string build_document(const std::string& svg) {
   }
   window.duneFit = fit;
   window.duneReset = fit;
+
+  // Render the artwork at its intrinsic 1:1 size, centred.
+  window.duneActualSize = function () {
+    state.base = 1; state.zoom = 1; state.x = 0; state.y = 0;
+    apply();
+  };
 
   window.duneZoomIn = function () { zoomBy(1.25); };
   window.duneZoomOut = function () { zoomBy(1 / 1.25); };
@@ -228,7 +235,23 @@ std::string build_document(const std::string& svg) {
     if (drag) { state.x = e.clientX - drag.x; state.y = e.clientY - drag.y; apply(); }
   });
 
-  // Crosshair + live coordinate readout in the chart's own SVG space.
+  // Keyboard shortcuts mirror the toolbar for a native feel.
+  window.addEventListener('keydown', function (e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    switch (e.key) {
+      case '+': case '=': zoomBy(1.25); break;
+      case '-': case '_': zoomBy(1 / 1.25); break;
+      case '0': fit(); break;
+      case '1': window.duneActualSize(); break;
+      case 'g': case 'G': window.duneToggleGrid(); break;
+      case 'c': case 'C': window.duneToggleCrosshair(); break;
+      case 't': case 'T': window.duneSetTheme('toggle'); break;
+      default: return;
+    }
+    e.preventDefault();
+  });
+
+  // Crosshair + live coordinate readout in the artwork's own SVG space.
   card.addEventListener('mousemove', function (e) {
     if (!state.hair || !svg || typeof svg.getScreenCTM !== 'function') return;
     var ctm = svg.getScreenCTM();
@@ -254,7 +277,7 @@ std::string build_document(const std::string& svg) {
 
   window.addEventListener('resize', fit);
   if (svg) { requestAnimationFrame(fit); } else {
-    document.getElementById('chart').innerHTML = '<div id="empty">No chart to display.</div>';
+    document.getElementById('chart').innerHTML = '<div id="empty">Nothing to display.</div>';
   }
   report('ready', { series: svg ? svg.querySelectorAll('.series').length : 0 });
 })();
@@ -272,10 +295,10 @@ std::string build_document(const std::string& svg) {
 
 } // namespace
 
-@interface DunePlotWindowDelegate : NSObject <NSWindowDelegate>
+@interface DuneCanvasWindowDelegate : NSObject <NSWindowDelegate>
 @end
 
-@implementation DunePlotWindowDelegate
+@implementation DuneCanvasWindowDelegate
 - (void)windowWillClose:(NSNotification*)notification {
     (void)notification;
     [NSApp stop:nil];
@@ -295,14 +318,14 @@ std::string build_document(const std::string& svg) {
 
 // Owns the web view + status bar and bridges the native toolbar to the page's
 // JavaScript, and the page's cursor messages back to the status bar.
-@interface DunePlotController : NSObject <NSToolbarDelegate, WKScriptMessageHandler>
+@interface DuneCanvasController : NSObject <NSToolbarDelegate, WKScriptMessageHandler>
 @property(nonatomic, strong) WKWebView* webView;
 @property(nonatomic, strong) NSTextField* coordLabel;
 @property(nonatomic, strong) NSTextField* zoomLabel;
 @property(nonatomic, copy) NSString* svg;
 @end
 
-@implementation DunePlotController
+@implementation DuneCanvasController
 
 - (void)runJS:(NSString*)script {
     [self.webView evaluateJavaScript:script completionHandler:nil];
@@ -312,16 +335,24 @@ std::string build_document(const std::string& svg) {
 - (void)zoomIn:(id)sender { (void)sender; [self runJS:@"window.duneZoomIn && duneZoomIn();"]; }
 - (void)zoomOut:(id)sender { (void)sender; [self runJS:@"window.duneZoomOut && duneZoomOut();"]; }
 - (void)resetView:(id)sender { (void)sender; [self runJS:@"window.duneReset && duneReset();"]; }
+- (void)actualSize:(id)sender { (void)sender; [self runJS:@"window.duneActualSize && duneActualSize();"]; }
 - (void)toggleCrosshair:(id)sender {
     (void)sender;
     [self runJS:@"window.duneToggleCrosshair && duneToggleCrosshair();"];
 }
 - (void)toggleTheme:(id)sender { (void)sender; [self runJS:@"window.duneSetTheme && duneSetTheme('toggle');"]; }
 
+- (void)copySVG:(id)sender {
+    (void)sender;
+    NSPasteboard* pasteboard = [NSPasteboard generalPasteboard];
+    [pasteboard clearContents];
+    [pasteboard setString:(self.svg == nil ? @"" : self.svg) forType:NSPasteboardTypeString];
+}
+
 - (void)saveSVG:(id)sender {
     (void)sender;
     NSSavePanel* panel = [NSSavePanel savePanel];
-    [panel setNameFieldStringValue:@"dune-plot.svg"];
+    [panel setNameFieldStringValue:@"dune-canvas.svg"];
     if ([panel runModal] != NSModalResponseOK || [panel URL] == nil) {
         return;
     }
@@ -378,8 +409,8 @@ std::string build_document(const std::string& svg) {
 - (NSArray<NSToolbarItemIdentifier>*)toolbarDefaultItemIdentifiers:(NSToolbar*)toolbar {
     (void)toolbar;
     return @[
-        @"grid", @"crosshair", NSToolbarSpaceItemIdentifier, @"zoomOut", @"reset", @"zoomIn",
-        NSToolbarFlexibleSpaceItemIdentifier, @"theme", @"save"
+        @"grid", @"crosshair", NSToolbarSpaceItemIdentifier, @"zoomOut", @"actualSize", @"zoomIn", @"reset",
+        NSToolbarFlexibleSpaceItemIdentifier, @"theme", @"copy", @"save"
     ];
 }
 
@@ -404,11 +435,18 @@ std::string build_document(const std::string& svg) {
     if ([identifier isEqualToString:@"zoomOut"]) {
         return [self item:identifier symbol:@"minus.magnifyingglass" label:@"Zoom Out" action:@selector(zoomOut:)];
     }
+    if ([identifier isEqualToString:@"actualSize"]) {
+        return [self item:identifier symbol:@"1.magnifyingglass" label:@"Actual Size" action:@selector(actualSize:)];
+    }
     if ([identifier isEqualToString:@"reset"]) {
-        return [self item:identifier symbol:@"arrow.counterclockwise" label:@"Reset" action:@selector(resetView:)];
+        return [self item:identifier symbol:@"arrow.up.left.and.arrow.down.right" label:@"Fit"
+                   action:@selector(resetView:)];
     }
     if ([identifier isEqualToString:@"theme"]) {
         return [self item:identifier symbol:@"circle.lefthalf.filled" label:@"Theme" action:@selector(toggleTheme:)];
+    }
+    if ([identifier isEqualToString:@"copy"]) {
+        return [self item:identifier symbol:@"doc.on.doc" label:@"Copy SVG" action:@selector(copySVG:)];
     }
     if ([identifier isEqualToString:@"save"]) {
         return [self item:identifier symbol:@"square.and.arrow.down" label:@"Save SVG" action:@selector(saveSVG:)];
@@ -420,9 +458,9 @@ std::string build_document(const std::string& svg) {
 
 namespace dune {
 
-NativePlotDisplayResult show_native_plot_svg(const std::string& svg) {
+NativeCanvasDisplayResult show_native_canvas_svg(const std::string& title, const std::string& svg) {
     if (svg.empty()) {
-        return {false, "native plot display backend received an empty SVG"};
+        return {false, "native canvas display backend received an empty SVG"};
     }
 
     @autoreleasepool {
@@ -436,13 +474,19 @@ NativePlotDisplayResult show_native_plot_svg(const std::string& svg) {
                                                   NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable
                                           backing:NSBackingStoreBuffered
                                             defer:NO];
-        [window setTitle:@"Dune Plot"];
+        NSString* titleString = [[NSString alloc] initWithBytes:title.data()
+                                                         length:title.size()
+                                                       encoding:NSUTF8StringEncoding];
+        if (titleString == nil || [titleString length] == 0) {
+            titleString = @"Dune Canvas";
+        }
+        [window setTitle:titleString];
         [window setReleasedWhenClosed:NO];
         if (@available(macOS 11.0, *)) {
             [window setToolbarStyle:NSWindowToolbarStyleUnified];
         }
 
-        DunePlotController* controller = [[DunePlotController alloc] init];
+        DuneCanvasController* controller = [[DuneCanvasController alloc] init];
         controller.svg = [[NSString alloc] initWithBytes:svg.data() length:svg.size() encoding:NSUTF8StringEncoding];
 
         // Web view with a message handler so the page can push cursor/zoom state.
@@ -480,11 +524,11 @@ NativePlotDisplayResult show_native_plot_svg(const std::string& svg) {
         [coord setAutoresizingMask:NSViewMaxXMargin];
         controller.coordLabel = coord;
 
-        NSTextField* hint = [NSTextField labelWithString:@"scroll to zoom · drag to pan"];
+        NSTextField* hint = [NSTextField labelWithString:@"scroll to zoom · drag to pan · 0 fit · 1 actual size"];
         [hint setFont:[NSFont systemFontOfSize:11.0]];
         [hint setTextColor:[NSColor tertiaryLabelColor]];
         [hint setAlignment:NSTextAlignmentCenter];
-        [hint setFrame:NSMakeRect(NSWidth(frame) / 2.0 - 130.0, 5.0, 260.0, 18.0)];
+        [hint setFrame:NSMakeRect(NSWidth(frame) / 2.0 - 180.0, 5.0, 360.0, 18.0)];
         [hint setAutoresizingMask:NSViewMinXMargin | NSViewMaxXMargin];
 
         NSTextField* zoom = [NSTextField labelWithString:@"100%"];
@@ -502,13 +546,13 @@ NativePlotDisplayResult show_native_plot_svg(const std::string& svg) {
         [root addSubview:web];
         [root addSubview:status];
 
-        NSToolbar* toolbar = [[NSToolbar alloc] initWithIdentifier:@"DunePlotToolbar"];
+        NSToolbar* toolbar = [[NSToolbar alloc] initWithIdentifier:@"DuneCanvasToolbar"];
         [toolbar setDelegate:controller];
         [toolbar setDisplayMode:NSToolbarDisplayModeIconOnly];
         [toolbar setAllowsUserCustomization:NO];
         [window setToolbar:toolbar];
 
-        DunePlotWindowDelegate* delegate = [[DunePlotWindowDelegate alloc] init];
+        DuneCanvasWindowDelegate* delegate = [[DuneCanvasWindowDelegate alloc] init];
         [window setDelegate:delegate];
         [window setContentView:root];
         [window center];
@@ -516,7 +560,7 @@ NativePlotDisplayResult show_native_plot_svg(const std::string& svg) {
         [app activateIgnoringOtherApps:YES];
         [app run];
 
-        return {true, "native plot window closed"};
+        return {true, "native canvas window closed"};
     }
 }
 
