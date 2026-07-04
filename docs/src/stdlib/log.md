@@ -64,47 +64,47 @@ log.set_level(log.WARN)
 
 ### `fn level(): int`
 
-Return the active minimum level.
+Return the active minimum level (INFO = 2 by default).
 
 **Example:**
 ```dune
-log.level()
+log.level()  // 2
 ```
 
 ### `fn enabled(level: int): bool`
 
-True when a message at `level` would be emitted.
+True when a message at `level` would be emitted at the active level.
 
 **Example:**
 ```dune
-log.enabled(log.DEBUG)
+log.enabled(log.ERROR)  // 1
 ```
 
 ### `fn trace(message: text): unit`
 
-Emit a trace message.
+Emit a trace message (suppressed unless the level is lowered to TRACE).
 
 **Example:**
 ```dune
-log.trace("starting parser")
+log.set_level(log.TRACE); log.trace("parsing input")  // stderr: [trace] parsing input
 ```
 
 ### `fn debug(message: text): unit`
 
-Emit a debug message.
+Emit a debug message (suppressed unless the level is lowered to DEBUG).
 
 **Example:**
 ```dune
-log.debug("cache miss")
+log.set_level(log.DEBUG); log.debug("cache miss")  // stderr: [debug] cache miss
 ```
 
 ### `fn info(message: text): unit`
 
-Emit an informational message.
+Emit an informational message (shown at the default level).
 
 **Example:**
 ```dune
-log.info("building target")
+log.info("building target")  // stderr: [info] building target
 ```
 
 ### `fn warn(message: text): unit`
@@ -113,7 +113,7 @@ Emit a warning message.
 
 **Example:**
 ```dune
-log.warn("native backend disabled")
+log.warn("native backend disabled")  // stderr: [warn] native backend disabled
 ```
 
 ### `fn error(message: text): unit`
@@ -122,5 +122,5 @@ Emit an error message.
 
 **Example:**
 ```dune
-log.error("failed")
+log.error("connection refused")  // stderr: [error] connection refused
 ```

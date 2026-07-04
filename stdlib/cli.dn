@@ -56,6 +56,7 @@ export record ParseResult {
     output: text,
 
     // Return the option value named `name`, if it was supplied or defaulted.
+    // example: cli.command("g").option("name", "n", "Name", "world").parse(["--name", "dune"]).value_or(cli.empty_result()).text("name").value_or("")  // dune
     export fn text(name: text): maybe.Maybe<text> {
         index = parsed_value_index(this.values, name);
         if index < 0 {
@@ -71,6 +72,7 @@ export record ParseResult {
     }
 
     // Parse a named option as an int. Invalid or absent values return Absent.
+    // example: cli.command("g").option("count", "c", "Count", "1").parse(["--count", "3"]).value_or(cli.empty_result()).as_int("count").value_or(0)  // 3
     export fn as_int(name: text): maybe.Maybe<int> {
         value = this.text(name);
         if value.has_value() {
@@ -106,6 +108,7 @@ export record ParseResult {
     }
 
     // True when a flag was supplied.
+    // example: cli.command("g").flag("v", "v", "").parse(["-v"]).value_or(cli.empty_result()).flag("v")  // 1
     export fn flag(name: text): bool {
         index = parsed_flag_index(this.flags, name);
         if index < 0 {
@@ -190,6 +193,7 @@ export record Command {
     }
 
     // Add an option with a default value.
+    // example: cli.command("g").flag("v", "v", "").option("name", "n", "Name", "world").parse(["-v"]).value_or(cli.empty_result()).text("name").value_or("")  // world
     export fn option(name: text, short: text, description: text, default_value: text): Command {
         options = copy_options(this.options);
         options.push(OptionSpec {
@@ -232,6 +236,7 @@ export record Command {
     }
 
     // Add a boolean flag.
+    // example: cli.command("g").flag("verbose", "v", "Verbose").parse(["-v"]).value_or(cli.empty_result()).flag("verbose")  // 1
     export fn flag(name: text, short: text, description: text): Command {
         flags = copy_flags(this.flags);
         flags.push(FlagSpec { name: name, short: short, about_text: description });
@@ -277,6 +282,7 @@ export record Command {
     }
 
     // Deterministic help text for this command.
+    // example: cli.command("greet").help_text().len()  // 69
     export fn help_text(): text {
         message = cat(this.name, "\n");
         if this.about_text != "" {
@@ -338,6 +344,7 @@ export record Command {
     }
 
     // Deterministic version text for this command.
+    // example: cli.command("tool").version("1.0").version_output()  // tool 1.0
     export fn version_output(): text {
         if this.version_text == "" {
             return this.name;
@@ -347,6 +354,7 @@ export record Command {
     }
 
     // Parse command-line arguments.
+    // example: cli.command("g").parse(["extra"]).failure_or("")  // unexpected positional argument 'extra'
     export fn parse(args: [text]): outcome.Outcome<ParseResult, text> {
         values = default_values(this.options);
         parsed_flags = default_flags(this.flags);
@@ -511,6 +519,7 @@ export record Command {
 }
 
 // Start a builder for a named command.
+// example: cli.command("greet").version_output()  // greet
 export fn command(name: text): Command {
     return Command {
         name: name,
@@ -523,6 +532,7 @@ export fn command(name: text): Command {
 }
 
 // Empty parse result useful as a value_or fallback.
+// example: cli.empty_result().text("missing").value_or("none")  // none
 export fn empty_result(): ParseResult {
     return empty_parse_result();
 }
