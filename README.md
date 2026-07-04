@@ -961,11 +961,14 @@ print(fs.read_text("greeting.txt").value_or("<missing>"));
 File and OS access runs on the bytecode VM (`dune <file>`); the best-effort
 native backend does not support it yet and reports a clear error.
 
-Plotting starts with pure Dune chart specs and deterministic renderers. The
-default display backend is `none`, so `plot.show(chart)` returns a clear
-`Outcome` failure instead of trying to open a GUI in headless runs. Set
-`plot.use_backend("svg")`, `plot.use_backend("html")`, or
-`DUNE_PLOT_BACKEND=svg|html|none` to choose display-capture behavior.
+Plotting starts with pure Dune chart specs, deterministic renderers, and
+Matplotlib-style display backends. The default display backend is `none`, so
+`plot.show(chart)` returns a clear `Outcome` failure instead of trying to open a
+GUI in headless runs. Set `plot.use_backend("native")` to open a platform-native
+plot window where the VM supports it (currently macOS via system Cocoa/WebKit),
+or set `plot.use_backend("svg")` / `plot.use_backend("html")` for deterministic
+capture behavior. `DUNE_PLOT_BACKEND=native|svg|html|none` overrides the backend
+from the environment.
 
 ```dn
 import plot;
@@ -976,7 +979,7 @@ chart = plot.line([1.0, 2.0, 3.0], [2.0, 4.0, 8.0])
     .y_label("value");
 
 plot.save_svg(chart, "growth.svg");
-plot.use_backend("svg");
+plot.use_backend("native");
 print(plot.show(chart).is_done());
 ```
 

@@ -243,6 +243,7 @@ export fn histogram(values: [real64], bins: int): Chart {
 // - "none": return a clear unsupported/headless error;
 // - "svg": return the deterministic SVG text;
 // - "html": return a deterministic HTML wrapper containing the SVG.
+// - "native": open a platform-native plot window when the VM supports it.
 export fn use_backend(name: text): unit {
     __plot_backend_set(name);
 }
@@ -252,7 +253,7 @@ export fn backend(): text {
 }
 
 export fn available_backends(): [text] {
-    return ["none", "svg", "html"];
+    return ["none", "svg", "html", "native"];
 }
 
 export fn svg(chart: Chart): text {
@@ -277,6 +278,15 @@ export fn save_html(chart: Chart, path: text): outcome.Outcome<text, text> {
     return fs.write_text(path, html(chart));
 }
 
+export fn show_native(chart: Chart): outcome.Outcome<text, text> {
+    (ok, message) = __plot_show_native(svg(chart));
+    if ok {
+        return outcome.done_text(message);
+    }
+
+    return outcome.failed_text(message);
+}
+
 export fn show(chart: Chart): outcome.Outcome<text, text> {
     selected = backend();
     if selected == "svg" {
@@ -287,6 +297,12 @@ export fn show(chart: Chart): outcome.Outcome<text, text> {
     }
     if selected == "none" {
         return outcome.failed_text("plot.show has no display backend; use plot.save_svg/save_html or plot.use_backend(\"svg\") in headless runs");
+    }
+    if selected == "native" {
+        return show_native(chart);
+    }
+    if selected == "macosx" {
+        return show_native(chart);
     }
 
     return outcome.failed_text(format("plot.show backend '{}' is not available", selected));
