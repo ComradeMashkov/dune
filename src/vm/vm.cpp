@@ -134,10 +134,11 @@ Value make_record(std::vector<Value> values) {
     return result;
 }
 
-Value make_variant(std::size_t tag, std::shared_ptr<Value> payload) {
+Value make_variant(std::size_t tag, std::string name, std::shared_ptr<Value> payload) {
     Value result;
     result.kind = ValueKind::variant;
     result.variant_tag = tag;
+    result.variant_name = std::move(name);
     result.variant_payload = std::move(payload);
     return result;
 }
@@ -414,7 +415,10 @@ std::string value_to_text(const Value& value) {
     case ValueKind::record:
         throw std::runtime_error("cannot format record value");
     case ValueKind::variant:
-        throw std::runtime_error("cannot format choice value");
+        if (value.variant_payload == nullptr) {
+            return value.variant_name;
+        }
+        return value.variant_name + "(" + value_to_text(*value.variant_payload) + ")";
     case ValueKind::callable:
         throw std::runtime_error("cannot format function value");
     }
@@ -903,14 +907,20 @@ void VirtualMachine::execute(std::ostream& output, std::ostream& error, std::ist
             break;
         }
         case OpCode::make_variant: {
-            stack_.push_back(make_variant(instruction.operand, std::make_shared<Value>(pop())));
+            // Stack layout (see compile_variant_constructor): [payload, name] with
+            // the variant name on top.
+            std::string name = pop().text_value;
+            Value payload = pop();
+            stack_.push_back(make_variant(instruction.operand, std::move(name), std::make_shared<Value>(std::move(payload))));
             ++frame.ip;
             break;
         }
-        case OpCode::make_unit_variant:
-            stack_.push_back(make_variant(instruction.operand, nullptr));
+        case OpCode::make_unit_variant: {
+            std::string name = pop().text_value;
+            stack_.push_back(make_variant(instruction.operand, std::move(name), nullptr));
             ++frame.ip;
             break;
+        }
         case OpCode::load_variant_tag: {
             const Value value = pop();
             if (value.kind != ValueKind::variant) {

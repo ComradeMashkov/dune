@@ -4,6 +4,9 @@
 // provides a `to_text(): text` method, so declaring `with display.Display` is
 // optional. It documents the intent and lets generic functions require the
 // capability through a `T is Display` bound.
+//
+// Choices print by default (as `Variant` or `Variant(payload)`) when every
+// variant payload is a scalar or text, so they do not need a Display method.
 // A `contract` is like an interface: any type that provides these methods
 // satisfies it. Here the single required method is `to_text`.
 export contract Display {

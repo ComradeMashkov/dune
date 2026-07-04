@@ -148,6 +148,10 @@ private:
     static bool is_io_builtin(const std::string& name);
     Type check_io_builtin_call(const Expression& expression);
     bool record_has_display(const Type& type) const;
+    // A choice is printable by default when every variant payload is a scalar or
+    // text (after substituting concrete generic arguments). The VM renders it as
+    // `Variant` or `Variant(payload)`.
+    bool choice_is_printable(const Type& type) const;
     Type check_method_call_expression(const Expression& expression, const TypeAnnotation& expected);
     Type check_constructor_call_expression(const Expression& expression, const std::string& record_name,
                                            const TypeAnnotation& expected);

@@ -1193,10 +1193,14 @@ void Compiler::compile_variant_constructor(const Expression& expression) {
             throw std::runtime_error("choice variant payload constructor needs an argument");
         }
 
+        // Push the variant name so the VM can render the choice as text by
+        // default; the make_variant opcode pops it (stack: [payload, name]).
+        emit(OpCode::push_constant, add_constant(make_text(resolution.variant_name)));
         emit(OpCode::make_variant, resolution.tag);
         return;
     }
 
+    emit(OpCode::push_constant, add_constant(make_text(resolution.variant_name)));
     emit(OpCode::make_unit_variant, resolution.tag);
 }
 
