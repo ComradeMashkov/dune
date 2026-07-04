@@ -11,6 +11,8 @@ preferred-dark-theme = "ayu"
 git-repository-url = "https://github.com/ComradeMashkov/dune"
 edit-url-template = "https://github.com/ComradeMashkov/dune/edit/main/docs/{path}"
 no-section-label = false
+# Registers a Dune grammar with highlight.js so ```dune / ```dn fences highlight.
+additional-js = ["dune-highlight.js"]
 
 [output.html.fold]
 enable = true
