@@ -52,7 +52,7 @@ print(result);   // 25
 
 `import array;` supplies `map(fn(T): U)`, `filter(fn(T): bool)`,
 `reduce`/`fold`, `any`, `all`, and `count_where`. Function values run on the
-bytecode VM; the native LLVM backend does not support them.
+bytecode VM.
 
 ## Foreign functions
 

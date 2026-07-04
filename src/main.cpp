@@ -1,5 +1,3 @@
-#include "cli/build_progress.hpp"
-#include "codegen/llvm_ir_generator.hpp"
 #include "compiler/compiler.hpp"
 #include "diagnostics/diagnostic.hpp"
 #include "diagnostics/snippet.hpp"
@@ -35,10 +33,6 @@
 namespace {
 
 constexpr const char* version = "0.13.1";
-
-#ifndef DUNE_CLANGXX_PATH
-#define DUNE_CLANGXX_PATH "clang++"
-#endif
 
 bool stderr_is_terminal() {
 #if defined(_WIN32)
@@ -155,34 +149,6 @@ void write_file(const std::string& path, const std::string& content) {
     output << content;
 }
 
-std::string shell_quote(const std::string& value) {
-#if defined(_WIN32)
-    std::string quoted = "\"";
-    for (const char character : value) {
-        if (character == '"') {
-            quoted += "\\\"";
-        } else {
-            quoted += character;
-        }
-    }
-
-    quoted += "\"";
-    return quoted;
-#else
-    std::string quoted = "'";
-    for (const char character : value) {
-        if (character == '\'') {
-            quoted += "'\\''";
-        } else {
-            quoted += character;
-        }
-    }
-
-    quoted += "'";
-    return quoted;
-#endif
-}
-
 dune::Program parse_source(const std::string& source, const std::filesystem::path& source_directory) {
     dune::Lexer lexer(source);
     dune::Parser parser(lexer.tokenize());
@@ -215,13 +181,6 @@ dune::Bytecode compile_bytecode(const dune::Program& program) {
     return compiler.compile(program);
 }
 
-std::string generate_llvm_ir(const dune::Program& program) {
-    dune::LlvmIrGenerator generator;
-    std::ostringstream output;
-    generator.generate(program, output);
-    return output.str();
-}
-
 template <typename Reporter>
 dune::Program load_program_with_status(const std::string& source_path, Reporter& reporter) {
     const std::filesystem::path source_directory = std::filesystem::path(source_path).parent_path();
@@ -230,27 +189,6 @@ dune::Program load_program_with_status(const std::string& source_path, Reporter&
     const std::vector<dune::Token> tokens = run_step(reporter, "lex", [&] { return lex_source(source); });
     dune::Program parsed = run_step(reporter, "parse AST", [&] { return parse_tokens(tokens); });
     return run_step(reporter, "resolve modules", [&] { return resolve_modules(std::move(parsed), source_directory); });
-}
-
-void compile_llvm_ir(const std::string& llvm_ir_path, const std::string& output_path) {
-    const char* clangxx = std::getenv("DUNE_CLANGXX");
-    const std::string compiler = clangxx == nullptr ? DUNE_CLANGXX_PATH : clangxx;
-    if (compiler.empty()) {
-        throw std::runtime_error("native backend unavailable: dune was built without clang++ "
-                                 "(reconfigure with -D DUNE_ENABLE_NATIVE=ON, or set the DUNE_CLANGXX "
-                                 "environment variable to a clang++)");
-    }
-    std::string command = shell_quote(compiler) + " " + shell_quote(llvm_ir_path) + " -o " + shell_quote(output_path);
-#if !defined(_WIN32)
-    command += " -lm";
-#endif
-#if defined(_WIN32)
-    command = "\"" + command + "\"";
-#endif
-
-    if (std::system(command.c_str()) != 0) {
-        throw std::runtime_error("LLVM backend failed");
-    }
 }
 
 // Prints a compile-time diagnostic for the plain (non-status) subcommands: a
@@ -313,26 +251,6 @@ int run_test_file(const std::string& path) {
     std::cout << "\ntest result: " << (failed == 0 ? "ok" : "FAILED") << ". " << passed << " passed; " << failed
               << " failed\n";
     return failed == 0 ? 0 : 1;
-}
-
-int build_native_file(const std::string& source_path, const std::string& output_path) {
-    dune::cli::BuildProgress reporter("build " + source_path);
-    const std::string llvm_ir_path = output_path + ".ll";
-    const dune::Program program = load_program_with_status(source_path, reporter);
-    run_step(reporter, "type check", [&] { check_program(program); });
-    const std::string llvm_ir = run_step(reporter, "emit LLVM IR", [&] { return generate_llvm_ir(program); });
-    run_step(reporter, "write LLVM IR", [&] { write_file(llvm_ir_path, llvm_ir); });
-    run_step(reporter, "compile native", [&] { compile_llvm_ir(llvm_ir_path, output_path); });
-    return 0;
-}
-
-int emit_llvm_file(const std::string& source_path, const std::string& output_path) {
-    CliReporter reporter("llvm " + source_path);
-    const dune::Program program = load_program_with_status(source_path, reporter);
-    run_step(reporter, "type check", [&] { check_program(program); });
-    const std::string llvm_ir = run_step(reporter, "emit LLVM IR", [&] { return generate_llvm_ir(program); });
-    run_step(reporter, "write LLVM IR", [&] { write_file(output_path, llvm_ir); });
-    return 0;
 }
 
 int check_source_file(const std::string& source_path) {
@@ -455,8 +373,6 @@ void print_usage() {
     std::cerr << "  dune <file.dn>\n";
     std::cerr << "  dune check <file.dn>\n";
     std::cerr << "  dune lsp\n";
-    std::cerr << "  dune build <file.dn> -o <output>\n";
-    std::cerr << "  dune llvm <file.dn> -o <file.ll>\n";
     std::cerr << "  dune doc <file.dn|dir> [-o <out>] [--check]\n";
     std::cerr << "  dune test <file.dn>\n";
 }
@@ -481,14 +397,6 @@ int main(int argc, char* argv[]) {
                 return check_source_file(argv[2]);
             }
 
-            if (command == "build" && argc == 5 && std::string(argv[3]) == "-o") {
-                return build_native_file(argv[2], argv[4]);
-            }
-
-            if (command == "llvm" && argc == 5 && std::string(argv[3]) == "-o") {
-                return emit_llvm_file(argv[2], argv[4]);
-            }
-
             if (command == "doc" && argc >= 3) {
                 return run_doc(std::vector<std::string>(argv + 2, argv + argc));
             }
@@ -498,8 +406,8 @@ int main(int argc, char* argv[]) {
             }
 
             // `dune <file.dn> [args...]` runs a script; args are exposed via process.args().
-            const bool is_subcommand = command == "lsp" || command == "check" || command == "build" ||
-                                       command == "llvm" || command == "doc" || command == "test";
+            const bool is_subcommand =
+                command == "lsp" || command == "check" || command == "doc" || command == "test";
             if (!is_subcommand) {
                 return run_source_file(command, std::vector<std::string>(argv + 2, argv + argc));
             }

@@ -10,7 +10,7 @@ output on stdout stays separate. The active level defaults to `info`, can be
 set from `DUNE_LOG` or `DUNE_LOG_LEVEL`, and can be changed at runtime with
 `set_level`.
 
-`log` provides a small diagnostics API for command-line tools and longer-running programs. It keeps logs on stderr, separate from regular `print` output, and filters messages below the active level.
+`log` provides a small diagnostics API for command-line tools and longer-running programs. It keeps logs on stderr, separate from regular `io.println` output on stdout, and filters messages below the active level.
 
 The default level is `info`. Set `DUNE_LOG` or `DUNE_LOG_LEVEL` to `trace`, `debug`, `info`, `warn`, `error`, or `off`, or call `log.set_level` from Dune code.
 
@@ -19,7 +19,7 @@ import log;
 
 log.set_level(log.DEBUG);
 log.info("building target");
-log.warn("native backend disabled");
+log.warn("using fallback config");
 ```
 
 > Auto-generated from `stdlib/log.dn` by `tools/gen_stdlib_docs.py`.
@@ -113,7 +113,7 @@ Emit a warning message.
 
 **Example:**
 ```dune
-log.warn("native backend disabled")  // stderr: [warn] native backend disabled
+log.warn("using fallback config")  // stderr: [warn] using fallback config
 ```
 
 ### `fn error(message: text): unit`

@@ -2,8 +2,7 @@
 
 Dune is a programming language which aims to keep systems-style code small,
 readable, and predictable while still compiling through a real compiler
-pipeline. It has a lexer, parser, AST, static type checker, bytecode VM, and an
-LLVM-based native backend.
+pipeline. It has a lexer, parser, AST, static type checker, and a bytecode VM.
 
 The language is intentionally compact: explicit types when they matter,
 overloads, generics, choices with `when` expressions, modules loaded from `.dn`
@@ -20,7 +19,6 @@ Good fits for Dune today:
 
 - experimenting with compiled language implementation
 - writing small typed programs with straightforward syntax
-- trying VM execution and native LLVM output from the same source
 - building standard library code in the language itself
 
 ## Example
@@ -814,8 +812,7 @@ fn add_checked(a: int, b: int): outcome.Outcome<int, text> {
 The operand of `?` must be an `outcome.Outcome<T, E>` and the enclosing function
 must return an `outcome.Outcome<R, E>` with the same error type `E`. `?` may be
 used anywhere an expression is allowed, including inside a larger expression. The
-bytecode VM is the canonical backend for `?`; the native backend reports a clear
-"not supported yet" error.
+`?` operator runs on the bytecode VM.
 
 Supported scalar types:
 
@@ -850,7 +847,7 @@ Indexing and slicing:
 - text slices return `text`
 - array slots and record fields can be assigned directly: `values[0] = 9`, `point.x = 7`, `points[0].x = 5`
 - nested assignment targets are supported for arrays of arrays and arrays of records
-- native output checks array/text indexes, slices, and empty `pop()` calls at runtime
+- the VM checks array/text indexes, slices, and empty `pop()` calls at runtime
 - arrays and records alias on assignment; scalars copy on assignment
 
 Comments:
@@ -888,8 +885,7 @@ result = values
 `all(fn(T): bool)`, and `count_where(fn(T): bool)`. Each returns a fresh array or
 a scalar and never mutates the receiver. A callback whose signature does not match
 the element type is a compile-time error that names the offending function type.
-Function values run on the bytecode VM; the native LLVM backend does not support
-them yet.
+Function values run on the bytecode VM.
 
 Standard library receiver methods are enabled by importing their module:
 
@@ -934,9 +930,8 @@ print(weights.len());                       // 100
 ```
 
 `Dict` and `Set` keep entries in insertion order and look them up linearly, so
-behaviour is identical on every backend. `Random` uses the Park-Miller minimal
-standard generator, so a given seed always produces the same sequence in both the
-VM and native builds.
+behaviour is deterministic. `Random` uses the Park-Miller minimal standard
+generator, so a given seed always produces the same sequence.
 
 Files, arguments, and environment variables let Dune scripts do real work.
 Errors are explicit through `Outcome`, so they compose with the `?` operator:
@@ -956,8 +951,7 @@ save_greeting();
 print(fs.read_text("greeting.txt").value_or("<missing>"));
 ```
 
-File and OS access runs on the bytecode VM (`dune <file>`); the best-effort
-native backend does not support it yet and reports a clear error.
+File and OS access runs on the bytecode VM (`dune <file>`).
 
 Plotting starts with pure Dune chart specs, deterministic renderers, and
 Matplotlib-style display backends. The default display backend is `none`, so
@@ -1015,23 +1009,9 @@ Arguments after the script are exposed to the program through `process.args()`:
 ./build/dune script.dn alpha beta
 ```
 
-Compile to a native output file through generated LLVM IR:
-
-```bash
-./build/dune build hello.dn -o hello
-./hello
-```
-
-`build`, `llvm`, and `check` print a short status trace to stderr for the
-pipeline stages they run. Color is enabled automatically on terminals. Set
-`DUNE_COLOR=always` to force color, or set `DUNE_COLOR=never` / `NO_COLOR=1` to
-disable it.
-
-Emit only LLVM IR:
-
-```bash
-./build/dune llvm hello.dn -o hello.ll
-```
+`check` prints a short status trace to stderr for the pipeline stages it runs.
+Color is enabled automatically on terminals. Set `DUNE_COLOR=always` to force
+color, or set `DUNE_COLOR=never` / `NO_COLOR=1` to disable it.
 
 Check a file without running it:
 
@@ -1075,16 +1055,6 @@ compiling targets. If those tools are not installed locally yet, configure with:
 ```bash
 cmake -S . -B build -D DUNE_ENABLE_LINT=OFF
 ```
-
-The native backend shells out to `clang++` for `dune build`. If you only need the
-VM (`dune <file>`, `dune check`, `dune lsp`) and have no LLVM toolchain, build
-without it:
-
-```bash
-cmake -S . -B build -D DUNE_ENABLE_NATIVE=OFF -D DUNE_ENABLE_LINT=OFF
-```
-
-`dune build` then reports a clear error instead of compiling.
 
 ## Zed
 
@@ -1197,7 +1167,6 @@ The current release implements a small compiled language with:
 - `test` blocks with `assert_eq`/`assert_true`/`assert_false`
 - bytecode
 - VM
-- LLVM native backend
 - runtime bounds checks
 - CLI
 - tests

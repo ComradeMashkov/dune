@@ -86,5 +86,5 @@ test result: FAILED. 1 passed; 1 failed
 
 - `test` blocks are only allowed at the top level of a file. A `test` inside a
   function or another block is a compile-time error.
-- Test blocks are ignored when a file is run normally with `dune path/to/file.dn`
-  or compiled with `dune build`; they exist purely for `dune test`.
+- Test blocks are ignored when a file is run normally with `dune path/to/file.dn`;
+  they exist purely for `dune test`.

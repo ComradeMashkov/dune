@@ -7,13 +7,12 @@ Dune is built from source with CMake. It targets C++23.
 ```sh
 git clone https://github.com/ComradeMashkov/dune.git
 cd dune
-cmake -S . -B build -D DUNE_ENABLE_NATIVE=OFF
+cmake -S . -B build -D DUNE_ENABLE_LINT=OFF
 cmake --build build -j
 ```
 
-This produces the `dune` binary at `build/dune`. The native LLVM backend is
-optional and gated behind `-D DUNE_ENABLE_NATIVE=ON` (it requires an LLVM
-toolchain); with it off, the virtual machine still runs every program.
+This produces the `dune` binary at `build/dune`. The bytecode virtual machine
+runs every program and needs no external toolchain.
 
 ## Run a program
 
