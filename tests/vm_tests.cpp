@@ -128,6 +128,59 @@ bool runs_csv_stdlib() {
                      "2\nb\nf\n", "expected csv parse_rows output");
 }
 
+bool runs_csv_matrix_stdlib() {
+    std::error_code error;
+    const std::filesystem::path reals = std::filesystem::temp_directory_path() / "dune_vm_csv_reals.csv";
+    const std::filesystem::path ints = std::filesystem::temp_directory_path() / "dune_vm_csv_ints.csv";
+    const std::filesystem::path bad = std::filesystem::temp_directory_path() / "dune_vm_csv_bad.csv";
+    const std::filesystem::path out = std::filesystem::temp_directory_path() / "dune_vm_csv_out.csv";
+    std::filesystem::remove(reals, error);
+    std::filesystem::remove(ints, error);
+    std::filesystem::remove(bad, error);
+    std::filesystem::remove(out, error);
+
+    // Everything runs inside one Dune program: the input files are written via
+    // fs, read back as typed matrices, round-tripped through write_matrix, and a
+    // malformed cell is exercised to confirm the failure message is forwarded.
+    const std::string source =
+        "import csv; import fs; import matrix; "
+        "real_seed: [[real64]] = [[0.0]]; def_r: matrix.Matrix<real64> = matrix.from_rows(real_seed); "
+        "int_seed: [[int]] = [[0]]; def_i: matrix.Matrix<int> = matrix.from_rows(int_seed); "
+        "fs.write_text(\"" +
+        reals.generic_string() +
+        "\", \"1.5, 2.0, 3.5\\n4.0, 5.5, 6.0\\n\"); "
+        "fs.write_text(\"" +
+        ints.generic_string() +
+        "\", \"10, 20\\n-30, 40\\n\"); "
+        "fs.write_text(\"" +
+        bad.generic_string() +
+        "\", \"1.0, oops\\n\"); "
+        "mr = csv.read_matrix_real64(\"" +
+        reals.generic_string() +
+        "\"); print(mr.is_done()); "
+        "m: matrix.Matrix<real64> = mr.value_or(def_r); "
+        "print(m.rows()); print(m.cols()); print(m.get(0, 2)); print(m.get(1, 1)); "
+        "w = csv.write_matrix_real64(\"" +
+        out.generic_string() +
+        "\", m); print(w.is_done()); "
+        "again = csv.read_matrix_real64(\"" +
+        out.generic_string() +
+        "\"); m2: matrix.Matrix<real64> = again.value_or(def_r); print(m2.get(0, 0)); print(m2.get(1, 2)); "
+        "mi = csv.read_matrix_int(\"" +
+        ints.generic_string() +
+        "\"); mint: matrix.Matrix<int> = mi.value_or(def_i); print(mint.get(1, 0)); "
+        "b = csv.read_matrix_real64(\"" +
+        bad.generic_string() + "\"); print(b.is_done()); print(b.failure_or(\"no-error\"));";
+
+    const bool passed = expect_eq(run_source(source), "1\n2\n3\n3.5\n5.5\n1\n1.5\n6\n-30\n0\ninvalid number: oops\n",
+                                  "expected csv matrix round-trip output");
+    std::filesystem::remove(reals, error);
+    std::filesystem::remove(ints, error);
+    std::filesystem::remove(bad, error);
+    std::filesystem::remove(out, error);
+    return passed;
+}
+
 } // namespace
 
 int main() {
@@ -501,6 +554,7 @@ print('\0' to int);)dune"),
     passed = runs_process_stdlib() && passed;
     passed = runs_fs_stdlib() && passed;
     passed = runs_csv_stdlib() && passed;
+    passed = runs_csv_matrix_stdlib() && passed;
 
     return passed ? 0 : 1;
 }

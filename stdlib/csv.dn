@@ -1,5 +1,6 @@
 // File reading, the Outcome result type, and text helpers used below.
 import fs;
+import matrix;
 import outcome;
 import text;
 
@@ -81,4 +82,255 @@ export fn read_rows(path: text): outcome.Outcome<[[text]], text> {
     // On failure, produce an empty rows value and forward the error message.
     empty: [[text]] = [];
     return outcome.failed(empty, result.failure_or(""));
+}
+
+// Parse a decimal real64 from `cell`: optional sign, integer digits, and an
+// optional fractional part after a '.'. Exponent notation is not handled yet.
+// Returns Done(number) or Failed(message) so callers can report bad data.
+fn parse_real64(cell: text): outcome.Outcome<real64, text> {
+    // Number of glyphs to scan.
+    n = cell.len();
+    // An empty cell is not a number.
+    if n == 0 {
+        return outcome.failed(0.0, "empty numeric cell");
+    }
+
+    // `index` walks the glyphs; `sign` applies an optional leading '-'/'+'.
+    index = 0;
+    sign: real64 = 1.0;
+    if cell[0] == '-' {
+        sign = -1.0;
+        index = 1;
+    } else {
+        // A leading '+' is allowed and simply skipped.
+        if cell[0] == '+' {
+            index = 1;
+        }
+    }
+
+    // Integer part accumulated as a real64, and whether any digit was seen.
+    int_part: real64 = 0.0;
+    seen_digit = false;
+
+    // Consume integer digits up to an optional decimal point.
+    while index < n && cell[index] != '.' {
+        // Current glyph.
+        g = cell[index];
+        // Reject anything that is not a digit.
+        if !text.is_digit(g) {
+            return outcome.failed(0.0, format("invalid number: {}", cell));
+        }
+        // Shift the running value and add this digit (glyph code minus '0').
+        int_part = int_part * 10.0 + ((g to int) - ('0' to int)) to real64;
+        seen_digit = true;
+        index = index + 1;
+    }
+
+    // Fractional part accumulated with a shrinking place value.
+    frac: real64 = 0.0;
+    scale: real64 = 1.0;
+
+    // If a '.' is present, parse the fractional digits after it.
+    if index < n && cell[index] == '.' {
+        // Skip the decimal point.
+        index = index + 1;
+        while index < n {
+            g = cell[index];
+            if !text.is_digit(g) {
+                return outcome.failed(0.0, format("invalid number: {}", cell));
+            }
+            // Each digit contributes a tenth of the previous place value.
+            scale = scale / 10.0;
+            frac = frac + (((g to int) - ('0' to int)) to real64) * scale;
+            seen_digit = true;
+            index = index + 1;
+        }
+    }
+
+    // A lone sign or '.' with no digits is not a valid number.
+    if !seen_digit {
+        return outcome.failed(0.0, format("invalid number: {}", cell));
+    }
+
+    // Recombine sign, integer, and fractional parts.
+    return outcome.done(sign * (int_part + frac), "");
+}
+
+// Parse a decimal integer from `cell`: optional sign then digits.
+// Returns Done(value) or Failed(message).
+fn parse_int(cell: text): outcome.Outcome<int, text> {
+    n = cell.len();
+    if n == 0 {
+        return outcome.failed_int("empty numeric cell");
+    }
+
+    // Optional leading sign.
+    index = 0;
+    negative = false;
+    if cell[0] == '-' {
+        negative = true;
+        index = 1;
+    } else {
+        // A leading '+' is allowed and simply skipped.
+        if cell[0] == '+' {
+            index = 1;
+        }
+    }
+
+    // Running value and whether a digit was seen.
+    value = 0;
+    seen_digit = false;
+    while index < n {
+        g = cell[index];
+        if !text.is_digit(g) {
+            return outcome.failed_int(format("invalid integer: {}", cell));
+        }
+        value = value * 10 + ((g to int) - ('0' to int));
+        seen_digit = true;
+        index = index + 1;
+    }
+
+    if !seen_digit {
+        return outcome.failed_int(format("invalid integer: {}", cell));
+    }
+
+    // Apply the sign.
+    if negative {
+        return outcome.done_int(0 - value);
+    }
+    return outcome.done_int(value);
+}
+
+// Convert parsed text rows into a rectangular real64 matrix. Trims each cell,
+// enforces a consistent row width, and reports the first parse or shape error.
+// Returns Done(Matrix) or Failed(message).
+export fn read_matrix_real64(path: text): outcome.Outcome<matrix.Matrix<real64>, text> {
+    // Throwaway value used only when returning a Failed result. Built from a
+    // typed 1x1 seed so the element type is unambiguously real64.
+    real_seed: [[real64]] = [[0.0]];
+    default: matrix.Matrix<real64> = matrix.from_rows(real_seed);
+
+    // Read and split the file into text rows first.
+    rows_result = read_rows(path);
+    if rows_result.is_done() {
+        // The parsed text grid.
+        empty: [[text]] = [];
+        text_rows = rows_result.value_or(empty);
+
+        // Numeric rows built up cell by cell.
+        number_rows: [[real64]] = [];
+        // Column count taken from the first row and enforced on the rest.
+        width = 0;
+        for r = 0; r < text_rows.len(); r = r + 1 {
+            row = text_rows[r];
+            // Establish the width on the first row, enforce it afterwards.
+            if r == 0 {
+                width = row.len();
+            } else {
+                // Every later row must match the first row's width.
+                if row.len() != width {
+                    return outcome.failed(default, "CSV rows have inconsistent width");
+                }
+            }
+
+            // Parse every cell in this row into a real64.
+            number_row: [real64] = [];
+            for c = 0; c < row.len(); c = c + 1 {
+                parsed = parse_real64(row[c].trim());
+                // Forward the first bad cell as a failure.
+                if parsed.is_failed() {
+                    return outcome.failed(default, parsed.failure_or(""));
+                }
+                number_row.push(parsed.value_or(0.0));
+            }
+            number_rows.push(number_row);
+        }
+
+        // Build the matrix from the rectangular numeric grid.
+        return outcome.done(matrix.from_rows(number_rows), "");
+    }
+
+    // Reading the file failed: forward the message.
+    return outcome.failed(default, rows_result.failure_or(""));
+}
+
+// Same as `read_matrix_real64` but parses cells as integers.
+export fn read_matrix_int(path: text): outcome.Outcome<matrix.Matrix<int>, text> {
+    // Typed 1x1 seed so the throwaway default is Matrix<int>, not Matrix<real>.
+    int_seed: [[int]] = [[0]];
+    default: matrix.Matrix<int> = matrix.from_rows(int_seed);
+
+    rows_result = read_rows(path);
+    if rows_result.is_done() {
+        empty: [[text]] = [];
+        text_rows = rows_result.value_or(empty);
+
+        number_rows: [[int]] = [];
+        width = 0;
+        for r = 0; r < text_rows.len(); r = r + 1 {
+            row = text_rows[r];
+            if r == 0 {
+                width = row.len();
+            } else {
+                // Every later row must match the first row's width.
+                if row.len() != width {
+                    return outcome.failed(default, "CSV rows have inconsistent width");
+                }
+            }
+
+            number_row: [int] = [];
+            for c = 0; c < row.len(); c = c + 1 {
+                parsed = parse_int(row[c].trim());
+                if parsed.is_failed() {
+                    return outcome.failed(default, parsed.failure_or(""));
+                }
+                number_row.push(parsed.value_or(0));
+            }
+            number_rows.push(number_row);
+        }
+
+        return outcome.done(matrix.from_rows(number_rows), "");
+    }
+
+    return outcome.failed(default, rows_result.failure_or(""));
+}
+
+// Write rows of text cells back out as CSV (comma-separated, newline-terminated).
+// Returns Done(path-like text) or Failed(message) from the underlying write.
+export fn write_rows(path: text, rows: [[text]]): outcome.Outcome<text, text> {
+    // Full file contents assembled line by line.
+    content = "";
+    for r = 0; r < rows.len(); r = r + 1 {
+        row = rows[r];
+        // Join this row's cells with commas.
+        line = "";
+        for c = 0; c < row.len(); c = c + 1 {
+            if c == 0 {
+                line = row[c];
+            } else {
+                line = format("{},{}", line, row[c]);
+            }
+        }
+        // Append the finished line and a newline.
+        content = format("{}{}\n", content, line);
+    }
+
+    // Delegate the actual file write to fs.
+    return fs.write_text(path, content);
+}
+
+// Serialize a real64 matrix to CSV and write it to `path`.
+export fn write_matrix_real64(path: text, data: matrix.Matrix<real64>): outcome.Outcome<text, text> {
+    // Convert each matrix element to its text form, row by row.
+    rows: [[text]] = [];
+    for r = 0; r < data.rows(); r = r + 1 {
+        row: [text] = [];
+        for c = 0; c < data.cols(); c = c + 1 {
+            row.push(format("{}", data.get(r, c)));
+        }
+        rows.push(row);
+    }
+
+    // Reuse the text-row writer.
+    return write_rows(path, rows);
 }

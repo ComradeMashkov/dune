@@ -812,7 +812,7 @@ Standard library receiver methods are enabled by importing their module:
 - `import random;` exposes the seedable `Random` generator, with `next_int()`, `next_real()`, `between(lo, hi)`, `normal(mean, stddev)`, plus `uniform()` and `normal()` array helpers
 - `import process;` exposes `args()`, `arg_count()`, `arg(index)`, `env(name)`, `env_or(name, default)`, and `cwd()`
 - `import fs;` exposes `read_text(path)` and `write_text(path, content)`, each returning an `Outcome`
-- `import csv;` exposes `parse_rows(content)` and `read_rows(path)` for comma-separated data
+- `import csv;` reads and writes comma-separated data: `parse_rows(content)` and `read_rows(path)` yield text grids, `read_matrix_real64(path)`/`read_matrix_int(path)` parse a rectangular file straight into a `matrix.Matrix<T>` (trimming cells and failing on ragged rows or non-numeric data), and `write_rows(path, rows)`/`write_matrix_real64(path, data)` serialize back out — every path-based call returns an `Outcome`
 - `import display;` exposes the `Display` contract and `show(value)` for rendering records to `text`
 
 Associative collections and deterministic randomness:
@@ -1018,7 +1018,7 @@ The current release implements a small compiled language with:
 - associative `dict`/`set` collections
 - seedable, deterministic `random` module
 - file, argument, and environment access via `fs`/`process`
-- minimal `csv` parsing
+- `csv` parsing plus matrix read/write round-trips
 - printable records via a `to_text(): text` method
 - text indexing
 - slices
