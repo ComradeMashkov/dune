@@ -152,8 +152,18 @@ target_link_libraries(dune_vm
         dune_compiler
 )
 
+add_library(dune_doc
+    src/doc/doc_generator.cpp
+)
+dune_add_lint_dependencies(dune_doc)
+
+target_link_libraries(dune_doc
+    PUBLIC
+        dune_typechecker
+)
+
 add_executable(dune src/main.cpp src/cli/build_progress.cpp)
-target_link_libraries(dune PRIVATE dune_codegen dune_lsp dune_modules dune_vm Threads::Threads)
+target_link_libraries(dune PRIVATE dune_codegen dune_doc dune_lsp dune_modules dune_vm Threads::Threads)
 target_compile_definitions(dune PRIVATE DUNE_CLANGXX_PATH="${DUNE_NATIVE_CLANGXX}")
 dune_add_lint_dependencies(dune)
 
@@ -198,6 +208,24 @@ add_test(NAME lsp_tests COMMAND lsp_tests)
 add_test(NAME cli_check_static_types COMMAND dune check ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/types/static_types.dn)
 add_test(NAME cli_check_type_error COMMAND dune check ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/errors/type_error.dn)
 set_tests_properties(cli_check_type_error PROPERTIES WILL_FAIL TRUE)
+
+# `dune doc` renders a module's public API to Markdown from the real AST.
+add_test(
+    NAME cli_doc_sample
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/doc/sample.dn
+        -D EXPECTED_OUTPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/golden/doc_sample.out
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_doc_case.cmake
+)
+
+# `--check` regenerates in memory and must agree with the golden (exit 0).
+add_test(
+    NAME cli_doc_check
+    COMMAND dune doc ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/doc/sample.dn
+            --check -o ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/golden/doc_sample.out
+)
 
 add_test(
     NAME cli_build_native_status
