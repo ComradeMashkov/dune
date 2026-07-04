@@ -44,6 +44,7 @@ module.exports = grammar({
       $.from_import_statement,
       $.module_declaration,
       $.function_declaration,
+      $.foreknown_declaration,
       $.foreign_function_declaration,
       $.record_declaration,
       $.contract_declaration,
@@ -69,6 +70,7 @@ module.exports = grammar({
       "export",
       choice(
         $.function_declaration,
+        $.foreknown_declaration,
         $.foreign_function_declaration,
         $.record_declaration,
         $.contract_declaration,
@@ -113,6 +115,14 @@ module.exports = grammar({
       optional(seq(":", field("return_type", $._type))),
       field("body", $.block),
     )),
+
+    foreknown_declaration: $ => seq(
+      "foreknown",
+      choice(
+        $.const_statement,
+        $.function_declaration,
+      ),
+    ),
 
     foreign_function_declaration: $ => seq(
       "foreign",

@@ -241,11 +241,14 @@ std::string callable_core(const Statement& statement) {
            parameter_list_text(statement.parameters) + ": " + type_annotation_name(statement.type, "unit");
 }
 
-// `[foreign ][static ]fn name<...>(params): ret` — a full function/method signature.
+// `[foreign ][foreknown ][static ]fn name<...>(params): ret` — a full function/method signature.
 std::string function_signature(const Statement& statement) {
     std::string signature;
     if (statement.is_extern) {
         signature += "foreign ";
+    }
+    if (statement.is_foreknown) {
+        signature += "foreknown ";
     }
     if (statement.is_static_record_member) {
         signature += "static ";
@@ -255,7 +258,8 @@ std::string function_signature(const Statement& statement) {
 }
 
 std::string const_signature(const Statement& statement) {
-    std::string signature = "const " + statement.name;
+    std::string signature = statement.is_foreknown ? "foreknown const " : "const ";
+    signature += statement.name;
     if (statement.type.has_type) {
         signature += ": " + type_name(statement.type.type);
     }

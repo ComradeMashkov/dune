@@ -109,6 +109,7 @@ private:
         std::vector<Type> parameters;
         Type return_type;
         SourceLocation location;
+        bool is_foreknown = false;
     };
 
     struct VariableBinding {
@@ -132,6 +133,12 @@ private:
     void collect_generic_function(const Statement& statement);
     void check_function(const Statement& statement);
     void check_statement(const Statement& statement);
+    void check_foreknown_statement(const Statement& statement, std::unordered_set<std::string>& locals) const;
+    void check_foreknown_statements(const std::vector<Statement>& statements,
+                                    std::unordered_set<std::string>& locals) const;
+    void require_foreknown_expression(const Expression& expression,
+                                      const std::unordered_set<std::string>& locals) const;
+    bool is_foreknown_function_key(const std::string& key) const;
     void check_for_in_statement(const Statement& statement);
     void check_statements(const std::vector<Statement>& statements);
     Type check_for_in_iterable(const Expression& expression);
@@ -258,6 +265,7 @@ private:
     std::unordered_map<std::string, FunctionSignature> functions_;
     std::unordered_map<std::string, std::vector<std::string>> overloads_;
     std::unordered_map<std::string, std::vector<const Statement*>> generic_overloads_;
+    std::unordered_set<std::string> foreknown_constants_;
     std::unordered_set<std::string> instantiated_function_keys_;
     std::deque<Statement> instantiated_functions_;
     std::unordered_map<std::string, std::string> instantiated_function_traces_;

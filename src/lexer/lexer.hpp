@@ -9,6 +9,7 @@ namespace dune {
 enum class TokenType {
     const_keyword,
     export_keyword,
+    foreknown_keyword,
     foreign_keyword,
     fn_keyword,
     method_keyword,

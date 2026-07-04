@@ -212,6 +212,22 @@ int main() {
     passed = expect_eq(run_source("const HIDDEN: int = 7; fn hidden(): int { return HIDDEN; } print(hidden());"), "7\n",
                        "expected top-level constant in function output") &&
              passed;
+    passed = expect_eq(run_source("foreknown fn factorial(n: int): int { "
+                                  "if n <= 1 { return 1; } return n * factorial(n - 1); } "
+                                  "foreknown const SIX: int = factorial(3); print(SIX);"),
+                       "6\n", "expected foreknown recursive constant output") &&
+             passed;
+    passed = expect_eq(run_source("foreknown fn sum_to(n: int): int { total: int = 0; "
+                                  "for i: int = 0; i <= n; i = i + 1 { total = total + i; } "
+                                  "return total; } foreknown const TOTAL: int = sum_to(4); print(TOTAL);"),
+                       "10\n", "expected foreknown loop constant output") &&
+             passed;
+    passed = expect_eq(run_source("foreknown fn nested_control(n: int): int { total: int = 0; "
+                                  "for i: int = 0; i < n; i = i + 1 { { if i == 2 { continue; } "
+                                  "if i == 4 { break; } } total = total + i; } return total; } "
+                                  "foreknown const TOTAL: int = nested_control(6); print(TOTAL);"),
+                       "4\n", "expected foreknown nested control-flow output") &&
+             passed;
     passed = expect_eq(run_source("fn choose(flag: bool, yes: int, no: int): int { "
                                   "if flag { return yes; } else { return no; } } "
                                   "print(choose(false, 1, 2));"),

@@ -47,6 +47,7 @@ private:
     Statement const_statement();
     Statement export_statement();
     Statement extern_statement();
+    Statement foreknown_statement();
     Statement for_statement();
     Statement for_in_statement(const Token& keyword);
     Statement function_statement(bool is_extern = false);

@@ -175,6 +175,25 @@ bool compiles_module_constants() {
     return passed;
 }
 
+bool folds_foreknown_constants_before_runtime() {
+    const dune::Bytecode bytecode = compile_source("foreknown fn scale(n: int): int { return n * 1024; } "
+                                                   "foreknown const SIZE: int = scale(4); print(SIZE);");
+
+    bool saw_main_call = false;
+    bool saw_scale_function = false;
+    for (const dune::Instruction& instruction : bytecode.instructions) {
+        saw_main_call = saw_main_call || instruction.op == dune::OpCode::call;
+    }
+    for (const dune::Bytecode::Function& function : bytecode.functions) {
+        saw_scale_function = saw_scale_function || function.name == "scale";
+    }
+
+    bool passed = true;
+    passed = expect(!saw_main_call, "expected foreknown initializer to avoid runtime call") && passed;
+    passed = expect(saw_scale_function, "expected foreknown function to remain callable at runtime") && passed;
+    return passed;
+}
+
 bool compiles_operators_casts_and_methods() {
     const dune::Bytecode bytecode = compile_source("values: [int] = [1, 2]; values.push(3); "
                                                    "print(values.pop()); values.clear(); print(values.is_empty()); "
@@ -743,6 +762,7 @@ int main() {
     passed = compiles_formatted_print() && passed;
     passed = compiles_arrays_and_module_calls() && passed;
     passed = compiles_module_constants() && passed;
+    passed = folds_foreknown_constants_before_runtime() && passed;
     passed = compiles_operators_casts_and_methods() && passed;
     passed = compiles_membership_operator() && passed;
     passed = compiles_stdlib_primitives() && passed;

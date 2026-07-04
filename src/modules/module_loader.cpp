@@ -186,6 +186,7 @@ Statement clone_statement(const Statement& statement) {
     result.is_record_member = statement.is_record_member;
     result.is_constructor = statement.is_constructor;
     result.is_static_record_member = statement.is_static_record_member;
+    result.is_foreknown = statement.is_foreknown;
     result.extern_symbol = statement.extern_symbol;
     result.owner_record = statement.owner_record;
     result.target = clone_expression_pointer(statement.target);

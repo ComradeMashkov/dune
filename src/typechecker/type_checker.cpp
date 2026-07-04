@@ -197,6 +197,7 @@ Statement clone_statement(const Statement& statement) {
     result.is_record_member = statement.is_record_member;
     result.is_constructor = statement.is_constructor;
     result.is_static_record_member = statement.is_static_record_member;
+    result.is_foreknown = statement.is_foreknown;
     result.extern_symbol = statement.extern_symbol;
     result.owner_record = statement.owner_record;
     result.target = clone_expression_pointer(statement.target);
@@ -518,6 +519,7 @@ void TypeChecker::check(const Program& program) {
     generic_overloads_.clear();
     imports_.clear();
     global_constants_.clear();
+    foreknown_constants_.clear();
     module_exports_.clear();
     known_modules_.clear();
     expression_types_.clear();
@@ -1020,10 +1022,15 @@ void TypeChecker::validate_contract_implementations(const Statement& statement) 
 }
 
 void TypeChecker::collect_function(const Statement& statement) {
+    if (statement.is_foreknown && statement.is_extern) {
+        throw std::runtime_error(diagnostic(statement.location, "foreknown functions cannot be foreign"));
+    }
+
     FunctionSignature signature;
     signature.name = statement.name;
     signature.return_type = annotation_or_default(statement.type);
     signature.location = statement.location;
+    signature.is_foreknown = statement.is_foreknown;
 
     for (const Parameter& parameter : statement.parameters) {
         const Type parameter_type = annotation_or_default(parameter.type);
@@ -1049,6 +1056,10 @@ void TypeChecker::collect_function(const Statement& statement) {
 }
 
 void TypeChecker::collect_generic_function(const Statement& statement) {
+    if (statement.is_foreknown) {
+        throw std::runtime_error(diagnostic(statement.location, "generic foreknown functions are not supported yet"));
+    }
+
     std::unordered_set<std::string> generic_names;
     for (const GenericParameter& parameter : statement.generic_parameters) {
         generic_names.insert(parameter.name);
@@ -1109,6 +1120,14 @@ void TypeChecker::check_function(const Statement& statement) {
                                                                     type_name(function.return_type) + "'"));
     }
 
+    if (statement.is_foreknown) {
+        std::unordered_set<std::string> locals;
+        for (const Parameter& parameter : statement.parameters) {
+            locals.insert(parameter.name);
+        }
+        check_foreknown_statements(statement.body, locals);
+    }
+
     current_function_ = nullptr;
     current_module_ = previous_module;
 }
@@ -1117,6 +1136,11 @@ void TypeChecker::check_statement(const Statement& statement) {
     switch (statement.kind) {
     case StatementKind::binding:
     case StatementKind::const_statement: {
+        if (statement.is_foreknown && (current_function_ != nullptr || scopes_.size() > 1)) {
+            throw std::runtime_error(
+                diagnostic(statement.location, "foreknown constants are only allowed at top level"));
+        }
+
         TypeAnnotation expected = statement.type;
         if (expected.has_type) {
             expected.type = normalize_type(expected.type);
@@ -1131,8 +1155,15 @@ void TypeChecker::check_statement(const Statement& statement) {
             throw std::runtime_error(diagnostic(statement.location, "variables cannot have type 'unit'"));
         }
 
+        if (statement.is_foreknown) {
+            require_foreknown_expression(*statement.expression, {});
+        }
+
         declare_binding(statement.name, expected.type, statement.kind == StatementKind::const_statement,
                         statement.location);
+        if (statement.is_foreknown) {
+            foreknown_constants_.insert(statement.name);
+        }
         return;
     }
     case StatementKind::assign: {
@@ -1280,6 +1311,184 @@ void TypeChecker::check_statement(const Statement& statement) {
     case StatementKind::module_declaration:
         throw std::runtime_error(
             diagnostic(statement.location, "'module' declarations are only allowed at the top of a file"));
+    }
+}
+
+bool TypeChecker::is_foreknown_function_key(const std::string& key) const {
+    const auto function = functions_.find(key);
+    return function != functions_.end() && function->second.is_foreknown;
+}
+
+void TypeChecker::check_foreknown_statements(const std::vector<Statement>& statements,
+                                             std::unordered_set<std::string>& locals) const {
+    for (const Statement& statement : statements) {
+        check_foreknown_statement(statement, locals);
+    }
+}
+
+void TypeChecker::check_foreknown_statement(const Statement& statement, std::unordered_set<std::string>& locals) const {
+    switch (statement.kind) {
+    case StatementKind::binding:
+    case StatementKind::const_statement:
+        require_foreknown_expression(*statement.expression, locals);
+        locals.insert(statement.name);
+        return;
+    case StatementKind::assign:
+        if (statement.target == nullptr || statement.target->kind != ExpressionKind::identifier) {
+            throw std::runtime_error(
+                diagnostic(statement.location, "foreknown functions cannot mutate aggregate values"));
+        }
+        if (!locals.contains(statement.target->lexeme)) {
+            throw std::runtime_error(
+                diagnostic(statement.location, "foreknown functions can only assign local values"));
+        }
+        require_foreknown_expression(*statement.expression, locals);
+        return;
+    case StatementKind::block: {
+        std::unordered_set<std::string> scoped = locals;
+        check_foreknown_statements(statement.body, scoped);
+        return;
+    }
+    case StatementKind::if_statement: {
+        require_foreknown_expression(*statement.expression, locals);
+        std::unordered_set<std::string> then_locals = locals;
+        check_foreknown_statements(statement.body, then_locals);
+        std::unordered_set<std::string> else_locals = locals;
+        check_foreknown_statements(statement.else_body, else_locals);
+        return;
+    }
+    case StatementKind::while_statement: {
+        require_foreknown_expression(*statement.expression, locals);
+        std::unordered_set<std::string> body_locals = locals;
+        check_foreknown_statements(statement.body, body_locals);
+        return;
+    }
+    case StatementKind::for_statement: {
+        std::unordered_set<std::string> for_locals = locals;
+        if (statement.initializer != nullptr) {
+            check_foreknown_statement(*statement.initializer, for_locals);
+        }
+        if (statement.expression != nullptr) {
+            require_foreknown_expression(*statement.expression, for_locals);
+        }
+        std::unordered_set<std::string> body_locals = for_locals;
+        check_foreknown_statements(statement.body, body_locals);
+        if (statement.increment != nullptr) {
+            check_foreknown_statement(*statement.increment, for_locals);
+        }
+        return;
+    }
+    case StatementKind::break_statement:
+    case StatementKind::continue_statement:
+        return;
+    case StatementKind::return_statement:
+        if (statement.expression != nullptr) {
+            require_foreknown_expression(*statement.expression, locals);
+        }
+        return;
+    case StatementKind::expression_statement:
+        require_foreknown_expression(*statement.expression, locals);
+        return;
+    case StatementKind::print:
+        throw std::runtime_error(diagnostic(statement.location, "foreknown functions cannot print"));
+    case StatementKind::for_in_statement:
+        throw std::runtime_error(diagnostic(statement.location, "foreknown functions do not support for-in yet"));
+    case StatementKind::function:
+    case StatementKind::method_block:
+    case StatementKind::struct_statement:
+    case StatementKind::enum_statement:
+    case StatementKind::contract_statement:
+    case StatementKind::type_alias_statement:
+    case StatementKind::import_statement:
+    case StatementKind::module_declaration:
+        throw std::runtime_error(diagnostic(statement.location, "statement is not allowed in a foreknown function"));
+    }
+}
+
+void TypeChecker::require_foreknown_expression(const Expression& expression,
+                                               const std::unordered_set<std::string>& locals) const {
+    switch (expression.kind) {
+    case ExpressionKind::number:
+    case ExpressionKind::floating:
+    case ExpressionKind::character:
+    case ExpressionKind::string:
+    case ExpressionKind::boolean:
+        return;
+    case ExpressionKind::identifier:
+        if (locals.contains(expression.lexeme) || foreknown_constants_.contains(expression.lexeme)) {
+            return;
+        }
+        throw std::runtime_error(
+            diagnostic(expression.location, "identifier '" + expression.lexeme + "' is not foreknown"));
+    case ExpressionKind::member:
+        if (expression.left != nullptr && expression.left->kind == ExpressionKind::identifier) {
+            const std::string qualified = expression.left->lexeme + "." + expression.lexeme;
+            if (foreknown_constants_.contains(qualified)) {
+                return;
+            }
+        }
+        throw std::runtime_error(diagnostic(expression.location, "member expression is not foreknown"));
+    case ExpressionKind::unary:
+        require_foreknown_expression(*expression.right, locals);
+        return;
+    case ExpressionKind::try_expression:
+        throw std::runtime_error(diagnostic(expression.location, "try expressions are not foreknown"));
+    case ExpressionKind::cast:
+        require_foreknown_expression(*expression.left, locals);
+        return;
+    case ExpressionKind::binary:
+        if (expression.lexeme == "in") {
+            throw std::runtime_error(diagnostic(expression.location, "operator 'in' is not foreknown"));
+        }
+        require_foreknown_expression(*expression.left, locals);
+        require_foreknown_expression(*expression.right, locals);
+        return;
+    case ExpressionKind::range:
+        require_foreknown_expression(*expression.left, locals);
+        require_foreknown_expression(*expression.right, locals);
+        return;
+    case ExpressionKind::when_expression:
+        require_foreknown_expression(*expression.left, locals);
+        for (const std::unique_ptr<Expression>& argument : expression.arguments) {
+            require_foreknown_expression(*argument, locals);
+        }
+        return;
+    case ExpressionKind::call: {
+        if (expression.lexeme == "format" || is_io_builtin(expression.lexeme)) {
+            throw std::runtime_error(
+                diagnostic(expression.location, "function '" + expression.lexeme + "' is not foreknown"));
+        }
+
+        const auto resolved = resolved_calls_.find(&expression);
+        if (resolved == resolved_calls_.end() || !is_foreknown_function_key(resolved->second)) {
+            throw std::runtime_error(
+                diagnostic(expression.location, "function '" + expression.lexeme + "' is not foreknown"));
+        }
+
+        for (const std::unique_ptr<Expression>& argument : expression.arguments) {
+            require_foreknown_expression(*argument, locals);
+        }
+        return;
+    }
+    case ExpressionKind::method_call: {
+        const auto resolved = resolved_calls_.find(&expression);
+        if (resolved == resolved_calls_.end() || !is_foreknown_function_key(resolved->second) ||
+            expression.left == nullptr || expression.left->kind != ExpressionKind::identifier) {
+            throw std::runtime_error(diagnostic(expression.location, "method call is not foreknown"));
+        }
+
+        for (const std::unique_ptr<Expression>& argument : expression.arguments) {
+            require_foreknown_expression(*argument, locals);
+        }
+        return;
+    }
+    case ExpressionKind::array:
+    case ExpressionKind::array_comprehension:
+    case ExpressionKind::tuple:
+    case ExpressionKind::struct_literal:
+    case ExpressionKind::index:
+    case ExpressionKind::slice:
+        throw std::runtime_error(diagnostic(expression.location, "expression is not supported in foreknown context"));
     }
 }
 

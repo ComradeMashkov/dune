@@ -8,6 +8,7 @@
   "derive"
   "else"
   "export"
+  "foreknown"
   "fn"
   "foreign"
   "for"
