@@ -1,0 +1,23 @@
+// Canvas showcase — opens the native Dune canvas window.
+// Run it with:  DUNE_STDLIB_PATH=stdlib ./build/dune examples/canvas_demo.dn
+import io;
+import canvas;
+
+scene = canvas.new("Dune Canvas Demo", 520, 360)
+    .background("#0f172a")
+    .grid(20.0, "#1e293b")
+    .panel(20.0, 20.0, 300.0, 150.0, "Controls")
+    .button(40.0, 55.0, 120.0, 30.0, "Run", true)
+    .button(180.0, 55.0, 120.0, 30.0, "Cancel", false)
+    .checkbox(40.0, 105.0, "Enable grid", true)
+    .checkbox(40.0, 135.0, "Dark theme", true)
+    .slider(40.0, 175.0, 260.0, 0.0, 100.0, 68.0, "Zoom")
+    .panel(340.0, 20.0, 160.0, 320.0, "Preview")
+    .circle(420.0, 110.0, 45.0, "#38bdf8", "#0ea5e9")
+    .rect(375.0, 190.0, 90.0, 60.0, "#f472b6", "#831843")
+    .line(360.0, 300.0, 480.0, 260.0, canvas.style("#facc15", "none", 3.0))
+    .text(360.0, 330.0, "Dune native canvas", "#e2e8f0");
+
+io.println("Opening native canvas window...");
+result = scene.show_native();
+io.println(result.failure_or("closed"));
