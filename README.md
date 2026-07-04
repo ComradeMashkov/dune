@@ -175,7 +175,7 @@ Modules are loaded from `.dn` files. The standard library currently includes
 `stdlib/outcome.dn`, `stdlib/assert.dn`, `stdlib/collections.dn`,
 `stdlib/dict.dn`, `stdlib/set.dn`, `stdlib/random.dn`, `stdlib/runtime.dn`,
 `stdlib/autograd.dn`, `stdlib/matrix.dn`, `stdlib/process.dn`, `stdlib/fs.dn`,
-`stdlib/csv.dn`, and `stdlib/display.dn`. Low-level
+`stdlib/csv.dn`, `stdlib/regex.dn`, and `stdlib/display.dn`. Low-level
 array and text operations such as `len`, `push`, indexing, and slicing remain
 runtime primitives; higher-level helpers are ordinary Dune functions in the
 standard library. Operating-system access (reading and writing files,
@@ -903,6 +903,7 @@ Standard library receiver methods are enabled by importing their module:
 - `import process;` exposes `args()`, `arg_count()`, `arg(index)`, `env(name)`, `env_or(name, default)`, and `cwd()`
 - `import fs;` exposes `read_text(path)` and `write_text(path, content)`, each returning an `Outcome`
 - `import csv;` reads and writes comma-separated data: `parse_rows(content)` and `read_rows(path)` yield text grids, `read_matrix_real64(path)`/`read_matrix_int(path)` parse a rectangular file straight into a `matrix.Matrix<T>` (trimming cells and failing on ragged rows or non-numeric data), and `write_rows(path, rows)`/`write_matrix_real64(path, data)` serialize back out — every path-based call returns an `Outcome`
+- `import regex;` exposes safe ASCII regex validation and cleanup with `compile(pattern)`, `is_match`, `find`, `find_all`, `split`, `replace`, and `replace_all`
 - `import display;` exposes the `Display` contract and `show(value)` for rendering records to `text`
 
 Associative collections and deterministic randomness:

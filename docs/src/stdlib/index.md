@@ -17,6 +17,7 @@ The standard library is ordinary Dune loaded from `.dn` files. Each page below i
 - [`outcome`](outcome.md) — The result-style `Outcome<T, E>` choice and helpers.
 - [`process`](process.md) — Process access: arguments and environment.
 - [`random`](random.md) — A small deterministic pseudo-random generator.
+- [`regex`](regex.md) — Safe ASCII regular expressions for validation and text cleanup.
 - [`runtime`](runtime.md) — Runtime helpers such as `panic`.
 - [`set`](set.md) — A hash-set built in Dune.
 - [`text`](text.md) — Text and glyph helpers.

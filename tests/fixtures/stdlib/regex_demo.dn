@@ -1,0 +1,59 @@
+import regex;
+import io;
+
+ident = regex.compile(r"^[a-z_][a-z0-9_]*$").value_or(regex.never());
+io.println(ident.is_match("hello_1"));
+io.println(ident.is_match("1bad"));
+
+wild = regex.compile(r"^a.+c$").value_or(regex.never());
+io.println(wild.is_match("abbc"));
+io.println(wild.is_match("a\nc"));
+
+newline = regex.compile(r"\n").value_or(regex.never());
+io.println(newline.is_match("a\nb"));
+
+empty = regex.compile("").value_or(regex.never());
+io.println(empty.find_all("ab").len());
+io.println(empty.replace_all("ab", "-"));
+
+no_digits = regex.compile(r"^[^0-9]+$").value_or(regex.never());
+io.println(no_digits.is_match("abc_"));
+io.println(no_digits.is_match("abc1"));
+
+pair = regex.compile(r"([a-z]+)([0-9]+)").value_or(regex.never());
+first = pair.find("id42 next7").value_or(regex.empty_match());
+io.println(first.value);
+io.println(first.capture_text(1, ""));
+io.println(first.capture_text(2, ""));
+
+matches = pair.find_all("a1 b22 c333");
+io.println(matches.len());
+io.println(matches[1].value);
+io.println(matches[2].start);
+
+space = regex.compile(r"\s+").value_or(regex.never());
+parts = space.split("a  b\tc");
+io.println(parts.len());
+io.println(parts[1]);
+
+digits = regex.compile(r"\d+").value_or(regex.never());
+io.println(digits.replace("abc123def456", "#"));
+io.println(digits.replace_all("abc123def456", "#"));
+io.println(pair.replace_all("a1 b22", "$2:$1"));
+
+lookahead = regex.compile(r"(?=x)");
+io.println(lookahead.is_failed());
+io.println(lookahead.failure_or(""));
+
+duplicate = regex.compile(r"a**");
+io.println(duplicate.is_failed());
+io.println(duplicate.failure_or(""));
+
+backref = regex.compile(r"(a)\1");
+io.println(backref.is_failed());
+io.println(backref.failure_or(""));
+
+// Adjacent overlapping quantifiers on non-matching input terminate (bounded
+// backtracking) instead of hanging, reporting no match.
+bomb = regex.compile(r"^a*a*a*a*a*b$").value_or(regex.never());
+io.println(bomb.is_match("aaaaaaaaaaaaaaaa"));

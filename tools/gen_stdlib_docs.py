@@ -39,6 +39,7 @@ MODULE_BLURBS = {
     "outcome": "The result-style `Outcome<T, E>` choice and helpers.",
     "autograd": "Scalar reverse-mode automatic differentiation.",
     "random": "A small deterministic pseudo-random generator.",
+    "regex": "Safe ASCII regular expressions for validation and text cleanup.",
     "runtime": "Runtime helpers such as `panic`.",
     "fs": "File-system access (read, write, list).",
     "process": "Process access: arguments and environment.",
