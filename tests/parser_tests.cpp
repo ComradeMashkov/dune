@@ -757,11 +757,16 @@ bool parses_generic_functions() {
     passed = expect(function.kind == dune::StatementKind::function, "expected generic function") && passed;
     passed = expect(function.generic_parameters.size() == 3, "expected three generic parameters") && passed;
     passed = expect(function.generic_parameters[0].name == "T", "expected first generic parameter") && passed;
-    passed = expect(function.generic_parameters[0].bound.empty(), "expected unbounded generic parameter") && passed;
+    passed = expect(function.generic_parameters[0].bounds.empty(), "expected unbounded generic parameter") && passed;
     passed = expect(function.generic_parameters[1].name == "R", "expected second generic parameter") && passed;
-    passed = expect(function.generic_parameters[1].bound == "real", "expected real generic bound") && passed;
+    passed = expect(function.generic_parameters[1].bounds.size() == 1 && function.generic_parameters[1].bounds[0] == "real",
+                    "expected real generic bound") &&
+             passed;
     passed = expect(function.generic_parameters[2].name == "U", "expected third generic parameter") && passed;
-    passed = expect(function.generic_parameters[2].bound == "numeric", "expected numeric generic bound") && passed;
+    passed = expect(function.generic_parameters[2].bounds.size() == 1 &&
+                        function.generic_parameters[2].bounds[0] == "numeric",
+                    "expected numeric generic bound") &&
+             passed;
     passed = expect(function.parameters[0].type.type.kind == dune::ValueType::generic_type,
                     "expected generic first parameter type") &&
              passed;
@@ -776,6 +781,37 @@ bool parses_generic_functions() {
     passed = expect(function.parameters[2].type.type.name == "U", "expected third parameter generic name") && passed;
     passed = expect(function.type.type.kind == dune::ValueType::generic_type, "expected generic return type") && passed;
     passed = expect(function.type.type.name == "U", "expected return generic name") && passed;
+
+    return passed;
+}
+
+bool parses_multiple_generic_bounds() {
+    // Grouped bounds (`T is A + B`) and repeated bounds (`T is A, T is B`) must both
+    // collapse to a single parameter carrying every constraint, with duplicates dropped.
+    const dune::Program grouped =
+        parse_source("fn a<T is ordered + comparable>(value: T): T { return value; }");
+    const dune::Program repeated =
+        parse_source("fn b<T is ordered, T is comparable>(value: T): T { return value; }");
+    const dune::Program duplicate =
+        parse_source("fn c<T is ordered + ordered>(value: T): T { return value; }");
+
+    bool passed = true;
+    passed = expect(grouped.statements[0].generic_parameters.size() == 1, "expected one grouped parameter") && passed;
+    passed = expect(grouped.statements[0].generic_parameters[0].bounds.size() == 2, "expected two grouped bounds") &&
+             passed;
+    passed = expect(grouped.statements[0].generic_parameters[0].bounds[0] == "ordered" &&
+                        grouped.statements[0].generic_parameters[0].bounds[1] == "comparable",
+                    "expected grouped bounds ordered + comparable") &&
+             passed;
+
+    passed = expect(repeated.statements[0].generic_parameters.size() == 1, "expected merged repeated parameter") &&
+             passed;
+    passed = expect(repeated.statements[0].generic_parameters[0].bounds.size() == 2, "expected two merged bounds") &&
+             passed;
+
+    passed =
+        expect(duplicate.statements[0].generic_parameters[0].bounds.size() == 1, "expected duplicate bound dropped") &&
+        passed;
 
     return passed;
 }
@@ -1272,6 +1308,7 @@ int main() {
     passed = parses_stdlib_primitives() && passed;
     passed = parses_for_in_and_ranges() && passed;
     passed = parses_generic_functions() && passed;
+    passed = parses_multiple_generic_bounds() && passed;
     passed = parses_receiver_methods() && passed;
     passed = parses_records_and_record_literals() && passed;
     passed = parses_derive_and_generates_methods() && passed;

@@ -65,7 +65,9 @@ struct Parameter {
 
 struct GenericParameter {
     std::string name;
-    std::string bound;
+    // Zero or more constraints on this type parameter, e.g. `T is ordered + Display`
+    // parses to {"ordered", "Display"}. An empty list means an unbounded parameter.
+    std::vector<std::string> bounds;
     SourceLocation location;
 };
 

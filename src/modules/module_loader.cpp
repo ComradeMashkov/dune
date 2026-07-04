@@ -639,8 +639,10 @@ void ModuleLoader::qualify_type(Type& type, const std::string& module_name,
 void ModuleLoader::qualify_generic_parameters(std::vector<GenericParameter>& parameters, const std::string& module_name,
                                               const std::unordered_set<std::string>& local_contracts) const {
     for (GenericParameter& parameter : parameters) {
-        if (!parameter.bound.empty() && local_contracts.contains(parameter.bound)) {
-            parameter.bound = module_name + "." + parameter.bound;
+        for (std::string& bound : parameter.bounds) {
+            if (!bound.empty() && local_contracts.contains(bound)) {
+                bound = module_name + "." + bound;
+            }
         }
     }
 }

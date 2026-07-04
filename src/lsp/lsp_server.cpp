@@ -967,9 +967,9 @@ std::string generic_parameters_text(const std::vector<GenericParameter>& paramet
             text += ", ";
         }
         text += parameters[index].name;
-        if (!parameters[index].bound.empty()) {
-            text += " is ";
-            text += parameters[index].bound;
+        for (std::size_t bound_index = 0; bound_index < parameters[index].bounds.size(); ++bound_index) {
+            text += bound_index == 0 ? " is " : " + ";
+            text += parameters[index].bounds[bound_index];
         }
     }
 

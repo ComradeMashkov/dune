@@ -2484,6 +2484,9 @@ const TypeChecker::FunctionSignature& TypeChecker::resolve_overload(const std::s
     Candidate best_match;
     int best_score = -1;
     bool ambiguous = false;
+    // Records why the last generic candidate was rejected on a bound, so the
+    // "no overload" error can name the specific unmet constraint.
+    std::string bound_failure_note;
 
     auto consider = [&](Candidate candidate) {
         if (candidate.score > best_score) {
@@ -2593,7 +2596,22 @@ const TypeChecker::FunctionSignature& TypeChecker::resolve_overload(const std::s
                     chosen = &existing_constraints->second.front().first;
                 }
 
-                if (!type_satisfies_bound(*chosen, parameter.bound, parameter.location)) {
+                bool bounds_satisfied = true;
+                if (parameter.bounds.empty()) {
+                    // An unbounded parameter still rejects the unit type.
+                    bounds_satisfied = type_satisfies_bound(*chosen, "", parameter.location);
+                } else {
+                    for (const std::string& bound : parameter.bounds) {
+                        if (!type_satisfies_bound(*chosen, bound, parameter.location)) {
+                            bounds_satisfied = false;
+                            bound_failure_note = "type '" + type_name(*chosen) + "' does not satisfy bound '" + bound +
+                                                 "' on '" + parameter.name + "'";
+                            break;
+                        }
+                    }
+                }
+
+                if (!bounds_satisfied) {
                     constraints_match = false;
                     break;
                 }
@@ -2655,6 +2673,9 @@ const TypeChecker::FunctionSignature& TypeChecker::resolve_overload(const std::s
             message += type_name(raw_argument_types[index]);
         }
         message += ")";
+        if (!bound_failure_note.empty()) {
+            message += " (" + bound_failure_note + ")";
+        }
         throw DiagnosticError(location, message);
     }
 

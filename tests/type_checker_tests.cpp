@@ -351,6 +351,14 @@ int main() {
                           "text_ok: bool = same(\"dune\", \"dune\"); int_ok: bool = lower(1, 2);",
                           "expected comparable and ordered bounds to validate") &&
              passed;
+    passed = expect_valid("fn spans<T is ordered + comparable>(a: T, b: T): bool { return (a < b) == (a == b); } "
+                          "ok: bool = spans(1, 2);",
+                          "expected grouped generic bounds (T is A + B) to validate") &&
+             passed;
+    passed = expect_valid("fn spans<T is ordered, T is comparable>(a: T, b: T): bool { return (a < b) == (a == b); } "
+                          "ok: bool = spans(1, 2);",
+                          "expected repeated generic bounds (T is A, T is B) to validate") &&
+             passed;
     passed = expect_valid("import maybe; import outcome; import assert; import collections; "
                           "maybe_value: maybe.Maybe<int> = maybe.present(42); "
                           "fallback: int = maybe.absent(0).value_or(7); "
@@ -652,6 +660,10 @@ int main() {
                                    "values: [int] = [1]; io.println(same(values, values));",
                                    "no overload for function 'same' with argument types ([int], [int])",
                                    "expected comparable bound mismatch") &&
+             passed;
+    passed = expect_error_contains("fn needs<T is comparable + numeric>(v: T): T { return v; } io.println(needs(\"x\"));",
+                                   "does not satisfy bound 'numeric'",
+                                   "expected multi-bound violation to name the unmet bound") &&
              passed;
     passed = expect_error_contains("fn invalid<T>(left: T, right: T): bool { return left == right; } "
                                    "values: [int] = [1]; io.println(invalid(values, values));",

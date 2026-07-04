@@ -2,6 +2,7 @@
 
 #include "diagnostics/diagnostic.hpp"
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <utility>
@@ -1318,12 +1319,34 @@ std::vector<GenericParameter> Parser::generic_parameters() {
 
     while (true) {
         const Token& name = consume(TokenType::identifier, "expected generic parameter name");
-        std::string bound;
+        std::vector<std::string> bounds;
         if (match(TokenType::is_keyword)) {
-            bound = qualified_name();
+            bounds.push_back(qualified_name());
+            // Grouped bounds share a single `is`: `T is ordered + Display`.
+            while (match(TokenType::plus)) {
+                bounds.push_back(qualified_name());
+            }
         }
 
-        parsed_parameters.push_back(GenericParameter{name.lexeme, std::move(bound), location_from_token(name)});
+        // Merge repeated constraints on the same parameter: `T is ordered, T is Display`.
+        GenericParameter* existing = nullptr;
+        for (GenericParameter& parameter : parsed_parameters) {
+            if (parameter.name == name.lexeme) {
+                existing = &parameter;
+                break;
+            }
+        }
+        if (existing == nullptr) {
+            parsed_parameters.push_back(GenericParameter{name.lexeme, {}, location_from_token(name)});
+            existing = &parsed_parameters.back();
+        }
+
+        for (std::string& bound : bounds) {
+            // Drop duplicate/redundant bounds so each constraint is checked once.
+            if (std::find(existing->bounds.begin(), existing->bounds.end(), bound) == existing->bounds.end()) {
+                existing->bounds.push_back(std::move(bound));
+            }
+        }
 
         if (!match(TokenType::comma)) {
             break;

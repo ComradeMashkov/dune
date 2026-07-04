@@ -34,6 +34,30 @@ Available bounds:
 - `comparable` — supports `==` / `!=`.
 - `ordered` — supports `<`, `<=`, `>`, `>=`.
 
+A contract name is also a valid bound: `T is Display` requires `T` to implement
+the [`Display`](../stdlib/display.md) contract.
+
+### Multiple bounds
+
+A single type parameter can carry several bounds. Group them with `+` under one
+`is`, or repeat `is` for the same parameter — both mean "every listed
+constraint must hold":
+
+```dn
+// Grouped: T must be both ordered (for `<`) and comparable (for `==`).
+fn spans<T is ordered + comparable>(low: T, value: T, high: T): bool {
+    return (low < value) == (value == high);
+}
+
+// Repeated form is equivalent.
+fn spans2<T is ordered, T is comparable>(low: T, value: T, high: T): bool {
+    return (low < value) == (value == high);
+}
+```
+
+When an argument fails a bound the diagnostic names the specific unmet
+constraint, e.g. `type 'text' does not satisfy bound 'numeric' on 'T'`.
+
 ## Function values and method chaining
 
 A named function can be passed by name as a first-class value wherever a function

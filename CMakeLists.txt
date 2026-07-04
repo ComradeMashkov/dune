@@ -464,7 +464,7 @@ add_test(
         ${CMAKE_COMMAND}
         -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/types/generics_bounds.dn
-        -D EXPECTED_OUTPUT="42\ndone\nlang\n144\n2.25\n18"
+        -D EXPECTED_OUTPUT="42\ndone\nlang\n144\n2.25\n18\n0"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
 )
 

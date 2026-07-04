@@ -198,7 +198,12 @@ module.exports = grammar({
 
     generic_parameter: $ => seq(
       field("name", $.identifier),
-      optional(seq("is", field("bound", $.qualified_name))),
+      optional(seq(
+        "is",
+        field("bound", $.qualified_name),
+        // Grouped bounds share one `is`: `T is ordered + Display`.
+        repeat(seq("+", field("bound", $.qualified_name))),
+      )),
     ),
 
     qualified_name: $ => seq($.identifier, repeat(seq(".", $.identifier))),
