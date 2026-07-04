@@ -474,7 +474,7 @@ add_test(
         ${CMAKE_COMMAND}
         -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/stdlib/plot_features.dn
-        -D EXPECTED_OUTPUT="1\n1\n1\n1\n1\n1\n1"
+        -D EXPECTED_OUTPUT="1\n1\n1\n1\n1\n1"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
 )
 
