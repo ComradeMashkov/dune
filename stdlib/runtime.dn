@@ -4,4 +4,5 @@
 // stdlib is pure Dune; new `foreign fn` declarations are forbidden here.
 // `export` makes it visible to other modules; it takes a text message and
 // returns `unit` (no meaningful value) because it never returns normally.
+// example: runtime.panic("index out of range")
 export foreign fn panic(message: text): unit = "dune_panic";

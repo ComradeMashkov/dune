@@ -29,22 +29,52 @@ print(process.cwd().has_value());
 
 The arguments passed after the script path (`dune script.dn a b c`).
 
+**Example:**
+```dune
+process.args()
+```
+
 ### `fn arg_count(): int`
 
 The number of command-line arguments.
+
+**Example:**
+```dune
+process.arg_count()
+```
 
 ### `fn arg(index: int): maybe.Maybe<text>`
 
 The argument at `index`, or `Absent` when out of range.
 
+**Example:**
+```dune
+process.arg(0)
+```
+
 ### `fn env(name: text): maybe.Maybe<text>`
 
 The value of environment variable `name`, or `Absent` when unset.
+
+**Example:**
+```dune
+process.env("PATH")
+```
 
 ### `fn env_or(name: text, default: text): text`
 
 The value of environment variable `name`, or `default` when unset.
 
+**Example:**
+```dune
+process.env_or("DUNE_EXAMPLE_UNSET_VAR", "fallback")
+```
+
 ### `fn cwd(): maybe.Maybe<text>`
 
 The current working directory, or `Absent` when it cannot be determined.
+
+**Example:**
+```dune
+process.cwd()
+```

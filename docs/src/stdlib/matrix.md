@@ -41,7 +41,7 @@ A fixed-length numeric vector backed by a flat array `data`.
 - `fn slice(start: int, end: int): Vector<T>` — A sub-vector over [start, end) as a new vector.
 - `fn concat(other: Vector<T>): Vector<T>` — This vector followed by `other`, as a new vector.
 - `fn fill(value: T): unit` — Overwrite every element with `value` in place.
-- `fn add(other: Vector<T>): Vector<T>` — Element-wise addition of two equal-length vectors.
+- `fn add(other: Vector<T>): Vector<T>` — Element-wise addition of two equal-length vectors. — e.g. `matrix.vector([1, 2, 3]).add(matrix.vector([10, 20, 30]))`
 - `fn add(value: T): Vector<T>` — Add a scalar `value` to every element (broadcast).
 - `fn sub(other: Vector<T>): Vector<T>` — Element-wise subtraction of two equal-length vectors.
 - `fn sub(value: T): Vector<T>` — Subtract a scalar `value` from every element (broadcast).
@@ -51,18 +51,18 @@ A fixed-length numeric vector backed by a flat array `data`.
 - `fn div(other: Vector<T>): Vector<T>` — Element-wise division of two equal-length vectors.
 - `fn div(value: T): Vector<T>` — Divide every element by a scalar (broadcast).
 - `fn rdiv(value: T): Vector<T>` — Reverse-divide: each element becomes `value` divided by the element.
-- `fn scale(factor: T): Vector<T>` — Multiply every element by scalar `factor` (the core of mul-by-scalar).
+- `fn scale(factor: T): Vector<T>` — Multiply every element by scalar `factor` (the core of mul-by-scalar). — e.g. `matrix.vector([1, 2, 3]).scale(2)`
 - `fn neg(): Vector<T>` — Negate every element.
 - `fn abs(): Vector<T>` — Absolute value of every element.
 - `fn clip(lower: T, upper: T): Vector<T>` — Clamp every element into the inclusive range [lower, upper].
-- `fn dot(other: Vector<T>): T` — Dot product with `other`: sum of element-wise products.
+- `fn dot(other: Vector<T>): T` — Dot product with `other`: sum of element-wise products. — e.g. `matrix.vector([1, 2, 3]).dot(matrix.vector([4, 5, 6]))  // 32`
 - `fn norm_squared(): T` — Squared Euclidean length (dot product with itself).
-- `fn norm(): real64` — Euclidean length: sqrt of the squared norm, as real64.
+- `fn norm(): real64` — Euclidean length: sqrt of the squared norm, as real64. — e.g. `matrix.vector([3, 4]).norm()  // 5`
 - `fn distance_squared(other: Vector<T>): T` — Squared distance to `other` (norm_squared of the difference).
 - `fn distance(other: Vector<T>): real64` — Euclidean distance to `other`, as real64.
-- `fn sum(): T` — Sum of all elements (starts from additive identity 0).
+- `fn sum(): T` — Sum of all elements (starts from additive identity 0). — e.g. `matrix.vector([1, 2, 3, 4]).sum()  // 10`
 - `fn product(): T` — Product of all elements (starts from multiplicative identity 1).
-- `fn mean(): real64` — Arithmetic mean as real64 (panics on an empty vector).
+- `fn mean(): real64` — Arithmetic mean as real64 (panics on an empty vector). — e.g. `matrix.vector([1, 2, 3, 4]).mean()  // 2.5`
 - `fn min(): T` — Minimum element (seeded with element 0; panics if empty).
 - `fn max(): T` — Maximum element (seeded with element 0; panics if empty).
 - `fn argmin(): int` — Index of the minimum element (argmin).
@@ -101,8 +101,8 @@ A dense 2-D matrix stored row-major in a flat array of length rows*cols.
 - `fn reshape(rows: int, cols: int): Matrix<T>` — Reshape into new dimensions preserving the element order (sizes must match).
 - `fn diagonal(): Vector<T>` — The main diagonal (i,i) as a Vector, truncated to the shorter dimension.
 - `fn diag(): Vector<T>` — Alias for `diagonal`.
-- `fn trace(): T` — Trace: the sum of the diagonal entries.
-- `fn add(other: Matrix<T>): Matrix<T>` — Element-wise matrix addition (same shape required).
+- `fn trace(): T` — Trace: the sum of the diagonal entries. — e.g. `matrix.from_rows([[1, 2], [3, 4]]).trace()  // 5`
+- `fn add(other: Matrix<T>): Matrix<T>` — Element-wise matrix addition (same shape required). — e.g. `matrix.from_rows([[1, 2], [3, 4]]).add(matrix.from_rows([[10, 20], [30, 40]]))`
 - `fn add(value: T): Matrix<T>` — Add a scalar to every element (broadcast).
 - `fn sub(other: Matrix<T>): Matrix<T>` — Element-wise matrix subtraction (same shape required).
 - `fn sub(value: T): Matrix<T>` — Subtract a scalar from every element (broadcast).
@@ -117,46 +117,71 @@ A dense 2-D matrix stored row-major in a flat array of length rows*cols.
 - `fn neg(): Matrix<T>` — Negate every element.
 - `fn abs(): Matrix<T>` — Absolute value of every element.
 - `fn clip(lower: T, upper: T): Matrix<T>` — Clamp every element into the inclusive range [lower, upper].
-- `fn transpose(): Matrix<T>` — Transpose: swap rows and columns into a new cols-by-rows matrix.
-- `fn matmul(other: Matrix<T>): Matrix<T>` — Matrix product: (rows x cols) * (cols x other.cols) -> (rows x other.cols).
+- `fn transpose(): Matrix<T>` — Transpose: swap rows and columns into a new cols-by-rows matrix. — e.g. `matrix.from_rows([[1, 2, 3], [4, 5, 6]]).transpose()`
+- `fn matmul(other: Matrix<T>): Matrix<T>` — Matrix product: (rows x cols) * (cols x other.cols) -> (rows x other.cols). — e.g. `matrix.from_rows([[1, 2], [3, 4]]).matmul(matrix.from_rows([[5, 6], [7, 8]]))`
 - `fn dot(other: Matrix<T>): Matrix<T>` — Matrix-times-matrix spelled as `dot`.
 - `fn dot(vector: Vector<T>): Vector<T>` — Matrix-times-vector spelled as `dot`.
-- `fn mul_vector(vector: Vector<T>): Vector<T>` — Multiply this matrix by a column vector, producing a vector.
+- `fn mul_vector(vector: Vector<T>): Vector<T>` — Multiply this matrix by a column vector, producing a vector. — e.g. `matrix.from_rows([[1, 2], [3, 4]]).mul_vector(matrix.vector([1, 1]))`
 - `fn sum_rows(): Vector<T>` — Vector of per-row sums (one entry per row).
 - `fn sum_columns(): Vector<T>` — Vector of per-column sums (one entry per column).
 - `fn mean_rows(): Vector<real64>` — Vector of per-row means as real64 (panics if there are no columns).
 - `fn mean_columns(): Vector<real64>` — Vector of per-column means as real64 (panics if there are no rows).
-- `fn sum(): T` — Sum of every element in the matrix.
+- `fn sum(): T` — Sum of every element in the matrix. — e.g. `matrix.from_rows([[1, 2], [3, 4]]).sum()  // 10`
 - `fn product(): T` — Product of every element in the matrix.
-- `fn mean(): real64` — Mean of every element as real64 (panics if empty).
+- `fn mean(): real64` — Mean of every element as real64 (panics if empty). — e.g. `matrix.from_rows([[1, 2], [3, 4]]).mean()  // 2.5`
 - `fn norm_squared(): T` — Sum of squares of all elements (the squared Frobenius norm).
 - `fn norm(): real64` — Frobenius norm: sqrt of the sum of squares, as real64.
 - `fn min(): T` — Minimum element over the whole matrix (via flatten; panics if empty).
 - `fn max(): T` — Maximum element over the whole matrix (panics if empty).
 - `fn argmin(): int` — Flat index of the minimum element (row-major).
 - `fn argmax(): int` — Flat index of the maximum element (row-major).
-- `fn det2(): T` — Determinant of a 2x2 matrix: ad - bc.
+- `fn det2(): T` — Determinant of a 2x2 matrix: ad - bc. — e.g. `matrix.from_rows([[1, 2], [3, 4]]).det2()  // -2`
 - `fn det3(): T` — Determinant of a 3x3 matrix via cofactor expansion along the first row.
 
 ### `fn vector<T is numeric>(data: [T]): Vector<T>`
 
 Free-function constructor: build a Vector from an array.
 
+**Example:**
+```dune
+matrix.vector([1, 2, 3])
+```
+
 ### `fn from_flat<T is numeric>(rows: int, cols: int, data: [T]): Matrix<T>`
 
 Build a Matrix from flat row-major data plus explicit dimensions.
+
+**Example:**
+```dune
+matrix.from_flat(2, 2, [1, 2, 3, 4])
+```
 
 ### `fn from_rows<T is numeric>(rows: [[T]]): Matrix<T>`
 
 Build a Matrix from an array of row arrays (all rows must be equal length).
 
+**Example:**
+```dune
+matrix.from_rows([[1, 2], [3, 4]])
+```
+
 ### `fn zeros<T is numeric>(size: int): Vector<T>`
 
 A zero vector of the given size (the literal 0 takes on type T).
 
+**Example:**
+```dune
+matrix.zeros(3)
+```
+
 ### `fn zeros<T is numeric>(rows: int, cols: int): Matrix<T>`
 
 A zero matrix of the given dimensions.
+
+**Example:**
+```dune
+matrix.zeros(2, 3)
+```
 
 ### `fn ones<T is numeric>(size: int): Vector<T>`
 
@@ -165,6 +190,11 @@ A ones vector of the given size.
 ### `fn ones<T is numeric>(rows: int, cols: int): Matrix<T>`
 
 A ones matrix of the given dimensions.
+
+**Example:**
+```dune
+matrix.ones(2, 2)
+```
 
 ### `fn full<T is numeric>(size: int, value: T): Vector<T>`
 
@@ -186,9 +216,19 @@ arange overload: [start, end) with step 1.
 
 A vector of evenly spaced values over [start, end) advancing by `step`.
 
+**Example:**
+```dune
+matrix.arange(0, 10, 2)
+```
+
 ### `fn identity<T is numeric>(size: int): Matrix<T>`
 
 The size-by-size identity matrix (1 on the diagonal, 0 elsewhere).
+
+**Example:**
+```dune
+matrix.identity(3)
+```
 
 ### `fn eye<T is numeric>(size: int): Matrix<T>`
 
@@ -198,6 +238,11 @@ Alias for `identity`.
 
 A square matrix with `values` on the diagonal and zeros elsewhere.
 
+**Example:**
+```dune
+matrix.diagonal(matrix.vector([1, 2, 3]))
+```
+
 ### `fn diag<T is numeric>(values: Vector<T>): Matrix<T>`
 
 Alias for `diagonal`.
@@ -205,6 +250,11 @@ Alias for `diagonal`.
 ### `fn dot<T is numeric>(left: Vector<T>, right: Vector<T>): T`
 
 Free-function dot product of two vectors.
+
+**Example:**
+```dune
+matrix.dot(matrix.vector([1, 2, 3]), matrix.vector([4, 5, 6]))  // 32
+```
 
 ### `fn dot<T is numeric>(left: Matrix<T>, right: Matrix<T>): Matrix<T>`
 

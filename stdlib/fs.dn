@@ -8,6 +8,7 @@ import outcome;
 
 // Read the whole file at `path` as text.
 // On success returns `Done(contents)`, otherwise `Failed(message)`.
+// example: fs.read_text("dune_example_tmp.txt")
 export fn read_text(path: text): outcome.Outcome<text, text> {
     // The intrinsic returns a tuple: a success flag and a payload string.
     (ok, payload) = __read_file(path);
@@ -22,6 +23,7 @@ export fn read_text(path: text): outcome.Outcome<text, text> {
 
 // Write `content` to `path`, replacing any existing file.
 // On success returns `Done(path)`, otherwise `Failed(message)`.
+// example: fs.write_text("dune_example_tmp.txt", "hello")
 export fn write_text(path: text, content: text): outcome.Outcome<text, text> {
     // The intrinsic returns a success flag and (on failure) an error string.
     (ok, error) = __write_file(path, content);

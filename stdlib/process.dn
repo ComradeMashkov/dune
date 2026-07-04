@@ -9,18 +9,21 @@ import maybe;
 // results into the `Maybe` type.
 
 // The arguments passed after the script path (`dune script.dn a b c`).
+// example: process.args()
 export fn args(): [text] {
     // Delegate directly to the VM intrinsic, which returns a text array.
     return __process_args();
 }
 
 // The number of command-line arguments.
+// example: process.arg_count()
 export fn arg_count(): int {
     // Fetch the argument array and report its length.
     return __process_args().len();
 }
 
 // The argument at `index`, or `Absent` when out of range.
+// example: process.arg(0)
 export fn arg(index: int): maybe.Maybe<text> {
     // Snapshot the arguments once so the bounds checks use a stable array.
     values = __process_args();
@@ -39,6 +42,7 @@ export fn arg(index: int): maybe.Maybe<text> {
 }
 
 // The value of environment variable `name`, or `Absent` when unset.
+// example: process.env("PATH")
 export fn env(name: text): maybe.Maybe<text> {
     // The intrinsic returns a presence flag and the value (empty when unset).
     (present, value) = __env_get(name);
@@ -52,6 +56,7 @@ export fn env(name: text): maybe.Maybe<text> {
 }
 
 // The value of environment variable `name`, or `default` when unset.
+// example: process.env_or("DUNE_EXAMPLE_UNSET_VAR", "fallback")
 export fn env_or(name: text, default: text): text {
     // Look up presence flag and value as above.
     (present, value) = __env_get(name);
@@ -65,6 +70,7 @@ export fn env_or(name: text, default: text): text {
 }
 
 // The current working directory, or `Absent` when it cannot be determined.
+// example: process.cwd()
 export fn cwd(): maybe.Maybe<text> {
     // The intrinsic returns a success flag and the directory path.
     (ok, value) = __process_cwd();

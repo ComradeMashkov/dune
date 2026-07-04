@@ -74,16 +74,117 @@ def signature(kind: str, code: str) -> str:
     return code.rstrip().rstrip(";").rstrip()
 
 
-def first_line(text: str) -> str:
-    for line in text.splitlines():
-        if line.strip():
-            return line.strip()
-    return ""
-
-
 def load_description(stem: str) -> str:
     path = DESCRIPTIONS / f"{stem}.md"
     return path.read_text().strip() if path.exists() else ""
+
+
+def _match_tag(line: str, tag: str) -> str | None:
+    """If `line` opens with `tag:` / `tag `, return the remaining text, else None."""
+    if not line.startswith(tag):
+        return None
+    rest = line[len(tag) :]
+    if rest.startswith(":"):
+        return rest[1:].strip()
+    if rest == "" or rest.startswith(" "):
+        return rest.strip()
+    return None
+
+
+def parse_doc(doc: str) -> tuple[list[str], list[tuple[str, str]], str, list[str]]:
+    """Split a doc-comment into (description lines, params, returns, example lines).
+
+    Recognises the structured tags brief/param/returns/example, mirroring the
+    compiler's hover and `dune doc` renderers so the site agrees with them.
+    """
+    description: list[str] = []
+    params: list[tuple[str, str]] = []
+    returns = ""
+    example: list[str] = []
+    in_example = False
+
+    for raw in doc.splitlines():
+        line = raw.strip()
+
+        rest = _match_tag(line, "brief")
+        if rest is not None:
+            if rest:
+                description.append(rest)
+            continue
+        rest = _match_tag(line, "param")
+        if rest is not None:
+            if ":" in rest:
+                name, detail = rest.split(":", 1)
+            elif " " in rest:
+                name, detail = rest.split(" ", 1)
+            else:
+                name, detail = rest, ""
+            if name.strip():
+                params.append((name.strip(), detail.strip()))
+            continue
+        rest = _match_tag(line, "returns")
+        if rest is None:
+            rest = _match_tag(line, "return")
+        if rest is not None:
+            returns = rest
+            continue
+        rest = _match_tag(line, "example")
+        if rest is not None:
+            in_example = True
+            if rest:
+                example.append(rest)
+            continue
+
+        if in_example:
+            example.append(line)
+        else:
+            description.append(line)
+
+    return description, params, returns, example
+
+
+def render_doc(doc: str) -> str:
+    """Render a doc-comment's tags to Markdown (prose, Parameters, Returns, Example)."""
+    description, params, returns, example = parse_doc(doc)
+    blocks: list[str] = []
+
+    paragraphs: list[str] = []
+    current: list[str] = []
+    for text in description:
+        if not text:
+            if current:
+                paragraphs.append(" ".join(current))
+                current = []
+        else:
+            current.append(text)
+    if current:
+        paragraphs.append(" ".join(current))
+    if paragraphs:
+        blocks.append("\n\n".join(paragraphs))
+
+    if params:
+        block = "**Parameters:**"
+        for name, detail in params:
+            block += f"\n- `{name}`" + (f" — {detail}" if detail else "")
+        blocks.append(block)
+    if returns:
+        blocks.append(f"**Returns:** {returns}")
+    if example:
+        blocks.append("**Example:**\n```dune\n" + "\n".join(example) + "\n```")
+
+    return "\n\n".join(blocks)
+
+
+def member_line(sig: str, doc: str) -> str:
+    """A record field/method bullet: signature, one-line summary, and any inline example."""
+    description, _params, _returns, example = parse_doc(doc)
+    summary = next((text for text in description if text), "")
+    line = f"- `{sig}`"
+    if summary:
+        line += f" — {summary}"
+    if len(example) == 1:
+        line += f" — e.g. `{example[0]}`"
+    return line
 
 
 def parse_module(path: pathlib.Path) -> tuple[str, list[dict]]:
@@ -161,24 +262,21 @@ def render(stem: str, module_doc: str, entries: list[dict]) -> str:
 
     for entry in entries:
         out += [f"### `{entry['sig']}`", ""]
-        if entry["doc"]:
-            out += [entry["doc"], ""]
+        rendered = render_doc(entry["doc"])
+        if rendered:
+            out += [rendered, ""]
         if entry["members"]:
             fields = [member for member in entry["members"] if member["kind"] == "field"]
             methods = [member for member in entry["members"] if member["kind"] != "field"]
             if fields:
                 out += ["**Fields:**", ""]
                 for member in fields:
-                    summary = first_line(member["doc"])
-                    suffix = f" — {summary}" if summary else ""
-                    out += [f"- `{member['sig']}`{suffix}"]
+                    out += [member_line(member["sig"], member["doc"])]
                 out += [""]
             if methods:
                 out += ["**Methods:**", ""]
                 for member in methods:
-                    summary = first_line(member["doc"])
-                    suffix = f" — {summary}" if summary else ""
-                    out += [f"- `{member['sig']}`{suffix}"]
+                    out += [member_line(member["sig"], member["doc"])]
                 out += [""]
 
     return "\n".join(out).rstrip() + "\n"

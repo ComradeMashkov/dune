@@ -225,6 +225,7 @@ export method<T> [T].count_where(predicate: fn(T): bool): int {
 }
 
 // The half-open integer range [start, end) as an array.
+// example: array.range(2, 6).sum()  // 14
 export fn range(start: int, end: int): [int] {
     result: [int] = [];
     for value = start; value < end; value = value + 1 {
@@ -264,6 +265,7 @@ export fn range(start: int, end: int, step: int): [int] {
 }
 
 // An array containing `value` repeated `count` times (generic element type).
+// example: array.repeat(4, 3).sum()  // 12
 export fn repeat<T>(value: T, count: int): [T] {
     result: [T] = [];
     for index = 0; index < count; index = index + 1 {
@@ -309,6 +311,7 @@ export fn sum(values: [int]): int {
 }
 
 // Sum of a numeric array as a method. `result` starts at 0 typed as T.
+// example: [1, 2, 3].sum()  // 6
 export method<T is numeric> [T].sum(): T {
     result: T = 0;
     for index = 0; index < this.len(); index = index + 1 {
@@ -319,6 +322,7 @@ export method<T is numeric> [T].sum(): T {
 }
 
 // Product of all elements (starts from the multiplicative identity 1).
+// example: [1, 2, 3, 4].product()  // 24
 export method<T is numeric> [T].product(): T {
     result: T = 1;
     for index = 0; index < this.len(); index = index + 1 {
@@ -329,6 +333,7 @@ export method<T is numeric> [T].product(): T {
 }
 
 // The minimum element (assumes at least one element; seeds with index 0).
+// example: [3, 1, 4, 1, 5].min()  // 1
 export method<T is numeric> [T].min(): T {
     result: T = this[0];
     for index = 1; index < this.len(); index = index + 1 {
@@ -341,6 +346,7 @@ export method<T is numeric> [T].min(): T {
 }
 
 // The maximum element (seeds with the first element, then scans the rest).
+// example: [3, 1, 4, 1, 5].max()  // 5
 export method<T is numeric> [T].max(): T {
     result: T = this[0];
     for index = 1; index < this.len(); index = index + 1 {
@@ -379,6 +385,7 @@ export method<T is numeric> [T].argmax(): int {
 }
 
 // True when every element of a bool array is true (logical AND-reduce).
+// example: [true, true, false].all()  // 0
 export method [bool].all(): bool {
     for index = 0; index < this.len(); index = index + 1 {
         // A single false short-circuits the whole result.
@@ -391,6 +398,7 @@ export method [bool].all(): bool {
 }
 
 // True when any element of a bool array is true (logical OR-reduce).
+// example: [false, false, true].any()  // 1
 export method [bool].any(): bool {
     for index = 0; index < this.len(); index = index + 1 {
         // A single true short-circuits the whole result.

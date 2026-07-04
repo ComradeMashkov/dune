@@ -9,6 +9,7 @@ export record Set {
     items: [text],
 
     // Construct an empty set.
+    // example: set.Set.new().len()  // 0
     export fn new(): Set {
         return Set { items: [] };
     }
@@ -29,6 +30,7 @@ export record Set {
     }
 
     // Add `value`; duplicates are ignored.
+    // example: s = set.Set.new(); s.add("a"); s.contains("a")  // 1
     export fn add(value: text): unit {
         // Only append when the value is not already stored (index < 0).
         if this.index_of(value) < 0 {
@@ -37,12 +39,14 @@ export record Set {
     }
 
     // True when `value` is a member of the set.
+    // example: s = set.Set.new(); s.add("a"); s.contains("b")  // 0
     export fn contains(value: text): bool {
         // A non-negative index means the value was found.
         return this.index_of(value) >= 0;
     }
 
     // Remove `value`; returns whether it was present.
+    // example: s = set.Set.new(); s.add("a"); s.remove("a")  // 1
     export fn remove(value: text): bool {
         // Locate the value; if missing there is nothing to remove.
         existing = this.index_of(value);
@@ -75,11 +79,13 @@ export record Set {
     }
 
     // Drop all elements, leaving an empty set.
+    // example: s = set.Set.new(); s.add("a"); s.clear(); s.is_empty()  // 1
     export fn clear(): unit {
         this.items = [];
     }
 
     // A copy of the values in insertion order.
+    // example: s = set.Set.new(); s.add("a"); s.add("b"); s.values()
     export fn values(): [text] {
         // Copy each element into a fresh array so callers cannot mutate ours.
         result: [text] = [];

@@ -3,21 +3,25 @@
 // readable, intention-revealing names for common comparisons.
 
 // True when `value` is already true (identity predicate on a bool).
+// example: assert.is_true(true)  // 1
 export fn is_true(value: bool): bool {
     return value;
 }
 
 // True when `value` is false (logical negation of the input).
+// example: assert.is_false(false)  // 1
 export fn is_false(value: bool): bool {
     return !value;
 }
 
 // True when the observed integer `actual` matches the `expected` integer.
+// example: assert.equals_int(2, 2)  // 1
 export fn equals_int(actual: int, expected: int): bool {
     return actual == expected;
 }
 
 // True when the observed text `actual` matches the `expected` text.
+// example: assert.equals_text("a", "a")  // 1
 export fn equals_text(actual: text, expected: text): bool {
     return actual == expected;
 }

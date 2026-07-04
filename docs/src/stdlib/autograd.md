@@ -36,13 +36,28 @@ A node in the autodiff graph: its numeric value plus the edges to its inputs.
 
 Create a leaf variable (participates in gradients, no parents).
 
+**Example:**
+```dune
+autograd.variable(3.0).data  // 3
+```
+
 ### `fn constant(data: real64): Value`
 
 Create a leaf constant (does not participate in gradients).
 
+**Example:**
+```dune
+autograd.constant(5.0).data  // 5
+```
+
 ### `fn value(data: real64): Value`
 
 Alias for `variable`: the default way to introduce a differentiable value.
+
+**Example:**
+```dune
+autograd.value(2.0).data  // 2
+```
 
 ### `fn data(value: Value): real64`
 
@@ -55,6 +70,11 @@ Read a node's accumulated gradient.
 ### `fn add(left: Value, right: Value): Value`
 
 Addition: d/dleft = 1, d/dright = 1.
+
+**Example:**
+```dune
+autograd.variable(2.0).add(autograd.variable(3.0)).data  // 5
+```
 
 ### `fn add(left: Value, right: real64): Value`
 
@@ -80,6 +100,11 @@ Subtraction with a scalar left operand.
 
 Multiplication: d/dleft = right.data, d/dright = left.data (product rule).
 
+**Example:**
+```dune
+autograd.variable(3.0).mul(autograd.variable(4.0)).data  // 12
+```
+
 ### `fn mul(left: Value, right: real64): Value`
 
 Multiplication with a scalar right operand.
@@ -91,6 +116,11 @@ Multiplication with a scalar left operand.
 ### `fn div(left: Value, right: Value): Value`
 
 Division: d/dleft = 1/right, d/dright = -left/right^2 (quotient rule).
+
+**Example:**
+```dune
+autograd.variable(10.0).div(autograd.variable(4.0)).data  // 2.5
+```
 
 ### `fn div(left: Value, right: real64): Value`
 
@@ -108,25 +138,55 @@ Negation: d/dvalue = -1.
 
 Power with a constant exponent: d/dbase = exponent * base^(exponent-1).
 
+**Example:**
+```dune
+autograd.variable(3.0).pow(2.0).data  // 9
+```
+
 ### `fn relu(value: Value): Value`
 
 ReLU: passes positives through (derivative 1) and clamps negatives to 0.
+
+**Example:**
+```dune
+autograd.variable(0.0 - 5.0).relu().data  // 0
+```
 
 ### `fn tanh(value: Value): Value`
 
 Hyperbolic tangent computed from exp, with derivative 1 - tanh^2.
 
+**Example:**
+```dune
+autograd.variable(0.0).tanh().data  // 0
+```
+
 ### `fn exp(value: Value): Value`
 
 Exponential: d/dvalue = exp(value), which equals the forward result itself.
+
+**Example:**
+```dune
+autograd.variable(0.0).exp().data  // 1
+```
 
 ### `fn ln(value: Value): Value`
 
 Natural log: d/dvalue = 1/value.
 
+**Example:**
+```dune
+autograd.variable(1.0).ln().data  // 0
+```
+
 ### `fn sqrt(value: Value): Value`
 
 Square root: d/dvalue = 0.5 / sqrt(value).
+
+**Example:**
+```dune
+autograd.variable(9.0).sqrt().data  // 3
+```
 
 ### `fn zero_grad(value: Value): unit`
 
@@ -134,5 +194,9 @@ Reset gradients throughout the graph feeding into `value`.
 
 ### `fn backward(value: Value): unit`
 
-Run a full backward pass: clear old gradients, then seed the output with 1.0
-and propagate. After this, each input's `grad` holds d(value)/d(input).
+Run a full backward pass: clear old gradients, then seed the output with 1.0 and propagate. After this, each input's `grad` holds d(value)/d(input).
+
+**Example:**
+```dune
+autograd.variable(3.0).backward()
+```

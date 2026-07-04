@@ -30,19 +30,25 @@ print(doubled(0).failure_or("ok"));
 
 ### `choice Outcome<T, E>`
 
-`Outcome<T, E>` is a result type: either success carrying a `T` or failure
-carrying an error `E`. It is the explicit error-handling type that the `?`
-operator understands. The two variants are `Done(T)` and `Failed(E)`.
+`Outcome<T, E>` is a result type: either success carrying a `T` or failure carrying an error `E`. It is the explicit error-handling type that the `?` operator understands. The two variants are `Done(T)` and `Failed(E)`.
 
 ### `fn done<T, E>(value: T, error_default: E): Outcome<T, E>`
 
-Build a success. `error_default` is only present to fix the error type E
-(Dune needs a value of E to infer it); it is not stored.
+Build a success. `error_default` is only present to fix the error type E (Dune needs a value of E to infer it); it is not stored.
+
+**Example:**
+```dune
+outcome.done(7, "").is_done()  // 1
+```
 
 ### `fn failed<T, E>(value_default: T, error: E): Outcome<T, E>`
 
-Build a failure. `value_default` is only present to fix the success type T;
-it is not stored.
+Build a failure. `value_default` is only present to fix the success type T; it is not stored.
+
+**Example:**
+```dune
+outcome.failed(0, "bad").is_failed()  // 1
+```
 
 ### `fn done_int(value: int): Outcome<int, text>`
 
@@ -64,14 +70,34 @@ A failure specialised to `Outcome<text, text>`.
 
 Method: true when this Outcome is a success.
 
+**Example:**
+```dune
+outcome.failed(0, "bad").is_done()  // 0
+```
+
 ### `method<T, E> Outcome<T, E>.is_failed(): bool`
 
 Method: true when this Outcome is a failure.
+
+**Example:**
+```dune
+outcome.done(7, "").is_failed()  // 0
+```
 
 ### `method<T, E> Outcome<T, E>.value_or(default: T): T`
 
 Method: return the success value, or `default` if this is a failure.
 
+**Example:**
+```dune
+outcome.failed(0, "bad").value_or(9)  // 9
+```
+
 ### `method<T, E> Outcome<T, E>.failure_or(default: E): E`
 
 Method: return the error value, or `default` if this is a success.
+
+**Example:**
+```dune
+outcome.done(7, "").failure_or("none")  // none
+```

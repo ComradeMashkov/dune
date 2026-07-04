@@ -46,6 +46,7 @@ fn split_cells(line: text): [text] {
 }
 
 // Parse CSV `content` into rows of text cells. A trailing newline is ignored.
+// example: csv.parse_rows("a,b\n1,2\n")  // [["a", "b"], ["1", "2"]]
 export fn parse_rows(content: text): [[text]] {
     // Accumulator for the parsed rows (each row is an array of cells).
     rows: [[text]] = [];
@@ -71,6 +72,7 @@ export fn parse_rows(content: text): [[text]] {
 
 // Read a CSV file into rows of text cells.
 // On success returns `Done(rows)`, otherwise `Failed(message)`.
+// example: csv.read_rows("data.csv")
 export fn read_rows(path: text): outcome.Outcome<[[text]], text> {
     // Read the file contents as an Outcome<text, text>.
     result = fs.read_text(path);
@@ -204,6 +206,7 @@ fn parse_int(cell: text): outcome.Outcome<int, text> {
 // Convert parsed text rows into a rectangular real64 matrix. Trims each cell,
 // enforces a consistent row width, and reports the first parse or shape error.
 // Returns Done(Matrix) or Failed(message).
+// example: csv.read_matrix_real64("data.csv")
 export fn read_matrix_real64(path: text): outcome.Outcome<matrix.Matrix<real64>, text> {
     // Throwaway value used only when returning a Failed result. Built from a
     // typed 1x1 seed so the element type is unambiguously real64.
@@ -297,6 +300,7 @@ export fn read_matrix_int(path: text): outcome.Outcome<matrix.Matrix<int>, text>
 
 // Write rows of text cells back out as CSV (comma-separated, newline-terminated).
 // Returns Done(path-like text) or Failed(message) from the underlying write.
+// example: csv.write_rows("out.csv", [["a", "b"], ["1", "2"]])
 export fn write_rows(path: text, rows: [[text]]): outcome.Outcome<text, text> {
     // Full file contents assembled line by line.
     content = "";
@@ -320,6 +324,7 @@ export fn write_rows(path: text, rows: [[text]]): outcome.Outcome<text, text> {
 }
 
 // Serialize a real64 matrix to CSV and write it to `path`.
+// example: csv.write_matrix_real64("out.csv", matrix.from_rows([[1.0, 2.0], [3.0, 4.0]]))
 export fn write_matrix_real64(path: text, data: matrix.Matrix<real64>): outcome.Outcome<text, text> {
     // Convert each matrix element to its text form, row by row.
     rows: [[text]] = [];

@@ -14,16 +14,19 @@ const E32: real32 = 2.7182817;
 const INVERSE_E32: real32 = 1.0 / E32;
 
 // Square of `value` (generic over any numeric type T).
+// example: math.square(7)  // 49
 fn square<T is numeric>(value: T): T {
     return value * value;
 }
 
 // Cube of `value`.
+// example: math.cube(3)  // 27
 fn cube<T is numeric>(value: T): T {
     return value * value * value;
 }
 
 // Absolute value: negate when the input is negative.
+// example: math.abs(0 - 5)  // 5
 fn abs<T is numeric>(value: T): T {
     if value < 0 {
         return 0 - value;
@@ -33,6 +36,7 @@ fn abs<T is numeric>(value: T): T {
 }
 
 // The smaller of two numbers.
+// example: math.min(3, 8)  // 3
 fn min<T is numeric>(left: T, right: T): T {
     if left < right {
         return left;
@@ -42,6 +46,7 @@ fn min<T is numeric>(left: T, right: T): T {
 }
 
 // The larger of two numbers.
+// example: math.max(3, 8)  // 8
 fn max<T is numeric>(left: T, right: T): T {
     if left > right {
         return left;
@@ -51,6 +56,7 @@ fn max<T is numeric>(left: T, right: T): T {
 }
 
 // Constrain `value` to the inclusive range [lower, upper].
+// example: math.clamp(15, 0, 10)  // 10
 fn clamp<T is numeric>(value: T, lower: T, upper: T): T {
     // Below the floor: return the floor.
     if value < lower {
@@ -67,6 +73,7 @@ fn clamp<T is numeric>(value: T, lower: T, upper: T): T {
 }
 
 // Square root via Newton's method (real types only).
+// example: math.sqrt(81.0)  // 9
 fn sqrt<T is real>(value: T): T {
     // sqrt is defined here as 0 for non-positive inputs.
     if value <= 0.0 {
@@ -106,6 +113,7 @@ fn normalize_radians<T is real>(value: T): T {
 }
 
 // Sine via the Maclaurin series after range reduction.
+// example: math.sin(0.0)  // 0
 fn sin<T is real>(value: T): T {
     // Bring the angle into (-pi, pi] first.
     x: T = normalize_radians(value);
@@ -129,6 +137,7 @@ fn sin<T is real>(value: T): T {
 }
 
 // Cosine via the Maclaurin series after range reduction.
+// example: math.cos(0.0)  // 1
 fn cos<T is real>(value: T): T {
     // Reduce the angle first.
     x: T = normalize_radians(value);
@@ -156,6 +165,7 @@ fn tan<T is real>(value: T): T {
 }
 
 // Exponential e^value using range reduction plus the Taylor series.
+// example: math.exp(0.0)  // 1
 fn exp<T is real>(value: T): T {
     // e at precision T, and a running `scale` counting whole-unit shifts.
     e: T = 2.718281828459045;
@@ -201,6 +211,7 @@ fn exp<T is real>(value: T): T {
 }
 
 // Natural logarithm via range reduction and the artanh series.
+// example: math.ln(1.0)  // 0
 fn ln<T is real>(value: T): T {
     // ln is undefined for non-positive inputs; return 0 as a safe fallback.
     if value <= 0.0 {
@@ -245,6 +256,7 @@ fn ln<T is real>(value: T): T {
 }
 
 // Integer power: base raised to an integer exponent by repeated multiplication.
+// example: math.pow(2.0, 10)  // 1024
 fn pow<T is real>(base: T, exponent: int): T {
     result: T = 1.0;
     // Work with the magnitude of the exponent.
@@ -274,6 +286,7 @@ fn pow<T is real>(base: T, exponent: T): T {
 }
 
 // Largest whole number not greater than `value`.
+// example: math.floor(3.7)  // 3
 fn floor<T is real>(value: T): T {
     result: T = 0.0;
     // For non-negatives, step up by 1 while the next step stays within value.
@@ -292,6 +305,7 @@ fn floor<T is real>(value: T): T {
 }
 
 // Smallest whole number not less than `value`.
+// example: math.ceil(3.2)  // 4
 fn ceil<T is real>(value: T): T {
     // Start from the floor; bump up by one when the value was not already whole.
     result: T = floor(value);
@@ -303,6 +317,7 @@ fn ceil<T is real>(value: T): T {
 }
 
 // Round to the nearest whole number (halves round away from zero).
+// example: math.round(2.5)  // 3
 fn round<T is real>(value: T): T {
     // For non-negatives, floor(value + 0.5) rounds half up.
     if value >= 0.0 {
