@@ -469,6 +469,16 @@ add_test(
 )
 
 add_test(
+    NAME cli_operator_overloading
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/language/operator_overloading.dn
+        -D EXPECTED_OUTPUT="11\n22\n9\n6\n9\n10\n10"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
     NAME cli_type_aliases
     COMMAND
         ${CMAKE_COMMAND}

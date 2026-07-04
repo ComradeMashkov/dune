@@ -170,6 +170,11 @@ private:
                                    const std::vector<std::unique_ptr<Expression>>& arguments, SourceLocation location,
                                    const TypeAnnotation& expected);
     Type check_receiver_method_call(const Expression& expression, const TypeAnnotation& expected);
+    // Resolves a binary operator (`+ - * /`) whose left operand is a record to the
+    // conventional method (add/sub/mul/div), mirroring receiver-method namespace lookup.
+    // Returns the matching signature and records the call, or nullptr if none applies.
+    const FunctionSignature* resolve_operator_overload(const Expression& expression, const std::string& method_name,
+                                                       const Type& receiver);
     Type check_array_method_call(const Type& receiver, const Expression& expression);
     Type check_text_method_call(const Type& receiver, const Expression& expression);
     void check_format_arguments(const Expression& format, const std::vector<std::unique_ptr<Expression>>& arguments,

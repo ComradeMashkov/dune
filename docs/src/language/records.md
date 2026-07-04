@@ -82,6 +82,45 @@ record Tag with Display {
 }
 ```
 
+## Operator overloading
+
+When the left operand of `+`, `-`, `*`, or `/` is a record, the operator
+dispatches to a conventionally-named method on that record:
+
+| Operator | Method  |
+| -------- | ------- |
+| `a + b`  | `a.add(b)` |
+| `a - b`  | `a.sub(b)` |
+| `a * b`  | `a.mul(b)` |
+| `a / b`  | `a.div(b)` |
+
+The method is resolved with the normal overload rules, so the right operand can
+be another record or a scalar, and the result type is whatever the method
+returns:
+
+```dn
+record Vec2 {
+    x: int,
+    y: int,
+    fn add(other: Vec2): Vec2 { return Vec2 { x: this.x + other.x, y: this.y + other.y }; }
+    fn mul(factor: int): Vec2 { return Vec2 { x: this.x * factor, y: this.y * factor }; }
+}
+
+a: Vec2 = Vec2 { x: 1, y: 2 };
+b: Vec2 = Vec2 { x: 3, y: 4 };
+
+sum: Vec2 = a + b;      // Vec2 { x: 4, y: 6 }
+scaled: Vec2 = a * 10;  // Vec2 { x: 10, y: 20 }
+```
+
+This is how the [`matrix`](../stdlib/matrix.md) module's vectors and matrices get
+natural arithmetic — `v + w`, `v * scalar`, and element-wise `v * w` all map to
+the corresponding `Vector`/`Matrix` methods. Applying an operator to a record
+that lacks the matching method is a compile-time error
+(`operator '+' is not defined for type 'Point'`). Matrix multiplication stays
+explicit via `.matmul(...)` / `.dot(...)` to avoid ambiguity with element-wise
+`*`.
+
 ## Visibility across modules
 
 Record fields and methods are private across module boundaries unless the member
