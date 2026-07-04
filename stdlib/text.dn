@@ -147,3 +147,156 @@ export fn is_upper(value: glyph): bool {
 export fn is_alpha(value: glyph): bool {
     return is_lower(value) || is_upper(value);
 }
+
+// --- Building new text with `+` --------------------------------------------
+// The methods below all construct their result with the `+` operator, which
+// joins `text + text` and appends `text + glyph`.
+
+// This text followed by `other` (the method form of `this + other`).
+// example: "foo".concat("bar")  // foobar
+export method text.concat(other: text): text {
+    return this + other;
+}
+
+// This text repeated `count` times ("" for count <= 0).
+// example: "ab".repeat(3)  // ababab
+export method text.repeat(count: int): text {
+    result: text = "";
+    for i = 0; i < count; i = i + 1 {
+        result = result + this;
+    }
+
+    return result;
+}
+
+// A new text with the glyphs in reverse order.
+// example: "abc".reverse()  // cba
+export method text.reverse(): text {
+    result: text = "";
+    // Walk from the last glyph back to the first, appending as we go.
+    index = this.len();
+    while index > 0 {
+        index = index - 1;
+        result = result + this[index];
+    }
+
+    return result;
+}
+
+// A copy of this text with every ASCII lowercase letter upper-cased.
+// example: "Hello, World!".to_upper()  // HELLO, WORLD!
+export method text.to_upper(): text {
+    result: text = "";
+    for index = 0; index < this.len(); index = index + 1 {
+        letter: glyph = this[index];
+        // Lowercase letters sit 32 code points above their uppercase form.
+        if is_lower(letter) {
+            result = result + (((letter to int) - 32) to glyph);
+        } else {
+            result = result + letter;
+        }
+    }
+
+    return result;
+}
+
+// A copy of this text with every ASCII uppercase letter lower-cased.
+// example: "Hello, World!".to_lower()  // hello, world!
+export method text.to_lower(): text {
+    result: text = "";
+    for index = 0; index < this.len(); index = index + 1 {
+        letter: glyph = this[index];
+        if is_upper(letter) {
+            result = result + (((letter to int) + 32) to glyph);
+        } else {
+            result = result + letter;
+        }
+    }
+
+    return result;
+}
+
+// Every occurrence of `target` replaced by `replacement`. Returns the text
+// unchanged when `target` is empty (which would otherwise never advance).
+// example: "a-b-c".replace("-", "+")  // a+b+c
+export method text.replace(target: text, replacement: text): text {
+    if target.is_empty() {
+        return this;
+    }
+
+    result: text = "";
+    index = 0;
+    target_len = target.len();
+    total = this.len();
+    while index < total {
+        // When `target` starts here, emit the replacement and skip past it.
+        if index + target_len <= total && this[index:index + target_len] == target {
+            result = result + replacement;
+            index = index + target_len;
+        } else {
+            result = result + this[index];
+            index = index + 1;
+        }
+    }
+
+    return result;
+}
+
+// Split into the pieces separated by glyph `separator`. Adjacent separators
+// yield empty pieces, and the result always has one more piece than the number
+// of separators.
+// example: "a,b,c".split(',').len()  // 3
+export method text.split(separator: glyph): [text] {
+    result: [text] = [];
+    current: text = "";
+    for index = 0; index < this.len(); index = index + 1 {
+        letter: glyph = this[index];
+        if letter == separator {
+            result.push(current);
+            current = "";
+        } else {
+            current = current + letter;
+        }
+    }
+
+    // Flush the final piece (everything after the last separator).
+    result.push(current);
+    return result;
+}
+
+// Left-pad with `fill` until the text is at least `width` glyphs wide.
+// example: "42".pad_start(5, '0')  // 00042
+export method text.pad_start(width: int, fill: glyph): text {
+    padding: text = "";
+    for count = this.len(); count < width; count = count + 1 {
+        padding = padding + fill;
+    }
+
+    return padding + this;
+}
+
+// Right-pad with `fill` until the text is at least `width` glyphs wide.
+// example: "42".pad_end(5, '.')  // 42...
+export method text.pad_end(width: int, fill: glyph): text {
+    result: text = this;
+    for count = this.len(); count < width; count = count + 1 {
+        result = result + fill;
+    }
+
+    return result;
+}
+
+// Join `parts` into a single text, inserting `separator` between them.
+// example: join(["a", "b", "c"], ", ")  // a, b, c
+export fn join(parts: [text], separator: text): text {
+    result: text = "";
+    for index = 0; index < parts.len(); index = index + 1 {
+        if index > 0 {
+            result = result + separator;
+        }
+
+        result = result + parts[index];
+    }
+
+    return result;
+}

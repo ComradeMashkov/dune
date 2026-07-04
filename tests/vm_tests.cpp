@@ -547,6 +547,19 @@ io.println('\0' to int);)dune"),
                        "6\n3\n1\n1\n2\n1\n4\n9\ndune language\n1\n1\n6\n2\n1\n1\n",
                        "expected array and text stdlib module output") &&
              passed;
+    passed = expect_eq(run_source("import text; "
+                                  "who: text = \"world\"; mark: glyph = '!'; "
+                                  "io.println(\"hello, \" + who + mark); "
+                                  "io.println(\"ab\".repeat(3)); "
+                                  "io.println(\"abc\".reverse()); "
+                                  "io.println(\"Mixed\".to_upper()); io.println(\"Mixed\".to_lower()); "
+                                  "io.println(\"a-b-c\".replace(\"-\", \"::\")); "
+                                  "io.println(\"7\".pad_start(3, '0')); "
+                                  "io.println(text.join([\"x\", \"y\", \"z\"], \",\")); "
+                                  "io.println(\"one,two,three\".split(',').len());"),
+                       "hello, world!\nababab\ncba\nMIXED\nmixed\na::b::c\n007\nx,y,z\n3\n",
+                       "expected text concatenation and string helper output") &&
+             passed;
     passed = expect_eq(run_source("import array; import math; "
                                   "fn identity<T>(value: T): T { return value; } "
                                   "fn twice<T is numeric>(value: T): T { return value + value; } "

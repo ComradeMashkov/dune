@@ -529,6 +529,12 @@ int main() {
     passed = expect_error_contains("io.println(true + 1);", "expected numeric type but got 'bool'",
                                    "expected invalid binary operation") &&
              passed;
+    passed = expect_valid("io.println(\"foo\" + \"bar\"); io.println(\"count \" + '5');",
+                          "expected text concatenation to validate") &&
+             passed;
+    passed = expect_error_contains("io.println(\"n = \" + 1);", "cannot concatenate 'text' with 'int'",
+                                   "expected invalid text concatenation") &&
+             passed;
     passed = expect_error_contains("io.println(1.5 % 1.0);", "expected integer type but got 'real'",
                                    "expected invalid modulo operation") &&
              passed;

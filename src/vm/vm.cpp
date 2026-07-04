@@ -157,6 +157,20 @@ void expect_same_kind(const Value& left, const Value& right) {
 }
 
 Value add_values(const Value& left, const Value& right) {
+    // Text concatenation: `text + text` joins two strings and a `glyph` on
+    // either side appends a single character. Handle it before the same-kind
+    // check so the mixed text/glyph forms are allowed.
+    if (left.kind == ValueKind::text) {
+        if (right.kind == ValueKind::text) {
+            return make_text(left.text_value + right.text_value);
+        }
+        if (right.kind == ValueKind::glyph) {
+            return make_text(left.text_value + right.glyph_value);
+        }
+    } else if (left.kind == ValueKind::glyph && right.kind == ValueKind::text) {
+        return make_text(left.glyph_value + right.text_value);
+    }
+
     expect_same_kind(left, right);
     switch (left.kind) {
     case ValueKind::signed_integer:
