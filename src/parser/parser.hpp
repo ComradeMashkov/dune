@@ -37,6 +37,7 @@ private:
     bool match_identifier_like();
 
     Statement statement();
+    Statement statement_dispatch();
     Statement assignment_statement(bool require_semicolon = true);
     Statement tuple_assignment_statement();
     Statement block_statement();

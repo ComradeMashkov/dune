@@ -289,6 +289,65 @@ bool defines_receiver_method() {
     return passed;
 }
 
+bool hovers_local_doc_comment_with_tags() {
+    const std::optional<dune::lsp::Hover> hover =
+        dune::lsp::hover_source("// brief: Squares a value.\n"
+                                "// param value: the number to square\n"
+                                "// returns: value * value\n"
+                                "fn square(value: int): int { return value * value; }\n"
+                                "print(square(3));",
+                                {}, {}, 4, 9);
+
+    bool passed = true;
+    passed = expect(hover.has_value(), "expected hover with doc comment") && passed;
+    if (hover.has_value()) {
+        passed = expect(hover->contents.find("square(value: int): int") != std::string::npos,
+                        "expected function signature") &&
+                 passed;
+        passed = expect(hover->contents.find("Squares a value.") != std::string::npos, "expected brief text") && passed;
+        passed = expect(hover->contents.find("**Parameters:**") != std::string::npos, "expected parameters section") &&
+                 passed;
+        passed = expect(hover->contents.find("`value`") != std::string::npos, "expected parameter name") && passed;
+        passed = expect(hover->contents.find("**Returns:** value * value") != std::string::npos,
+                        "expected returns section") &&
+                 passed;
+    }
+    return passed;
+}
+
+bool hovers_plain_comment_as_prose() {
+    const std::optional<dune::lsp::Hover> hover = dune::lsp::hover_source("// The running total of every input.\n"
+                                                                          "total: int = 0;\n"
+                                                                          "print(total);",
+                                                                          {}, {}, 2, 7);
+
+    bool passed = true;
+    passed = expect(hover.has_value(), "expected hover with prose comment") && passed;
+    if (hover.has_value()) {
+        passed =
+            expect(hover->contents.find("total: int") != std::string::npos, "expected variable signature") && passed;
+        passed = expect(hover->contents.find("The running total of every input.") != std::string::npos,
+                        "expected prose description") &&
+                 passed;
+    }
+    return passed;
+}
+
+bool hovers_module_member_doc_comment() {
+    // math.square carries a comment in stdlib/math.dn; hover should surface it.
+    const std::optional<dune::lsp::Hover> hover =
+        dune::lsp::hover_source("import math;\nprint(math.square(5));", {}, {}, 1, 13);
+
+    bool passed = true;
+    passed = expect(hover.has_value(), "expected module member hover") && passed;
+    if (hover.has_value()) {
+        passed = expect(hover->contents.find("Square of") != std::string::npos,
+                        "expected doc comment from module file in hover") &&
+                 passed;
+    }
+    return passed;
+}
+
 bool defines_module_from_from_import() {
     // Regression: `from array import ...` must register `array` as a module so
     // go-to-definition on the module name opens the module file.
@@ -467,6 +526,9 @@ int main() {
     passed = defines_module_from_import() && passed;
     passed = defines_module_member() && passed;
     passed = defines_receiver_method() && passed;
+    passed = hovers_local_doc_comment_with_tags() && passed;
+    passed = hovers_plain_comment_as_prose() && passed;
+    passed = hovers_module_member_doc_comment() && passed;
     passed = defines_module_from_from_import() && passed;
     passed = defines_selective_import_symbol() && passed;
     passed = hovers_selective_import_symbol() && passed;

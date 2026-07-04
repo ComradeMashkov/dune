@@ -156,6 +156,11 @@ struct Statement {
     // import_symbols with the selectively imported names.
     std::string module_alias;
     std::vector<std::string> import_symbols;
+    // The doc-comment block written directly above this declaration (markers
+    // stripped, lines joined by '\n'), or empty. Populated by the parser from the
+    // leading comment of the statement's first token; rendered by LSP hover and
+    // available to documentation tooling.
+    std::string doc_comment;
 };
 
 struct Program {

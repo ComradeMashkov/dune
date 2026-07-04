@@ -98,6 +98,11 @@ struct Token {
     std::string lexeme;
     std::size_t line = 1;
     std::size_t column = 1;
+    // The contiguous block of comment lines written directly above this token
+    // (markers stripped, joined by '\n'), or empty. A blank line breaks the
+    // block, and trailing comments after code do not attach. The parser copies
+    // this onto a declaration's `doc_comment`.
+    std::string leading_comment;
 };
 
 class Lexer {
@@ -112,7 +117,10 @@ private:
     char advance();
     bool match(char expected);
     char peek() const;
-    void skip_whitespace();
+    void skip_trivia();
+    bool is_line_leading(std::size_t position) const;
+    void record_comment_block(const std::string& text, std::size_t first_line, std::size_t last_line);
+    Token scan_token();
 
     Token make_token(TokenType type, std::size_t start, std::size_t line, std::size_t column) const;
     Token identifier(std::size_t start, std::size_t line, std::size_t column);
@@ -125,6 +133,9 @@ private:
     std::size_t current_ = 0;
     std::size_t line_ = 1;
     std::size_t column_ = 1;
+    // Comment lines collected by skip_trivia for the token being scanned next.
+    std::vector<std::string> pending_comment_lines_;
+    std::size_t pending_comment_last_line_ = 0;
 };
 
 } // namespace dune
