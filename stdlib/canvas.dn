@@ -1,0 +1,814 @@
+// Canvas is a deterministic drawing-command layer for native display backends.
+// It is intentionally separate from `plot`: plot can render charts, while canvas
+// owns reusable drawing primitives and the native display hook.
+import fs;
+import outcome;
+import runtime;
+
+const DEFAULT_WIDTH: int = 800;
+const DEFAULT_HEIGHT: int = 600;
+
+export record Style {
+    stroke_color: text,
+    fill_color: text,
+    stroke_width_value: real64,
+    font_size_value: int,
+    opacity_value: real64,
+    dash_value: text,
+
+    // Build the default drawing style: dark stroke, no fill, one-pixel line.
+    export static fn default(): Style {
+        return Style {
+            stroke_color: "#0f172a",
+            fill_color: "none",
+            stroke_width_value: 1.0,
+            font_size_value: 12,
+            opacity_value: 1.0,
+            dash_value: "",
+        };
+    }
+
+    // Return a copy with a different stroke color.
+    export fn with_stroke(color: text): Style {
+        return Style {
+            stroke_color: color,
+            fill_color: this.fill_color,
+            stroke_width_value: this.stroke_width_value,
+            font_size_value: this.font_size_value,
+            opacity_value: this.opacity_value,
+            dash_value: this.dash_value,
+        };
+    }
+
+    // Return a copy with a different fill color.
+    export fn with_fill(color: text): Style {
+        return Style {
+            stroke_color: this.stroke_color,
+            fill_color: color,
+            stroke_width_value: this.stroke_width_value,
+            font_size_value: this.font_size_value,
+            opacity_value: this.opacity_value,
+            dash_value: this.dash_value,
+        };
+    }
+
+    // Return a copy with a different stroke width.
+    export fn with_width(width: real64): Style {
+        return Style {
+            stroke_color: this.stroke_color,
+            fill_color: this.fill_color,
+            stroke_width_value: width,
+            font_size_value: this.font_size_value,
+            opacity_value: this.opacity_value,
+            dash_value: this.dash_value,
+        };
+    }
+
+    // Return a copy with a different text size.
+    export fn with_font_size(size: int): Style {
+        return Style {
+            stroke_color: this.stroke_color,
+            fill_color: this.fill_color,
+            stroke_width_value: this.stroke_width_value,
+            font_size_value: size,
+            opacity_value: this.opacity_value,
+            dash_value: this.dash_value,
+        };
+    }
+
+    // Return a copy with a different opacity.
+    export fn with_opacity(opacity: real64): Style {
+        return Style {
+            stroke_color: this.stroke_color,
+            fill_color: this.fill_color,
+            stroke_width_value: this.stroke_width_value,
+            font_size_value: this.font_size_value,
+            opacity_value: opacity,
+            dash_value: this.dash_value,
+        };
+    }
+
+    // Return a copy with an SVG stroke-dasharray such as "4 2".
+    export fn with_dash(dash: text): Style {
+        return Style {
+            stroke_color: this.stroke_color,
+            fill_color: this.fill_color,
+            stroke_width_value: this.stroke_width_value,
+            font_size_value: this.font_size_value,
+            opacity_value: this.opacity_value,
+            dash_value: dash,
+        };
+    }
+}
+
+record DrawCommand {
+    kind: text,
+    xs: [real64],
+    ys: [real64],
+    label: text,
+    style: Style,
+
+    static fn new(kind: text, xs: [real64], ys: [real64], label: text, style: Style): DrawCommand {
+        return DrawCommand { kind: kind, xs: xs, ys: ys, label: label, style: style };
+    }
+}
+
+export record Canvas {
+    title_text: text,
+    width: int,
+    height: int,
+    background_color: text,
+    view_x: real64,
+    view_y: real64,
+    view_width: real64,
+    view_height: real64,
+    commands: [DrawCommand],
+
+    // Create an empty canvas with an explicit pixel size.
+    export static fn new(title: text, width: int, height: int): Canvas {
+        require_positive_size(width, height);
+        empty_commands: [DrawCommand] = [];
+        return Canvas {
+            title_text: title,
+            width: width,
+            height: height,
+            background_color: "#ffffff",
+            view_x: 0.0,
+            view_y: 0.0,
+            view_width: width to real64,
+            view_height: height to real64,
+            commands: empty_commands,
+        };
+    }
+
+    // Return a copy with a new native window / SVG title.
+    export fn title(value: text): Canvas {
+        return Canvas {
+            title_text: value,
+            width: this.width,
+            height: this.height,
+            background_color: this.background_color,
+            view_x: this.view_x,
+            view_y: this.view_y,
+            view_width: this.view_width,
+            view_height: this.view_height,
+            commands: this.commands,
+        };
+    }
+
+    // Return a copy with a new background color.
+    export fn background(color: text): Canvas {
+        return Canvas {
+            title_text: this.title_text,
+            width: this.width,
+            height: this.height,
+            background_color: color,
+            view_x: this.view_x,
+            view_y: this.view_y,
+            view_width: this.view_width,
+            view_height: this.view_height,
+            commands: this.commands,
+        };
+    }
+
+    // Return a copy with a custom SVG viewBox.
+    export fn view_box(x: real64, y: real64, width: real64, height: real64): Canvas {
+        if width <= 0.0 || height <= 0.0 {
+            runtime.panic("canvas: view box size must be positive");
+        }
+
+        return Canvas {
+            title_text: this.title_text,
+            width: this.width,
+            height: this.height,
+            background_color: this.background_color,
+            view_x: x,
+            view_y: y,
+            view_width: width,
+            view_height: height,
+            commands: this.commands,
+        };
+    }
+
+    // Drop all drawing commands but keep canvas size, title, background, and viewBox.
+    export fn clear(): Canvas {
+        empty_commands: [DrawCommand] = [];
+        return Canvas {
+            title_text: this.title_text,
+            width: this.width,
+            height: this.height,
+            background_color: this.background_color,
+            view_x: this.view_x,
+            view_y: this.view_y,
+            view_width: this.view_width,
+            view_height: this.view_height,
+            commands: empty_commands,
+        };
+    }
+
+    // Draw a straight line.
+    export fn line(x1: real64, y1: real64, x2: real64, y2: real64, style: Style): Canvas {
+        return append(this, DrawCommand.new("line", [x1, x2], [y1, y2], "", style));
+    }
+
+    // Draw a straight line with a stroke color.
+    export fn line(x1: real64, y1: real64, x2: real64, y2: real64, color: text): Canvas {
+        return this.line(x1, y1, x2, y2, stroke(color));
+    }
+
+    // Draw a connected polyline.
+    export fn polyline(xs: [real64], ys: [real64], style: Style): Canvas {
+        require_xy(xs, ys);
+        return append(this, DrawCommand.new("polyline", xs, ys, "", style));
+    }
+
+    // Draw a connected polyline with a stroke color.
+    export fn polyline(xs: [real64], ys: [real64], color: text): Canvas {
+        return this.polyline(xs, ys, stroke(color));
+    }
+
+    // Draw a closed polygon.
+    export fn polygon(xs: [real64], ys: [real64], style: Style): Canvas {
+        require_xy(xs, ys);
+        return append(this, DrawCommand.new("polygon", xs, ys, "", style));
+    }
+
+    // Draw a closed polygon with stroke and fill colors.
+    export fn polygon(xs: [real64], ys: [real64], stroke_color: text, fill_color: text): Canvas {
+        return this.polygon(xs, ys, style(stroke_color, fill_color, 1.0));
+    }
+
+    // Draw a rectangle.
+    export fn rect(x: real64, y: real64, width: real64, height: real64, style: Style): Canvas {
+        return append(this, DrawCommand.new("rect", [x, width], [y, height], "", style));
+    }
+
+    // Draw a rectangle with stroke and fill colors.
+    export fn rect(x: real64, y: real64, width: real64, height: real64, stroke_color: text, fill_color: text): Canvas {
+        return this.rect(x, y, width, height, style(stroke_color, fill_color, 1.0));
+    }
+
+    // Draw a rounded rectangle.
+    export fn rounded_rect(x: real64, y: real64, width: real64, height: real64, radius: real64, style: Style): Canvas {
+        return append(this, DrawCommand.new("rounded_rect", [x, width, radius], [y, height], "", style));
+    }
+
+    // Draw a rounded rectangle with stroke and fill colors.
+    export fn rounded_rect(x: real64, y: real64, width: real64, height: real64, radius: real64, stroke_color: text, fill_color: text): Canvas {
+        return this.rounded_rect(x, y, width, height, radius, style(stroke_color, fill_color, 1.0));
+    }
+
+    // Draw a circle.
+    export fn circle(cx: real64, cy: real64, radius: real64, style: Style): Canvas {
+        return append(this, DrawCommand.new("circle", [cx, radius], [cy], "", style));
+    }
+
+    // Draw a circle with stroke and fill colors.
+    export fn circle(cx: real64, cy: real64, radius: real64, stroke_color: text, fill_color: text): Canvas {
+        return this.circle(cx, cy, radius, style(stroke_color, fill_color, 1.0));
+    }
+
+    // Draw an ellipse.
+    export fn ellipse(cx: real64, cy: real64, rx: real64, ry: real64, style: Style): Canvas {
+        return append(this, DrawCommand.new("ellipse", [cx, rx], [cy, ry], "", style));
+    }
+
+    // Draw an ellipse with stroke and fill colors.
+    export fn ellipse(cx: real64, cy: real64, rx: real64, ry: real64, stroke_color: text, fill_color: text): Canvas {
+        return this.ellipse(cx, cy, rx, ry, style(stroke_color, fill_color, 1.0));
+    }
+
+    // Draw left-aligned text.
+    export fn text(x: real64, y: real64, value: text, style: Style): Canvas {
+        return append(this, DrawCommand.new("text", [x], [y], value, style));
+    }
+
+    // Draw left-aligned text with a fill color.
+    export fn text(x: real64, y: real64, value: text, color: text): Canvas {
+        return this.text(x, y, value, stroke(color).with_fill(color));
+    }
+
+    // Draw center-aligned text.
+    export fn text_center(x: real64, y: real64, value: text, style: Style): Canvas {
+        return append(this, DrawCommand.new("text_center", [x], [y], value, style));
+    }
+
+    // Draw right-aligned text.
+    export fn text_right(x: real64, y: real64, value: text, style: Style): Canvas {
+        return append(this, DrawCommand.new("text_right", [x], [y], value, style));
+    }
+
+    // Draw a raw SVG path. Useful for icons and custom shapes.
+    export fn path(data: text, style: Style): Canvas {
+        coords: [real64] = [];
+        return append(this, DrawCommand.new("path", coords, coords, data, style));
+    }
+
+    // Draw an SVG image reference.
+    export fn image(x: real64, y: real64, width: real64, height: real64, href: text): Canvas {
+        return append(this, DrawCommand.new("image", [x, width], [y, height], href, Style.default()));
+    }
+
+    // Draw a background grid aligned to the current viewBox.
+    export fn grid(step: real64, color: text): Canvas {
+        if step <= 0.0 {
+            runtime.panic("canvas: grid step must be positive");
+        }
+
+        ys: [real64] = [];
+        return append(this, DrawCommand.new("grid", [step], ys, "", stroke(color).with_width(0.5).with_opacity(0.45)));
+    }
+
+    // Draw horizontal and vertical axes at the given origin.
+    export fn axes(origin_x: real64, origin_y: real64, color: text): Canvas {
+        return append(this, DrawCommand.new("axes", [origin_x], [origin_y], "", stroke(color).with_width(1.0)));
+    }
+
+    // Draw a filled point.
+    export fn point(x: real64, y: real64, radius: real64, color: text): Canvas {
+        return this.circle(x, y, radius, style(color, color, 1.0));
+    }
+
+    // Draw a line with a simple endpoint marker.
+    export fn arrow(x1: real64, y1: real64, x2: real64, y2: real64, color: text): Canvas {
+        return append(this, DrawCommand.new("arrow", [x1, x2], [y1, y2], "", stroke(color).with_width(1.5)));
+    }
+
+    // Draw a titled panel for dashboards and tool surfaces.
+    export fn panel(x: real64, y: real64, width: real64, height: real64, title: text): Canvas {
+        result = this.rounded_rect(x, y, width, height, 6.0, style("#cbd5e1", "#ffffff", 1.0));
+        if title.len() > 0 {
+            result = result.text(x + 12.0, y + 22.0, title, fill("#0f172a").with_font_size(14));
+            result = result.line(x, y + 34.0, x + width, y + 34.0, stroke("#e2e8f0"));
+        }
+        return result;
+    }
+
+    // Draw a button. The active state uses a stronger fill and inverted text.
+    export fn button(x: real64, y: real64, width: real64, height: real64, label: text, active: bool): Canvas {
+        fill_color = "#f8fafc";
+        stroke_color = "#94a3b8";
+        label_color = "#0f172a";
+        if active {
+            fill_color = "#2563eb";
+            stroke_color = "#1d4ed8";
+            label_color = "#ffffff";
+        }
+        return this.rounded_rect(x, y, width, height, 5.0, style(stroke_color, fill_color, 1.0))
+            .text_center(x + width / 2.0, y + height / 2.0 + 4.0, label, fill(label_color).with_font_size(12));
+    }
+
+    // Draw a checkbox with a label.
+    export fn checkbox(x: real64, y: real64, label: text, checked: bool): Canvas {
+        result = this.rounded_rect(x, y, 14.0, 14.0, 3.0, style("#64748b", "#ffffff", 1.0));
+        if checked {
+            result = result.polyline([x + 3.0, x + 6.0, x + 11.0],
+                                     [y + 7.0, y + 10.0, y + 4.0],
+                                     stroke("#2563eb").with_width(2.0));
+        }
+        return result.text(x + 22.0, y + 12.0, label, fill("#0f172a").with_font_size(12));
+    }
+
+    // Draw a compact on/off toggle.
+    export fn toggle(x: real64, y: real64, width: real64, label: text, on: bool): Canvas {
+        track_fill = "#cbd5e1";
+        knob_x = x + 4.0;
+        if on {
+            track_fill = "#22c55e";
+            knob_x = x + width - 18.0;
+        }
+        return this.rounded_rect(x, y, width, 22.0, 11.0, style("none", track_fill, 0.0))
+            .circle(knob_x + 7.0, y + 11.0, 7.0, "none", "#ffffff")
+            .text(x + width + 8.0, y + 16.0, label, fill("#0f172a").with_font_size(12));
+    }
+
+    // Draw a slider with a label and current value.
+    export fn slider(x: real64, y: real64, width: real64, min: real64, max: real64, value: real64, label: text): Canvas {
+        if max <= min {
+            runtime.panic("canvas: slider max must be greater than min");
+        }
+        current = clamp(value, min, max);
+        filled = ((current - min) / (max - min)) * width;
+        return this.text(x, y - 6.0, label, fill("#0f172a").with_font_size(12))
+            .rounded_rect(x, y, width, 6.0, 3.0, style("none", "#e2e8f0", 0.0))
+            .rounded_rect(x, y, filled, 6.0, 3.0, style("none", "#2563eb", 0.0))
+            .circle(x + filled, y + 3.0, 7.0, "#1d4ed8", "#ffffff")
+            .text_right(x + width, y + 24.0, format("{}", current), fill("#475569").with_font_size(11));
+    }
+
+    // Draw a 0..1 progress bar.
+    export fn progress(x: real64, y: real64, width: real64, height: real64, value: real64, color: text): Canvas {
+        ratio = clamp(value, 0.0, 1.0);
+        return this.rounded_rect(x, y, width, height, height / 2.0, style("none", "#e2e8f0", 0.0))
+            .rounded_rect(x, y, width * ratio, height, height / 2.0, style("none", color, 0.0));
+    }
+
+    // Draw a row of tabs. The active index is zero-based.
+    export fn tabs(x: real64, y: real64, width: real64, labels: [text], active_index: int): Canvas {
+        require_text_items(labels, "tabs");
+        tab_width = width / (labels.len() to real64);
+        result = this;
+        for index = 0; index < labels.len(); index = index + 1 {
+            active = index == active_index;
+            result = result.button(x + (index to real64) * tab_width, y, tab_width, 28.0, labels[index], active);
+        }
+        return result;
+    }
+
+    // Draw a toolbar as a sequence of compact buttons.
+    export fn toolbar(x: real64, y: real64, labels: [text], active_index: int): Canvas {
+        require_text_items(labels, "toolbar");
+        result = this;
+        for index = 0; index < labels.len(); index = index + 1 {
+            active = index == active_index;
+            result = result.button(x + (index to real64) * 86.0, y, 78.0, 28.0, labels[index], active);
+        }
+        return result;
+    }
+
+    // Draw a small status badge.
+    export fn badge(x: real64, y: real64, label: text, color: text): Canvas {
+        width = (label.len() to real64) * 7.0 + 16.0;
+        return this.rounded_rect(x, y, width, 22.0, 11.0, style("none", color, 0.0))
+            .text_center(x + width / 2.0, y + 15.0, label, fill("#ffffff").with_font_size(11));
+    }
+
+    // Draw a text input-like field with a placeholder.
+    export fn input(x: real64, y: real64, width: real64, value: text, placeholder: text): Canvas {
+        label = placeholder;
+        color = "#94a3b8";
+        if value.len() > 0 {
+            label = value;
+            color = "#0f172a";
+        }
+        return this.rounded_rect(x, y, width, 30.0, 5.0, style("#cbd5e1", "#ffffff", 1.0))
+            .text(x + 10.0, y + 20.0, label, fill(color).with_font_size(12));
+    }
+
+    // Draw a read-only select box.
+    export fn select_box(x: real64, y: real64, width: real64, label: text, value: text): Canvas {
+        return this.text(x, y - 6.0, label, fill("#475569").with_font_size(11))
+            .rounded_rect(x, y, width, 30.0, 5.0, style("#cbd5e1", "#ffffff", 1.0))
+            .text(x + 10.0, y + 20.0, value, fill("#0f172a").with_font_size(12))
+            .path(format("M {} {} L {} {} L {} {}", x + width - 18.0, y + 12.0,
+                         x + width - 12.0, y + 18.0, x + width - 6.0, y + 12.0),
+                  stroke("#64748b").with_width(1.5));
+    }
+
+    // Draw a metric tile with a label and large value.
+    export fn metric(x: real64, y: real64, width: real64, height: real64, label: text, value: text): Canvas {
+        return this.rounded_rect(x, y, width, height, 6.0, style("#cbd5e1", "#ffffff", 1.0))
+            .text(x + 12.0, y + 22.0, label, fill("#64748b").with_font_size(11))
+            .text(x + 12.0, y + 52.0, value, fill("#0f172a").with_font_size(24));
+    }
+
+    // Draw a simple table with fixed column widths.
+    export fn table(x: real64, y: real64, column_widths: [real64], headers: [text], rows: [[text]]): Canvas {
+        require_table(column_widths, headers, rows);
+        total_width = sum_real64(column_widths);
+        row_height = 24.0;
+        result = this.rounded_rect(x, y, total_width, row_height * ((rows.len() + 1) to real64), 5.0,
+                                   style("#cbd5e1", "#ffffff", 1.0))
+            .rect(x, y, total_width, row_height, "none", "#f1f5f9");
+        current_x = x;
+        for column = 0; column < headers.len(); column = column + 1 {
+            result = result.text(current_x + 8.0, y + 17.0, headers[column], fill("#334155").with_font_size(11));
+            result = result.line(current_x, y, current_x, y + row_height * ((rows.len() + 1) to real64), stroke("#e2e8f0"));
+            current_x = current_x + column_widths[column];
+        }
+        result = result.line(x + total_width, y, x + total_width, y + row_height * ((rows.len() + 1) to real64), stroke("#e2e8f0"));
+        for row = 0; row < rows.len(); row = row + 1 {
+            row_y = y + row_height * ((row + 1) to real64);
+            result = result.line(x, row_y, x + total_width, row_y, stroke("#e2e8f0"));
+            current_x = x;
+            for column = 0; column < headers.len(); column = column + 1 {
+                result = result.text(current_x + 8.0, row_y + 17.0, rows[row][column],
+                                     fill("#0f172a").with_font_size(11));
+                current_x = current_x + column_widths[column];
+            }
+        }
+        return result;
+    }
+
+    // Render to deterministic SVG text.
+    export fn to_svg(): text {
+        return render_svg(this);
+    }
+
+    // Save the SVG document to disk.
+    export fn save_svg(path: text): outcome.Outcome<text, text> {
+        return fs.write_text(path, this.to_svg());
+    }
+
+    // Open the SVG in the VM native canvas window when supported.
+    export fn show_native(): outcome.Outcome<text, text> {
+        (ok, message) = __canvas_show_native(this.title_text, this.to_svg());
+        if ok {
+            return outcome.done_text(message);
+        }
+
+        return outcome.failed_text(message);
+    }
+}
+
+// Create an empty canvas with an explicit pixel size.
+export fn new(title: text, width: int, height: int): Canvas {
+    return Canvas.new(title, width, height);
+}
+
+// Create an empty canvas with the default size.
+export fn new(title: text): Canvas {
+    return Canvas.new(title, DEFAULT_WIDTH, DEFAULT_HEIGHT);
+}
+
+// Build a custom style from stroke, fill, and stroke width.
+export fn style(stroke_color: text, fill_color: text, stroke_width: real64): Style {
+    return Style.default().with_stroke(stroke_color).with_fill(fill_color).with_width(stroke_width);
+}
+
+// Build a stroke-only style.
+export fn stroke(color: text): Style {
+    return Style.default().with_stroke(color).with_fill("none");
+}
+
+// Build a fill-only style.
+export fn fill(color: text): Style {
+    return Style.default().with_stroke("none").with_fill(color);
+}
+
+// Render a canvas to deterministic SVG text.
+export fn svg(scene: Canvas): text {
+    return render_svg(scene);
+}
+
+// List the interactive tools exposed by the native canvas window.
+export fn native_tools(): [text] {
+    return ["grid", "zoom-in", "zoom-out", "reset", "ruler", "save-svg", "cursor-status"];
+}
+
+fn require_positive_size(width: int, height: int): unit {
+    if width <= 0 || height <= 0 {
+        runtime.panic("canvas: size must be positive");
+    }
+}
+
+fn require_xy(xs: [real64], ys: [real64]): unit {
+    if xs.len() != ys.len() {
+        runtime.panic("canvas: xs and ys length mismatch");
+    }
+    if xs.len() == 0 {
+        runtime.panic("canvas: coordinate arrays cannot be empty");
+    }
+}
+
+fn require_text_items(items: [text], name: text): unit {
+    if items.len() == 0 {
+        runtime.panic(format("canvas: {} needs at least one item", name));
+    }
+}
+
+fn require_table(column_widths: [real64], headers: [text], rows: [[text]]): unit {
+    if column_widths.len() == 0 {
+        runtime.panic("canvas: table needs at least one column");
+    }
+    if column_widths.len() != headers.len() {
+        runtime.panic("canvas: table column widths and headers length mismatch");
+    }
+    for column = 0; column < column_widths.len(); column = column + 1 {
+        if column_widths[column] <= 0.0 {
+            runtime.panic("canvas: table column widths must be positive");
+        }
+    }
+    for row = 0; row < rows.len(); row = row + 1 {
+        if rows[row].len() != headers.len() {
+            runtime.panic("canvas: table row length mismatch");
+        }
+    }
+}
+
+fn clamp(value: real64, low: real64, high: real64): real64 {
+    if value < low {
+        return low;
+    }
+    if value > high {
+        return high;
+    }
+    return value;
+}
+
+fn sum_real64(values: [real64]): real64 {
+    total = 0.0;
+    for index = 0; index < values.len(); index = index + 1 {
+        total = total + values[index];
+    }
+    return total;
+}
+
+fn append(scene: Canvas, command: DrawCommand): Canvas {
+    next: [DrawCommand] = [];
+    for index = 0; index < scene.commands.len(); index = index + 1 {
+        next.push(scene.commands[index]);
+    }
+    next.push(command);
+
+    return Canvas {
+        title_text: scene.title_text,
+        width: scene.width,
+        height: scene.height,
+        background_color: scene.background_color,
+        view_x: scene.view_x,
+        view_y: scene.view_y,
+        view_width: scene.view_width,
+        view_height: scene.view_height,
+        commands: next,
+    };
+}
+
+fn escape_xml(value: text): text {
+    escaped = "";
+    for index = 0; index < value.len(); index = index + 1 {
+        ch = value[index];
+        if ch == '&' {
+            escaped = format("{}&amp;", escaped);
+        } else {
+            if ch == '<' {
+                escaped = format("{}&lt;", escaped);
+            } else {
+                if ch == '>' {
+                    escaped = format("{}&gt;", escaped);
+                } else {
+                    if ch == '"' {
+                        escaped = format("{}&quot;", escaped);
+                    } else {
+                        if ch == '\'' {
+                            escaped = format("{}&apos;", escaped);
+                        } else {
+                            escaped = format("{}{}", escaped, ch);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return escaped;
+}
+
+fn style_attrs(style: Style): text {
+    attrs = format("stroke=\"{}\" fill=\"{}\" stroke-width=\"{}\" opacity=\"{}\"",
+                   style.stroke_color, style.fill_color, style.stroke_width_value, style.opacity_value);
+    if style.dash_value.len() > 0 {
+        attrs = format("{} stroke-dasharray=\"{}\"", attrs, style.dash_value);
+    }
+    return attrs;
+}
+
+fn render_svg(scene: Canvas): text {
+    output = format("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{}\" height=\"{}\" viewBox=\"{} {} {} {}\">\n",
+                    scene.width, scene.height, scene.view_x, scene.view_y, scene.view_width, scene.view_height);
+    output = format("{}<title>{}</title>\n", output, escape_xml(scene.title_text));
+    output = format("{}<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" fill=\"{}\"/>\n",
+                    output, scene.view_x, scene.view_y, scene.view_width, scene.view_height, scene.background_color);
+
+    for index = 0; index < scene.commands.len(); index = index + 1 {
+        output = format("{}{}\n", output, render_command(scene, scene.commands[index]));
+    }
+
+    return format("{}</svg>\n", output);
+}
+
+fn render_command(scene: Canvas, command: DrawCommand): text {
+    if command.kind == "line" {
+        return format("<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" {}/>",
+                      command.xs[0], command.ys[0], command.xs[1], command.ys[1], style_attrs(command.style));
+    }
+    if command.kind == "polyline" {
+        return render_polyline(command);
+    }
+    if command.kind == "polygon" {
+        return render_polygon(command);
+    }
+    if command.kind == "rect" {
+        return format("<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" {}/>",
+                      command.xs[0], command.ys[0], command.xs[1], command.ys[1], style_attrs(command.style));
+    }
+    if command.kind == "rounded_rect" {
+        return format("<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" rx=\"{}\" ry=\"{}\" {}/>",
+                      command.xs[0], command.ys[0], command.xs[1], command.ys[1], command.xs[2], command.xs[2],
+                      style_attrs(command.style));
+    }
+    if command.kind == "circle" {
+        return format("<circle cx=\"{}\" cy=\"{}\" r=\"{}\" {}/>",
+                      command.xs[0], command.ys[0], command.xs[1], style_attrs(command.style));
+    }
+    if command.kind == "ellipse" {
+        return format("<ellipse cx=\"{}\" cy=\"{}\" rx=\"{}\" ry=\"{}\" {}/>",
+                      command.xs[0], command.ys[0], command.xs[1], command.ys[1], style_attrs(command.style));
+    }
+    if command.kind == "text" {
+        return render_text(command, "start");
+    }
+    if command.kind == "text_center" {
+        return render_text(command, "middle");
+    }
+    if command.kind == "text_right" {
+        return render_text(command, "end");
+    }
+    if command.kind == "path" {
+        return format("<path d=\"{}\" {}/>", escape_xml(command.label), style_attrs(command.style));
+    }
+    if command.kind == "image" {
+        return format("<image x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" href=\"{}\"/>",
+                      command.xs[0], command.ys[0], command.xs[1], command.ys[1], escape_xml(command.label));
+    }
+    if command.kind == "grid" {
+        return render_grid(scene, command);
+    }
+    if command.kind == "axes" {
+        return render_axes(scene, command);
+    }
+    if command.kind == "arrow" {
+        return render_arrow(command);
+    }
+
+    return "";
+}
+
+fn render_polyline(command: DrawCommand): text {
+    points = "";
+    for index = 0; index < command.xs.len(); index = index + 1 {
+        pair = format("{},{}", command.xs[index], command.ys[index]);
+        if index == 0 {
+            points = pair;
+        } else {
+            points = format("{} {}", points, pair);
+        }
+    }
+
+    return format("<polyline points=\"{}\" {}/>", points, style_attrs(command.style));
+}
+
+fn render_polygon(command: DrawCommand): text {
+    points = "";
+    for index = 0; index < command.xs.len(); index = index + 1 {
+        pair = format("{},{}", command.xs[index], command.ys[index]);
+        if index == 0 {
+            points = pair;
+        } else {
+            points = format("{} {}", points, pair);
+        }
+    }
+
+    return format("<polygon points=\"{}\" {}/>", points, style_attrs(command.style));
+}
+
+fn render_text(command: DrawCommand, anchor: text): text {
+    return format("<text x=\"{}\" y=\"{}\" fill=\"{}\" font-family=\"sans-serif\" font-size=\"{}\" opacity=\"{}\" text-anchor=\"{}\">{}</text>",
+                  command.xs[0], command.ys[0], command.style.fill_color, command.style.font_size_value,
+                  command.style.opacity_value, anchor, escape_xml(command.label));
+}
+
+fn render_grid(scene: Canvas, command: DrawCommand): text {
+    step = command.xs[0];
+    x_end = scene.view_x + scene.view_width;
+    y_end = scene.view_y + scene.view_height;
+    output = "<g class=\"canvas-grid\">\n";
+
+    x = scene.view_x;
+    while x <= x_end {
+        output = format("{}<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" {}/>\n",
+                        output, x, scene.view_y, x, y_end, style_attrs(command.style));
+        x = x + step;
+    }
+
+    y = scene.view_y;
+    while y <= y_end {
+        output = format("{}<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" {}/>\n",
+                        output, scene.view_x, y, x_end, y, style_attrs(command.style));
+        y = y + step;
+    }
+
+    return format("{}</g>", output);
+}
+
+fn render_axes(scene: Canvas, command: DrawCommand): text {
+    x = command.xs[0];
+    y = command.ys[0];
+    x_end = scene.view_x + scene.view_width;
+    y_end = scene.view_y + scene.view_height;
+    output = "<g class=\"canvas-axes\">\n";
+    output = format("{}<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" {}/>\n",
+                    output, scene.view_x, y, x_end, y, style_attrs(command.style));
+    output = format("{}<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" {}/>\n",
+                    output, x, scene.view_y, x, y_end, style_attrs(command.style));
+    return format("{}</g>", output);
+}
+
+fn render_arrow(command: DrawCommand): text {
+    output = "<g class=\"canvas-arrow\">\n";
+    output = format("{}<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" {}/>\n",
+                    output, command.xs[0], command.ys[0], command.xs[1], command.ys[1], style_attrs(command.style));
+    output = format("{}<circle cx=\"{}\" cy=\"{}\" r=\"3\" fill=\"{}\" stroke=\"none\"/>\n",
+                    output, command.xs[1], command.ys[1], command.style.stroke_color);
+    return format("{}</g>", output);
+}

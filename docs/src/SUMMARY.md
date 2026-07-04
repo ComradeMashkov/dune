@@ -19,6 +19,7 @@
   - [array](stdlib/array.md)
   - [assert](stdlib/assert.md)
   - [autograd](stdlib/autograd.md)
+  - [canvas](stdlib/canvas.md)
   - [collections](stdlib/collections.md)
   - [csv](stdlib/csv.md)
   - [dict](stdlib/dict.md)

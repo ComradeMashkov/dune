@@ -845,8 +845,8 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_expression(const Expression& e
             throw std::runtime_error("fs/process I/O is not supported in the native backend yet");
         }
         if (expression.lexeme == "__plot_backend_get" || expression.lexeme == "__plot_backend_set" ||
-            expression.lexeme == "__plot_show_native") {
-            throw std::runtime_error("plot display backends are not supported in the native backend yet");
+            expression.lexeme == "__plot_show_native" || expression.lexeme == "__canvas_show_native") {
+            throw std::runtime_error("plot/canvas display backends are not supported in the native backend yet");
         }
         return emit_call_expression(expression, output);
     case ExpressionKind::method_call:

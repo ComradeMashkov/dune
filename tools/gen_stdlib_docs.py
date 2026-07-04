@@ -38,6 +38,7 @@ MODULE_BLURBS = {
     "maybe": "The optional `Maybe<T>` choice and helpers.",
     "outcome": "The result-style `Outcome<T, E>` choice and helpers.",
     "autograd": "Scalar reverse-mode automatic differentiation.",
+    "canvas": "Deterministic SVG canvas and immediate-mode GUI widgets.",
     "random": "A small deterministic pseudo-random generator.",
     "runtime": "Runtime helpers such as `panic`.",
     "fs": "File-system access (read, write, list).",

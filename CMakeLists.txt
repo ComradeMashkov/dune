@@ -144,14 +144,14 @@ target_link_libraries(dune_lsp
 
 if(APPLE)
     enable_language(OBJCXX)
-    set(DUNE_NATIVE_PLOT_DISPLAY_SOURCE src/vm/native_plot_display_macos.mm)
+    set(DUNE_NATIVE_CANVAS_DISPLAY_SOURCE src/vm/native_canvas_display_macos.mm)
 else()
-    set(DUNE_NATIVE_PLOT_DISPLAY_SOURCE src/vm/native_plot_display.cpp)
+    set(DUNE_NATIVE_CANVAS_DISPLAY_SOURCE src/vm/native_canvas_display.cpp)
 endif()
 
 add_library(dune_vm
     src/vm/vm.cpp
-    ${DUNE_NATIVE_PLOT_DISPLAY_SOURCE}
+    ${DUNE_NATIVE_CANVAS_DISPLAY_SOURCE}
 )
 dune_add_lint_dependencies(dune_vm)
 
@@ -590,6 +590,16 @@ add_test(
         -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/stdlib/plot_svg.dn
         -D EXPECTED_OUTPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/golden/plot_svg.out
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
+    NAME cli_canvas_gui
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/stdlib/canvas_gui.dn
+        -D EXPECTED_OUTPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/golden/canvas_gui.out
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
 )
 

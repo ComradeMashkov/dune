@@ -5,6 +5,7 @@ The standard library is ordinary Dune loaded from `.dn` files. Each page below i
 - [`array`](array.md) — Generic helpers and higher-order pipelines for arrays.
 - [`assert`](assert.md) — Assertion helpers for tests.
 - [`autograd`](autograd.md) — Scalar reverse-mode automatic differentiation.
+- [`canvas`](canvas.md) — Deterministic SVG canvas and immediate-mode GUI widgets.
 - [`collections`](collections.md) — Shared collection utilities.
 - [`csv`](csv.md) — CSV parsing and numeric-matrix I/O.
 - [`dict`](dict.md) — A hash-map style dictionary built in Dune.

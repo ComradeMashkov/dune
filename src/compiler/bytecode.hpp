@@ -101,6 +101,7 @@ enum class OpCode {
     plot_backend_get,
     plot_backend_set,
     plot_show_native,
+    canvas_show_native,
     print,
     print_format,
     format_text,
