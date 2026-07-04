@@ -2860,7 +2860,7 @@
     "named": true,
     "fields": {
       "bound": {
-        "multiple": false,
+        "multiple": true,
         "required": false,
         "types": [
           {

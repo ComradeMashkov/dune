@@ -36,3 +36,11 @@ io.println(math.square(12));
 io.println(math.square(rough));
 // twice with the numeric bound satisfied by int; returns 9 + 9.
 io.println(twice(9));
+
+// spans carries TWO bounds on one parameter: `T is ordered + comparable`.
+// `<` requires the ordered bound and `==` requires the comparable bound; both must hold.
+fn spans<T is ordered + comparable>(low: T, value: T, high: T): bool {
+    return (low < value) == (value == high);
+}
+// int satisfies both bounds: (1 < 2) is true, (2 == 3) is false, true == false -> false (prints 0).
+io.println(spans(1, 2, 3));

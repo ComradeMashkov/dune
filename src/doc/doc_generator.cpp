@@ -214,8 +214,9 @@ std::string generic_parameters_text(const std::vector<GenericParameter>& generic
             text += ", ";
         }
         text += generics[index].name;
-        if (!generics[index].bound.empty()) {
-            text += " is " + generics[index].bound;
+        for (std::size_t bound_index = 0; bound_index < generics[index].bounds.size(); ++bound_index) {
+            text += bound_index == 0 ? " is " : " + ";
+            text += generics[index].bounds[bound_index];
         }
     }
     text += ">";
