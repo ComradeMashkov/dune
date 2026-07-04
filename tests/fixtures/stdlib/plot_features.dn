@@ -20,3 +20,18 @@ io.println(figure.contains("<title>D</title>"));  // 1
 // Subplots reach the same output paths a single chart has (rendered in-memory
 // here; file/native paths share this exact SVG).
 io.println(plot.subplots_html([a, b], 2).contains("<!doctype"));       // 1
+
+// Chart types: area fills to the baseline, step draws a staircase.
+io.println(plot.svg(plot.area([1.0, 4.0, 2.0, 5.0])).contains("<polygon"));    // 1
+io.println(plot.svg(plot.step([1.0, 4.0, 2.0, 5.0])).contains("series step")); // 1
+
+// Pie charts render wedges as <path> with percentage labels and a legend.
+budget = plot.pie([50.0, 30.0, 20.0], ["a", "b", "c"]).legend(true);
+pie_svg = plot.svg(budget);
+io.println(pie_svg.contains("<path"));  // 1
+io.println(pie_svg.contains("50%"));    // 1
+
+// Grouped bars: two bar series draw as two <g class="series bar"> groups.
+qs: [real64] = [1.0, 2.0, 3.0];
+grouped = plot.bar(qs, [3.0, 5.0, 4.0]).add_bar(qs, [4.0, 3.0, 6.0]);
+io.println(plot.svg(grouped).contains("series bar"));  // 1

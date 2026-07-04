@@ -1,7 +1,7 @@
 id = "dune"
 name = "Dune"
 description = "Dune language support: Tree-sitter highlighting, symbol outline, LSP diagnostics, completions, hover, go-to-definition, and file icons."
-version = "0.5.14"
+version = "0.5.15"
 schema_version = 1
 authors = ["ComradeMashkov"]
 repository = "https://github.com/ComradeMashkov/dune"

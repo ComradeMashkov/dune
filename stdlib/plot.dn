@@ -223,6 +223,22 @@ export record Chart {
     export fn add_bar(ys: [real64]): Chart {
         return this.add_bar(default_xs(ys), ys);
     }
+
+    export fn add_area(xs: [real64], ys: [real64]): Chart {
+        return append_series(this, Series.new("area", xs, ys, "", palette(this.series.len())));
+    }
+
+    export fn add_area(ys: [real64]): Chart {
+        return this.add_area(default_xs(ys), ys);
+    }
+
+    export fn add_step(xs: [real64], ys: [real64]): Chart {
+        return append_series(this, Series.new("step", xs, ys, "", palette(this.series.len())));
+    }
+
+    export fn add_step(ys: [real64]): Chart {
+        return this.add_step(default_xs(ys), ys);
+    }
 }
 
 export fn empty(): Chart {
@@ -263,6 +279,66 @@ export fn bar(xs: [real64], ys: [real64]): Chart {
 // example: plot.svg(plot.bar([3.0, 1.0, 2.0])).contains("<rect")  // 1
 export fn bar(ys: [real64]): Chart {
     return Chart.empty().add_bar(ys);
+}
+
+// An area chart: a line filled down to the baseline.
+// example: plot.svg(plot.area([0.0, 1.0, 2.0], [3.0, 7.0, 5.0])).contains("<polygon")  // 1
+export fn area(xs: [real64], ys: [real64]): Chart {
+    return Chart.empty().add_area(xs, ys);
+}
+
+// An area chart from y values against their index.
+// example: plot.svg(plot.area([3.0, 1.0, 2.0])).contains("<polygon")  // 1
+export fn area(ys: [real64]): Chart {
+    return Chart.empty().add_area(ys);
+}
+
+// A step chart: values held constant between samples (like a staircase).
+// example: plot.svg(plot.step([0.0, 1.0, 2.0], [3.0, 7.0, 5.0])).contains("<polyline")  // 1
+export fn step(xs: [real64], ys: [real64]): Chart {
+    return Chart.empty().add_step(xs, ys);
+}
+
+// A step chart from y values against their index.
+// example: plot.svg(plot.step([3.0, 1.0, 2.0])).contains("<polyline")  // 1
+export fn step(ys: [real64]): Chart {
+    return Chart.empty().add_step(ys);
+}
+
+// A pie chart. Each value becomes a wedge sized by its share of the total and
+// coloured from the palette; wedges are labelled with their percentage.
+// example: plot.svg(plot.pie([3.0, 5.0, 2.0])).contains("<path")  // 1
+export fn pie(values: [real64]): Chart {
+    labels: [text] = [];
+    for index = 0; index < values.len(); index = index + 1 {
+        labels.push("");
+    }
+
+    return pie(values, labels);
+}
+
+// A pie chart with a category name for each wedge (shown in the legend).
+// example: plot.svg(plot.pie([3.0, 5.0], ["a", "b"]).legend(true)).contains("<path")  // 1
+export fn pie(values: [real64], labels: [text]): Chart {
+    if values.len() == 0 {
+        runtime.panic("plot: pie requires at least one value");
+    }
+    if labels.len() != values.len() {
+        runtime.panic("plot: pie labels and values length mismatch");
+    }
+
+    // One "pie" series per wedge keeps the value, its colour, and its legend
+    // label together, and lets the existing legend renderer work unchanged.
+    chart = Chart.empty();
+    for index = 0; index < values.len(); index = index + 1 {
+        if values[index] < 0.0 {
+            runtime.panic("plot: pie values must be non-negative");
+        }
+        wedge = Series.new("pie", [0.0], [values[index]], labels[index], palette(index));
+        chart = append_series(chart, wedge);
+    }
+
+    return chart;
 }
 
 // A histogram: bucket `values` into `bins` equal-width bars.
@@ -558,7 +634,7 @@ fn x_min(chart: Chart): real64 {
         }
     }
 
-    return result;
+    return result - bar_x_pad(chart);
 }
 
 fn x_max(chart: Chart): real64 {
@@ -573,7 +649,41 @@ fn x_max(chart: Chart): real64 {
         }
     }
 
-    return result;
+    return result + bar_x_pad(chart);
+}
+
+// Bars are centred on their x value, so the outermost bars would spill past the
+// axes. Pad the x-domain by half a slot on each side when the chart has bars.
+fn bar_x_pad(chart: Chart): real64 {
+    if count_bar_series(chart) == 0 {
+        return 0.0;
+    }
+
+    points = 0;
+    for index = 0; index < chart.series.len(); index = index + 1 {
+        if chart.series[index].xs.len() > points {
+            points = chart.series[index].xs.len();
+        }
+    }
+    if points <= 1 {
+        return 0.5;
+    }
+
+    lo = chart.series[0].xs[0];
+    hi = lo;
+    for s = 0; s < chart.series.len(); s = s + 1 {
+        series = chart.series[s];
+        for index = 0; index < series.xs.len(); index = index + 1 {
+            if series.xs[index] < lo {
+                lo = series.xs[index];
+            }
+            if series.xs[index] > hi {
+                hi = series.xs[index];
+            }
+        }
+    }
+
+    return (hi - lo) / ((points - 1) to real64) / 2.0;
 }
 
 fn y_min(chart: Chart): real64 {
@@ -659,6 +769,12 @@ fn scale_y(chart: Chart, value: real64, minimum: real64, maximum: real64): real6
 fn render_svg_body(chart: Chart): text {
     require_chart_data(chart);
 
+    // Pie charts have no axes and are laid out radially, so they take a
+    // dedicated body renderer.
+    if chart.series.len() > 0 && chart.series[0].kind == "pie" {
+        return render_pie_body(chart);
+    }
+
     xmin = x_min(chart);
     xmax = x_max(chart);
     ymin = y_min(chart);
@@ -672,7 +788,7 @@ fn render_svg_body(chart: Chart): text {
     output = fmt.format("{}{}\n", output, render_axes(chart, xmin, xmax, ymin, ymax));
 
     for index = 0; index < chart.series.len(); index = index + 1 {
-        output = fmt.format("{}{}\n", output, render_series(chart, chart.series[index], xmin, xmax, ymin, ymax));
+        output = fmt.format("{}{}\n", output, render_series(chart, chart.series[index], index, xmin, xmax, ymin, ymax));
     }
 
     output = fmt.format("{}{}", output, render_labels(chart, xmin, xmax, ymin, ymax));
@@ -800,12 +916,18 @@ fn render_labels(chart: Chart, xmin: real64, xmax: real64, ymin: real64, ymax: r
     return fmt.format("{}</g>\n", output);
 }
 
-fn render_series(chart: Chart, series: Series, xmin: real64, xmax: real64, ymin: real64, ymax: real64): text {
+fn render_series(chart: Chart, series: Series, series_index: int, xmin: real64, xmax: real64, ymin: real64, ymax: real64): text {
     if series.kind == "scatter" {
         return render_scatter(chart, series, xmin, xmax, ymin, ymax);
     }
     if series.kind == "bar" {
-        return render_bar(chart, series, xmin, xmax, ymin, ymax);
+        return render_bar(chart, series, series_index, xmin, xmax, ymin, ymax);
+    }
+    if series.kind == "area" {
+        return render_area(chart, series, xmin, xmax, ymin, ymax);
+    }
+    if series.kind == "step" {
+        return render_step(chart, series, xmin, xmax, ymin, ymax);
     }
 
     return render_line(chart, series, xmin, xmax, ymin, ymax);
@@ -839,14 +961,22 @@ fn render_scatter(chart: Chart, series: Series, xmin: real64, xmax: real64, ymin
     return fmt.format("{}</g>", output);
 }
 
-fn render_bar(chart: Chart, series: Series, xmin: real64, xmax: real64, ymin: real64, ymax: real64): text {
+fn render_bar(chart: Chart, series: Series, series_index: int, xmin: real64, xmax: real64, ymin: real64, ymax: real64): text {
     base = scale_y(chart, 0.0, ymin, ymax);
     slot_width = plot_width(chart) / (series.xs.len() to real64);
-    bar_width = math.round(slot_width * 0.7);
-    output = fmt.format("<g class=\"series bar\" fill=\"{}\">\n", series.color);
 
+    // When several bar series share the chart, split each slot into as many
+    // side-by-side sub-bars (grouped bars, like a category comparison).
+    bar_count = count_bar_series(chart);
+    ordinal = bar_ordinal(chart, series_index);
+    group_width = slot_width * 0.7;
+    sub_width = group_width / (bar_count to real64);
+    // Offset this series' bar from the slot centre so the group is centred.
+    offset = 0.0 - group_width / 2.0 + ((ordinal to real64) + 0.5) * sub_width;
+
+    output = fmt.format("<g class=\"series bar\" fill=\"{}\">\n", series.color);
     for index = 0; index < series.xs.len(); index = index + 1 {
-        center = scale_x(chart, series.xs[index], xmin, xmax);
+        center = scale_x(chart, series.xs[index], xmin, xmax) + offset;
         top = scale_y(chart, series.ys[index], ymin, ymax);
         y = top;
         height = base - top;
@@ -856,10 +986,137 @@ fn render_bar(chart: Chart, series: Series, xmin: real64, xmax: real64, ymin: re
         }
 
         output = fmt.format("{}<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\"/>\n",
-                        output, center - bar_width / 2.0, y, bar_width, height);
+                        output, center - sub_width / 2.0, y, math.round(sub_width), height);
     }
 
     return fmt.format("{}</g>", output);
+}
+
+// How many bar series the chart holds (for grouping side-by-side bars).
+fn count_bar_series(chart: Chart): int {
+    total = 0;
+    for index = 0; index < chart.series.len(); index = index + 1 {
+        if chart.series[index].kind == "bar" {
+            total = total + 1;
+        }
+    }
+
+    return total;
+}
+
+// The position of the series at `series_index` among the chart's bar series.
+fn bar_ordinal(chart: Chart, series_index: int): int {
+    ordinal = 0;
+    for index = 0; index < series_index; index = index + 1 {
+        if chart.series[index].kind == "bar" {
+            ordinal = ordinal + 1;
+        }
+    }
+
+    return ordinal;
+}
+
+fn render_area(chart: Chart, series: Series, xmin: real64, xmax: real64, ymin: real64, ymax: real64): text {
+    base = scale_y(chart, 0.0, ymin, ymax);
+    first_x = scale_x(chart, series.xs[0], xmin, xmax);
+    last_x = scale_x(chart, series.xs[series.xs.len() - 1], xmin, xmax);
+
+    // Start on the baseline under the first sample, trace the curve, then drop
+    // back to the baseline under the last sample so the polygon closes cleanly.
+    points = fmt.format("{},{}", first_x, base);
+    for index = 0; index < series.xs.len(); index = index + 1 {
+        px = scale_x(chart, series.xs[index], xmin, xmax);
+        py = scale_y(chart, series.ys[index], ymin, ymax);
+        points = fmt.format("{} {},{}", points, px, py);
+    }
+    points = fmt.format("{} {},{}", points, last_x, base);
+
+    output = fmt.format("<polygon class=\"series area\" fill=\"{}\" fill-opacity=\"0.25\" stroke=\"none\" points=\"{}\"/>\n",
+                    series.color, points);
+    // Draw the outline on top of the fill for a crisp edge.
+    return fmt.format("{}{}", output, render_line(chart, series, xmin, xmax, ymin, ymax));
+}
+
+fn render_step(chart: Chart, series: Series, xmin: real64, xmax: real64, ymin: real64, ymax: real64): text {
+    points = "";
+    prev_y = scale_y(chart, series.ys[0], ymin, ymax);
+    for index = 0; index < series.xs.len(); index = index + 1 {
+        px = scale_x(chart, series.xs[index], xmin, xmax);
+        py = scale_y(chart, series.ys[index], ymin, ymax);
+        if index == 0 {
+            points = fmt.format("{},{}", px, py);
+        } else {
+            // Horizontal to the new x at the old height, then vertical to the
+            // new height — the staircase shape.
+            points = fmt.format("{} {},{} {},{}", points, px, prev_y, px, py);
+        }
+        prev_y = py;
+    }
+
+    return fmt.format("<polyline class=\"series step\" fill=\"none\" stroke=\"{}\" stroke-width=\"2\" points=\"{}\"/>",
+                  series.color, points);
+}
+
+// Render a pie chart: wedges sized by each series' single value, centred in the
+// plot area. Pie charts have no axes, so this replaces the usual axes+series
+// body entirely.
+fn render_pie_body(chart: Chart): text {
+    total = 0.0;
+    for index = 0; index < chart.series.len(); index = index + 1 {
+        total = total + chart.series[index].ys[0];
+    }
+    if total <= 0.0 {
+        runtime.panic("plot: pie values must sum to a positive total");
+    }
+
+    cx = (chart.width to real64) / 2.0;
+    cy = (chart.height to real64) / 2.0 + 8.0;
+    radius = plot_height(chart) / 2.0;
+
+    output = fmt.format("<title>{}</title>\n", escape_xml(chart.title_text));
+    output = fmt.format("{}<rect width=\"{}\" height=\"{}\" fill=\"#ffffff\"/>\n", output, chart.width, chart.height);
+    output = fmt.format("{}<g class=\"series pie\" stroke=\"#ffffff\" stroke-width=\"2\">\n", output);
+
+    angle = 0.0 - (math.PI / 2.0);   // start at 12 o'clock
+    for index = 0; index < chart.series.len(); index = index + 1 {
+        value = chart.series[index].ys[0];
+        sweep = (value / total) * math.TAU;
+        next_angle = angle + sweep;
+
+        x1 = cx + radius * math.cos(angle);
+        y1 = cy + radius * math.sin(angle);
+        x2 = cx + radius * math.cos(next_angle);
+        y2 = cy + radius * math.sin(next_angle);
+
+        large = 0;
+        if sweep > math.PI {
+            large = 1;
+        }
+
+        // A single wedge: centre -> arc start -> arc end -> back to centre.
+        path = fmt.format("M {} {} L {} {} A {} {} 0 {} 1 {} {} Z",
+                      math.round(cx), math.round(cy), math.round(x1), math.round(y1),
+                      math.round(radius), math.round(radius), large, math.round(x2), math.round(y2));
+        output = fmt.format("{}<path fill=\"{}\" d=\"{}\"/>\n", output, chart.series[index].color, path);
+
+        // Percentage label at the wedge's mid-angle, part-way out from centre.
+        mid = angle + sweep / 2.0;
+        lx = cx + radius * 0.6 * math.cos(mid);
+        ly = cy + radius * 0.6 * math.sin(mid);
+        percent = math.round((value / total) * 100.0);
+        output = fmt.format("{}<text x=\"{}\" y=\"{}\" text-anchor=\"middle\" fill=\"#ffffff\" font-family=\"sans-serif\" font-size=\"12\" font-weight=\"700\">{}%</text>\n",
+                        output, math.round(lx), math.round(ly), percent);
+
+        angle = next_angle;
+    }
+    output = fmt.format("{}</g>\n", output);
+
+    output = fmt.format("{}{}", output, render_labels(chart, 0.0, 0.0, 0.0, 0.0));
+    if chart.legend_enabled {
+        output = fmt.format("{}{}", output, render_legend(chart));
+    }
+
+    return output;
 }
 
 fn render_legend(chart: Chart): text {

@@ -15,9 +15,9 @@ checker rejects mismatched assignments, calls, returns, and operators before
 execution; the VM adds runtime checks for things like invalid indexes and slices.
 
 📖 **[Documentation site](https://comrademashkov.github.io/dune/)** — the language
-reference, the standard-library reference (generated from source doc-comments),
-guides, and a [plot gallery](https://comrademashkov.github.io/dune/guides/plot_gallery.html).
-This README is only a quick tour; the site is the full story.
+reference, the standard-library reference (generated from source doc-comments,
+including a [chart-type gallery](https://comrademashkov.github.io/dune/stdlib/plot.html)),
+and guides. This README is only a quick tour; the site is the full story.
 
 ## Example
 
