@@ -3,11 +3,13 @@
 #include "lexer/lexer.hpp"
 #include "parser/parser.hpp"
 
+#include <algorithm>
 #include <cstdlib>
 #include <fstream>
 #include <iterator>
 #include <sstream>
 #include <stdexcept>
+#include <system_error>
 #include <utility>
 
 namespace dune {
@@ -64,6 +66,42 @@ bool is_relative_to_parent(const std::filesystem::path& path) {
     }
 
     return false;
+}
+
+std::filesystem::path normalized_existing_path(const std::filesystem::path& path) {
+    std::error_code error;
+    std::filesystem::path canonical = std::filesystem::weakly_canonical(path, error);
+    if (!error) {
+        return canonical.lexically_normal();
+    }
+
+    canonical = std::filesystem::absolute(path, error);
+    if (!error) {
+        return canonical.lexically_normal();
+    }
+
+    return path.lexically_normal();
+}
+
+bool same_path(const std::filesystem::path& left, const std::filesystem::path& right) {
+    std::error_code error;
+    if (std::filesystem::equivalent(left, right, error)) {
+        return true;
+    }
+
+    return normalized_existing_path(left).string() == normalized_existing_path(right).string();
+}
+
+void add_unique_path(std::vector<std::filesystem::path>& paths, const std::filesystem::path& path) {
+    if (path.empty()) {
+        return;
+    }
+
+    const bool exists =
+        std::ranges::any_of(paths, [&](const std::filesystem::path& current) { return same_path(current, path); });
+    if (!exists) {
+        paths.push_back(path);
+    }
 }
 
 std::string diagnostic(SourceLocation location, const std::string& message) {
@@ -269,6 +307,10 @@ ModuleLoader::ModuleLoader() : ModuleLoader(default_search_paths()) {}
 
 ModuleLoader::ModuleLoader(std::vector<std::filesystem::path> search_paths) : search_paths_(std::move(search_paths)) {}
 
+void ModuleLoader::set_project_source_roots(std::vector<std::filesystem::path> source_roots) {
+    project_source_roots_ = std::move(source_roots);
+}
+
 Program ModuleLoader::resolve(Program program, const std::filesystem::path& source_directory) {
     loaded_modules_.clear();
     module_exports_.clear();
@@ -465,18 +507,39 @@ std::filesystem::path ModuleLoader::find_module(const std::string& module_name,
         }
     }
 
-    // Local modules resolve relative to the importing file, then the working
-    // directory.
+    // Local modules resolve relative to the importing file, then configured
+    // project roots. Without a project manifest, keep the historical current
+    // working directory fallback for single-file usage.
     std::filesystem::path local_match;
-    for (const std::filesystem::path& directory : {importer_directory, std::filesystem::current_path()}) {
-        if (directory.empty()) {
-            continue;
+    const std::filesystem::path effective_importer_directory =
+        importer_directory.empty() ? std::filesystem::current_path() : importer_directory;
+    const std::filesystem::path importer_candidate = effective_importer_directory / module_path;
+    if (std::filesystem::exists(importer_candidate)) {
+        local_match = importer_candidate;
+    }
+
+    if (local_match.empty()) {
+        std::vector<std::filesystem::path> local_roots;
+        if (project_source_roots_.empty()) {
+            add_unique_path(local_roots, std::filesystem::current_path());
+        } else {
+            for (const std::filesystem::path& root : project_source_roots_) {
+                add_unique_path(local_roots, root);
+            }
         }
 
-        const std::filesystem::path candidate = directory / module_path;
-        if (std::filesystem::exists(candidate)) {
+        for (const std::filesystem::path& directory : local_roots) {
+            const std::filesystem::path candidate = directory / module_path;
+            if (!std::filesystem::exists(candidate)) {
+                continue;
+            }
+
+            if (!local_match.empty() && !same_path(local_match, candidate)) {
+                throw std::runtime_error("ambiguous module '" + module_name + "': found both '" + local_match.string() +
+                                         "' and '" + candidate.string() + "'");
+            }
+
             local_match = candidate;
-            break;
         }
     }
 

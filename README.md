@@ -236,6 +236,24 @@ The plain, aliased, and selective forms interoperate freely, and every existing
 `import module;` continues to work unchanged. See `examples/geometry.dn` and
 `examples/geometry_demo.dn` for a complete two-file program.
 
+Projects can opt into a minimal package model with a `dune.toml` file at the
+project root:
+
+```toml
+name = "my_app"
+version = "0.1.0"
+sources = ["src"]
+tests = ["tests"]
+```
+
+The manifest is optional. Without it, Dune keeps the current single-file/module
+lookup behavior. With it, commands such as `dune check src/main.dn`,
+`dune src/main.dn`, `dune build src/main.dn -o app`, and
+`dune llvm src/main.dn -o app.ll` discover the project root by walking up from
+the source file. Imports resolve first next to the importing file, then through
+the configured `sources` and `tests` roots, then through the standard library.
+If `sources` or `tests` are omitted, they default to `["src"]` and `["tests"]`.
+
 Comments and doc-comments:
 
 Dune has single-line `//` comments and multi-line `/* ... */` block comments.

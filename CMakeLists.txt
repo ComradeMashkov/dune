@@ -110,6 +110,16 @@ target_link_libraries(dune_modules
         dune_parser
 )
 
+add_library(dune_project
+    src/project/project_config.cpp
+)
+dune_add_lint_dependencies(dune_project)
+
+target_include_directories(dune_project
+    PUBLIC
+        src
+)
+
 add_library(dune_compiler
     src/compiler/compiler.cpp
 )
@@ -139,6 +149,7 @@ target_compile_definitions(dune_lsp PRIVATE DUNE_STDLIB_PATH="${CMAKE_CURRENT_SO
 target_link_libraries(dune_lsp
     PUBLIC
         dune_modules
+        dune_project
         dune_typechecker
 )
 
@@ -163,7 +174,7 @@ target_link_libraries(dune_doc
 )
 
 add_executable(dune src/main.cpp src/cli/build_progress.cpp)
-target_link_libraries(dune PRIVATE dune_codegen dune_doc dune_lsp dune_modules dune_vm Threads::Threads)
+target_link_libraries(dune PRIVATE dune_codegen dune_doc dune_lsp dune_modules dune_project dune_vm Threads::Threads)
 target_compile_definitions(dune PRIVATE DUNE_CLANGXX_PATH="${DUNE_NATIVE_CLANGXX}")
 dune_add_lint_dependencies(dune)
 
@@ -178,6 +189,10 @@ dune_add_lint_dependencies(parser_tests)
 add_executable(compiler_tests tests/compiler_tests.cpp)
 target_link_libraries(compiler_tests PRIVATE dune_compiler dune_modules)
 dune_add_lint_dependencies(compiler_tests)
+
+add_executable(project_config_tests tests/project_config_tests.cpp)
+target_link_libraries(project_config_tests PRIVATE dune_project)
+dune_add_lint_dependencies(project_config_tests)
 
 add_executable(type_checker_tests tests/type_checker_tests.cpp)
 target_link_libraries(type_checker_tests PRIVATE dune_modules dune_typechecker)
@@ -201,6 +216,7 @@ set_tests_properties(smoke PROPERTIES PASS_REGULAR_EXPRESSION "dune 0.13.1")
 
 add_test(NAME lexer_tests COMMAND lexer_tests)
 add_test(NAME parser_tests COMMAND parser_tests)
+add_test(NAME project_config_tests COMMAND project_config_tests)
 add_test(NAME compiler_tests COMMAND compiler_tests)
 add_test(NAME type_checker_tests COMMAND type_checker_tests)
 add_test(NAME vm_tests COMMAND vm_tests)
@@ -255,6 +271,22 @@ add_test(
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/errors/type_error.dn
         -D EXPECTED_ERROR="expected type 'int' but got 'bool'"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_status_failure_case.cmake
+)
+
+add_test(
+    NAME cli_project_source_roots
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_project_case.cmake
+)
+
+add_test(
+    NAME cli_project_shadow_stdlib
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_project_shadow_case.cmake
 )
 
 add_test(

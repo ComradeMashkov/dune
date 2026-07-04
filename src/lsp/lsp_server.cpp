@@ -3,6 +3,7 @@
 #include "lexer/lexer.hpp"
 #include "modules/module_loader.hpp"
 #include "parser/parser.hpp"
+#include "project/project_config.hpp"
 #include "typechecker/type_checker.hpp"
 
 #include <algorithm>
@@ -593,6 +594,14 @@ void add_search_path(std::vector<std::filesystem::path>& paths, const std::files
 std::vector<std::filesystem::path> module_search_paths(const std::filesystem::path& source_directory) {
     std::vector<std::filesystem::path> paths;
     add_search_path(paths, source_directory);
+    const std::vector<std::filesystem::path> project_roots = project_module_roots_for(source_directory);
+    for (const std::filesystem::path& root : project_roots) {
+        add_search_path(paths, root);
+    }
+
+    if (project_roots.empty()) {
+        add_search_path(paths, std::filesystem::current_path());
+    }
 
     const char* env_path = std::getenv("DUNE_STDLIB_PATH");
     if (env_path != nullptr && *env_path != '\0') {
@@ -609,7 +618,6 @@ std::vector<std::filesystem::path> module_search_paths(const std::filesystem::pa
     }
 
     add_search_path(paths, DUNE_STDLIB_PATH);
-    add_search_path(paths, std::filesystem::current_path());
     return paths;
 }
 
@@ -657,7 +665,8 @@ std::optional<CheckedProgram> check_program_best_effort(const std::string& sourc
     try {
         Lexer lexer(source);
         Parser parser(lexer.tokenize());
-        ModuleLoader loader(module_search_paths(source_directory));
+        ModuleLoader loader;
+        loader.set_project_source_roots(project_module_roots_for(source_directory));
         TypeChecker checker;
         Program program = loader.resolve(parser.parse(), source_directory);
         checker.check(program);
@@ -1895,7 +1904,8 @@ std::vector<Diagnostic> diagnose_source(const std::string& source, const std::st
         Lexer lexer(source);
         Parser parser(lexer.tokenize());
         const std::filesystem::path directory = source_directory_for(uri, source_directory);
-        ModuleLoader loader(module_search_paths(directory));
+        ModuleLoader loader;
+        loader.set_project_source_roots(project_module_roots_for(directory));
         TypeChecker checker;
         checker.check(loader.resolve(parser.parse(), directory));
         return {};
