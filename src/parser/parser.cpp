@@ -161,6 +161,12 @@ Type make_tuple_type(std::vector<Type> elements) {
     return type;
 }
 
+Type make_function_type(std::vector<Type> parameters, Type return_type) {
+    Type type{ValueType::function_type, std::make_shared<Type>(std::move(return_type))};
+    type.arguments = std::move(parameters);
+    return type;
+}
+
 Type make_generic_type(std::string name) {
     Type type{ValueType::generic_type, nullptr};
     type.name = std::move(name);
@@ -1274,6 +1280,32 @@ TypeAnnotation Parser::optional_type_annotation() {
 }
 
 TypeAnnotation Parser::type_annotation() {
+    // Function type: `fn(P1, P2): R`. The return clause is optional and defaults
+    // to `unit`, mirroring function declarations.
+    if (match(TokenType::fn_keyword)) {
+        consume(TokenType::left_paren, "expected '(' after 'fn' in function type");
+        std::vector<Type> parameters;
+        if (!check(TokenType::right_paren)) {
+            while (true) {
+                parameters.push_back(type_annotation().type);
+                if (!match(TokenType::comma)) {
+                    break;
+                }
+                if (check(TokenType::right_paren)) {
+                    break;
+                }
+            }
+        }
+
+        consume(TokenType::right_paren, "expected ')' after function type parameters");
+        Type return_type = make_type(ValueType::unit_type);
+        if (match(TokenType::colon)) {
+            return_type = type_annotation().type;
+        }
+
+        return TypeAnnotation{true, make_function_type(std::move(parameters), std::move(return_type))};
+    }
+
     if (match(TokenType::int_keyword)) {
         return TypeAnnotation{true, make_type(ValueType::int_type)};
     }

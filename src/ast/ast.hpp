@@ -38,8 +38,12 @@ enum class ValueType {
     generic_type,
     struct_type,
     enum_type,
+    function_type,
 };
 
+// For a `function_type`, `arguments` holds the parameter types and `element`
+// holds the return type (unit when the function returns nothing). All other
+// kinds leave those fields to their usual meaning.
 struct Type {
     ValueType kind = ValueType::int_type;
     std::shared_ptr<Type> element;

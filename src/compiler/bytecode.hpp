@@ -20,6 +20,7 @@ enum class ValueKind {
     tuple,
     record,
     variant,
+    callable,
 };
 
 struct Value {
@@ -35,6 +36,8 @@ struct Value {
     std::shared_ptr<std::vector<Value>> record_value;
     std::size_t variant_tag = 0;
     std::shared_ptr<Value> variant_payload;
+    // For `callable`: index into Bytecode::functions of the referenced function.
+    std::size_t function_index = 0;
 };
 
 enum class OpCode {
@@ -62,6 +65,8 @@ enum class OpCode {
     jump_if_false,
     jump,
     call,
+    push_function,
+    call_value,
     return_value,
     pop,
     make_array,

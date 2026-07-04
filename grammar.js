@@ -294,6 +294,7 @@ module.exports = grammar({
     _type: $ => choice(
       $.array_type,
       $.tuple_type,
+      $.function_type,
       $.generic_type,
       $.builtin_type,
       $.qualified_type_identifier,
@@ -301,6 +302,15 @@ module.exports = grammar({
     ),
 
     array_type: $ => seq("[", field("element", $._type), "]"),
+
+    function_type: $ => prec.right(seq(
+      "fn",
+      "(",
+      optional(commaSep(field("parameter", $._type))),
+      optional(","),
+      ")",
+      optional(seq(":", field("return_type", $._type))),
+    )),
 
     tuple_type: $ => seq(
       "(",
@@ -481,7 +491,10 @@ module.exports = grammar({
         $.constructor_identifier,
         $.member_expression,
         $.call_expression,
+        $.method_call_expression,
         $.index_expression,
+        $.array_literal,
+        $.array_comprehension,
         $.parenthesized_expression,
       )),
       ".",
@@ -497,7 +510,10 @@ module.exports = grammar({
         $.constructor_identifier,
         $.member_expression,
         $.call_expression,
+        $.method_call_expression,
         $.index_expression,
+        $.array_literal,
+        $.array_comprehension,
         $.parenthesized_expression,
       )),
       ".",
@@ -505,14 +521,14 @@ module.exports = grammar({
     )),
 
     index_expression: $ => prec.left(PREC.member, seq(
-      field("receiver", choice($.identifier, $.member_expression, $.call_expression, $.index_expression, $.parenthesized_expression)),
+      field("receiver", choice($.identifier, $.member_expression, $.call_expression, $.method_call_expression, $.index_expression, $.parenthesized_expression)),
       "[",
       field("index", $._expression),
       "]",
     )),
 
     slice_expression: $ => prec.left(PREC.member, seq(
-      field("receiver", choice($.identifier, $.member_expression, $.call_expression, $.index_expression, $.parenthesized_expression)),
+      field("receiver", choice($.identifier, $.member_expression, $.call_expression, $.method_call_expression, $.index_expression, $.parenthesized_expression)),
       "[",
       optional(field("start", $._expression)),
       ":",

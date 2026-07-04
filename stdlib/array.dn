@@ -140,6 +140,90 @@ export method<T> [T].fill(value: T): unit {
     }
 }
 
+// --- Higher-order pipelines -------------------------------------------------
+// These take function values (`fn(...)`) so collection code reads as a chain:
+//   values.filter(is_positive).map(square).sum();
+// Each returns a fresh array (or a scalar) and never mutates the receiver.
+
+// A new array with `transform` applied to every element.
+export method<T, U> [T].map(transform: fn(T): U): [U] {
+    result: [U] = [];
+    for index = 0; index < this.len(); index = index + 1 {
+        result.push(transform(this[index]));
+    }
+
+    return result;
+}
+
+// A new array holding only the elements for which `keep` returns true.
+export method<T> [T].filter(keep: fn(T): bool): [T] {
+    result: [T] = [];
+    for index = 0; index < this.len(); index = index + 1 {
+        if keep(this[index]) {
+            result.push(this[index]);
+        }
+    }
+
+    return result;
+}
+
+// Left fold: seed an accumulator with `initial`, then combine it with each
+// element in order. `combine` receives (accumulator, element).
+export method<T, Acc> [T].fold(initial: Acc, combine: fn(Acc, T): Acc): Acc {
+    result: Acc = initial;
+    for index = 0; index < this.len(); index = index + 1 {
+        result = combine(result, this[index]);
+    }
+
+    return result;
+}
+
+// Reduce with the first element as the seed (panics on an empty array, since
+// there is no element to start from). `combine` receives (accumulator, element).
+export method<T> [T].reduce(combine: fn(T, T): T): T {
+    result: T = this[0];
+    for index = 1; index < this.len(); index = index + 1 {
+        result = combine(result, this[index]);
+    }
+
+    return result;
+}
+
+// True when `predicate` holds for at least one element (short-circuits).
+export method<T> [T].any(predicate: fn(T): bool): bool {
+    for index = 0; index < this.len(); index = index + 1 {
+        if predicate(this[index]) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// True when `predicate` holds for every element (short-circuits on the first
+// failure; vacuously true for an empty array).
+export method<T> [T].all(predicate: fn(T): bool): bool {
+    for index = 0; index < this.len(); index = index + 1 {
+        if !predicate(this[index]) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// How many elements satisfy `predicate`.
+export method<T> [T].count_where(predicate: fn(T): bool): int {
+    count = 0;
+    for index = 0; index < this.len(); index = index + 1 {
+        if predicate(this[index]) {
+            count = count + 1;
+        }
+    }
+
+    return count;
+}
+
 // The half-open integer range [start, end) as an array.
 export fn range(start: int, end: int): [int] {
     result: [int] = [];

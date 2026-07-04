@@ -556,5 +556,33 @@ print('\0' to int);)dune"),
     passed = runs_csv_stdlib() && passed;
     passed = runs_csv_matrix_stdlib() && passed;
 
+    // First-class function values: the acceptance-criteria chain plus the other
+    // higher-order stdlib methods, and a callback that maps between types.
+    passed = expect_eq(run_source("import array; "
+                                  "fn square(x: int): int { return x * x; } "
+                                  "fn is_positive(x: int): bool { return x > 0; } "
+                                  "fn add(acc: int, x: int): int { return acc + x; } "
+                                  "fn is_even(x: int): bool { return x % 2 == 0; } "
+                                  "values = [0 - 3, 2, 0 - 1, 4, 5]; "
+                                  "print(values.filter(is_positive).map(square).sum()); "
+                                  "print(values.fold(0, add)); "
+                                  "print([1, 2, 3, 4].reduce(add)); "
+                                  "print(values.any(is_positive)); "
+                                  "print(values.all(is_positive)); "
+                                  "print(values.count_where(is_positive)); "
+                                  "print([1, 2, 3, 4].map(is_even).count_value(true));"),
+                       "45\n7\n10\n1\n0\n3\n2\n", "expected higher-order array stdlib output") &&
+             passed;
+    // A function value flowing through a user-defined higher-order method with no
+    // stdlib involved, exercising indirect calls in the VM directly.
+    passed = expect_eq(run_source("fn twice(x: int): int { return x + x; } "
+                                  "method<T, U> [T].transform(f: fn(T): U): [U] { "
+                                  "result: [U] = []; "
+                                  "for i = 0; i < this.len(); i = i + 1 { result.push(f(this[i])); } "
+                                  "return result; } "
+                                  "out = [10, 20].transform(twice); print(out[0]); print(out[1]);"),
+                       "20\n40\n", "expected user-defined higher-order method output") &&
+             passed;
+
     return passed ? 0 : 1;
 }

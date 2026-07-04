@@ -319,6 +319,12 @@ Type make_enum_type(std::string name, std::vector<Type> arguments) {
     return type;
 }
 
+Type make_function_type(std::vector<Type> parameters, Type return_type) {
+    Type type{ValueType::function_type, std::make_shared<Type>(std::move(return_type))};
+    type.arguments = std::move(parameters);
+    return type;
+}
+
 std::string type_name(ValueType type) {
     switch (type) {
     case ValueType::int_type:
@@ -365,12 +371,29 @@ std::string type_name(ValueType type) {
         return "record";
     case ValueType::enum_type:
         return "choice";
+    case ValueType::function_type:
+        return "function";
     }
 
     return "unknown";
 }
 
 std::string type_name(const Type& type) {
+    if (type.kind == ValueType::function_type) {
+        std::string name = "fn(";
+        for (std::size_t index = 0; index < type.arguments.size(); ++index) {
+            if (index > 0) {
+                name += ", ";
+            }
+            name += type_name(type.arguments[index]);
+        }
+        name += ")";
+        if (type.element != nullptr && type.element->kind != ValueType::unit_type) {
+            name += ": " + type_name(*type.element);
+        }
+        return name;
+    }
+
     if (type.kind == ValueType::array_type) {
         if (type.element == nullptr) {
             return "[unknown]";
@@ -452,6 +475,16 @@ std::string type_key(const Type& type) {
         for (const Type& argument : type.arguments) {
             key += "_" + type_key(argument);
         }
+        return key;
+    }
+
+    if (type.kind == ValueType::function_type) {
+        std::string key = "fn";
+        for (const Type& argument : type.arguments) {
+            key += "_" + type_key(argument);
+        }
+        key += "_ret_";
+        key += type.element != nullptr ? type_key(*type.element) : type_name(ValueType::unit_type);
         return key;
     }
 
@@ -1491,6 +1524,13 @@ Type TypeChecker::check_expression(const Expression& expression, const TypeAnnot
             break;
         }
 
+        // A bare function name used where a value is expected becomes a first-class
+        // function reference (e.g. passing `square` to `[T].map`).
+        if (Type reference; resolve_function_reference(expression, wanted, reference)) {
+            actual = reference;
+            break;
+        }
+
         throw std::runtime_error(diagnostic(expression.location, "undefined variable '" + expression.lexeme + "'"));
     }
     case ExpressionKind::number:
@@ -1743,7 +1783,89 @@ Type TypeChecker::check_call_expression(const Expression& expression, const Type
                                          expected);
     }
 
+    // A local binding of function type shadows any same-named function: calling it
+    // is an indirect call through the function value (e.g. `predicate(x)` inside
+    // a higher-order stdlib method).
+    if (const VariableBinding* variable = find_binding(expression.lexeme);
+        variable != nullptr && variable->type.kind == ValueType::function_type) {
+        return check_indirect_call(expression, variable->type);
+    }
+
     return check_function_call(expression, expression.lexeme, expression.arguments, expression.location, expected);
+}
+
+// Type-check a call through a function value. Unlike a direct call this records
+// nothing in `resolved_calls_`; the compiler treats that absence as "load the
+// callable and dispatch dynamically".
+Type TypeChecker::check_indirect_call(const Expression& expression, const Type& function_type) {
+    if (expression.arguments.size() != function_type.arguments.size()) {
+        throw std::runtime_error(
+            diagnostic(expression.location, "function value expects " + std::to_string(function_type.arguments.size()) +
+                                                " argument(s) but got " + std::to_string(expression.arguments.size())));
+    }
+
+    for (std::size_t index = 0; index < expression.arguments.size(); ++index) {
+        expect_type(function_type.arguments[index],
+                    check_expression(*expression.arguments[index], expected_type(function_type.arguments[index])),
+                    expression.arguments[index]->location);
+    }
+
+    return function_type.element != nullptr ? clone_type(*function_type.element) : make_type(ValueType::unit_type);
+}
+
+// Resolve a bare identifier that names a function into a first-class function
+// value. When an expected function type is supplied the matching overload is
+// selected; otherwise the name must be unambiguous. Generic functions cannot be
+// used as values without a call site to monomorphize them.
+bool TypeChecker::resolve_function_reference(const Expression& expression, const TypeAnnotation& expected,
+                                             Type& result) {
+    const std::string& name = expression.lexeme;
+    const auto concrete = overloads_.find(name);
+    const bool has_generic = generic_overloads_.contains(name);
+    if (concrete == overloads_.end() || concrete->second.empty()) {
+        if (has_generic) {
+            throw std::runtime_error(diagnostic(expression.location, "generic function '" + base_name(name) +
+                                                                         "' cannot be used as a value"));
+        }
+
+        return false;
+    }
+
+    auto signature_type = [&](const FunctionSignature& function) {
+        std::vector<Type> parameters;
+        parameters.reserve(function.parameters.size());
+        for (const Type& parameter : function.parameters) {
+            parameters.push_back(clone_type(parameter));
+        }
+
+        return make_function_type(std::move(parameters), clone_type(function.return_type));
+    };
+
+    if (expected.has_type && expected.type.kind == ValueType::function_type) {
+        for (const std::string& key : concrete->second) {
+            const FunctionSignature& function = find_function_by_key(key, expression.location);
+            Type function_type = signature_type(function);
+            if (same_type(function_type, expected.type)) {
+                resolved_calls_[&expression] = function.key;
+                result = std::move(function_type);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    if (concrete->second.size() != 1) {
+        throw std::runtime_error(
+            diagnostic(expression.location, "function '" + base_name(name) +
+                                                "' is overloaded; annotate the target with a function type to use it "
+                                                "as a value"));
+    }
+
+    const FunctionSignature& function = find_function_by_key(concrete->second.front(), expression.location);
+    resolved_calls_[&expression] = function.key;
+    result = signature_type(function);
+    return true;
 }
 
 Type TypeChecker::check_format_call_expression(const Expression& expression) {
@@ -2043,6 +2165,34 @@ Type TypeChecker::check_receiver_method_call(const Expression& expression, const
 
     if (receiver.kind == ValueType::struct_type) {
         expect_public_method(receiver, expression.lexeme, expression.location);
+    }
+
+    // When a method of this name exists but no overload accepted the arguments,
+    // report the actual argument types (which spell out any mismatched callback
+    // `fn(...)` signature) instead of a bare "has no method".
+    bool method_exists = overloads_.contains(expression.lexeme) || generic_overloads_.contains(expression.lexeme);
+    for (const std::string& module : imports_) {
+        method_exists = method_exists || overloads_.contains(module + "." + expression.lexeme) ||
+                        generic_overloads_.contains(module + "." + expression.lexeme);
+    }
+
+    if (method_exists) {
+        std::string argument_types;
+        for (std::size_t index = 1; index < arguments.size(); ++index) {
+            if (index > 1) {
+                argument_types += ", ";
+            }
+
+            try {
+                argument_types += type_name(check_expression(*arguments[index]));
+            } catch (const std::runtime_error&) {
+                argument_types += "?";
+            }
+        }
+
+        throw std::runtime_error(diagnostic(expression.location, "type '" + type_name(receiver) + "' has no method '" +
+                                                                     expression.lexeme + "' matching argument types (" +
+                                                                     argument_types + ")"));
     }
 
     throw std::runtime_error(diagnostic(expression.location, "type '" + type_name(receiver) + "' has no method '" +
@@ -2935,6 +3085,22 @@ bool TypeChecker::collect_generic_constraints(
         return true;
     }
 
+    if (pattern.kind == ValueType::function_type) {
+        if (actual.kind != ValueType::function_type || pattern.arguments.size() != actual.arguments.size() ||
+            pattern.element == nullptr || actual.element == nullptr) {
+            return false;
+        }
+
+        for (std::size_t index = 0; index < pattern.arguments.size(); ++index) {
+            if (!collect_generic_constraints(pattern.arguments[index], actual.arguments[index], constraints,
+                                             preferred)) {
+                return false;
+            }
+        }
+
+        return collect_generic_constraints(*pattern.element, *actual.element, constraints, preferred);
+    }
+
     return same_type(pattern, actual);
 }
 
@@ -3254,6 +3420,19 @@ Type TypeChecker::normalize_type(const Type& type, const std::unordered_set<std:
         return result;
     }
 
+    if (type.kind == ValueType::function_type) {
+        Type result{ValueType::function_type, nullptr};
+        if (type.element != nullptr) {
+            result.element =
+                std::make_shared<Type>(normalize_type(*type.element, generic_parameters, resolving_aliases));
+        }
+        result.arguments.reserve(type.arguments.size());
+        for (const Type& argument : type.arguments) {
+            result.arguments.push_back(normalize_type(argument, generic_parameters, resolving_aliases));
+        }
+        return result;
+    }
+
     std::vector<Type> arguments;
     arguments.reserve(type.arguments.size());
     for (const Type& argument : type.arguments) {
@@ -3304,6 +3483,14 @@ void TypeChecker::validate_known_type(const Type& type, SourceLocation location)
     case ValueType::tuple_type:
         for (const Type& argument : normalized.arguments) {
             validate_known_type(argument, location);
+        }
+        return;
+    case ValueType::function_type:
+        for (const Type& argument : normalized.arguments) {
+            validate_known_type(argument, location);
+        }
+        if (normalized.element != nullptr) {
+            validate_known_type(*normalized.element, location);
         }
         return;
     case ValueType::struct_type: {
@@ -3393,6 +3580,24 @@ bool TypeChecker::same_type(const Type& left, const Type& right) const {
         }
 
         return true;
+    }
+
+    if (left.kind == ValueType::function_type) {
+        if (left.arguments.size() != right.arguments.size()) {
+            return false;
+        }
+
+        for (std::size_t index = 0; index < left.arguments.size(); ++index) {
+            if (!same_type(left.arguments[index], right.arguments[index])) {
+                return false;
+            }
+        }
+
+        if (left.element == nullptr || right.element == nullptr) {
+            return left.element == right.element;
+        }
+
+        return same_type(*left.element, *right.element);
     }
 
     if (left.kind != ValueType::array_type) {
@@ -3523,6 +3728,7 @@ unsigned long long TypeChecker::max_integer_literal(ValueType target) const {
     case ValueType::generic_type:
     case ValueType::struct_type:
     case ValueType::enum_type:
+    case ValueType::function_type:
         break;
     }
 

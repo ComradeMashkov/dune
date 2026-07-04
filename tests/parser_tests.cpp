@@ -240,6 +240,69 @@ bool rejects_legacy_function_syntax() {
                               "expected legacy function syntax to be rejected");
 }
 
+bool parses_function_type_parameters() {
+    const dune::Program program =
+        parse_source("export method<T, U> [T].apply(transform: fn(T): U): [U] { result: [U] = []; return result; }");
+
+    if (!expect(program.statements.size() == 1, "expected one method statement")) {
+        return false;
+    }
+
+    bool passed = true;
+    const dune::Statement& method = program.statements[0].body[0];
+    passed = expect(method.parameters.size() == 1, "expected one explicit method parameter") && passed;
+    const dune::Parameter& callback = method.parameters[0];
+    passed = expect(callback.type.has_type, "expected callback type annotation") && passed;
+    passed =
+        expect(callback.type.type.kind == dune::ValueType::function_type, "expected function type parameter") && passed;
+    passed = expect(callback.type.type.arguments.size() == 1, "expected one function-type parameter") && passed;
+    passed = expect(callback.type.type.arguments[0].kind == dune::ValueType::generic_type, "expected generic param") &&
+             passed;
+    passed = expect(callback.type.type.element != nullptr, "expected function-type return") && passed;
+    passed =
+        expect(callback.type.type.element->kind == dune::ValueType::generic_type, "expected generic return") && passed;
+
+    // A parameterless function type defaults its return to unit.
+    const dune::Program action = parse_source("fn run(callback: fn()): unit { return; }");
+    const dune::Parameter& thunk = action.statements[0].parameters[0];
+    passed = expect(thunk.type.type.kind == dune::ValueType::function_type, "expected thunk function type") && passed;
+    passed = expect(thunk.type.type.arguments.empty(), "expected no thunk parameters") && passed;
+    passed = expect(thunk.type.type.element != nullptr && thunk.type.type.element->kind == dune::ValueType::unit_type,
+                    "expected thunk to return unit") &&
+             passed;
+
+    return passed;
+}
+
+bool parses_multiline_method_chain() {
+    const dune::Program program = parse_source("total = values\n"
+                                               "    .filter(is_positive)\n"
+                                               "    .map(square)\n"
+                                               "    .sum();\n");
+
+    bool passed = true;
+    if (!expect(program.statements.size() == 1, "expected a single chained assignment")) {
+        return false;
+    }
+
+    // Newlines are insignificant: the chain nests left-associatively as
+    // (((values.filter(...)).map(...)).sum()).
+    const dune::Expression* sum_call = program.statements[0].expression.get();
+    passed = expect(sum_call->kind == dune::ExpressionKind::method_call, "expected outermost method call") && passed;
+    passed = expect(sum_call->lexeme == "sum", "expected outermost method 'sum'") && passed;
+    const dune::Expression* map_call = sum_call->left.get();
+    passed = expect(map_call->kind == dune::ExpressionKind::method_call, "expected map method call") && passed;
+    passed = expect(map_call->lexeme == "map", "expected middle method 'map'") && passed;
+    const dune::Expression* filter_call = map_call->left.get();
+    passed = expect(filter_call->kind == dune::ExpressionKind::method_call, "expected filter method call") && passed;
+    passed = expect(filter_call->lexeme == "filter", "expected innermost method 'filter'") && passed;
+    passed =
+        expect(filter_call->left->kind == dune::ExpressionKind::identifier, "expected chain root identifier") && passed;
+    passed = expect(filter_call->left->lexeme == "values", "expected chain root 'values'") && passed;
+
+    return passed;
+}
+
 bool parses_extended_types() {
     const dune::Program program =
         parse_source("byte: u8 = 255; wide: uint64 = 500; ratio: real = 1.5; mark: glyph = 'z';");
@@ -1087,6 +1150,8 @@ int main() {
     passed = parses_assignment_targets() && passed;
     passed = parses_functions_and_types() && passed;
     passed = rejects_legacy_function_syntax() && passed;
+    passed = parses_function_type_parameters() && passed;
+    passed = parses_multiline_method_chain() && passed;
     passed = parses_extended_types() && passed;
     passed = parses_type_aliases() && passed;
     passed = rejects_generic_type_aliases() && passed;
