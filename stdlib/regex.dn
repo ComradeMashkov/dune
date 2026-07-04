@@ -93,6 +93,8 @@ export record Match {
         return maybe.absent(empty_capture());
     }
 
+    // The text of capture group `index`, or `default` when it did not match.
+    // example: regex.compile(r"([a-z]+)([0-9]+)").value_or(regex.never()).find("id42").value_or(regex.empty_match()).capture_text(1, "")  // id
     export fn capture_text(index: int, default: text): text {
         found = this.capture(index);
         if found.has_value() {
@@ -114,14 +116,20 @@ export record Regex {
     anchored_end: bool,
     never_matches: bool,
 
+    // True when the pattern matches anywhere in the input.
+    // example: regex.compile(r"\d+").value_or(regex.never()).is_match("abc123")  // 1
     export fn is_match(input: text): bool {
         return this.find(input).has_value();
     }
 
+    // Alias for find: the first match as a Maybe<Match>.
+    // example: regex.compile(r"\d+").value_or(regex.never()).match("abc123").value_or(regex.empty_match()).value  // 123
     export fn match(input: text): maybe.Maybe<Match> {
         return this.find(input);
     }
 
+    // The leftmost match as a Maybe<Match>, or absent when there is none.
+    // example: regex.compile(r"\d+").value_or(regex.never()).find("abc123def").value_or(regex.empty_match()).value  // 123
     export fn find(input: text): maybe.Maybe<Match> {
         if this.never_matches {
             return maybe.absent(empty_match());
@@ -141,6 +149,8 @@ export record Regex {
         return maybe.absent(empty_match());
     }
 
+    // Every non-overlapping match, from left to right.
+    // example: regex.compile(r"\d+").value_or(regex.never()).find_all("a1 b22 c333").len()  // 3
     export fn find_all(input: text): [Match] {
         matches: [Match] = [];
         if this.never_matches {
@@ -167,6 +177,8 @@ export record Regex {
         return matches;
     }
 
+    // Split the input around each match, returning the pieces in between.
+    // example: regex.compile(r"\s+").value_or(regex.never()).split("a b c").len()  // 3
     export fn split(input: text): [text] {
         parts: [text] = [];
         last = 0;
@@ -180,6 +192,8 @@ export record Regex {
         return parts;
     }
 
+    // Replace the first match; `$1`..`$9` in `replacement` expand captures.
+    // example: regex.compile(r"\d+").value_or(regex.never()).replace("abc123def456", "#")  // abc#def456
     export fn replace(input: text, replacement: text): text {
         found = this.find(input);
         if found.is_absent() {
@@ -191,6 +205,8 @@ export record Regex {
         return append_text(append_text(input[:current.start], expanded), input[current.end:]);
     }
 
+    // Replace every match; `$1`..`$9` in `replacement` expand captures.
+    // example: regex.compile(r"\d+").value_or(regex.never()).replace_all("abc123def456", "#")  // abc#def#
     export fn replace_all(input: text, replacement: text): text {
         if this.never_matches {
             return input;
@@ -283,6 +299,7 @@ fn empty_capture(): Capture {
 }
 
 // A default empty match, useful for Maybe.value_or.
+// example: regex.empty_match().is_empty()  // 1
 export fn empty_match(): Match {
     return Match { start: -1, end: -1, value: "", captures: empty_captures() };
 }
@@ -325,6 +342,7 @@ fn regex_value(pattern: text, terms: [Term], group_count: int, anchored_start: b
 }
 
 // A regex that never matches. Useful with Outcome.value_or after compile.
+// example: regex.never().is_match("anything")  // 0
 export fn never(): Regex {
     return regex_value("(?!)", empty_terms(), 0, true, true, true);
 }
@@ -695,6 +713,7 @@ fn append_terms(left: [Term], right: [Term]): [Term] {
 
 // Compile a pattern into a Regex. Errors are explicit Outcome failures rather
 // than panics.
+// example: regex.compile(r"\d+").is_done()  // 1
 export fn compile(pattern: text): outcome.Outcome<Regex, text> {
     start = 0;
     end = pattern.len();

@@ -58,6 +58,8 @@ export record Chart {
         };
     }
 
+    // Return a copy of the chart with its title set.
+    // example: plot.svg(plot.line([1.0, 2.0]).title("Sales")).contains("Sales")  // 1
     export fn title(value: text): Chart {
         return Chart {
             series: this.series,
@@ -70,6 +72,8 @@ export record Chart {
         };
     }
 
+    // Return a copy with the x-axis label set.
+    // example: plot.line([1.0, 2.0]).x_label("time")
     export fn x_label(value: text): Chart {
         return Chart {
             series: this.series,
@@ -82,6 +86,8 @@ export record Chart {
         };
     }
 
+    // Return a copy with the y-axis label set.
+    // example: plot.line([1.0, 2.0]).y_label("value")
     export fn y_label(value: text): Chart {
         return Chart {
             series: this.series,
@@ -94,6 +100,8 @@ export record Chart {
         };
     }
 
+    // Return a copy with the legend shown or hidden.
+    // example: plot.line([1.0, 2.0]).label("trend").legend(true)
     export fn legend(enabled: bool): Chart {
         return Chart {
             series: this.series,
@@ -106,6 +114,8 @@ export record Chart {
         };
     }
 
+    // Return a copy sized to `width` x `height` pixels (both must be positive).
+    // example: plot.svg(plot.line([1.0, 2.0]).size(640, 480)).contains("width=\"640\"")  // 1
     export fn size(width: int, height: int): Chart {
         if width <= 0 || height <= 0 {
             runtime.panic("plot: chart size must be positive");
@@ -167,30 +177,44 @@ export fn empty(): Chart {
     return Chart.empty();
 }
 
+// A line chart from paired x/y data.
+// example: plot.svg(plot.line([0.0, 1.0, 2.0], [3.0, 7.0, 5.0])).contains("<svg")  // 1
 export fn line(xs: [real64], ys: [real64]): Chart {
     return Chart.empty().add_line(xs, ys);
 }
 
+// A line chart from y values, with x taken as the index 0, 1, 2, ...
+// example: plot.svg(plot.line([1.0, 3.0, 2.0])).contains("<svg")  // 1
 export fn line(ys: [real64]): Chart {
     return Chart.empty().add_line(ys);
 }
 
+// A scatter chart from paired x/y data.
+// example: plot.svg(plot.scatter([1.0, 2.0], [3.0, 4.0])).contains("<circle")  // 1
 export fn scatter(xs: [real64], ys: [real64]): Chart {
     return Chart.empty().add_scatter(xs, ys);
 }
 
+// A scatter chart from y values against their index.
+// example: plot.scatter([3.0, 1.0, 4.0])
 export fn scatter(ys: [real64]): Chart {
     return Chart.empty().add_scatter(ys);
 }
 
+// A bar chart from paired x/y data.
+// example: plot.svg(plot.bar([1.0, 2.0], [3.0, 5.0])).contains("<rect")  // 1
 export fn bar(xs: [real64], ys: [real64]): Chart {
     return Chart.empty().add_bar(xs, ys);
 }
 
+// A bar chart from y values against their index.
+// example: plot.svg(plot.bar([3.0, 1.0, 2.0])).contains("<rect")  // 1
 export fn bar(ys: [real64]): Chart {
     return Chart.empty().add_bar(ys);
 }
 
+// A histogram: bucket `values` into `bins` equal-width bars.
+// example: plot.svg(plot.histogram([1.0, 2.0, 2.0, 3.0], 3)).contains("<svg")  // 1
 export fn histogram(values: [real64], bins: int): Chart {
     if values.len() == 0 {
         runtime.panic("plot: histogram requires at least one value");
@@ -249,18 +273,27 @@ export fn use_backend(name: text): unit {
     __plot_backend_set(name);
 }
 
+// The active backend used by `show`. Reads `DUNE_PLOT_BACKEND` if set,
+// otherwise the value last passed to `use_backend`.
+// example: plot.use_backend("svg"); plot.backend()  // "svg"
 export fn backend(): text {
     return process.env_or("DUNE_PLOT_BACKEND", __plot_backend_get());
 }
 
+// The backend names `show` understands.
+// example: plot.available_backends().len()  // 4
 export fn available_backends(): [text] {
     return ["none", "svg", "html", "native"];
 }
 
+// Render `chart` to deterministic standalone SVG text.
+// example: plot.svg(plot.line([1.0, 2.0])).starts_with("<svg")  // 1
 export fn svg(chart: Chart): text {
     return render_svg(chart);
 }
 
+// Render `chart` to a deterministic standalone HTML document wrapping the SVG.
+// example: plot.html(plot.line([1.0, 2.0])).contains("<!doctype")  // 1
 export fn html(chart: Chart): text {
     title = chart.title_text;
     if title == "" {
@@ -271,14 +304,20 @@ export fn html(chart: Chart): text {
                   escape_xml(title), svg(chart));
 }
 
+// Write `chart` as SVG to `path`, returning an `Outcome` for the write.
+// example: plot.save_svg(plot.line([1.0, 2.0]), "chart.svg").is_done()  // 1
 export fn save_svg(chart: Chart, path: text): outcome.Outcome<text, text> {
     return fs.write_text(path, svg(chart));
 }
 
+// Write `chart` as an HTML document to `path`, returning an `Outcome`.
+// example: plot.save_html(plot.line([1.0, 2.0]), "chart.html").is_done()  // 1
 export fn save_html(chart: Chart, path: text): outcome.Outcome<text, text> {
     return fs.write_text(path, html(chart));
 }
 
+// Open `chart` in a native plot window where the VM supports it; returns an
+// `Outcome` describing whether the window opened (a headless-safe error if not).
 export fn show_native(chart: Chart): outcome.Outcome<text, text> {
     (ok, message) = __plot_show_native(svg(chart));
     if ok {

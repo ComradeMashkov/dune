@@ -31,14 +31,14 @@ export fn set_level(level: int): unit {
     __log_set_level(level);
 }
 
-// Return the active minimum level.
-// example: log.level()
+// Return the active minimum level (INFO = 2 by default).
+// example: log.level()  // 2
 export fn level(): int {
     return __log_level();
 }
 
-// True when a message at `level` would be emitted.
-// example: log.enabled(log.DEBUG)
+// True when a message at `level` would be emitted at the active level.
+// example: log.enabled(log.ERROR)  // 1
 export fn enabled(level: int): bool {
     return level >= __log_level();
 }
@@ -47,32 +47,32 @@ fn emit(level: int, label: text, message: text): unit {
     __log_emit(level, label, message);
 }
 
-// Emit a trace message.
-// example: log.trace("starting parser")
+// Emit a trace message (suppressed unless the level is lowered to TRACE).
+// example: log.set_level(log.TRACE); log.trace("parsing input")  // stderr: [trace] parsing input
 export fn trace(message: text): unit {
     emit(TRACE, "trace", message);
 }
 
-// Emit a debug message.
-// example: log.debug("cache miss")
+// Emit a debug message (suppressed unless the level is lowered to DEBUG).
+// example: log.set_level(log.DEBUG); log.debug("cache miss")  // stderr: [debug] cache miss
 export fn debug(message: text): unit {
     emit(DEBUG, "debug", message);
 }
 
-// Emit an informational message.
-// example: log.info("building target")
+// Emit an informational message (shown at the default level).
+// example: log.info("building target")  // stderr: [info] building target
 export fn info(message: text): unit {
     emit(INFO, "info", message);
 }
 
 // Emit a warning message.
-// example: log.warn("native backend disabled")
+// example: log.warn("native backend disabled")  // stderr: [warn] native backend disabled
 export fn warn(message: text): unit {
     emit(WARN, "warn", message);
 }
 
 // Emit an error message.
-// example: log.error("failed")
+// example: log.error("connection refused")  // stderr: [error] connection refused
 export fn error(message: text): unit {
     emit(ERROR, "error", message);
 }

@@ -26,3 +26,8 @@ print(display.show(label));
 ### `fn show<T is Display>(value: T): text`
 
 Render any Display value to text. Useful when a function wants the text instead of printing it directly. The bound `T is Display` guarantees `value` has a `to_text` method to call.
+
+**Example:**
+```dune
+display.show(Label { name: "core" })  // label: core
+```

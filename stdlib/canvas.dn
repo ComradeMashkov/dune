@@ -158,6 +158,7 @@ export record Canvas {
     }
 
     // Return a copy with a new background color.
+    // example: canvas.new("s", 100, 100).background("#f8fafc").to_svg().contains("#f8fafc")  // 1
     export fn background(color: text): Canvas {
         return Canvas {
             title_text: this.title_text,
@@ -213,6 +214,7 @@ export record Canvas {
     }
 
     // Draw a straight line with a stroke color.
+    // example: canvas.new("s", 100, 100).line(0.0, 0.0, 50.0, 50.0, "#000").to_svg().contains("<line")  // 1
     export fn line(x1: real64, y1: real64, x2: real64, y2: real64, color: text): Canvas {
         return this.line(x1, y1, x2, y2, stroke(color));
     }
@@ -245,6 +247,7 @@ export record Canvas {
     }
 
     // Draw a rectangle with stroke and fill colors.
+    // example: canvas.new("s", 100, 100).rect(10.0, 10.0, 40.0, 30.0, "#000", "#eee").to_svg().contains("<rect")  // 1
     export fn rect(x: real64, y: real64, width: real64, height: real64, stroke_color: text, fill_color: text): Canvas {
         return this.rect(x, y, width, height, style(stroke_color, fill_color, 1.0));
     }
@@ -265,6 +268,7 @@ export record Canvas {
     }
 
     // Draw a circle with stroke and fill colors.
+    // example: canvas.new("s", 100, 100).circle(50.0, 50.0, 20.0, "#000", "none").to_svg().contains("<circle")  // 1
     export fn circle(cx: real64, cy: real64, radius: real64, stroke_color: text, fill_color: text): Canvas {
         return this.circle(cx, cy, radius, style(stroke_color, fill_color, 1.0));
     }
@@ -285,6 +289,7 @@ export record Canvas {
     }
 
     // Draw left-aligned text with a fill color.
+    // example: canvas.new("s", 100, 100).text(10.0, 20.0, "hi", "#000").to_svg().contains(">hi<")  // 1
     export fn text(x: real64, y: real64, value: text, color: text): Canvas {
         return this.text(x, y, value, stroke(color).with_fill(color));
     }
@@ -311,6 +316,7 @@ export record Canvas {
     }
 
     // Draw a background grid aligned to the current viewBox.
+    // example: canvas.new("s", 100, 100).grid(20.0, "#eee").to_svg().contains("canvas-grid")  // 1
     export fn grid(step: real64, color: text): Canvas {
         if step <= 0.0 {
             runtime.panic("canvas: grid step must be positive");
@@ -336,6 +342,7 @@ export record Canvas {
     }
 
     // Draw a titled panel for dashboards and tool surfaces.
+    // example: canvas.new("s", 100, 100).panel(4.0, 4.0, 80.0, 40.0, "Box").to_svg().contains(">Box<")  // 1
     export fn panel(x: real64, y: real64, width: real64, height: real64, title: text): Canvas {
         result = this.rounded_rect(x, y, width, height, 6.0, style("#cbd5e1", "#ffffff", 1.0));
         if title.len() > 0 {
@@ -346,6 +353,7 @@ export record Canvas {
     }
 
     // Draw a button. The active state uses a stronger fill and inverted text.
+    // example: canvas.new("s", 100, 100).button(10.0, 10.0, 60.0, 24.0, "OK", true).to_svg().contains(">OK<")  // 1
     export fn button(x: real64, y: real64, width: real64, height: real64, label: text, active: bool): Canvas {
         fill_color = "#f8fafc";
         stroke_color = "#94a3b8";
@@ -360,6 +368,7 @@ export record Canvas {
     }
 
     // Draw a checkbox with a label.
+    // example: canvas.new("s", 100, 100).checkbox(10.0, 10.0, "on", true).to_svg().contains(">on<")  // 1
     export fn checkbox(x: real64, y: real64, label: text, checked: bool): Canvas {
         result = this.rounded_rect(x, y, 14.0, 14.0, 3.0, style("#64748b", "#ffffff", 1.0));
         if checked {
@@ -384,6 +393,7 @@ export record Canvas {
     }
 
     // Draw a slider with a label and current value.
+    // example: canvas.new("s", 200, 60).slider(10.0, 30.0, 150.0, 0.0, 100.0, 42.0, "zoom").to_svg().contains(">zoom<")  // 1
     export fn slider(x: real64, y: real64, width: real64, min: real64, max: real64, value: real64, label: text): Canvas {
         if max <= min {
             runtime.panic("canvas: slider max must be greater than min");
@@ -492,11 +502,14 @@ export record Canvas {
     }
 
     // Render to deterministic SVG text.
+    // Render the recorded commands to deterministic SVG text.
+    // example: canvas.new("s", 100, 80).to_svg().starts_with("<svg")  // 1
     export fn to_svg(): text {
         return render_svg(this);
     }
 
     // Save the SVG document to disk.
+    // example: canvas.new("s", 100, 80).save_svg("scene.svg").is_done()  // 1
     export fn save_svg(path: text): outcome.Outcome<text, text> {
         return fs.write_text(path, this.to_svg());
     }
@@ -513,36 +526,43 @@ export record Canvas {
 }
 
 // Create an empty canvas with an explicit pixel size.
+// example: canvas.svg(canvas.new("scene", 320, 200)).contains("width=\"320\"")  // 1
 export fn new(title: text, width: int, height: int): Canvas {
     return Canvas.new(title, width, height);
 }
 
 // Create an empty canvas with the default size.
+// example: canvas.new("scene")
 export fn new(title: text): Canvas {
     return Canvas.new(title, DEFAULT_WIDTH, DEFAULT_HEIGHT);
 }
 
 // Build a custom style from stroke, fill, and stroke width.
+// example: canvas.style("#0f172a", "#eef2ff", 2.0)
 export fn style(stroke_color: text, fill_color: text, stroke_width: real64): Style {
     return Style.default().with_stroke(stroke_color).with_fill(fill_color).with_width(stroke_width);
 }
 
 // Build a stroke-only style.
+// example: canvas.stroke("#2563eb").with_width(2.0)
 export fn stroke(color: text): Style {
     return Style.default().with_stroke(color).with_fill("none");
 }
 
 // Build a fill-only style.
+// example: canvas.fill("#dbeafe")
 export fn fill(color: text): Style {
     return Style.default().with_stroke("none").with_fill(color);
 }
 
 // Render a canvas to deterministic SVG text.
+// example: canvas.svg(canvas.new("s", 100, 80)).starts_with("<svg")  // 1
 export fn svg(scene: Canvas): text {
     return render_svg(scene);
 }
 
 // List the interactive tools exposed by the native canvas window.
+// example: canvas.native_tools().len()  // 7
 export fn native_tools(): [text] {
     return ["grid", "zoom-in", "zoom-out", "reset", "ruler", "save-svg", "cursor-status"];
 }
