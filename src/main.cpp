@@ -1,6 +1,7 @@
 #include "cli/build_progress.hpp"
 #include "codegen/llvm_ir_generator.hpp"
 #include "compiler/compiler.hpp"
+#include "doc/doc_generator.hpp"
 #include "lexer/lexer.hpp"
 #include "lsp/lsp_server.hpp"
 #include "modules/module_loader.hpp"
@@ -8,6 +9,7 @@
 #include "typechecker/type_checker.hpp"
 #include "vm/vm.hpp"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -270,6 +272,114 @@ int check_source_file(const std::string& source_path) {
     return 0;
 }
 
+// Renders one module's Markdown to the given stream.
+std::string render_module_file(const std::string& source_path) {
+    const std::string source = read_file(source_path);
+    const std::string module_name = std::filesystem::path(source_path).stem().string();
+    return dune::doc::render_module(source, module_name);
+}
+
+// `dune doc <path> [-o <out>] [--check]`.
+//
+// `<path>` is a single `.dn` file or a directory of them. With no `-o` a single
+// file's Markdown is printed to stdout; with `-o` it is written to that path (a
+// directory input writes one `<module>.md` per file plus an `index.md`).
+// `--check` regenerates in memory and compares against the existing files,
+// exiting non-zero on any drift — for CI that keeps generated docs current.
+int run_doc(const std::vector<std::string>& arguments) {
+    namespace fs = std::filesystem;
+
+    std::string input;
+    std::string output;
+    bool check = false;
+    for (std::size_t index = 0; index < arguments.size(); ++index) {
+        const std::string& argument = arguments[index];
+        if (argument == "-o" || argument == "--out") {
+            if (index + 1 >= arguments.size()) {
+                throw std::runtime_error("dune doc: '" + argument + "' needs a path");
+            }
+            output = arguments[++index];
+        } else if (argument == "--check") {
+            check = true;
+        } else if (input.empty()) {
+            input = argument;
+        } else {
+            throw std::runtime_error("dune doc: unexpected argument '" + argument + "'");
+        }
+    }
+
+    if (input.empty()) {
+        throw std::runtime_error("dune doc: missing input path");
+    }
+
+    if (!fs::is_directory(input)) {
+        const std::string markdown = render_module_file(input);
+        if (check) {
+            const std::string existing = fs::exists(output) ? read_file(output) : std::string{};
+            if (existing != markdown) {
+                std::cerr << "doc drift: " << output << '\n';
+                return 1;
+            }
+            return 0;
+        }
+        if (output.empty()) {
+            std::cout << markdown;
+        } else {
+            write_file(output, markdown);
+        }
+        return 0;
+    }
+
+    if (output.empty()) {
+        throw std::runtime_error("dune doc: a directory input needs -o <out-dir>");
+    }
+
+    std::vector<std::string> stems;
+    for (const auto& entry : fs::directory_iterator(input)) {
+        if (entry.is_regular_file() && entry.path().extension() == ".dn") {
+            stems.push_back(entry.path().stem().string());
+        }
+    }
+    std::sort(stems.begin(), stems.end());
+
+    bool drift = false;
+    for (const std::string& stem : stems) {
+        const std::string source = read_file((fs::path(input) / (stem + ".dn")).string());
+        const std::string markdown = dune::doc::render_module(source, stem);
+        const std::string page = (fs::path(output) / (stem + ".md")).string();
+        if (check) {
+            const std::string existing = fs::exists(page) ? read_file(page) : std::string{};
+            if (existing != markdown) {
+                std::cerr << "doc drift: " << page << '\n';
+                drift = true;
+            }
+        } else {
+            fs::create_directories(output);
+            write_file(page, markdown);
+        }
+    }
+
+    std::string index = "# Standard library reference\n\n";
+    for (const std::string& stem : stems) {
+        index += "- [`";
+        index += stem;
+        index += "`](";
+        index += stem;
+        index += ".md)\n";
+    }
+    const std::string index_path = (fs::path(output) / "index.md").string();
+    if (check) {
+        const std::string existing = fs::exists(index_path) ? read_file(index_path) : std::string{};
+        if (existing != index) {
+            std::cerr << "doc drift: " << index_path << '\n';
+            drift = true;
+        }
+        return drift ? 1 : 0;
+    }
+    write_file(index_path, index);
+    return 0;
+}
+
 void print_usage() {
     std::cerr << "usage:\n";
     std::cerr << "  dune <file.dn>\n";
@@ -277,6 +387,7 @@ void print_usage() {
     std::cerr << "  dune lsp\n";
     std::cerr << "  dune build <file.dn> -o <output>\n";
     std::cerr << "  dune llvm <file.dn> -o <file.ll>\n";
+    std::cerr << "  dune doc <file.dn|dir> [-o <out>] [--check]\n";
 }
 
 } // namespace
@@ -307,9 +418,13 @@ int main(int argc, char* argv[]) {
                 return emit_llvm_file(argv[2], argv[4]);
             }
 
+            if (command == "doc" && argc >= 3) {
+                return run_doc(std::vector<std::string>(argv + 2, argv + argc));
+            }
+
             // `dune <file.dn> [args...]` runs a script; args are exposed via process.args().
             const bool is_subcommand =
-                command == "lsp" || command == "check" || command == "build" || command == "llvm";
+                command == "lsp" || command == "check" || command == "build" || command == "llvm" || command == "doc";
             if (!is_subcommand) {
                 return run_source_file(command, std::vector<std::string>(argv + 2, argv + argc));
             }

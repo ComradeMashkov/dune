@@ -999,6 +999,14 @@ Start the editor language server:
 ./build/dune lsp
 ```
 
+Generate Markdown API docs for a module (or a directory of modules) from the
+real AST and its doc-comments:
+
+```bash
+./build/dune doc stdlib/maybe.dn            # print to stdout
+./build/dune doc stdlib -o docs/api         # a page per module, plus index.md
+```
+
 ## Build And Test
 
 ```bash
@@ -1119,6 +1127,7 @@ The current release implements a small compiled language with:
 - standard library modules
 - `dune check`
 - `dune lsp`
+- `dune doc`
 - Zed syntax highlighting
 - native heap cleanup on normal program exit and runtime panic paths
 - comparison operators

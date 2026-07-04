@@ -1,0 +1,68 @@
+/// Sample module used by the `dune doc` golden test.
+///
+/// It exercises every documentable declaration kind: constants, type aliases,
+/// free functions with structured tags, records with fields and methods,
+/// choices with variants, and contracts. Non-exported declarations must never
+/// appear in the generated reference.
+
+/// The largest number of items a counter is expected to hold.
+export const MAX_ITEMS: int = 128;
+
+/// A plain integer score, named for readability.
+export type Score = int;
+
+/// Adds two integers together.
+///
+/// param a: the first addend
+/// param b: the second addend
+/// returns: the sum of `a` and `b`
+/// example: add(40, 2)
+export fn add(a: int, b: int): int {
+    return a + b;
+}
+
+/// Returns its argument unchanged.
+export fn identity<T>(value: T): T {
+    return value;
+}
+
+/// A tally that counts items by category.
+export record Counter {
+    /// The running total counted so far.
+    export total: int,
+    // Internal scratch field — not part of the public API.
+    scratch: int,
+
+    /// Create an empty counter.
+    export fn new(): Counter {
+        return Counter { total: 0, scratch: 0 };
+    }
+
+    /// Add one to the running total.
+    export fn bump(): unit {
+        this.total = this.total + 1;
+    }
+
+    // Private helper that must stay out of the docs.
+    fn reset_scratch(): unit {
+        this.scratch = 0;
+    }
+}
+
+/// A shape carrying an optional dimension.
+export choice Shape {
+    Circle(int),
+    Square(int),
+    Empty,
+}
+
+/// Types that can render themselves as text.
+export contract Describable {
+    /// Produce a human-readable description.
+    describe(): text;
+}
+
+// A private helper that must not be documented.
+fn internal_seed(): int {
+    return 7;
+}

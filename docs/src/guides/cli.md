@@ -47,6 +47,22 @@ dune lsp
 Starts the Language Server over stdio. Editors launch this for diagnostics,
 completions, hover, and go-to-definition — see [Editor integration](editor.md).
 
+## Generate API documentation
+
+```sh
+dune doc path/to/module.dn            # print Markdown to stdout
+dune doc path/to/module.dn -o out.md  # write one page
+dune doc path/to/modules -o out/      # a page per module, plus index.md
+dune doc path/to/modules -o out/ --check   # fail if out/ is out of date
+```
+
+Renders a module's public API — functions, constants, type aliases, records
+(with their fields and methods), choices, and contracts — to Markdown, using the
+real parser so signatures and [doc-comments](../language/comments.md) match the
+source exactly. Only exported declarations appear (a module with no `export` is
+treated as fully public). `--check` regenerates in memory and exits non-zero on
+any drift, which keeps generated docs current in CI.
+
 ## Version
 
 ```sh
