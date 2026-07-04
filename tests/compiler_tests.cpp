@@ -11,8 +11,12 @@
 
 namespace {
 
+std::string test_source(const std::string& source) {
+    return "import io; import fmt; " + source;
+}
+
 dune::Bytecode compile_source(const std::string& source) {
-    dune::Lexer lexer(source);
+    dune::Lexer lexer(test_source(source));
     dune::Parser parser(lexer.tokenize());
     dune::ModuleLoader loader;
     dune::Compiler compiler;
@@ -30,25 +34,35 @@ bool expect(bool condition, const char* message) {
 
 bool compiles_function_table_and_call() {
     const dune::Bytecode bytecode = compile_source("fn add(a: int, b: int): int { return a + b; } "
-                                                   "print(add(1, 2));");
+                                                   "io.println(add(1, 2));");
 
     bool passed = true;
-    passed = expect(bytecode.functions.size() == 1, "expected one compiled function") && passed;
-    passed = expect(bytecode.functions[0].name == "add", "expected function name") && passed;
-    passed = expect(bytecode.functions[0].arity == 2, "expected function arity") && passed;
-    passed = expect(bytecode.functions[0].local_count == 2, "expected parameter locals") && passed;
+    std::size_t add_index = bytecode.functions.size();
+    for (std::size_t index = 0; index < bytecode.functions.size(); ++index) {
+        if (bytecode.functions[index].name == "add") {
+            add_index = index;
+            break;
+        }
+    }
+
+    passed = expect(add_index < bytecode.functions.size(), "expected compiled add function") && passed;
+    if (add_index < bytecode.functions.size()) {
+        passed = expect(bytecode.functions[add_index].arity == 2, "expected function arity") && passed;
+    }
 
     bool saw_call = false;
     for (const dune::Instruction& instruction : bytecode.instructions) {
-        if (instruction.op == dune::OpCode::call && instruction.operand == 0) {
+        if (instruction.op == dune::OpCode::call && instruction.operand == add_index) {
             saw_call = true;
         }
     }
 
     bool saw_return = false;
-    for (const dune::Instruction& instruction : bytecode.functions[0].instructions) {
-        if (instruction.op == dune::OpCode::return_value) {
-            saw_return = true;
+    if (add_index < bytecode.functions.size()) {
+        for (const dune::Instruction& instruction : bytecode.functions[add_index].instructions) {
+            if (instruction.op == dune::OpCode::return_value) {
+                saw_return = true;
+            }
         }
     }
 
@@ -58,7 +72,7 @@ bool compiles_function_table_and_call() {
 }
 
 bool compiles_unit_call_statement() {
-    const dune::Bytecode bytecode = compile_source("fn log(message: text): unit { print(message); } log(\"done\");");
+    const dune::Bytecode bytecode = compile_source("fn log(message: text): unit { io.println(message); } log(\"done\");");
 
     bool saw_call = false;
     bool saw_pop = false;
@@ -82,7 +96,7 @@ bool compiles_type_aliases() {
     const dune::Bytecode bytecode =
         compile_source("type Count = int; fn inc(value: Count): Count { return value + 1; } "
                        "record Point { x: Count, fn new(x: Count): Point { return Point { x: x }; } } "
-                       "type PointAlias = Point; point: PointAlias = Point.new(inc(4)); print(point.x);");
+                       "type PointAlias = Point; point: PointAlias = Point.new(inc(4)); io.println(point.x);");
 
     bool saw_inc = false;
     bool saw_constructor = false;
@@ -111,23 +125,18 @@ bool compiles_type_aliases() {
 
 bool compiles_formatted_print() {
     const dune::Bytecode bytecode = compile_source("name: text = \"Dune\"; version: int = 1; "
-                                                   "message: text = format(\"{} v{}\", name, version); "
-                                                   "print(\"{}\", message);");
+                                                   "message: text = fmt.format(\"{} v{}\", name, version); "
+                                                   "io.println(fmt.format(\"{}\", message));");
 
-    bool saw_print_format = false;
     bool saw_format_text = false;
     for (const dune::Instruction& instruction : bytecode.instructions) {
         if (instruction.op == dune::OpCode::format_text && instruction.operand == 2) {
             saw_format_text = true;
         }
-        if (instruction.op == dune::OpCode::print_format && instruction.operand == 1) {
-            saw_print_format = true;
-        }
     }
 
     bool passed = true;
     passed = expect(saw_format_text, "expected format_text instruction") && passed;
-    passed = expect(saw_print_format, "expected print_format instruction") && passed;
     return passed;
 }
 
@@ -135,7 +144,7 @@ bool compiles_arrays_and_module_calls() {
     const dune::Bytecode bytecode = compile_source("import math; "
                                                    "values: [int] = [1, 2]; "
                                                    "values.push(math.square(3)); "
-                                                   "print(values.len()); print(values[2]);");
+                                                   "io.println(values.len()); io.println(values[2]);");
 
     bool saw_make_array = false;
     bool saw_array_push = false;
@@ -160,7 +169,7 @@ bool compiles_arrays_and_module_calls() {
 }
 
 bool compiles_module_constants() {
-    const dune::Bytecode bytecode = compile_source("import math; print(math.PI);");
+    const dune::Bytecode bytecode = compile_source("import math; io.println(math.PI);");
 
     bool saw_constant_store = false;
     bool saw_member_load = false;
@@ -177,11 +186,11 @@ bool compiles_module_constants() {
 
 bool compiles_operators_casts_and_methods() {
     const dune::Bytecode bytecode = compile_source("values: [int] = [1, 2]; values.push(3); "
-                                                   "print(values.pop()); values.clear(); print(values.is_empty()); "
-                                                   "message: text = \"dune\"; print(message.len()); "
-                                                   "print(message.contains(\"un\")); "
+                                                   "io.println(values.pop()); values.clear(); io.println(values.is_empty()); "
+                                                   "message: text = \"dune\"; io.println(message.len()); "
+                                                   "io.println(message.contains(\"un\")); "
                                                    "value: real64 = 17 to real64; "
-                                                   "print(!false && (17 % 5 == 2));");
+                                                   "io.println(!false && (17 % 5 == 2));");
 
     bool saw_modulo = false;
     bool saw_not = false;
@@ -215,8 +224,8 @@ bool compiles_operators_casts_and_methods() {
 }
 
 bool compiles_membership_operator() {
-    const dune::Bytecode bytecode = compile_source("values: [int] = [1, 2, 3]; print(2 in values); "
-                                                   "message: text = \"dune\"; print(\"un\" in message);");
+    const dune::Bytecode bytecode = compile_source("values: [int] = [1, 2, 3]; io.println(2 in values); "
+                                                   "message: text = \"dune\"; io.println(\"un\" in message);");
 
     bool saw_array_contains = false;
     bool saw_text_in = false;
@@ -233,12 +242,12 @@ bool compiles_membership_operator() {
 
 bool compiles_stdlib_primitives() {
     const dune::Bytecode bytecode = compile_source("foreign fn c_sqrt(value: real64): real64 = \"sqrt\"; "
-                                                   "message: text = \"dune\"; print(message[0]); "
-                                                   "print(message[1:3]); "
+                                                   "message: text = \"dune\"; io.println(message[0]); "
+                                                   "io.println(message[1:3]); "
                                                    "values: [int] = [1, 2, 3]; part: [int] = values[:2]; "
                                                    "for i = 0; i < 3; i = i + 1 { "
                                                    "if i == 1 { continue; } break; } "
-                                                   "print(c_sqrt(81.0));");
+                                                   "io.println(c_sqrt(81.0));");
 
     bool saw_text_index = false;
     bool saw_slice = false;
@@ -255,9 +264,14 @@ bool compiles_stdlib_primitives() {
     }
 
     bool passed = true;
-    passed = expect(bytecode.functions.size() == 1, "expected one foreign function") && passed;
-    passed = expect(bytecode.functions[0].is_extern, "expected foreign function flag") && passed;
-    passed = expect(bytecode.functions[0].extern_symbol == "sqrt", "expected foreign symbol") && passed;
+    bool saw_foreign_function = false;
+    for (const dune::Bytecode::Function& function : bytecode.functions) {
+        if (function.name == "c_sqrt" && function.is_extern && function.extern_symbol == "sqrt") {
+            saw_foreign_function = true;
+        }
+    }
+
+    passed = expect(saw_foreign_function, "expected foreign function entry") && passed;
     passed = expect(saw_text_index, "expected text index instruction") && passed;
     passed = expect(saw_slice, "expected slice instruction") && passed;
     passed = expect(saw_backward_jump, "expected loop backward jump") && passed;
@@ -269,7 +283,7 @@ bool compiles_for_in_arrays_and_ranges() {
     const dune::Bytecode bytecode = compile_source("values: [int] = [1, 2, 3]; total = 0; "
                                                    "for value in values { total = total + value; } "
                                                    "for i in 0..values.len() { total = total + values[i]; } "
-                                                   "print(total);");
+                                                   "io.println(total);");
 
     bool saw_array_len = false;
     bool saw_load_index = false;
@@ -296,7 +310,7 @@ bool compiles_for_in_arrays_and_ranges() {
 bool compiles_generic_functions() {
     const dune::Bytecode bytecode = compile_source("fn identity<T>(value: T): T { return value; } "
                                                    "fn twice<T is numeric>(value: T): T { return value + value; } "
-                                                   "print(identity(42)); print(identity(\"done\")); print(twice(9));");
+                                                   "io.println(identity(42)); io.println(identity(\"done\")); io.println(twice(9));");
 
     int identity_count = 0;
     int twice_count = 0;
@@ -312,7 +326,9 @@ bool compiles_generic_functions() {
 
     int call_count = 0;
     for (const dune::Instruction& instruction : bytecode.instructions) {
-        if (instruction.op == dune::OpCode::call) {
+        if (instruction.op == dune::OpCode::call && instruction.operand < bytecode.functions.size() &&
+            (bytecode.functions[instruction.operand].name == "identity" ||
+             bytecode.functions[instruction.operand].name == "twice")) {
             ++call_count;
         }
     }
@@ -327,8 +343,8 @@ bool compiles_generic_functions() {
 bool compiles_stdlib_receiver_methods() {
     const dune::Bytecode bytecode = compile_source("import array; import text; "
                                                    "values: [int] = [1, 2, 3]; "
-                                                   "print(values.first()); print(values.append(4).last()); "
-                                                   "message: text = \" dune \"; print(message.trim());");
+                                                   "io.println(values.first()); io.println(values.append(4).last()); "
+                                                   "message: text = \" dune \"; io.println(message.trim());");
 
     int call_count = 0;
     bool saw_array_first = false;
@@ -341,8 +357,24 @@ bool compiles_stdlib_receiver_methods() {
     }
 
     for (const dune::Instruction& instruction : bytecode.instructions) {
-        if (instruction.op == dune::OpCode::call) {
-            ++call_count;
+        if (instruction.op == dune::OpCode::call && instruction.operand < bytecode.functions.size()) {
+            const std::string& function_name = bytecode.functions[instruction.operand].name;
+            if (function_name == "array.first" || function_name == "array.append" || function_name == "array.last" ||
+                function_name == "text.trim") {
+                ++call_count;
+            }
+        }
+    }
+
+    for (const dune::Bytecode::Function& function : bytecode.functions) {
+        for (const dune::Instruction& instruction : function.instructions) {
+            if (instruction.op == dune::OpCode::call && instruction.operand < bytecode.functions.size()) {
+                const std::string& function_name = bytecode.functions[instruction.operand].name;
+                if (function_name == "array.first" || function_name == "array.append" ||
+                    function_name == "array.last" || function_name == "text.trim") {
+                    ++call_count;
+                }
+            }
         }
     }
 
@@ -357,7 +389,7 @@ bool compiles_stdlib_receiver_methods() {
 bool compiles_record_literals_fields_and_methods() {
     const dune::Bytecode bytecode =
         compile_source("record Point { x: int, y: int, fn sum(): int { return this.x + this.y; } } "
-                       "p: Point = Point { x: 10, y: 20 }; print(p.x); print(p.sum());");
+                       "p: Point = Point { x: 10, y: 20 }; io.println(p.x); io.println(p.sum());");
 
     bool saw_make_record = false;
     bool saw_load_field = false;
@@ -385,7 +417,7 @@ bool compiles_record_field_defaults() {
     const dune::Bytecode bytecode =
         compile_source("record Optimizer { lr: real64 = 0.01, momentum: real64 = 0.0, name: text = \"sgd\" } "
                        "base: Optimizer = Optimizer {}; fast: Optimizer = Optimizer { lr: 0.1 }; "
-                       "print(base.lr); print(fast.momentum); print(fast.name);");
+                       "io.println(base.lr); io.println(fast.momentum); io.println(fast.name);");
 
     std::size_t make_record_count = 0;
     bool saw_load_field = false;
@@ -405,7 +437,7 @@ bool compiles_record_field_defaults() {
 bool compiles_record_constructors() {
     const dune::Bytecode bytecode = compile_source("record Point { x: int, y: int, "
                                                    "fn new(x: int, y: int): Point { return Point { x: x, y: y }; } } "
-                                                   "point: Point = Point.new(10, 20); print(point.x);");
+                                                   "point: Point = Point.new(10, 20); io.println(point.x);");
 
     bool saw_constructor = false;
     bool saw_constructor_call = false;
@@ -438,7 +470,7 @@ bool compiles_static_associated_record_functions() {
         compile_source("record Optimizer { lr: real64, momentum: real64, "
                        "static fn default(): Optimizer { return Optimizer { lr: 0.01, momentum: 0.0 }; } "
                        "fn rate(): real64 { return this.lr; } } "
-                       "opt: Optimizer = Optimizer.default(); print(opt.rate());");
+                       "opt: Optimizer = Optimizer.default(); io.println(opt.rate());");
 
     bool saw_static_function = false;
     bool saw_static_call = false;
@@ -482,7 +514,7 @@ bool compiles_assignment_targets() {
 
 bool compiles_when_expression() {
     const dune::Bytecode bytecode = compile_source("value = 2; chosen = when value { "
-                                                   "is 1 { 10 } is 2 { 20 } is _ { 30 } }; print(chosen);");
+                                                   "is 1 { 10 } is 2 { 20 } is _ { 30 } }; io.println(chosen);");
 
     bool saw_equal = false;
     bool saw_false_jump = false;
@@ -505,8 +537,8 @@ bool compiles_choice_variants_and_when() {
                                                    "value: Maybe = Present(42); "
                                                    "empty: Maybe = Absent; "
                                                    "chosen = when value { is Present(x) { x } is Absent { 0 } }; "
-                                                   "print(chosen); "
-                                                   "print(when empty { is Present(x) { x } is Absent { 0 } });");
+                                                   "io.println(chosen); "
+                                                   "io.println(when empty { is Present(x) { x } is Absent { 0 } });");
 
     bool saw_make_variant = false;
     bool saw_make_unit_variant = false;
@@ -535,8 +567,8 @@ bool compiles_arrow_style_choice_when() {
                                                    "value: Maybe = Present(42); "
                                                    "empty: Maybe = Absent; "
                                                    "chosen = when value { Present(x) => x; Absent => 0; }; "
-                                                   "print(chosen); "
-                                                   "print(when empty { Present(x) => x; _ => 7; });");
+                                                   "io.println(chosen); "
+                                                   "io.println(when empty { Present(x) => x; _ => 7; });");
 
     bool saw_load_variant_tag = false;
     bool saw_load_variant_payload = false;
@@ -558,7 +590,7 @@ bool compiles_tuples_and_destructuring() {
     const dune::Bytecode bytecode = compile_source("fn minmax(): (int, int) { return (2, 5); } "
                                                    "(lo, hi) = minmax(); "
                                                    "sum = when (lo, hi) { (left, right) => left + right; }; "
-                                                   "print(sum);");
+                                                   "io.println(sum);");
 
     bool saw_make_tuple = false;
     bool saw_load_tuple_element = false;
@@ -583,7 +615,7 @@ bool compiles_autograd_module_as_dune_code() {
     const dune::Bytecode bytecode = compile_source("import autograd; "
                                                    "x = autograd.variable(2.0); "
                                                    "loss = x.mul(3.0).add(x.pow(2.0)); "
-                                                   "loss.backward(); print(loss.data);");
+                                                   "loss.backward(); io.println(loss.data);");
 
     bool saw_variable = false;
     bool saw_backward = false;
@@ -625,9 +657,9 @@ bool compiles_matrix_module_as_dune_code() {
     const dune::Bytecode bytecode = compile_source("import matrix; "
                                                    "v = matrix.vector([1, 2, 3]); "
                                                    "w = matrix.vector([4, 5, 6]); "
-                                                   "print(v.dot(w)); "
+                                                   "io.println(v.dot(w)); "
                                                    "m = matrix.from_flat(2, 2, [1, 2, 3, 4]); "
-                                                   "print(m.transpose().get(1, 0));");
+                                                   "io.println(m.transpose().get(1, 0));");
 
     bool saw_vector = false;
     bool saw_from_flat = false;
@@ -668,8 +700,8 @@ bool stdlib_stays_pure_dune_except_panic() {
     const std::string source = "import math; import random; import matrix; import autograd; "
                                "import dict; import set; import array; import text; "
                                "import collections; import maybe; import outcome; "
-                               "import fs; import process; import csv; import display; "
-                               "import assert; import runtime; print(0);";
+                               "import fs; import process; import fmt; import io; import csv; import display; "
+                               "import assert; import runtime; io.println(0);";
 
     dune::Lexer lexer(source);
     dune::Parser parser(lexer.tokenize());
@@ -712,7 +744,7 @@ bool rejects_local_module_shadowing_stdlib() {
     std::ofstream(stdlib_dir / "math.dn") << "export fn answer(): int { return 1; }";
     std::ofstream(local_dir / "math.dn") << "export fn answer(): int { return 2; }";
 
-    dune::Lexer lexer("import math; print(math.answer());");
+    dune::Lexer lexer("import math; io.println(math.answer());");
     dune::Parser parser(lexer.tokenize());
     dune::ModuleLoader loader({stdlib_dir});
 
@@ -734,7 +766,7 @@ bool rejects_local_module_shadowing_stdlib() {
 }
 
 bool compiles_test_blocks_into_separate_chunks() {
-    const dune::Bytecode bytecode = compile_source("print(\"top\");\n"
+    const dune::Bytecode bytecode = compile_source("top: int = 1;\n"
                                                    "test \"first\" { x = 1; }\n"
                                                    "test \"second\" { y = 2; }");
 

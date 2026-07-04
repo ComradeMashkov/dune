@@ -1,3 +1,4 @@
+import io;
 // ERROR FIXTURE: this file is expected to FAIL at runtime.
 // Pull in the stdlib matrix module (provides vector and its dot product).
 import matrix;
@@ -10,4 +11,4 @@ right = matrix.vector([1, 2, 3]);
 // Dot product requires both vectors to have the SAME length. Here left has 2
 // components and right has 3, so their shapes do not match.
 // THIS LINE CAUSES THE ERROR: vector shape mismatch (length 2 vs length 3) in dot.
-print(left.dot(right));
+io.println(left.dot(right));

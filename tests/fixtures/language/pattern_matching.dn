@@ -1,3 +1,4 @@
+import io;
 // Generic choice type Maybe<T>: a payload variant and an empty variant.
 choice Maybe<T> {
     // Present holds a value of the generic type parameter T.
@@ -59,32 +60,32 @@ failed: Result<int> = Failed("bad");
 point: Point = Point { x: lo, y: hi };
 
 // unwrap(value, 0) matches Present(30) -> 30.
-print(unwrap(value, 0));
+io.println(unwrap(value, 0));
 // unwrap(missing, 7) matches Absent -> 7.
-print(unwrap(missing, 7));
+io.println(unwrap(missing, 7));
 // describe(done) -> "done".
-print(describe(done));
+io.println(describe(done));
 // describe(failed) -> "bad".
-print(describe(failed));
+io.println(describe(failed));
 // lo -> 3.
-print(lo);
+io.println(lo);
 // hi -> 8.
-print(hi);
+io.println(hi);
 // 'when' with a record field-destructuring pattern -> x + y = 3 + 8 = 11.
-print(when point {
+io.println(when point {
     Point { x, y } => x + y;
 });
 // 'when' with a tuple pattern -> left * right = 3 * 8 = 24.
-print(when (lo, hi) {
+io.println(when (lo, hi) {
     (left, right) => left * right;
 });
 // 'when' with a wildcard '_' catch-all arm; missing is Absent so '_' -> 99.
-print(when missing {
+io.println(when missing {
     Present(x) => x;
     _ => 99;
 });
 // 'when' matching a literal int: 2 != 1, so the '_' arm -> 20.
-print(when 2 {
+io.println(when 2 {
     1 => 10;
     _ => 20;
 });

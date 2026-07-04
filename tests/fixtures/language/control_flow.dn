@@ -1,3 +1,4 @@
+import io;
 // Bind x to 3.
 x = 3;
 
@@ -10,8 +11,8 @@ while x > 0 {
 // if/else conditional on the final value of x (now 0).
 if x == 0 {
   // Taken branch: prints 42.
-  print(42);
+  io.println(42);
 } else {
   // Untaken branch in this run.
-  print(0);
+  io.println(0);
 }

@@ -1,3 +1,4 @@
+import io;
 // Transparent type alias: Count is just another name for int.
 type Count = int;
 // Alias for a list of Count, i.e. [int].
@@ -28,6 +29,6 @@ values: Counts = [inc(1), 3, 5];
 point: PointAlias = Point.new(values[0] + values[1]);
 
 // Print the list length.
-print(values.len());
+io.println(values.len());
 // Print the point's x field.
-print(point.x);
+io.println(point.x);

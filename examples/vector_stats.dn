@@ -1,3 +1,4 @@
+import io;
 // Import the matrix module, which also supplies the Vector type and its
 // statistical and reshaping helpers used throughout this example.
 import matrix;
@@ -11,46 +12,46 @@ values = matrix.vector([2.0, 4.0, 6.0, 8.0]);
 weights = matrix.vector([1.0, 0.5, 0.25, 0.125]);
 
 // Label the summary-statistics block.
-print("stats");
+io.println("stats");
 // Length: the number of elements, 4.
-print(values.len());
+io.println(values.len());
 // Sum of all elements: 2 + 4 + 6 + 8 = 20.
-print(values.sum());
+io.println(values.sum());
 // Mean (average): 20 / 4 = 5.
-print(values.mean());
+io.println(values.mean());
 // Smallest element: 2.
-print(values.min());
+io.println(values.min());
 // Largest element: 8.
-print(values.max());
+io.println(values.max());
 
 // Label the dot-product block.
-print("dot");
+io.println("dot");
 // Weighted dot product = 2*1 + 4*0.5 + 6*0.25 + 8*0.125 = 2 + 2 + 1.5 + 1 = 6.5.
-print(values.dot(weights));
+io.println(values.dot(weights));
 // Squared Euclidean norm = 2^2 + 4^2 + 6^2 + 8^2 = 4 + 16 + 36 + 64 = 120.
-print(values.norm_squared());
+io.println(values.norm_squared());
 
 // Label the slicing/reshaping block.
-print("window");
+io.println("window");
 // Take a sub-vector (a sliding window) from index 1 up to but not including 3,
 // giving the two middle elements [4, 6].
 window = values.slice(1, 3);
 // Sum of the window [4, 6] = 10.
-print(window.sum());
+io.println(window.sum());
 // Mean of the window = 10 / 2 = 5.
-print(window.mean());
+io.println(window.mean());
 // Reshape the 4-element vector into a 2x2 matrix, filled row by row:
 // [[2, 4], [6, 8]].
 reshaped = values.reshape(2, 2);
 // Trace of that matrix = diagonal sum = 2 + 8 = 10.
-print(reshaped.trace());
+io.println(reshaped.trace());
 
 // Label the clipping block.
-print("clip");
+io.println("clip");
 // Clip every value into the range [3.0, 7.0]: values below 3 become 3 and
 // values above 7 become 7, giving [3, 4, 6, 7].
 clipped = values.clip(3.0, 7.0);
 // First clipped element: 2 was below 3, so it is raised to 3.
-print(clipped.get(0));
+io.println(clipped.get(0));
 // Last clipped element: 8 was above 7, so it is lowered to 7.
-print(clipped.get(3));
+io.println(clipped.get(3));

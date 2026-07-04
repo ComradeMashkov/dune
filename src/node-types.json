@@ -1265,10 +1265,6 @@
           "named": true
         },
         {
-          "type": "print_statement",
-          "named": true
-        },
-        {
           "type": "record_declaration",
           "named": true
         },
@@ -3675,208 +3671,6 @@
     }
   },
   {
-    "type": "print_statement",
-    "named": true,
-    "fields": {
-      "argument": {
-        "multiple": true,
-        "required": false,
-        "types": [
-          {
-            "type": "array_comprehension",
-            "named": true
-          },
-          {
-            "type": "array_literal",
-            "named": true
-          },
-          {
-            "type": "binary_expression",
-            "named": true
-          },
-          {
-            "type": "boolean",
-            "named": true
-          },
-          {
-            "type": "call_expression",
-            "named": true
-          },
-          {
-            "type": "cast_expression",
-            "named": true
-          },
-          {
-            "type": "character",
-            "named": true
-          },
-          {
-            "type": "constructor_identifier",
-            "named": true
-          },
-          {
-            "type": "float",
-            "named": true
-          },
-          {
-            "type": "identifier",
-            "named": true
-          },
-          {
-            "type": "index_expression",
-            "named": true
-          },
-          {
-            "type": "member_expression",
-            "named": true
-          },
-          {
-            "type": "method_call_expression",
-            "named": true
-          },
-          {
-            "type": "number",
-            "named": true
-          },
-          {
-            "type": "parenthesized_expression",
-            "named": true
-          },
-          {
-            "type": "range_expression",
-            "named": true
-          },
-          {
-            "type": "record_literal",
-            "named": true
-          },
-          {
-            "type": "slice_expression",
-            "named": true
-          },
-          {
-            "type": "string",
-            "named": true
-          },
-          {
-            "type": "try_expression",
-            "named": true
-          },
-          {
-            "type": "tuple_literal",
-            "named": true
-          },
-          {
-            "type": "unary_expression",
-            "named": true
-          },
-          {
-            "type": "when_expression",
-            "named": true
-          }
-        ]
-      },
-      "value": {
-        "multiple": false,
-        "required": true,
-        "types": [
-          {
-            "type": "array_comprehension",
-            "named": true
-          },
-          {
-            "type": "array_literal",
-            "named": true
-          },
-          {
-            "type": "binary_expression",
-            "named": true
-          },
-          {
-            "type": "boolean",
-            "named": true
-          },
-          {
-            "type": "call_expression",
-            "named": true
-          },
-          {
-            "type": "cast_expression",
-            "named": true
-          },
-          {
-            "type": "character",
-            "named": true
-          },
-          {
-            "type": "constructor_identifier",
-            "named": true
-          },
-          {
-            "type": "float",
-            "named": true
-          },
-          {
-            "type": "identifier",
-            "named": true
-          },
-          {
-            "type": "index_expression",
-            "named": true
-          },
-          {
-            "type": "member_expression",
-            "named": true
-          },
-          {
-            "type": "method_call_expression",
-            "named": true
-          },
-          {
-            "type": "number",
-            "named": true
-          },
-          {
-            "type": "parenthesized_expression",
-            "named": true
-          },
-          {
-            "type": "range_expression",
-            "named": true
-          },
-          {
-            "type": "record_literal",
-            "named": true
-          },
-          {
-            "type": "slice_expression",
-            "named": true
-          },
-          {
-            "type": "string",
-            "named": true
-          },
-          {
-            "type": "try_expression",
-            "named": true
-          },
-          {
-            "type": "tuple_literal",
-            "named": true
-          },
-          {
-            "type": "unary_expression",
-            "named": true
-          },
-          {
-            "type": "when_expression",
-            "named": true
-          }
-        ]
-      }
-    }
-  },
-  {
     "type": "qualified_name",
     "named": true,
     "fields": {},
@@ -4835,10 +4629,6 @@
         },
         {
           "type": "module_declaration",
-          "named": true
-        },
-        {
-          "type": "print_statement",
           "named": true
         },
         {
@@ -6139,10 +5929,6 @@
   {
     "type": "number",
     "named": true
-  },
-  {
-    "type": "print",
-    "named": false
   },
   {
     "type": "real",

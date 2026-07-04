@@ -1,9 +1,19 @@
-execute_process(
-    COMMAND "${DUNE_EXECUTABLE}" "${SOURCE_FILE}"
-    RESULT_VARIABLE result
-    OUTPUT_VARIABLE output
-    ERROR_VARIABLE error
-)
+if(DEFINED INPUT_FILE)
+    execute_process(
+        COMMAND "${DUNE_EXECUTABLE}" "${SOURCE_FILE}"
+        INPUT_FILE "${INPUT_FILE}"
+        RESULT_VARIABLE result
+        OUTPUT_VARIABLE output
+        ERROR_VARIABLE error
+    )
+else()
+    execute_process(
+        COMMAND "${DUNE_EXECUTABLE}" "${SOURCE_FILE}"
+        RESULT_VARIABLE result
+        OUTPUT_VARIABLE output
+        ERROR_VARIABLE error
+    )
+endif()
 
 if(NOT result EQUAL 0)
     message(FATAL_ERROR "dune exited with ${result}: ${error}")
@@ -29,4 +39,11 @@ endif()
 
 if(NOT "${output}" STREQUAL "${expected_output}")
     message(FATAL_ERROR "expected '${expected_output}', got '${output}'")
+endif()
+
+if(DEFINED EXPECTED_ERROR_FILE)
+    file(READ "${EXPECTED_ERROR_FILE}" expected_error)
+    if(NOT "${error}" STREQUAL "${expected_error}")
+        message(FATAL_ERROR "expected stderr '${expected_error}', got '${error}'")
+    endif()
 endif()

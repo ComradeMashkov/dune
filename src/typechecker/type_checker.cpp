@@ -1180,24 +1180,6 @@ void TypeChecker::check_statement(const Statement& statement) {
                     statement.expression->location);
         return;
     }
-    case StatementKind::print: {
-        const Type type = check_expression(*statement.expression);
-        if (!is_printable_type(type) && !record_has_display(type)) {
-            std::string message = "cannot print type '" + type_name(type) + "'";
-            if (type.kind == ValueType::struct_type) {
-                message += "; add a 'to_text(): text' method to make it printable";
-            }
-
-            throw DiagnosticError(statement.expression->location, message);
-        }
-
-        if (statement.arguments.empty()) {
-            return;
-        }
-
-        check_format_arguments(*statement.expression, statement.arguments, 0, "print");
-        return;
-    }
     case StatementKind::block:
         push_scope();
         check_statements(statement.body);
@@ -1772,9 +1754,27 @@ Type TypeChecker::check_when_expression(const Expression& expression, const Type
 }
 
 Type TypeChecker::check_call_expression(const Expression& expression, const TypeAnnotation& expected) {
+    if (expression.lexeme == "print") {
+        const bool has_print_function = overloads_.contains("print") || generic_overloads_.contains("print");
+        const VariableBinding* print_binding = find_binding("print");
+        const bool has_print_value =
+            print_binding != nullptr && print_binding->type.kind == ValueType::function_type;
+        if (!has_print_function && !has_print_value) {
+            throw DiagnosticError(expression.location,
+                                  "print is not available globally; import io and use io.print(...) or "
+                                  "io.println(...)");
+        }
+    }
+
     if (expression.lexeme == "format") {
-        (void)expected;
-        return check_format_call_expression(expression);
+        const bool has_format_function = overloads_.contains("format") || generic_overloads_.contains("format");
+        const VariableBinding* format_binding = find_binding("format");
+        const bool has_format_value =
+            format_binding != nullptr && format_binding->type.kind == ValueType::function_type;
+        if (!has_format_function && !has_format_value) {
+            throw DiagnosticError(
+                expression.location, "format is not available globally; import fmt and use fmt.format(...)");
+        }
     }
 
     if (is_io_builtin(expression.lexeme)) {
@@ -1887,14 +1887,16 @@ Type TypeChecker::check_format_call_expression(const Expression& expression) {
 // opcodes instead of C/C++ foreign functions. Each returns primitives (a tuple
 // or array) so the Dune wrappers can shape the result into Outcome/Maybe.
 bool TypeChecker::is_io_builtin(const std::string& name) {
-    return name == "__read_file" || name == "__write_file" || name == "__env_get" || name == "__process_args" ||
+    return name == "__read_file" || name == "__write_file" || name == "__stdout_write" ||
+           name == "__stderr_write" || name == "__stdout_flush" || name == "__stderr_flush" ||
+           name == "__stdin_read_line" || name == "__env_get" || name == "__process_args" ||
            name == "__process_cwd";
 }
 
 Type TypeChecker::check_io_builtin_call(const Expression& expression) {
     const std::string& name = expression.lexeme;
     std::size_t expected_arguments = 0;
-    if (name == "__read_file" || name == "__env_get") {
+    if (name == "__read_file" || name == "__env_get" || name == "__stdout_write" || name == "__stderr_write") {
         expected_arguments = 1;
     } else if (name == "__write_file") {
         expected_arguments = 2;
@@ -1918,8 +1920,8 @@ Type TypeChecker::check_io_builtin_call(const Expression& expression) {
 }
 
 // A record satisfies the Display contract when it provides an instance method
-// `to_text(): text`. Such records can be printed and formatted; the compiler
-// lowers `print(record)` / `format("{}", record)` to a `to_text()` call.
+// `to_text(): text`. Such records can be formatted; the compiler lowers
+// `fmt.format("{}", record)` to a `to_text()` call.
 bool TypeChecker::record_has_display(const Type& type) const {
     if (type.kind != ValueType::struct_type) {
         return false;
@@ -1943,7 +1945,7 @@ bool TypeChecker::record_has_display(const Type& type) const {
 void TypeChecker::check_format_arguments(const Expression& format,
                                          const std::vector<std::unique_ptr<Expression>>& arguments,
                                          std::size_t first_argument, std::string_view feature_name) {
-    const std::string label = feature_name == "print" ? "print format" : std::string(feature_name);
+    const std::string label = std::string(feature_name);
     const std::string action = std::string(feature_name);
     if (format.kind != ExpressionKind::string) {
         throw DiagnosticError(format.location, label + " string must be a string literal");
@@ -2025,6 +2027,13 @@ Type TypeChecker::check_variant_constructor(const Expression& expression, const 
 }
 
 Type TypeChecker::check_method_call_expression(const Expression& expression, const TypeAnnotation& expected) {
+    if (expression.left != nullptr && expression.left->kind == ExpressionKind::identifier &&
+        expression.left->lexeme == "fmt" && expression.lexeme == "format") {
+        (void)expected;
+        expect_imported_module("fmt", expression.location);
+        return check_format_call_expression(expression);
+    }
+
     if (expression.left != nullptr) {
         const std::string record_name = expression_type_name(*expression.left);
         if (!record_name.empty() && structs_.contains(record_name)) {
@@ -3345,7 +3354,6 @@ bool TypeChecker::statement_returns(const Statement& statement) const {
     case StatementKind::binding:
     case StatementKind::const_statement:
     case StatementKind::assign:
-    case StatementKind::print:
     case StatementKind::while_statement:
     case StatementKind::for_statement:
     case StatementKind::for_in_statement:

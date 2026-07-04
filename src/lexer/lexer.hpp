@@ -20,7 +20,6 @@ enum class TokenType {
     import_keyword,
     when_keyword,
     return_keyword,
-    print,
     if_keyword,
     else_keyword,
     while_keyword,

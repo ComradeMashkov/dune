@@ -3,6 +3,7 @@ import fs;
 import matrix;
 import outcome;
 import text;
+import fmt;
 
 // Minimal CSV support, layered purely on top of `fs` and `text` — no new VM
 // primitives. The first iteration handles comma-separated cells and
@@ -120,7 +121,7 @@ fn parse_real64(cell: text): outcome.Outcome<real64, text> {
         g = cell[index];
         // Reject anything that is not a digit.
         if !text.is_digit(g) {
-            return outcome.failed(0.0, format("invalid number: {}", cell));
+            return outcome.failed(0.0, fmt.format("invalid number: {}", cell));
         }
         // Shift the running value and add this digit (glyph code minus '0').
         int_part = int_part * 10.0 + ((g to int) - ('0' to int)) to real64;
@@ -139,7 +140,7 @@ fn parse_real64(cell: text): outcome.Outcome<real64, text> {
         while index < n {
             g = cell[index];
             if !text.is_digit(g) {
-                return outcome.failed(0.0, format("invalid number: {}", cell));
+                return outcome.failed(0.0, fmt.format("invalid number: {}", cell));
             }
             // Each digit contributes a tenth of the previous place value.
             scale = scale / 10.0;
@@ -151,7 +152,7 @@ fn parse_real64(cell: text): outcome.Outcome<real64, text> {
 
     // A lone sign or '.' with no digits is not a valid number.
     if !seen_digit {
-        return outcome.failed(0.0, format("invalid number: {}", cell));
+        return outcome.failed(0.0, fmt.format("invalid number: {}", cell));
     }
 
     // Recombine sign, integer, and fractional parts.
@@ -185,7 +186,7 @@ fn parse_int(cell: text): outcome.Outcome<int, text> {
     while index < n {
         g = cell[index];
         if !text.is_digit(g) {
-            return outcome.failed_int(format("invalid integer: {}", cell));
+            return outcome.failed_int(fmt.format("invalid integer: {}", cell));
         }
         value = value * 10 + ((g to int) - ('0' to int));
         seen_digit = true;
@@ -193,7 +194,7 @@ fn parse_int(cell: text): outcome.Outcome<int, text> {
     }
 
     if !seen_digit {
-        return outcome.failed_int(format("invalid integer: {}", cell));
+        return outcome.failed_int(fmt.format("invalid integer: {}", cell));
     }
 
     // Apply the sign.
@@ -312,11 +313,11 @@ export fn write_rows(path: text, rows: [[text]]): outcome.Outcome<text, text> {
             if c == 0 {
                 line = row[c];
             } else {
-                line = format("{},{}", line, row[c]);
+                line = fmt.format("{},{}", line, row[c]);
             }
         }
         // Append the finished line and a newline.
-        content = format("{}{}\n", content, line);
+        content = fmt.format("{}{}\n", content, line);
     }
 
     // Delegate the actual file write to fs.
@@ -331,7 +332,7 @@ export fn write_matrix_real64(path: text, data: matrix.Matrix<real64>): outcome.
     for r = 0; r < data.rows(); r = r + 1 {
         row: [text] = [];
         for c = 0; c < data.cols(); c = c + 1 {
-            row.push(format("{}", data.get(r, c)));
+            row.push(fmt.format("{}", data.get(r, c)));
         }
         rows.push(row);
     }

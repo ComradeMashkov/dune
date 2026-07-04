@@ -1,3 +1,4 @@
+import io;
 // Pull in the stdlib array module (used below for array.reverse).
 import array;
 // Pull in the stdlib math module (used below for math.square).
@@ -24,14 +25,14 @@ reversed: [text] = array.reverse(words);
 rough: real32 = 1.5;
 
 // Instantiate identity with int (T = int) from the integer literal argument.
-print(identity(42));
+io.println(identity(42));
 // Instantiate identity with text (T = text); same generic, different concrete type.
-print(identity("done"));
+io.println(identity("done"));
 // Call the list method .first() on a [text] value to get its first element.
-print(reversed.first());
+io.println(reversed.first());
 // math.square instantiated for int (T inferred from the literal 12).
-print(math.square(12));
+io.println(math.square(12));
 // math.square instantiated for real32 (T inferred from `rough`); shows generic reuse across numeric types.
-print(math.square(rough));
+io.println(math.square(rough));
 // twice with the numeric bound satisfied by int; returns 9 + 9.
-print(twice(9));
+io.println(twice(9));

@@ -1,3 +1,4 @@
+import io;
 // Function declaration: 'add' takes two int parameters and returns an int.
 fn add(a: int, b: int): int {
     // return statement yields the sum of the two arguments.
@@ -11,4 +12,4 @@ fn twice(value: int): int {
 }
 
 // Nested calls: twice(5)=10, add(3,4)=7, add(10,7)=17 -> prints 17.
-print(add(twice(5), add(3, 4)));
+io.println(add(twice(5), add(3, 4)));

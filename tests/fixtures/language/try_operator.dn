@@ -1,3 +1,4 @@
+import io;
 // Import the standard-library 'outcome' module (provides the Outcome result type).
 import outcome;
 
@@ -32,11 +33,11 @@ fn sum_in_expression(a: int, b: int): outcome.Outcome<int, text> {
 // report prints the Outcome's status plus its value/failure accessors; returns unit.
 fn report(result: outcome.Outcome<int, text>): unit {
     // .is_done() -> true if the Outcome represents success.
-    print(result.is_done());
+    io.println(result.is_done());
     // .value_or(default) returns the value, or the default (-1) on failure.
-    print(result.value_or(0 - 1));
+    io.println(result.value_or(0 - 1));
     // .failure_or(default) returns the error text, or the default ("ok") on success.
-    print(result.failure_or("ok"));
+    io.println(result.failure_or("ok"));
 }
 
 // Both args positive: 3+4 succeeds -> done 7.

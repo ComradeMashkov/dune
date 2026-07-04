@@ -1,3 +1,4 @@
+import io;
 // Exercises Modules v2: an optional `module` declaration, an aliased import, and
 // selective / grouped `from ... import` for both a local module and the stdlib.
 module modules_v2;
@@ -16,14 +17,14 @@ a = Point { x: 1, y: 2 };
 // Construct via the alias-qualified record literal.
 b = sh.Point { x: 4, y: 6 };
 
-print(manhattan(a, b));          // selective fn: |1-4| + |2-6| = 7
-print(sh.manhattan(a, b));       // alias-qualified fn: 7
-print(quadrant_sum(b));          // selective fn: 4 + 6 = 10
-print(sh.ORIGIN_SUM);            // alias-qualified constant -> 0
+io.println(manhattan(a, b));          // selective fn: |1-4| + |2-6| = 7
+io.println(sh.manhattan(a, b));       // alias-qualified fn: 7
+io.println(quadrant_sum(b));          // selective fn: 4 + 6 = 10
+io.println(sh.ORIGIN_SUM);            // alias-qualified constant -> 0
 
 // Selective stdlib functions used unqualified.
 r = range(1, 5);                 // [1, 2, 3, 4]
-print(sum(r));                   // 1 + 2 + 3 + 4 = 10
+io.println(sum(r));                   // 1 + 2 + 3 + 4 = 10
 
 // Aliased stdlib constant.
-print(m.PI > 3);                 // true -> 1
+io.println(m.PI > 3);                 // true -> 1

@@ -1,3 +1,4 @@
+import io;
 // Record demonstrating static associated functions (constructors called on the type).
 record Optimizer {
     // Learning-rate field.
@@ -40,14 +41,14 @@ record Box<T> {
 // Call the static default() on the type to build an Optimizer.
 opt: Optimizer = Optimizer.default();
 // Read lr through the instance method rate().
-print(opt.rate());
+io.println(opt.rate());
 
 // Call the parameterized static with_lr() to build another Optimizer.
 tuned: Optimizer = Optimizer.with_lr(0.2);
 // Read the tuned lr.
-print(tuned.rate());
+io.println(tuned.rate());
 
 // Call the generic static wrap(), instantiating Box<int>.
 boxed: Box<int> = Box.wrap(42);
 // Retrieve the boxed value via get().
-print(boxed.get());
+io.println(boxed.get());

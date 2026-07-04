@@ -31,6 +31,10 @@ bool has_completion(const std::vector<dune::lsp::CompletionItem>& completions, c
     return false;
 }
 
+std::string with_test_print(const std::string& source) {
+    return source + "\nfn print<T>(__printed_value: T): unit { return; }";
+}
+
 bool diagnoses_valid_source() {
     const std::vector<dune::lsp::Diagnostic> diagnostics =
         dune::lsp::diagnose_source("fn add(a: int, b: int): int { return a + b; } "
@@ -94,7 +98,7 @@ bool completes_typed_record_methods() {
 
 bool hovers_local_symbols() {
     const std::optional<dune::lsp::Hover> hover =
-        dune::lsp::hover_source("total: int = 42;\nprint(total);", {}, {}, 1, 7);
+        dune::lsp::hover_source(with_test_print("total: int = 42;\nprint(total);"), {}, {}, 1, 7);
 
     bool passed = true;
     passed = expect(hover.has_value(), "expected hover") && passed;
@@ -106,7 +110,9 @@ bool hovers_local_symbols() {
 
 bool hovers_for_in_loop_variable() {
     const std::optional<dune::lsp::Hover> hover =
-        dune::lsp::hover_source("values: [int] = [1, 2, 3];\nfor value in values { print(value); }", {}, {}, 1, 30);
+        dune::lsp::hover_source(with_test_print("values: [int] = [1, 2, 3];\n"
+                                                "for value in values { print(value); }"),
+                                {}, {}, 1, 30);
 
     bool passed = true;
     passed = expect(hover.has_value(), "expected for-in loop variable hover") && passed;
@@ -120,7 +126,7 @@ bool hovers_for_in_loop_variable() {
 
 bool hovers_typed_record_methods() {
     const std::optional<dune::lsp::Hover> hover = dune::lsp::hover_source(
-        "import matrix;\nvalues = matrix.vector([1, 2, 3]);\nprint(values.mean());", {}, {}, 2, 14);
+        with_test_print("import matrix;\nvalues = matrix.vector([1, 2, 3]);\nprint(values.mean());"), {}, {}, 2, 14);
 
     bool passed = true;
     passed = expect(hover.has_value(), "expected receiver method hover") && passed;
@@ -134,7 +140,7 @@ bool hovers_typed_record_methods() {
 
 bool hovers_imported_module_members() {
     const std::optional<dune::lsp::Hover> hover =
-        dune::lsp::hover_source("import math;\nprint(math.square(5));", {}, {}, 1, 13);
+        dune::lsp::hover_source(with_test_print("import math;\nprint(math.square(5));"), {}, {}, 1, 13);
 
     bool passed = true;
     passed = expect(hover.has_value(), "expected module member hover") && passed;
@@ -148,8 +154,8 @@ bool hovers_imported_module_members() {
 
 bool hovers_inferred_call_assignments() {
     const std::optional<dune::lsp::Hover> hover =
-        dune::lsp::hover_source("import matrix;\nleft = matrix.vector([1, 2]);\n"
-                                "right = matrix.vector([1, 2, 3]);\nprint(left.dot(right));",
+        dune::lsp::hover_source(with_test_print("import matrix;\nleft = matrix.vector([1, 2]);\n"
+                                                "right = matrix.vector([1, 2, 3]);\nprint(left.dot(right));"),
                                 {}, {}, 3, 7);
 
     bool passed = true;
@@ -178,7 +184,7 @@ bool defines_function_from_call() {
 
 bool defines_local_variable() {
     const std::optional<dune::lsp::DefinitionLocation> definition =
-        dune::lsp::definition_source("total: int = 42;\nprint(total);", {}, {}, 1, 7);
+        dune::lsp::definition_source(with_test_print("total: int = 42;\nprint(total);"), {}, {}, 1, 7);
 
     bool passed = true;
     passed = expect(definition.has_value(), "expected definition for local variable") && passed;
@@ -217,7 +223,8 @@ bool defines_function_parameter() {
 
 bool defines_record_field() {
     const std::optional<dune::lsp::DefinitionLocation> definition = dune::lsp::definition_source(
-        "record Point { x: int, y: int }\np: Point = Point { x: 1, y: 2 };\nprint(p.x);", {}, {}, 2, 8);
+        with_test_print("record Point { x: int, y: int }\np: Point = Point { x: 1, y: 2 };\nprint(p.x);"), {}, {}, 2,
+        8);
 
     bool passed = true;
     passed = expect(definition.has_value(), "expected definition for record field") && passed;
@@ -249,7 +256,7 @@ bool resolves_no_definition_for_literal() {
 
 bool defines_module_from_import() {
     const std::optional<dune::lsp::DefinitionLocation> definition =
-        dune::lsp::definition_source("import math;\nprint(math.square(3));", {}, {}, 0, 8);
+        dune::lsp::definition_source(with_test_print("import math;\nprint(math.square(3));"), {}, {}, 0, 8);
 
     bool passed = true;
     passed = expect(definition.has_value(), "expected definition for module import") && passed;
@@ -262,7 +269,7 @@ bool defines_module_from_import() {
 
 bool defines_module_member() {
     const std::optional<dune::lsp::DefinitionLocation> definition =
-        dune::lsp::definition_source("import math;\nprint(math.square(3));", {}, {}, 1, 12);
+        dune::lsp::definition_source(with_test_print("import math;\nprint(math.square(3));"), {}, {}, 1, 12);
 
     bool passed = true;
     passed = expect(definition.has_value(), "expected definition for module member") && passed;
@@ -277,7 +284,8 @@ bool defines_module_member() {
 
 bool defines_receiver_method() {
     const std::optional<dune::lsp::DefinitionLocation> definition =
-        dune::lsp::definition_source("import matrix;\nv = matrix.vector([1, 2, 3]);\nprint(v.mean());", {}, {}, 2, 9);
+        dune::lsp::definition_source(with_test_print("import matrix;\nv = matrix.vector([1, 2, 3]);\nprint(v.mean());"),
+                                     {}, {}, 2, 9);
 
     bool passed = true;
     passed = expect(definition.has_value(), "expected definition for receiver method") && passed;
@@ -291,11 +299,11 @@ bool defines_receiver_method() {
 
 bool hovers_local_doc_comment_with_tags() {
     const std::optional<dune::lsp::Hover> hover =
-        dune::lsp::hover_source("// brief: Squares a value.\n"
-                                "// param value: the number to square\n"
-                                "// returns: value * value\n"
-                                "fn square(value: int): int { return value * value; }\n"
-                                "print(square(3));",
+        dune::lsp::hover_source(with_test_print("// brief: Squares a value.\n"
+                                                "// param value: the number to square\n"
+                                                "// returns: value * value\n"
+                                                "fn square(value: int): int { return value * value; }\n"
+                                                "print(square(3));"),
                                 {}, {}, 4, 9);
 
     bool passed = true;
@@ -316,10 +324,11 @@ bool hovers_local_doc_comment_with_tags() {
 }
 
 bool hovers_plain_comment_as_prose() {
-    const std::optional<dune::lsp::Hover> hover = dune::lsp::hover_source("// The running total of every input.\n"
-                                                                          "total: int = 0;\n"
-                                                                          "print(total);",
-                                                                          {}, {}, 2, 7);
+    const std::optional<dune::lsp::Hover> hover =
+        dune::lsp::hover_source(with_test_print("// The running total of every input.\n"
+                                                "total: int = 0;\n"
+                                                "print(total);"),
+                                {}, {}, 2, 7);
 
     bool passed = true;
     passed = expect(hover.has_value(), "expected hover with prose comment") && passed;
@@ -336,7 +345,7 @@ bool hovers_plain_comment_as_prose() {
 bool hovers_module_member_doc_comment() {
     // math.square carries a comment in stdlib/math.dn; hover should surface it.
     const std::optional<dune::lsp::Hover> hover =
-        dune::lsp::hover_source("import math;\nprint(math.square(5));", {}, {}, 1, 13);
+        dune::lsp::hover_source(with_test_print("import math;\nprint(math.square(5));"), {}, {}, 1, 13);
 
     bool passed = true;
     passed = expect(hover.has_value(), "expected module member hover") && passed;
@@ -351,14 +360,15 @@ bool hovers_module_member_doc_comment() {
 bool hovers_record_field_doc_comment() {
     // A comment above a record field shows when hovering `value.field`. The
     // field name is a single glyph, exercising the token-boundary resolution.
-    const std::optional<dune::lsp::Hover> hover = dune::lsp::hover_source("record Point {\n"
-                                                                          "    // The horizontal coordinate.\n"
-                                                                          "    x: int,\n"
-                                                                          "    y: int,\n"
-                                                                          "}\n"
-                                                                          "p: Point = Point { x: 1, y: 2 };\n"
-                                                                          "print(p.x);",
-                                                                          {}, {}, 6, 8);
+    const std::optional<dune::lsp::Hover> hover =
+        dune::lsp::hover_source(with_test_print("record Point {\n"
+                                                "    // The horizontal coordinate.\n"
+                                                "    x: int,\n"
+                                                "    y: int,\n"
+                                                "}\n"
+                                                "p: Point = Point { x: 1, y: 2 };\n"
+                                                "print(p.x);"),
+                                {}, {}, 6, 8);
 
     bool passed = true;
     passed = expect(hover.has_value(), "expected record field hover") && passed;
@@ -372,15 +382,16 @@ bool hovers_record_field_doc_comment() {
 }
 
 bool hovers_record_method_doc_comment() {
-    const std::optional<dune::lsp::Hover> hover = dune::lsp::hover_source("record Counter {\n"
-                                                                          "    value: int,\n"
-                                                                          "\n"
-                                                                          "    // Returns the current value.\n"
-                                                                          "    fn get(): int { return this.value; }\n"
-                                                                          "}\n"
-                                                                          "c: Counter = Counter { value: 5 };\n"
-                                                                          "print(c.get());",
-                                                                          {}, {}, 7, 9);
+    const std::optional<dune::lsp::Hover> hover =
+        dune::lsp::hover_source(with_test_print("record Counter {\n"
+                                                "    value: int,\n"
+                                                "\n"
+                                                "    // Returns the current value.\n"
+                                                "    fn get(): int { return this.value; }\n"
+                                                "}\n"
+                                                "c: Counter = Counter { value: 5 };\n"
+                                                "print(c.get());"),
+                                {}, {}, 7, 9);
 
     bool passed = true;
     passed = expect(hover.has_value(), "expected record method hover") && passed;
@@ -397,7 +408,8 @@ bool defines_module_from_from_import() {
     // Regression: `from array import ...` must register `array` as a module so
     // go-to-definition on the module name opens the module file.
     const std::optional<dune::lsp::DefinitionLocation> definition =
-        dune::lsp::definition_source("from array import range, sum;\nprint(range(1, 3));", {}, {}, 0, 6);
+        dune::lsp::definition_source(with_test_print("from array import range, sum;\nprint(range(1, 3));"), {}, {}, 0,
+                                     6);
 
     bool passed = true;
     passed = expect(definition.has_value(), "expected definition for from-import module name") && passed;
@@ -440,7 +452,7 @@ bool hovers_selective_import_symbol() {
 bool defines_aliased_module_name() {
     // `import math as m;` — go-to-definition on the alias opens the module file.
     const std::optional<dune::lsp::DefinitionLocation> definition =
-        dune::lsp::definition_source("import math as m;\nprint(m.square(3));", {}, {}, 0, 15);
+        dune::lsp::definition_source(with_test_print("import math as m;\nprint(m.square(3));"), {}, {}, 0, 15);
 
     bool passed = true;
     passed = expect(definition.has_value(), "expected definition for module alias") && passed;
@@ -452,7 +464,7 @@ bool defines_aliased_module_name() {
 
 bool hovers_aliased_module_member() {
     const std::optional<dune::lsp::Hover> hover =
-        dune::lsp::hover_source("import math as m;\nprint(m.square(3));", {}, {}, 1, 9);
+        dune::lsp::hover_source(with_test_print("import math as m;\nprint(m.square(3));"), {}, {}, 1, 9);
 
     bool passed = true;
     passed = expect(hover.has_value(), "expected hover for aliased module member") && passed;
@@ -466,7 +478,8 @@ bool hovers_aliased_module_member() {
 
 bool serves_lsp_definition() {
     const std::string uri = "file:///tmp/main.dn";
-    const std::string source = "fn value(): int { return 7; }\\nprint(value());";
+    const std::string source = "fn value(): int { return 7; }\\nprint(value());\\n"
+                               "fn print<T>(value: T): unit { return; }";
     const std::string initialize = R"({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}})";
     const std::string opened = R"({"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":")" +
                                uri + R"(","languageId":"dune","version":1,"text":")" + source + R"("}}})";
@@ -519,7 +532,8 @@ bool publishes_lsp_diagnostics() {
 
 bool serves_lsp_completions_and_hover() {
     const std::string uri = "file:///tmp/main.dn";
-    const std::string source = "import math;\\ntotal: int = 42;\\nprint(math.);\\nprint(total);";
+    const std::string source = "import math;\\ntotal: int = 42;\\nprint(math.);\\nprint(total);\\n"
+                               "fn print<T>(value: T): unit { return; }";
     const std::string initialize = R"({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}})";
     const std::string opened = R"({"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":")" +
                                uri + R"(","languageId":"dune","version":1,"text":")" + source + R"("}}})";

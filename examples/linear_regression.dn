@@ -1,3 +1,4 @@
+import io;
 // Bring in the standard-library matrix module, which provides Vector and
 // Matrix types along with numeric helpers (mean, dot, norm, etc.).
 import matrix;
@@ -32,13 +33,13 @@ intercept = y_mean - slope * x_mean;
 prediction = slope * 6.0 + intercept;
 
 // Label the block of output that follows.
-print("linear regression");
+io.println("linear regression");
 // Print the fitted slope (should be 2, matching the data's true slope).
-print(slope);
+io.println(slope);
 // Print the fitted intercept (should be 1, matching the data's true intercept).
-print(intercept);
+io.println(intercept);
 // Print the extrapolated value at x = 6.0 (should be 2 * 6 + 1 = 13).
-print(prediction);
+io.println(prediction);
 
 // Residuals are the differences between the observed ys and the model's
 // predictions. Here we build the prediction vector by scaling every x by the
@@ -46,4 +47,4 @@ print(prediction);
 residuals = ys.sub(xs.mul(slope).add(intercept));
 // Print the sum of squared residuals. Because this data lies exactly on the
 // line, every residual is zero and the total is 0.
-print(residuals.norm_squared());
+io.println(residuals.norm_squared());

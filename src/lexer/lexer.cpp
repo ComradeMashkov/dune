@@ -449,10 +449,6 @@ Token Lexer::identifier(std::size_t start, std::size_t line, std::size_t column)
         return Token{TokenType::return_keyword, lexeme, line, column};
     }
 
-    if (lexeme == "print") {
-        return Token{TokenType::print, lexeme, line, column};
-    }
-
     if (lexeme == "if") {
         return Token{TokenType::if_keyword, lexeme, line, column};
     }

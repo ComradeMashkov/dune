@@ -1,6 +1,6 @@
 // The Display contract marks a type that can render itself as text.
 //
-// `print(value)` and `format("{}", value)` already accept any record that
+// `io.print(value)` and `fmt.format("{}", value)` already accept any record that
 // provides a `to_text(): text` method, so declaring `with display.Display` is
 // optional. It documents the intent and lets generic functions require the
 // capability through a `T is Display` bound.

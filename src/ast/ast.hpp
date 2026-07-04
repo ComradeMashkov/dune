@@ -108,7 +108,6 @@ enum class StatementKind {
     binding,
     const_statement,
     assign,
-    print,
     block,
     if_statement,
     while_statement,

@@ -1,3 +1,4 @@
+import io;
 // Exercises first-class function values and the higher-order array pipeline:
 // map / filter / fold / reduce / any / all / count_where, chained fluently.
 import array;
@@ -21,26 +22,26 @@ result = values
     .filter(is_positive)
     .map(square)
     .sum();
-print(result);                         // 2^2 + 4^2 + 5^2 = 45
+io.println(result);                         // 2^2 + 4^2 + 5^2 = 45
 
 // map to a different element type (int -> bool) then count the trues.
-print([1, 2, 3, 4].map(is_even).count_value(true));  // 2 and 4 -> 2
+io.println([1, 2, 3, 4].map(is_even).count_value(true));  // 2 and 4 -> 2
 
 // filter then count the survivors.
-print(values.filter(is_positive).len());             // 2, 4, 5 -> 3
+io.println(values.filter(is_positive).len());             // 2, 4, 5 -> 3
 
 // fold with an explicit seed and reduce seeded by the first element.
-print(values.fold(0, add));            // -3+2-1+4+5 -> 7
-print(values.reduce(max_of));          // running max -> 5
-print([10, 20, 30].reduce(add));       // 60
+io.println(values.fold(0, add));            // -3+2-1+4+5 -> 7
+io.println(values.reduce(max_of));          // running max -> 5
+io.println([10, 20, 30].reduce(add));       // 60
 
 // predicate any / all / count_where.
-print(values.any(is_positive));        // true -> 1
-print(values.all(is_positive));        // false -> 0
-print(values.count_where(is_even));    // 2 and 4 -> 2
+io.println(values.any(is_positive));        // true -> 1
+io.println(values.all(is_positive));        // false -> 0
+io.println(values.count_where(is_even));    // 2 and 4 -> 2
 
 // A chain that mixes higher-order and structural array methods.
-print(array.range(1, 6)
+io.println(array.range(1, 6)
     .map(square)
     .filter(is_even)
     .sum());                           // 1,4,9,16,25 -> evens 4,16 -> 20

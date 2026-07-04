@@ -1,3 +1,4 @@
+import io;
 // 'choice' declares a sum type (tagged union) named Maybe with two variants.
 choice Maybe {
     // Variant carrying a single int payload.
@@ -25,15 +26,15 @@ value: Maybe = Present(30);
 missing: Maybe = Absent;
 
 // fallback(value, 0) matches Present(30) -> prints 30.
-print(fallback(value, 0));
+io.println(fallback(value, 0));
 // fallback(missing, 7) matches Absent -> prints the default 7.
-print(fallback(missing, 7));
+io.println(fallback(missing, 7));
 // Inline 'when' expression used directly as print's argument.
-print(when value {
+io.println(when value {
     // Present arm adds 1 to the payload -> 30 + 1 = 31.
     is Present(x) { x + 1 }
     // Absent arm would evaluate to 0.
     is Absent { 0 }
 });
 // Prints the top-level x (99); the arm-bound x did not leak into this scope.
-print(x);
+io.println(x);

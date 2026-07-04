@@ -1,7 +1,8 @@
+import io;
 // Function returning unit (no value): prints then explicitly returns.
 fn say(message: text): unit {
     // Print the text argument.
-    print(message);
+    io.println(message);
     // Bare return from a unit function.
     return;
 }
@@ -41,26 +42,26 @@ say("types");
 // Call the empty unit function.
 noop();
 // Print the i8 value.
-print(tiny);
+io.println(tiny);
 // Print the i16 value.
-print(small);
+io.println(small);
 // Print the i32 value.
-print(mid);
+io.println(mid);
 // Print the i64 value.
-print(wide);
+io.println(wide);
 // Print the usize value.
-print(count);
+io.println(count);
 // Print the isize value.
-print(offset);
+io.println(offset);
 // Print the real32 sum.
-print(sample_sum);
+io.println(sample_sum);
 // Print the real64 value.
-print(precise);
+io.println(precise);
 // Branch on text equality using ==.
 if status == "same" {
     // Taken branch: status equals "same".
-    print(status);
+    io.println(status);
 } else {
     // Untaken branch for the non-matching case.
-    print("bad");
+    io.println("bad");
 }

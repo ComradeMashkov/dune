@@ -498,13 +498,6 @@ bool LlvmIrGenerator::emit_statement(const Statement& statement, std::ostream& o
         output << "  store " << llvm_type(value.type) << ' ' << value.name << ", ptr " << local->second.pointer << '\n';
         return false;
     }
-    case StatementKind::print:
-        if (statement.arguments.empty()) {
-            emit_print(emit_expression(*statement.expression, output), output);
-        } else {
-            emit_format_print(statement, output);
-        }
-        return false;
     case StatementKind::block:
         push_scope();
         {
@@ -838,13 +831,12 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_expression(const Expression& e
     case ExpressionKind::when_expression:
         return emit_when_expression(expression, output);
     case ExpressionKind::call:
-        if (expression.lexeme == "format") {
-            return emit_format_expression(expression, output);
-        }
         if (expression.lexeme == "__read_file" || expression.lexeme == "__write_file" ||
             expression.lexeme == "__env_get" || expression.lexeme == "__process_args" ||
-            expression.lexeme == "__process_cwd") {
-            throw std::runtime_error("fs/process I/O is not supported in the native backend yet");
+            expression.lexeme == "__process_cwd" || expression.lexeme == "__stdout_write" ||
+            expression.lexeme == "__stderr_write" || expression.lexeme == "__stdout_flush" ||
+            expression.lexeme == "__stderr_flush" || expression.lexeme == "__stdin_read_line") {
+            throw std::runtime_error("stdlib I/O is not supported in the native backend yet");
         }
         return emit_call_expression(expression, output);
     case ExpressionKind::method_call:
@@ -1340,6 +1332,11 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_format_expression(const Expres
 
 LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_method_call_expression(const Expression& expression,
                                                                          std::ostream& output) {
+    if (expression.left != nullptr && expression.left->kind == ExpressionKind::identifier &&
+        expression.left->lexeme == "fmt" && expression.lexeme == "format") {
+        return emit_format_expression(expression, output);
+    }
+
     const auto resolved = resolved_calls_.find(&expression);
     const auto function = resolved == resolved_calls_.end() ? functions_.end() : functions_.find(resolved->second);
     if (function != functions_.end()) {

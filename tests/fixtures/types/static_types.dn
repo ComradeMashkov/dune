@@ -1,3 +1,4 @@
+import io;
 // Function over int returning bool via the == comparison operator.
 fn is_equal(left: int, right: int): bool {
     return left == right;
@@ -11,4 +12,4 @@ y: int = 20;
 done: bool = is_equal(x + y, 30);
 
 // Print the bool result (expected true).
-print(done);
+io.println(done);

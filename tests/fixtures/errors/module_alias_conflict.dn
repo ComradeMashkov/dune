@@ -1,5 +1,6 @@
+import io;
 // Binding the same alias to two different modules is a conflict.
 import math as m;
 import array as m;
 
-print(m.PI);
+io.println(m.PI);

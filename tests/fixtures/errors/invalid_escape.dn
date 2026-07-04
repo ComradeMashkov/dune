@@ -1,3 +1,4 @@
+import io;
 // ERROR FIXTURE: this file is expected to FAIL at lex/parse time.
 // Bind `bad` (annotated as text) to a text literal that contains the escape
 // sequence \x. Dune's text literals only allow a fixed set of escape codes
@@ -6,4 +7,4 @@
 bad: text = "\x";
 // Never reached: the file fails while scanning the string literal above, so
 // this print of `bad` never executes.
-print(bad);
+io.println(bad);

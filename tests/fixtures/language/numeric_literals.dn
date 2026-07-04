@@ -1,3 +1,4 @@
+import io;
 // Underscores act as digit separators in a decimal int literal (value 1000000).
 size: int = 1_000_000;
 // Hexadecimal literal with explicit u64 suffix: 0xff = 255.
@@ -10,12 +11,12 @@ wide: i64 = 123i64;
 index: usize = 10usize;
 
 // Prints 1000000.
-print(size);
+io.println(size);
 // Prints 255.
-print(mask);
+io.println(mask);
 // Prints 165.
-print(bits);
+io.println(bits);
 // Prints 123.
-print(wide);
+io.println(wide);
 // Prints 10.
-print(index);
+io.println(index);

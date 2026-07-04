@@ -1,3 +1,4 @@
+import io;
 // Import the sibling module that exports the Shape contract and Counter/Circle records.
 import object_model_api;
 
@@ -15,14 +16,14 @@ counter.inc();
 // Second mutation; state persists on the record instance.
 counter.inc();
 // Read back the internal value through the exported accessor current().
-print(counter.current());
+io.println(counter.current());
 
 // Construct a Circle (which satisfies the Shape contract) passing radius 2.0 to new().
 circle: object_model_api.Circle = object_model_api.Circle.new(2.0);
 // Call the record method area() directly on the circle instance.
-print(circle.area());
+io.println(circle.area());
 // Pass the circle to the contract-bounded generic; Circle satisfies Shape so this type-checks.
-print(area_of(circle));
+io.println(area_of(circle));
 
 // Generic record: Box parameterized by T, defining a single field plus associated functions.
 record Box<T> {
@@ -45,4 +46,4 @@ record Box<T> {
 // Instantiate Box<int> via the associated function new; T is fixed to int here.
 boxed: Box<int> = Box.new(42);
 // Call the instance method get() to retrieve the boxed int.
-print(boxed.get());
+io.println(boxed.get());

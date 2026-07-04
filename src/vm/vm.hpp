@@ -14,10 +14,11 @@ public:
     VirtualMachine(Bytecode bytecode, std::vector<std::string> program_arguments);
 
     void run(std::ostream& output);
+    void run(std::ostream& output, std::ostream& error, std::istream& input);
     void run_test(std::size_t function_index, std::ostream& output);
 
 private:
-    void execute(std::ostream& output);
+    void execute(std::ostream& output, std::ostream& error, std::istream& input);
 
     struct CallFrame {
         const std::vector<Instruction>* instructions = nullptr;
