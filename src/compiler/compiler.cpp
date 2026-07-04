@@ -225,6 +225,7 @@ Bytecode Compiler::compile(const Program& program) {
     loop_stack_.clear();
     temporary_count_ = 0;
     expression_types_ = type_checker.expression_types();
+    iterable_element_types_ = type_checker.iterable_element_types();
     resolved_calls_ = type_checker.resolved_calls();
     resolved_variants_ = type_checker.resolved_variants();
     resolved_tries_ = type_checker.resolved_tries();
@@ -578,11 +579,12 @@ void Compiler::compile_statement(const Statement& statement) {
 
 void Compiler::compile_for_in_statement(const Statement& statement) {
     push_scope();
-    const Type iterable_type = expression_type(*statement.expression);
+    const Type iterable_type = normalize_type(expression_type(*statement.expression));
+    const Type element_type = iterable_element_type(*statement.expression);
     if (statement.expression->kind == ExpressionKind::range) {
-        compile_range_for_in_statement(statement, iterable_type);
+        compile_range_for_in_statement(statement, element_type);
     } else {
-        compile_array_for_in_statement(statement, iterable_type);
+        compile_array_for_in_statement(statement, iterable_type, element_type);
     }
     pop_scope();
 }
@@ -629,14 +631,12 @@ void Compiler::compile_range_for_in_statement(const Statement& statement, const 
     }
 }
 
-void Compiler::compile_array_for_in_statement(const Statement& statement, const Type& iterable_type) {
-    if (iterable_type.kind != ValueType::array_type || iterable_type.element == nullptr) {
-        throw std::runtime_error("for-in used with non-array type");
-    }
-
-    compile_expression(*statement.expression);
+void Compiler::compile_array_for_in_statement(const Statement& statement, const Type& iterable_type,
+                                              const Type& element_type) {
+    compile_iterable_storage(*statement.expression, iterable_type);
+    const Type storage_type = iterable_storage_type(iterable_type, element_type);
     const std::size_t iterable_slot =
-        declare_scoped_local("__for_iterable_" + std::to_string(temporary_count_++), iterable_type);
+        declare_scoped_local("__for_iterable_" + std::to_string(temporary_count_++), storage_type);
     emit(OpCode::store_local, iterable_slot);
 
     const Type index_type = make_type(ValueType::int_type);
@@ -645,7 +645,7 @@ void Compiler::compile_array_for_in_statement(const Statement& statement, const 
         declare_scoped_local("__for_index_" + std::to_string(temporary_count_++), index_type);
     emit(OpCode::store_local, index_slot);
 
-    const std::size_t item_slot = declare_scoped_local(statement.name, *iterable_type.element);
+    const std::size_t item_slot = declare_scoped_local(statement.name, element_type);
     const std::size_t loop_start = instructions_->size();
     emit(OpCode::load_local, index_slot);
     emit(OpCode::load_local, iterable_slot);
@@ -679,6 +679,63 @@ void Compiler::compile_array_for_in_statement(const Statement& statement, const 
     }
 }
 
+void Compiler::compile_iterable_storage(const Expression& expression, const Type& iterable_type) {
+    if (iterable_type.kind == ValueType::array_type && iterable_type.element != nullptr) {
+        compile_expression(expression);
+        return;
+    }
+
+    std::string field_name;
+    if (!known_iterable_record_field(iterable_type, field_name)) {
+        throw std::runtime_error("for-in used with non-array type");
+    }
+
+    const auto layout = structs_.find(iterable_type.name);
+    if (layout == structs_.end()) {
+        throw std::runtime_error("unknown record '" + iterable_type.name + "'");
+    }
+
+    const auto field = layout->second.field_indices.find(field_name);
+    if (field == layout->second.field_indices.end()) {
+        throw std::runtime_error("iterable record '" + iterable_type.name + "' is missing backing field '" +
+                                 field_name + "'");
+    }
+
+    compile_expression(expression);
+    emit(OpCode::load_field, field->second);
+}
+
+Type Compiler::iterable_storage_type(const Type& iterable_type, const Type& element_type) const {
+    if (iterable_type.kind == ValueType::array_type && iterable_type.element != nullptr) {
+        return iterable_type;
+    }
+
+    std::string field_name;
+    if (known_iterable_record_field(iterable_type, field_name)) {
+        return make_array_type(element_type);
+    }
+
+    throw std::runtime_error("for-in used with non-array type");
+}
+
+bool Compiler::known_iterable_record_field(const Type& iterable_type, std::string& field_name) const {
+    if (iterable_type.kind != ValueType::struct_type) {
+        return false;
+    }
+
+    if (iterable_type.name == "set.Set") {
+        field_name = "items";
+        return true;
+    }
+
+    if (iterable_type.name == "matrix.Vector" && iterable_type.arguments.size() == 1) {
+        field_name = "data";
+        return true;
+    }
+
+    return false;
+}
+
 void Compiler::compile_comprehension_body(const Expression& comprehension, std::size_t result_slot,
                                           const Expression* condition) {
     std::size_t skip_jump = 0;
@@ -701,7 +758,8 @@ void Compiler::compile_comprehension_body(const Expression& comprehension, std::
 void Compiler::compile_array_comprehension(const Expression& expression) {
     const Type result_type = expression_type(expression);
     const Expression& iterable = *expression.right;
-    const Type iterable_type = expression_type(iterable);
+    const Type iterable_type = normalize_type(expression_type(iterable));
+    const Type element_type = iterable_element_type(iterable);
     const Expression* condition = expression.arguments.empty() ? nullptr : expression.arguments.front().get();
 
     push_scope();
@@ -712,7 +770,6 @@ void Compiler::compile_array_comprehension(const Expression& expression) {
     emit(OpCode::store_local, result_slot);
 
     if (iterable.kind == ExpressionKind::range) {
-        const Type& element_type = iterable_type;
         compile_expression(*iterable.left);
         const std::size_t current_slot =
             declare_scoped_local("__comp_current_" + std::to_string(temporary_count_++), element_type);
@@ -742,13 +799,10 @@ void Compiler::compile_array_comprehension(const Expression& expression) {
         emit(OpCode::jump, loop_start);
         patch_operand(loop_exit, instructions_->size());
     } else {
-        if (iterable_type.kind != ValueType::array_type || iterable_type.element == nullptr) {
-            throw std::runtime_error("array comprehension used with non-array type");
-        }
-
-        compile_expression(iterable);
+        compile_iterable_storage(iterable, iterable_type);
+        const Type storage_type = iterable_storage_type(iterable_type, element_type);
         const std::size_t iterable_slot =
-            declare_scoped_local("__comp_iterable_" + std::to_string(temporary_count_++), iterable_type);
+            declare_scoped_local("__comp_iterable_" + std::to_string(temporary_count_++), storage_type);
         emit(OpCode::store_local, iterable_slot);
 
         const Type index_type = make_type(ValueType::int_type);
@@ -757,7 +811,7 @@ void Compiler::compile_array_comprehension(const Expression& expression) {
             declare_scoped_local("__comp_index_" + std::to_string(temporary_count_++), index_type);
         emit(OpCode::store_local, index_slot);
 
-        const std::size_t item_slot = declare_scoped_local(expression.lexeme, *iterable_type.element);
+        const std::size_t item_slot = declare_scoped_local(expression.lexeme, element_type);
         const std::size_t loop_start = instructions_->size();
         emit(OpCode::load_local, index_slot);
         emit(OpCode::load_local, iterable_slot);
@@ -1615,6 +1669,15 @@ const Type& Compiler::expression_type(const Expression& expression) const {
     const auto existing = expression_types_.find(&expression);
     if (existing == expression_types_.end()) {
         throw std::runtime_error("missing inferred expression type");
+    }
+
+    return existing->second;
+}
+
+const Type& Compiler::iterable_element_type(const Expression& expression) const {
+    const auto existing = iterable_element_types_.find(&expression);
+    if (existing == iterable_element_types_.end()) {
+        throw std::runtime_error("missing inferred iterable element type");
     }
 
     return existing->second;

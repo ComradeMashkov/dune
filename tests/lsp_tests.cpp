@@ -124,6 +124,21 @@ bool hovers_for_in_loop_variable() {
     return passed;
 }
 
+bool hovers_known_record_for_in_loop_variable() {
+    const std::optional<dune::lsp::Hover> hover = dune::lsp::hover_source(
+        with_test_print("import set;\nseen: set.Set = set.Set.new(); seen.add(\"a\");\nfor value in seen { print(value); }"),
+        {}, {}, 2, 28);
+
+    bool passed = true;
+    passed = expect(hover.has_value(), "expected record-backed for-in loop variable hover") && passed;
+    if (hover.has_value()) {
+        passed = expect(hover->contents.find("value: text") != std::string::npos,
+                        "expected record-backed for-in variable hover type") &&
+                 passed;
+    }
+    return passed;
+}
+
 bool hovers_typed_record_methods() {
     const std::optional<dune::lsp::Hover> hover = dune::lsp::hover_source(
         with_test_print("import matrix;\nvalues = matrix.vector([1, 2, 3]);\nprint(values.mean());"), {}, {}, 2, 14);
@@ -572,6 +587,7 @@ int main() {
     passed = completes_typed_record_methods() && passed;
     passed = hovers_local_symbols() && passed;
     passed = hovers_for_in_loop_variable() && passed;
+    passed = hovers_known_record_for_in_loop_variable() && passed;
     passed = hovers_typed_record_methods() && passed;
     passed = hovers_imported_module_members() && passed;
     passed = hovers_inferred_call_assignments() && passed;

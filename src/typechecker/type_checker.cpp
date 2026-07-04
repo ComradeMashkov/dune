@@ -522,6 +522,7 @@ void TypeChecker::check(const Program& program) {
     module_exports_.clear();
     known_modules_.clear();
     expression_types_.clear();
+    iterable_element_types_.clear();
     resolved_calls_.clear();
     resolved_variants_.clear();
     instantiated_function_keys_.clear();
@@ -669,6 +670,10 @@ void TypeChecker::check(const Program& program) {
 
 const std::unordered_map<const Expression*, Type>& TypeChecker::expression_types() const {
     return expression_types_;
+}
+
+const std::unordered_map<const Expression*, Type>& TypeChecker::iterable_element_types() const {
+    return iterable_element_types_;
 }
 
 const std::unordered_map<const Expression*, std::string>& TypeChecker::resolved_calls() const {
@@ -1274,7 +1279,7 @@ void TypeChecker::check_statement(const Statement& statement) {
 }
 
 void TypeChecker::check_for_in_statement(const Statement& statement) {
-    const Type element_type = check_for_in_iterable(*statement.expression);
+    const Type element_type = check_iterable_expression(*statement.expression);
 
     push_scope();
     declare_binding(statement.name, element_type, true, statement.location);
@@ -1338,7 +1343,7 @@ void TypeChecker::check_tuple_destructuring_assignment(const Expression& target,
     }
 }
 
-Type TypeChecker::check_for_in_iterable(const Expression& expression) {
+Type TypeChecker::check_iterable_expression(const Expression& expression) {
     if (expression.kind == ExpressionKind::range) {
         if (expression.left == nullptr || expression.right == nullptr) {
             throw DiagnosticError(expression.location, "invalid range expression");
@@ -1358,15 +1363,41 @@ Type TypeChecker::check_for_in_iterable(const Expression& expression) {
 
         expect_type(start, end, expression.right->location);
         expression_types_[&expression] = start;
+        iterable_element_types_[&expression] = start;
         return start;
     }
 
     const Type iterable = check_expression(expression);
     if (iterable.kind == ValueType::array_type && iterable.element != nullptr) {
+        iterable_element_types_[&expression] = *iterable.element;
         return *iterable.element;
     }
 
+    Type element;
+    if (known_iterable_record_element_type(iterable, element)) {
+        iterable_element_types_[&expression] = element;
+        return element;
+    }
+
     throw DiagnosticError(expression.location, "type '" + type_name(iterable) + "' is not iterable");
+}
+
+bool TypeChecker::known_iterable_record_element_type(const Type& iterable, Type& element) const {
+    if (iterable.kind != ValueType::struct_type) {
+        return false;
+    }
+
+    if (iterable.name == "set.Set") {
+        element = make_type(ValueType::text_type);
+        return true;
+    }
+
+    if (iterable.name == "matrix.Vector" && iterable.arguments.size() == 1) {
+        element = iterable.arguments.front();
+        return true;
+    }
+
+    return false;
 }
 
 Type TypeChecker::check_assignment_target(const Expression& target, SourceLocation location) {
@@ -3330,7 +3361,7 @@ Type TypeChecker::check_array_literal(const Expression& expression, const TypeAn
 }
 
 Type TypeChecker::check_array_comprehension(const Expression& expression, const TypeAnnotation& expected) {
-    const Type element_type = check_for_in_iterable(*expression.right);
+    const Type element_type = check_iterable_expression(*expression.right);
 
     push_scope();
     declare_binding(expression.lexeme, element_type, true, expression.location);

@@ -648,6 +648,16 @@ add_test(
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
 )
 
+add_test(
+    NAME cli_iteration_protocol
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/stdlib/iteration_protocol.dn
+        -D EXPECTED_OUTPUT="3\n6\n2\n4\n6\n2"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
 # First-class function values / higher-order array pipeline on the VM.
 add_test(
     NAME cli_method_chaining
