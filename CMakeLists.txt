@@ -142,8 +142,16 @@ target_link_libraries(dune_lsp
         dune_typechecker
 )
 
+if(APPLE)
+    enable_language(OBJCXX)
+    set(DUNE_NATIVE_PLOT_DISPLAY_SOURCE src/vm/native_plot_display_macos.mm)
+else()
+    set(DUNE_NATIVE_PLOT_DISPLAY_SOURCE src/vm/native_plot_display.cpp)
+endif()
+
 add_library(dune_vm
     src/vm/vm.cpp
+    ${DUNE_NATIVE_PLOT_DISPLAY_SOURCE}
 )
 dune_add_lint_dependencies(dune_vm)
 
@@ -151,6 +159,14 @@ target_link_libraries(dune_vm
     PUBLIC
         dune_compiler
 )
+
+if(APPLE)
+    target_link_libraries(dune_vm
+        PUBLIC
+            "-framework Cocoa"
+            "-framework WebKit"
+    )
+endif()
 
 add_library(dune_doc
     src/doc/doc_generator.cpp

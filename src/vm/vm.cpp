@@ -1,5 +1,7 @@
 #include "vm.hpp"
 
+#include "native_plot_display.hpp"
+
 #include <cmath>
 #include <cstddef>
 #include <cstdlib>
@@ -1226,6 +1228,20 @@ void VirtualMachine::run(std::ostream& output) {
 
             plot_backend_ = name.text_value;
             stack_.push_back(make_unit());
+            ++frame.ip;
+            break;
+        }
+        case OpCode::plot_show_native: {
+            const Value svg = pop();
+            if (svg.kind != ValueKind::text) {
+                throw std::runtime_error("plot_show_native expects SVG text");
+            }
+
+            const NativePlotDisplayResult display = show_native_plot_svg(svg.text_value);
+            std::vector<Value> result(2);
+            result[0] = make_bool(display.ok);
+            result[1] = make_text(display.message);
+            stack_.push_back(make_tuple(std::move(result)));
             ++frame.ip;
             break;
         }

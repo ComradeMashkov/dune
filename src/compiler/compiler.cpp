@@ -957,6 +957,8 @@ bool Compiler::compile_io_builtin_expression(const Expression& expression) {
         op = OpCode::plot_backend_get;
     } else if (expression.lexeme == "__plot_backend_set") {
         op = OpCode::plot_backend_set;
+    } else if (expression.lexeme == "__plot_show_native") {
+        op = OpCode::plot_show_native;
     } else {
         return false;
     }

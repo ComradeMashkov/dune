@@ -4,8 +4,8 @@ Deterministic SVG/HTML chart rendering.
 
 `plot` builds deterministic chart specs in pure Dune and renders them to SVG or
 HTML. The first backend set covers line, scatter, bar, and histogram charts,
-file output through `fs.write_text`, and headless-safe `show()` behavior via
-`Outcome<text, text>`.
+file output through `fs.write_text`, headless-safe capture backends, and a
+platform-native display backend for `show()` where the VM supports it.
 
 > Auto-generated from `stdlib/plot.dn` by `tools/gen_stdlib_docs.py`.
 
@@ -45,7 +45,11 @@ file output through `fs.write_text`, and headless-safe `show()` behavior via
 
 ### `fn use_backend(name: text): unit`
 
-Select the display backend for `show`. Supported MVP backends are: - "none": return a clear unsupported/headless error; - "svg": return the deterministic SVG text; - "html": return a deterministic HTML wrapper containing the SVG.
+Select the display backend for `show`. Supported MVP backends are:
+- "none": return a clear unsupported/headless error;
+- "svg": return the deterministic SVG text;
+- "html": return a deterministic HTML wrapper containing the SVG.
+- "native": open a platform-native plot window when the VM supports it.
 
 ### `fn backend(): text`
 
@@ -58,5 +62,7 @@ Select the display backend for `show`. Supported MVP backends are: - "none": ret
 ### `fn save_svg(chart: Chart, path: text): outcome.Outcome<text, text>`
 
 ### `fn save_html(chart: Chart, path: text): outcome.Outcome<text, text>`
+
+### `fn show_native(chart: Chart): outcome.Outcome<text, text>`
 
 ### `fn show(chart: Chart): outcome.Outcome<text, text>`

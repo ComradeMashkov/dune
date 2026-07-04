@@ -673,6 +673,7 @@ bool compiles_plot_module_as_dune_code() {
     bool saw_field_load = false;
     bool saw_backend_get = false;
     bool saw_backend_set = false;
+    bool saw_show_native = false;
     bool saw_plot_extern = false;
 
     auto inspect = [&](const std::vector<dune::Instruction>& instructions) {
@@ -681,6 +682,7 @@ bool compiles_plot_module_as_dune_code() {
             saw_field_load = saw_field_load || instruction.op == dune::OpCode::load_field;
             saw_backend_get = saw_backend_get || instruction.op == dune::OpCode::plot_backend_get;
             saw_backend_set = saw_backend_set || instruction.op == dune::OpCode::plot_backend_set;
+            saw_show_native = saw_show_native || instruction.op == dune::OpCode::plot_show_native;
         }
     };
 
@@ -703,6 +705,7 @@ bool compiles_plot_module_as_dune_code() {
     passed = expect(saw_field_load, "expected plot field access") && passed;
     passed = expect(saw_backend_get, "expected plot backend getter opcode") && passed;
     passed = expect(saw_backend_set, "expected plot backend setter opcode") && passed;
+    passed = expect(saw_show_native, "expected plot native display opcode") && passed;
     return passed;
 }
 

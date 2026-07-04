@@ -1890,13 +1890,15 @@ Type TypeChecker::check_format_call_expression(const Expression& expression) {
 // dedicated VM opcodes instead of C/C++ foreign functions.
 bool TypeChecker::is_io_builtin(const std::string& name) {
     return name == "__read_file" || name == "__write_file" || name == "__env_get" || name == "__process_args" ||
-           name == "__process_cwd" || name == "__plot_backend_get" || name == "__plot_backend_set";
+           name == "__process_cwd" || name == "__plot_backend_get" || name == "__plot_backend_set" ||
+           name == "__plot_show_native";
 }
 
 Type TypeChecker::check_io_builtin_call(const Expression& expression) {
     const std::string& name = expression.lexeme;
     std::size_t expected_arguments = 0;
-    if (name == "__read_file" || name == "__env_get" || name == "__plot_backend_set") {
+    if (name == "__read_file" || name == "__env_get" || name == "__plot_backend_set" ||
+        name == "__plot_show_native") {
         expected_arguments = 1;
     } else if (name == "__write_file") {
         expected_arguments = 2;

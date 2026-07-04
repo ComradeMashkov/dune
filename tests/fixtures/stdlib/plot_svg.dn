@@ -27,4 +27,5 @@ print(plot.show(chart).value_or("").contains("<polyline"));
 plot.use_backend("html");
 print(plot.show(chart).value_or("").contains("<!doctype html>"));
 print(plot.available_backends().len());
+print(plot.available_backends()[3] == "native");
 print(plot.svg(plot.histogram([0.0, 1.0, 2.0, 3.0], 2)).contains("series bar"));
