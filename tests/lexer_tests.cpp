@@ -92,6 +92,16 @@ int main() {
                            }) &&
              passed;
 
+    passed = expect_tokens("test \"adds\" { }",
+                           {
+                               {test_keyword, "test"},
+                               {string_literal, "\"adds\""},
+                               {left_brace, "{"},
+                               {right_brace, "}"},
+                               {eof, ""},
+                           }) &&
+             passed;
+
     passed = expect_tokens("foo - 7 * bar / 3",
                            {
                                {identifier, "foo"},

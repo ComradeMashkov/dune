@@ -889,5 +889,16 @@ int main() {
                                            "expected private-member access diagnostic") &&
              passed;
 
+    // A top-level test block sees globals and functions; its body is a normal block.
+    passed = expect_valid("const LIMIT: int = 3; fn twice(x: int): int { return x + x; } "
+                          "test \"uses globals\" { total: int = twice(LIMIT); print(total); }",
+                          "expected a top-level test block to type-check") &&
+             passed;
+    // Test blocks are only allowed at the top level.
+    passed = expect_error_contains("fn f(): unit { test \"nested\" { } }",
+                                   "test blocks are only allowed at top level",
+                                   "expected a nested test block to be rejected") &&
+             passed;
+
     return passed ? 0 : 1;
 }

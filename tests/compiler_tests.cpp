@@ -733,6 +733,31 @@ bool rejects_local_module_shadowing_stdlib() {
     return passed;
 }
 
+bool compiles_test_blocks_into_separate_chunks() {
+    const dune::Bytecode bytecode = compile_source("print(\"top\");\n"
+                                                   "test \"first\" { x = 1; }\n"
+                                                   "test \"second\" { y = 2; }");
+
+    bool passed = true;
+    passed = expect(bytecode.tests.size() == 2, "expected two registered tests") && passed;
+    if (bytecode.tests.size() == 2) {
+        passed = expect(bytecode.tests[0].name == "first", "expected the first test name") && passed;
+        passed = expect(bytecode.tests[1].name == "second", "expected the second test name") && passed;
+        // Each test is lowered to its own callable chunk in `functions`.
+        passed = expect(bytecode.tests[0].function_index < bytecode.functions.size(),
+                        "expected the first test chunk to exist") &&
+                 passed;
+        passed = expect(bytecode.tests[1].function_index < bytecode.functions.size(),
+                        "expected the second test chunk to exist") &&
+                 passed;
+        passed = expect(bytecode.tests[0].function_index != bytecode.tests[1].function_index,
+                        "expected distinct chunks per test") &&
+                 passed;
+    }
+
+    return passed;
+}
+
 } // namespace
 
 int main() {
@@ -755,6 +780,7 @@ int main() {
     passed = compiles_static_associated_record_functions() && passed;
     passed = compiles_assignment_targets() && passed;
     passed = compiles_when_expression() && passed;
+    passed = compiles_test_blocks_into_separate_chunks() && passed;
     passed = compiles_choice_variants_and_when() && passed;
     passed = compiles_arrow_style_choice_when() && passed;
     passed = compiles_tuples_and_destructuring() && passed;

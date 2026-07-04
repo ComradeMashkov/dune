@@ -40,6 +40,26 @@ std::string run_source_with_args(const std::string& source, std::vector<std::str
     return output.str();
 }
 
+// Compiles `source`, then runs only its `test` blocks through `run_test` — the
+// same path `dune test` takes — and returns their concatenated output. Top-level
+// code is never executed, mirroring the runner.
+std::string run_only_tests(const std::string& source) {
+    dune::Lexer lexer(source);
+    dune::Parser parser(lexer.tokenize());
+    dune::ModuleLoader loader;
+    dune::Compiler compiler;
+    dune::Bytecode bytecode = compiler.compile(loader.resolve(parser.parse()));
+    const std::vector<dune::Bytecode::Test> tests(bytecode.tests);
+    dune::VirtualMachine vm(std::move(bytecode));
+
+    std::ostringstream output;
+    for (const dune::Bytecode::Test& test : tests) {
+        vm.run_test(test.function_index, output);
+    }
+
+    return output.str();
+}
+
 bool expect_eq(const std::string& actual, const std::string& expected, const char* message) {
     if (actual != expected) {
         std::cerr << message << ": expected '" << expected << "', got '" << actual << "'\n";
@@ -179,6 +199,29 @@ bool runs_csv_matrix_stdlib() {
     std::filesystem::remove(bad, error);
     std::filesystem::remove(out, error);
     return passed;
+}
+
+bool runs_only_test_blocks() {
+    // Top-level code must not run under the test runner; each test body runs in
+    // declaration order, and top-level functions are in scope inside them.
+    const std::string output = run_only_tests("print(\"toplevel\");\n"
+                                              "fn label(): text { return \"body\"; }\n"
+                                              "test \"one\" { print(label()); }\n"
+                                              "test \"two\" { print(\"two\"); }");
+    return expect_eq(output, "body\ntwo\n", "expected only the test bodies to run, in order");
+}
+
+bool test_failure_unwinds() {
+    // A runtime panic inside a test body (here an out-of-bounds index) must
+    // propagate out of run_test so the runner can mark that test failed.
+    try {
+        run_only_tests("test \"boom\" { values = [1, 2]; print(values[9]); }");
+    } catch (const std::runtime_error&) {
+        return true;
+    }
+
+    std::cerr << "expected a panicking test body to throw out of run_test\n";
+    return false;
 }
 
 } // namespace
@@ -591,6 +634,9 @@ print('\0' to int);)dune"),
                                   "print(m.max(3, 7));"),
                        "10\n16\n7\n", "expected Modules v2 alias/selective runtime output") &&
              passed;
+
+    passed = runs_only_test_blocks() && passed;
+    passed = test_failure_unwinds() && passed;
 
     return passed ? 0 : 1;
 }

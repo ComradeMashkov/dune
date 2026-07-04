@@ -163,6 +163,28 @@ bool parses_control_flow() {
     return passed;
 }
 
+bool parses_test_block() {
+    const dune::Program program = parse_source("test \"adds up\" { x = 1 + 1; print(x); }");
+
+    if (!expect(program.statements.size() == 1, "expected one test statement")) {
+        return false;
+    }
+
+    bool passed = true;
+    const dune::Statement& test = program.statements[0];
+    passed = expect(test.kind == dune::StatementKind::test_block, "expected a test block") && passed;
+    passed = expect(test.name == "adds up", "expected the decoded test name") && passed;
+    passed = expect(test.body.size() == 2, "expected two statements in the test body") && passed;
+    passed = expect(test.body[0].kind == dune::StatementKind::assign, "expected assignment in test body") && passed;
+    passed = expect(test.body[1].kind == dune::StatementKind::print, "expected print in test body") && passed;
+
+    return passed;
+}
+
+bool rejects_test_block_without_name() {
+    return expect_parse_error("test { }", "expected a test block without a name to be rejected");
+}
+
 bool parses_assignment_targets() {
     const dune::Program program = parse_source("values[1] = 9; grid[0][1] = 8; point.x = 7; users[0].age = 40;");
 
@@ -1215,6 +1237,8 @@ int main() {
     passed = parses_operator_precedence() && passed;
     passed = parses_membership_operator_precedence() && passed;
     passed = parses_control_flow() && passed;
+    passed = parses_test_block() && passed;
+    passed = rejects_test_block_without_name() && passed;
     passed = parses_assignment_targets() && passed;
     passed = parses_functions_and_types() && passed;
     passed = rejects_legacy_function_syntax() && passed;
