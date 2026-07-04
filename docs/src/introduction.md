@@ -18,16 +18,13 @@ total = values.filter(is_positive).map(square).sum();
 print(total);
 ```
 
-## Two backends, one front end
+## One front end, one backend
 
-Dune shares a single front end — lexer, parser, type checker — across two
-execution backends:
+Dune shares a single front end — lexer, parser, type checker — feeding a single
+execution backend:
 
-- A **bytecode virtual machine** that runs programs directly. This is the
-  default and supports every language feature.
-- An optional **native LLVM backend** (`dune build`) for ahead-of-time
-  compilation. It covers most of the language; features it does not support fall
-  back to the VM.
+- A **bytecode virtual machine** that runs programs directly. It supports every
+  language feature and needs no external toolchain.
 
 ## How to read this book
 

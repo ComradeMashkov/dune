@@ -41,35 +41,21 @@ Expected output:
 
 ---
 
-## Backends
+## Backend
 
-Dune has two execution backends that share the same front end (lexer, parser,
-type checker, module loader):
+Dune has a single execution backend that shares the same front end (lexer,
+parser, type checker, module loader):
 
-- The **bytecode VM** (`src/compiler`, `src/vm`) is the **canonical** backend.
-  It needs no external toolchain, powers `dune <file>` and `dune check`, and is
-  the basis for the planned REPL.
-- The **native LLVM backend** (`src/codegen`) emits textual LLVM IR that
-  `clang++` turns into a native binary for `dune build`. It is **best-effort**.
+- The **bytecode VM** (`src/compiler`, `src/vm`) is the **canonical and only**
+  backend. It needs no external toolchain, powers `dune <file>` and `dune check`,
+  and is the basis for the planned REPL.
 
 Policy:
 
-- Every language feature must work in the **VM and type checker first** — that
-  is what gates a pull request.
-- The native backend may lag. It is fine to land a feature in the VM and follow
-  up on native support later; prefer a clear "not supported in the native
-  backend yet" error over silently diverging from the VM.
+- Every language feature must work in the **VM and type checker** — that is what
+  gates a pull request.
 - CI reflects this: the `build-test` job (VM / core tests, all platforms) is the
-  required gate; the `native-backend` job runs the native backend tests
-  best-effort and never blocks a merge.
-- Name native backend tests `cli_build_native_<case>` so CI can separate them
-  with `ctest -R cli_build_native` / `-E cli_build_native`.
-
-The native backend is gated by the `DUNE_ENABLE_NATIVE` CMake option (default
-`ON`). With `-D DUNE_ENABLE_NATIVE=OFF` the build needs no `clang++` and skips
-the native toolchain entirely — the VM, type checker, and LSP still build and
-run, while `dune build` reports a clear error. The required CI gate uses this to
-build VM-only on every platform.
+  required gate.
 
 ---
 
@@ -99,12 +85,12 @@ cmake --build build -j
 ctest --test-dir build --output-on-failure
 ```
 
-VM-only build (no LLVM toolchain required, native `dune build` disabled):
+If `clang-format` / `clang-tidy` are not installed, disable the lint checks:
 
 ```bash
-cmake -S . -B build -D DUNE_ENABLE_NATIVE=OFF -D DUNE_ENABLE_LINT=OFF
+cmake -S . -B build -D DUNE_ENABLE_LINT=OFF
 cmake --build build -j
-ctest --test-dir build -E cli_build_native --output-on-failure
+ctest --test-dir build --output-on-failure
 ```
 
 ---

@@ -32,24 +32,6 @@ file's top-level code is skipped, so only the tests execute — while top-level
 functions, constants, and imports remain in scope. A failed assertion aborts
 just that test; the command exits non-zero if any test fails.
 
-## Build a native binary
-
-```sh
-dune build path/to/program.dn -o path/to/output
-```
-
-Compiles the program ahead of time through the native LLVM backend. Requires a
-build configured with `-D DUNE_ENABLE_NATIVE=ON`. Features the native backend does
-not support are documented per feature in the language reference.
-
-## Emit LLVM IR
-
-```sh
-dune llvm path/to/program.dn -o path/to/output.ll
-```
-
-Writes the generated LLVM IR for inspection.
-
 ## Language server
 
 ```sh
@@ -90,8 +72,7 @@ error: expected type 'int' but got 'text'
 
 The `-->` line gives `file:line:column`, and the caret underline marks the
 offending token or expression. Lexer, parser, and type-check errors all use this
-format; `dune check`, `dune build`, and `dune llvm` show it beneath their
-per-stage progress trace. Errors from imported modules and runtime failures fall
+format; `dune check` shows it beneath its per-stage progress trace. Errors from imported modules and runtime failures fall
 back to a single-line message (source snippets for other files are a follow-up).
 The same locations are sent to editors over the [language server](editor.md), so
 squiggles land on the right span.
