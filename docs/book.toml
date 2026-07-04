@@ -6,11 +6,13 @@ language = "en"
 src = "src"
 
 [output.html]
-default-theme = "rust"
-preferred-dark-theme = "ayu"
+default-theme = "light"
+preferred-dark-theme = "navy"
 git-repository-url = "https://github.com/ComradeMashkov/dune"
 edit-url-template = "https://github.com/ComradeMashkov/dune/edit/main/docs/{path}"
 no-section-label = false
+# A modern restyle (indigo accent, refined typography, rounded code blocks).
+additional-css = ["custom.css"]
 # Registers a Dune grammar with highlight.js so ```dune / ```dn fences highlight.
 additional-js = ["dune-highlight.js"]
 

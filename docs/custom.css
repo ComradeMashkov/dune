@@ -1,0 +1,149 @@
+/* Modern restyle for the Dune documentation site. Loaded after mdBook's own CSS
+   via `additional-css`, so these rules win. Refines typography, colours, code
+   blocks, the sidebar, and controls without changing mdBook's layout. */
+
+:root {
+  --dune-accent: #635bff;
+  --dune-accent-soft: rgba(99, 91, 255, 0.1);
+  --dune-accent-border: rgba(99, 91, 255, 0.16);
+  --dune-radius: 10px;
+  --mono-font: "JetBrains Mono", "Fira Code", ui-monospace, "SFMono-Regular",
+    Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+/* Modern system font stack for prose; comfortable reading rhythm. */
+html {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+}
+.content {
+  line-height: 1.7;
+}
+
+/* --- Light theme: clean, airy greys with an indigo accent --- */
+.light {
+  --bg: #ffffff;
+  --fg: #1f2328;
+  --sidebar-bg: #f7f8fa;
+  --sidebar-fg: #3d444d;
+  --sidebar-active: var(--dune-accent);
+  --sidebar-spacer: #e6e8eb;
+  --scrollbar: #c9ccd1;
+  --icons: #9aa0a6;
+  --icons-hover: var(--dune-accent);
+  --links: var(--dune-accent);
+  --inline-code-color: #b5299e;
+  --theme-popup-bg: #ffffff;
+  --theme-popup-border: #e6e8eb;
+  --theme-hover: #eef0f3;
+  --quote-bg: #f7f8fa;
+  --quote-border: #e4e7eb;
+  --table-border-color: #e6e8eb;
+  --table-header-bg: #eef0f3;
+  --table-alternate-bg: #fafbfc;
+  --searchbar-border-color: #e0e3e7;
+  --searchbar-bg: #ffffff;
+  --searchbar-fg: #1f2328;
+  --searchbar-shadow-color: #d4d7db;
+  --searchresults-header-fg: #6b7280;
+  --searchresults-border-color: #e6e8eb;
+  --searchresults-li-bg: #f2f4f7;
+  --search-mark-bg: #ffe08a;
+}
+
+/* --- Modern dark (navy) accent tweaks --- */
+.navy {
+  --links: #8f89ff;
+  --sidebar-active: #8f89ff;
+  --inline-code-color: #f78fdf;
+  --icons-hover: #8f89ff;
+}
+
+/* --- Code blocks: rounded, bordered, breathable --- */
+.content pre {
+  border-radius: var(--dune-radius);
+  border: 1px solid var(--quote-border);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.content pre > code {
+  padding: 0.95rem 1.15rem;
+  font-size: 0.9rem;
+}
+.navy .content pre,
+.coal .content pre,
+.ayu .content pre {
+  box-shadow: none;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* Inline code chips. */
+.content :not(pre) > code {
+  padding: 0.12em 0.4em;
+  border-radius: 5px;
+  background: var(--dune-accent-soft);
+  border: 1px solid var(--dune-accent-border);
+}
+.navy .content :not(pre) > code,
+.coal .content :not(pre) > code,
+.ayu .content :not(pre) > code {
+  background: rgba(143, 137, 255, 0.14);
+  border-color: rgba(143, 137, 255, 0.22);
+}
+
+/* --- Headings --- */
+.content h1,
+.content h2,
+.content h3 {
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.content h1 {
+  padding-bottom: 0.3em;
+  border-bottom: 2px solid var(--dune-accent);
+}
+.content h2 {
+  margin-top: 2.2rem;
+  padding-bottom: 0.25em;
+  border-bottom: 1px solid var(--quote-border);
+}
+
+/* --- Links --- */
+.content a {
+  text-decoration: none;
+}
+.content a:hover {
+  text-decoration: underline;
+}
+
+/* --- Sidebar --- */
+.chapter li a {
+  border-radius: 6px;
+  padding: 4px 8px;
+  transition: background 0.12s ease;
+}
+.chapter li a.active {
+  background: var(--dune-accent-soft);
+  color: var(--dune-accent);
+  font-weight: 600;
+}
+
+/* --- Blockquotes / callouts --- */
+.content blockquote {
+  border-inline-start: 4px solid var(--dune-accent);
+  background: var(--quote-bg);
+  border-radius: 0 var(--dune-radius) var(--dune-radius) 0;
+}
+
+/* --- Tables --- */
+.content table {
+  border-radius: var(--dune-radius);
+  border-collapse: separate;
+  border-spacing: 0;
+  overflow: hidden;
+}
+
+/* --- Search bar --- */
+#searchbar {
+  border-radius: 999px;
+  padding: 0.55rem 1.1rem;
+}
