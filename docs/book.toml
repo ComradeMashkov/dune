@@ -1,0 +1,22 @@
+[book]
+title = "The Dune Programming Language"
+authors = ["ComradeMashkov"]
+description = "Language reference, standard-library reference, and guides for the Dune programming language."
+language = "en"
+src = "src"
+
+[output.html]
+default-theme = "rust"
+preferred-dark-theme = "ayu"
+git-repository-url = "https://github.com/ComradeMashkov/dune"
+edit-url-template = "https://github.com/ComradeMashkov/dune/edit/main/docs/{path}"
+no-section-label = false
+
+[output.html.fold]
+enable = true
+level = 1
+
+[output.html.search]
+enable = true
+limit-results = 30
+use-boolean-and = true

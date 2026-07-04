@@ -5,3 +5,6 @@ editors/zed/extension.wasm
 editors/zed/grammars/
 node_modules/
 .DS_Store
+
+# mdBook build output
+docs/book/
