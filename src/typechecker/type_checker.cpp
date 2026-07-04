@@ -1907,6 +1907,25 @@ Type TypeChecker::check_binary_expression(const Expression& expression, const Ty
                                                        type_name(left) + "'");
     }
 
+    // Text concatenation: `+` where at least one side is `text` yields `text`.
+    // `text + text` joins two strings, and a `glyph` on either side appends a
+    // single character. (`glyph + glyph` stays a numeric error.)
+    if (expression.lexeme == "+" &&
+        (left.kind == ValueType::text_type || right.kind == ValueType::text_type)) {
+        const auto is_textual = [](ValueType kind) {
+            return kind == ValueType::text_type || kind == ValueType::glyph_type;
+        };
+        if (!is_textual(left.kind)) {
+            throw DiagnosticError(expression.left->location,
+                                  "cannot concatenate 'text' with '" + type_name(left) + "'");
+        }
+        if (!is_textual(right.kind)) {
+            throw DiagnosticError(expression.right->location,
+                                  "cannot concatenate 'text' with '" + type_name(right) + "'");
+        }
+        return make_type(ValueType::text_type);
+    }
+
     if (!same_type(left, right)) {
         left = coerce_numeric_literal(*expression.left, left, right);
         right = coerce_numeric_literal(*expression.right, right, left);

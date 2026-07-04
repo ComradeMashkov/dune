@@ -135,3 +135,93 @@ True when `value` is any ASCII letter (upper or lower case).
 ```dune
 text.is_alpha('a')  // 1
 ```
+
+### `method text.concat(other: text): text`
+
+This text followed by `other` (the method form of `this + other`).
+
+**Example:**
+```dune
+"foo".concat("bar")  // foobar
+```
+
+### `method text.repeat(count: int): text`
+
+This text repeated `count` times ("" for count <= 0).
+
+**Example:**
+```dune
+"ab".repeat(3)  // ababab
+```
+
+### `method text.reverse(): text`
+
+A new text with the glyphs in reverse order.
+
+**Example:**
+```dune
+"abc".reverse()  // cba
+```
+
+### `method text.to_upper(): text`
+
+A copy of this text with every ASCII lowercase letter upper-cased.
+
+**Example:**
+```dune
+"Hello, World!".to_upper()  // HELLO, WORLD!
+```
+
+### `method text.to_lower(): text`
+
+A copy of this text with every ASCII uppercase letter lower-cased.
+
+**Example:**
+```dune
+"Hello, World!".to_lower()  // hello, world!
+```
+
+### `method text.replace(target: text, replacement: text): text`
+
+Every occurrence of `target` replaced by `replacement`. Returns the text unchanged when `target` is empty (which would otherwise never advance).
+
+**Example:**
+```dune
+"a-b-c".replace("-", "+")  // a+b+c
+```
+
+### `method text.split(separator: glyph): [text]`
+
+Split into the pieces separated by glyph `separator`. Adjacent separators yield empty pieces, and the result always has one more piece than the number of separators.
+
+**Example:**
+```dune
+"a,b,c".split(',').len()  // 3
+```
+
+### `method text.pad_start(width: int, fill: glyph): text`
+
+Left-pad with `fill` until the text is at least `width` glyphs wide.
+
+**Example:**
+```dune
+"42".pad_start(5, '0')  // 00042
+```
+
+### `method text.pad_end(width: int, fill: glyph): text`
+
+Right-pad with `fill` until the text is at least `width` glyphs wide.
+
+**Example:**
+```dune
+"42".pad_end(5, '.')  // 42...
+```
+
+### `fn join(parts: [text], separator: text): text`
+
+Join `parts` into a single text, inserting `separator` between them.
+
+**Example:**
+```dune
+join(["a", "b", "c"], ", ")  // a, b, c
+```

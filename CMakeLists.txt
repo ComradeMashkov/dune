@@ -668,6 +668,16 @@ add_test(
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
 )
 
+add_test(
+    NAME cli_text_concat
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/language/text_concat.dn
+        -D EXPECTED_OUTPUT="Hi, Ada!\nreally?\nababab\ncba\nMIXED CASE\nmixed case\na::b::c\n00042\nx,y,z\n3\ntwo"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
 # First-class function values / higher-order array pipeline on the VM.
 add_test(
     NAME cli_method_chaining

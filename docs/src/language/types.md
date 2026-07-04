@@ -12,6 +12,28 @@
 `unit` is the type of an expression with no meaningful value (for example a
 function that returns nothing).
 
+## Text and glyphs
+
+A `text` is an immutable string; a `glyph` is a single character. Text supports
+indexing (returning a `glyph`), slicing, `len`, and the `+` operator:
+
+```dn
+import io;
+
+name: text = "Ada";
+greeting: text = "Hi, " + name + "!";   // text + text
+shout: text = greeting + '!';           // a glyph appends a character
+io.println(greeting);                    // Hi, Ada!
+io.println("ab" + "cd" + "ef");          // abcdef
+```
+
+`+` joins two `text` values, and a `glyph` on either side is appended as a
+single character (`glyph + glyph` remains a numeric error). The
+[`text`](../stdlib/text.md) module builds on it with helpers such as `repeat`,
+`reverse`, `to_upper`, `to_lower`, `replace`, `split`, `pad_start`, `pad_end`,
+and the free `join` function. To interpolate non-text values, use
+[`fmt.format`](../stdlib/fmt.md).
+
 ## Arrays
 
 An array type is written `[T]`. Arrays support literals, indexing, slicing,
@@ -19,10 +41,12 @@ An array type is written `[T]`. Arrays support literals, indexing, slicing,
 [`array`](../stdlib/array.md)).
 
 ```dn
+import io;
+
 values: [int] = [1, 2, 3, 4];
 values.push(5);
-print(values.len());     // 5
-print(values[0]);        // 1
+io.println(values.len());     // 5
+io.println(values[0]);        // 1
 middle: [int] = values[1:3];
 ```
 

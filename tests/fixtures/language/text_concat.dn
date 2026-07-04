@@ -1,0 +1,30 @@
+// Exercises `text + text` / `text + glyph` concatenation and the string-building
+// helpers in the `text` stdlib module that are written on top of it.
+import io;
+import text;
+
+// Core operator: joining text and appending a glyph.
+greeting: text = "Hi, " + "Ada" + "!";
+io.println(greeting);               // Hi, Ada!
+
+bang: glyph = '?';
+io.println("really" + bang);        // really?
+
+// Building a result up in a loop with `+`.
+line: text = "";
+for i = 0; i < 3; i = i + 1 {
+    line = line + "ab";
+}
+io.println(line);                   // ababab
+
+// Stdlib helpers built on `+`.
+io.println("abc".reverse());        // cba
+io.println("Mixed Case".to_upper()); // MIXED CASE
+io.println("Mixed Case".to_lower()); // mixed case
+io.println("a-b-c".replace("-", "::")); // a::b::c
+io.println("42".pad_start(5, '0')); // 00042
+io.println(text.join(["x", "y", "z"], ",")); // x,y,z
+
+parts: [text] = "one,two,three".split(',');
+io.println(parts.len());            // 3
+io.println(parts[1]);               // two
