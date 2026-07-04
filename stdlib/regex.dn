@@ -1,0 +1,886 @@
+import maybe;
+import outcome;
+import text;
+import fmt;
+
+const KIND_LITERAL = 1;
+const KIND_DOT = 2;
+const KIND_CLASS = 3;
+const KIND_CAPTURE_START = 4;
+const KIND_CAPTURE_END = 5;
+
+const INFINITY = -1;
+
+// Upper bound on backtracking steps for a single match attempt. The engine is a
+// recursive backtracker, so adjacent overlapping quantifiers (e.g. `a*a*...b`)
+// could otherwise explore an exponential number of splits. When the budget is
+// exhausted the attempt reports no match, keeping worst-case work bounded.
+const MAX_MATCH_STEPS = 50000;
+
+record CharRange {
+    start: int,
+    end: int,
+}
+
+record Term {
+    kind: int,
+    literal: glyph,
+    ranges: [CharRange],
+    negated: bool,
+    min: int,
+    max: int,
+    group: int,
+}
+
+record MatchState {
+    pos: int,
+    starts: [int],
+    ends: [int],
+}
+
+record ParseResult {
+    terms: [Term],
+    index: int,
+    group_count: int,
+    error: text,
+}
+
+record ClassResult {
+    term: Term,
+    index: int,
+    error: text,
+}
+
+record ClassPart {
+    ranges: [CharRange],
+    index: int,
+    error: text,
+    single: bool,
+    code: int,
+}
+
+// One captured subgroup. Captures that did not participate are omitted from
+// Match.captures; use Match.capture(index) to get a Maybe<Capture>.
+export record Capture {
+    export index: int,
+    export start: int,
+    export end: int,
+    export value: text,
+}
+
+// A single match with byte/glyph offsets into the searched text.
+export record Match {
+    export start: int,
+    export end: int,
+    export value: text,
+    export captures: [Capture],
+
+    export fn len(): int {
+        return this.end - this.start;
+    }
+
+    export fn is_empty(): bool {
+        return this.start == this.end;
+    }
+
+    export fn capture(index: int): maybe.Maybe<Capture> {
+        for i = 0; i < this.captures.len(); i = i + 1 {
+            if this.captures[i].index == index {
+                return maybe.present(this.captures[i]);
+            }
+        }
+
+        return maybe.absent(empty_capture());
+    }
+
+    export fn capture_text(index: int, default: text): text {
+        found = this.capture(index);
+        if found.has_value() {
+            return found.value_or(empty_capture()).value;
+        }
+        return default;
+    }
+}
+
+// A compiled regular expression. The engine is ASCII-oriented and supports a
+// bounded, safe subset: literals, '.', '*', '+', '?', classes, anchors, and
+// capturing groups. It intentionally rejects alternation, lookaround,
+// backreferences, counted repetition, flags, and quantified groups.
+export record Regex {
+    export pattern: text,
+    terms: [Term],
+    group_count: int,
+    anchored_start: bool,
+    anchored_end: bool,
+    never_matches: bool,
+
+    export fn is_match(input: text): bool {
+        return this.find(input).has_value();
+    }
+
+    export fn match(input: text): maybe.Maybe<Match> {
+        return this.find(input);
+    }
+
+    export fn find(input: text): maybe.Maybe<Match> {
+        if this.never_matches {
+            return maybe.absent(empty_match());
+        }
+
+        if this.anchored_start {
+            return this.try_match_at(input, 0);
+        }
+
+        for start = 0; start <= input.len(); start = start + 1 {
+            found = this.try_match_at(input, start);
+            if found.has_value() {
+                return found;
+            }
+        }
+
+        return maybe.absent(empty_match());
+    }
+
+    export fn find_all(input: text): [Match] {
+        matches: [Match] = [];
+        if this.never_matches {
+            return matches;
+        }
+
+        start = 0;
+        while start <= input.len() {
+            found = this.find_from(input, start);
+            if found.is_absent() {
+                return matches;
+            }
+
+            current = found.value_or(empty_match());
+            matches.push(current);
+
+            if current.is_empty() {
+                start = current.start + 1;
+            } else {
+                start = current.end;
+            }
+        }
+
+        return matches;
+    }
+
+    export fn split(input: text): [text] {
+        parts: [text] = [];
+        last = 0;
+        matches = this.find_all(input);
+        for i = 0; i < matches.len(); i = i + 1 {
+            current = matches[i];
+            parts.push(input[last:current.start]);
+            last = current.end;
+        }
+        parts.push(input[last:]);
+        return parts;
+    }
+
+    export fn replace(input: text, replacement: text): text {
+        found = this.find(input);
+        if found.is_absent() {
+            return input;
+        }
+
+        current = found.value_or(empty_match());
+        expanded = expand_replacement(replacement, current);
+        return append_text(append_text(input[:current.start], expanded), input[current.end:]);
+    }
+
+    export fn replace_all(input: text, replacement: text): text {
+        if this.never_matches {
+            return input;
+        }
+
+        result = "";
+        last = 0;
+        start = 0;
+        while start <= input.len() {
+            found = this.find_from(input, start);
+            if found.is_absent() {
+                return append_text(result, input[last:]);
+            }
+
+            current = found.value_or(empty_match());
+            result = append_text(result, input[last:current.start]);
+            result = append_text(result, expand_replacement(replacement, current));
+
+            if current.is_empty() {
+                if current.start < input.len() {
+                    result = append_text(result, input[current.start:current.start + 1]);
+                    last = current.start + 1;
+                    start = last;
+                } else {
+                    last = input.len();
+                    start = input.len() + 1;
+                }
+            } else {
+                last = current.end;
+                start = current.end;
+            }
+        }
+
+        return append_text(result, input[last:]);
+    }
+
+    fn try_match_at(input: text, start: int): maybe.Maybe<Match> {
+        starts = repeat_int(-1, this.group_count + 1);
+        ends = repeat_int(-1, this.group_count + 1);
+        budget: [int] = [MAX_MATCH_STEPS];
+        state = match_terms(this.terms, 0, input, start, starts, ends, budget);
+        if state.is_absent() {
+            return maybe.absent(empty_match());
+        }
+
+        found = state.value_or(default_state());
+        if this.anchored_end && found.pos != input.len() {
+            return maybe.absent(empty_match());
+        }
+
+        return maybe.present(build_match(input, start, found));
+    }
+
+    fn find_from(input: text, start: int): maybe.Maybe<Match> {
+        if this.anchored_start {
+            if start > 0 {
+                return maybe.absent(empty_match());
+            }
+            return this.try_match_at(input, 0);
+        }
+
+        for cursor = start; cursor <= input.len(); cursor = cursor + 1 {
+            found = this.try_match_at(input, cursor);
+            if found.has_value() {
+                return found;
+            }
+        }
+
+        return maybe.absent(empty_match());
+    }
+}
+
+fn empty_ranges(): [CharRange] {
+    ranges: [CharRange] = [];
+    return ranges;
+}
+
+fn empty_terms(): [Term] {
+    terms: [Term] = [];
+    return terms;
+}
+
+fn empty_captures(): [Capture] {
+    captures: [Capture] = [];
+    return captures;
+}
+
+fn empty_capture(): Capture {
+    return Capture { index: 0, start: -1, end: -1, value: "" };
+}
+
+// A default empty match, useful for Maybe.value_or.
+export fn empty_match(): Match {
+    return Match { start: -1, end: -1, value: "", captures: empty_captures() };
+}
+
+fn default_state(): MatchState {
+    starts: [int] = [];
+    ends: [int] = [];
+    return MatchState { pos: -1, starts: starts, ends: ends };
+}
+
+fn make_term(kind: int, literal: glyph, ranges: [CharRange], negated: bool, min: int, max: int, group: int): Term {
+    return Term { kind: kind, literal: literal, ranges: ranges, negated: negated, min: min, max: max, group: group };
+}
+
+fn literal_term(value: glyph): Term {
+    return make_term(KIND_LITERAL, value, empty_ranges(), false, 1, 1, 0);
+}
+
+fn dot_term(): Term {
+    return make_term(KIND_DOT, '\0', empty_ranges(), false, 1, 1, 0);
+}
+
+fn class_term(ranges: [CharRange], negated: bool): Term {
+    return make_term(KIND_CLASS, '\0', ranges, negated, 1, 1, 0);
+}
+
+fn capture_marker(kind: int, group: int): Term {
+    return make_term(kind, '\0', empty_ranges(), false, 1, 1, group);
+}
+
+fn regex_value(pattern: text, terms: [Term], group_count: int, anchored_start: bool, anchored_end: bool, never_matches: bool): Regex {
+    return Regex {
+        pattern: pattern,
+        terms: terms,
+        group_count: group_count,
+        anchored_start: anchored_start,
+        anchored_end: anchored_end,
+        never_matches: never_matches,
+    };
+}
+
+// A regex that never matches. Useful with Outcome.value_or after compile.
+export fn never(): Regex {
+    return regex_value("(?!)", empty_terms(), 0, true, true, true);
+}
+
+fn append_text(left: text, right: text): text {
+    return fmt.format("{}{}", left, right);
+}
+
+fn is_ascii(value: glyph): bool {
+    code: int = value to int;
+    return code >= 0 && code <= 127;
+}
+
+fn is_quantifier(value: glyph): bool {
+    return value == '*' || value == '+' || value == '?';
+}
+
+fn is_atom_kind(kind: int): bool {
+    return kind == KIND_LITERAL || kind == KIND_DOT || kind == KIND_CLASS;
+}
+
+fn is_escaped_at(pattern: text, index: int): bool {
+    slash_count = 0;
+    cursor = index - 1;
+    while cursor >= 0 && pattern[cursor] == '\\' {
+        slash_count = slash_count + 1;
+        cursor = cursor - 1;
+    }
+
+    return slash_count % 2 == 1;
+}
+
+fn add_range(ranges: [CharRange], start: int, end: int): [CharRange] {
+    ranges.push(CharRange { start: start, end: end });
+    return ranges;
+}
+
+fn digit_ranges(ranges: [CharRange]): [CharRange] {
+    return add_range(ranges, '0' to int, '9' to int);
+}
+
+fn word_ranges(ranges: [CharRange]): [CharRange] {
+    ranges = add_range(ranges, '0' to int, '9' to int);
+    ranges = add_range(ranges, 'A' to int, 'Z' to int);
+    ranges = add_range(ranges, '_' to int, '_' to int);
+    return add_range(ranges, 'a' to int, 'z' to int);
+}
+
+fn space_ranges(ranges: [CharRange]): [CharRange] {
+    ranges = add_range(ranges, ' ' to int, ' ' to int);
+    ranges = add_range(ranges, '\t' to int, '\t' to int);
+    ranges = add_range(ranges, '\n' to int, '\n' to int);
+    return add_range(ranges, '\r' to int, '\r' to int);
+}
+
+fn escape_literal(value: glyph): glyph {
+    if value == 'n' {
+        return '\n';
+    }
+    if value == 'r' {
+        return '\r';
+    }
+    if value == 't' {
+        return '\t';
+    }
+    return value;
+}
+
+fn make_error_result(index: int, group_count: int, error: text): ParseResult {
+    return ParseResult { terms: empty_terms(), index: index, group_count: group_count, error: error };
+}
+
+fn make_parse_result(terms: [Term], index: int, group_count: int): ParseResult {
+    return ParseResult { terms: terms, index: index, group_count: group_count, error: "" };
+}
+
+fn make_class_error(index: int, error: text): ClassResult {
+    return ClassResult { term: literal_term('\0'), index: index, error: error };
+}
+
+fn make_class_part_error(index: int, error: text): ClassPart {
+    return ClassPart { ranges: empty_ranges(), index: index, error: error, single: false, code: 0 };
+}
+
+fn make_class_part(ranges: [CharRange], index: int, single: bool, code: int): ClassPart {
+    return ClassPart { ranges: ranges, index: index, error: "", single: single, code: code };
+}
+
+fn class_escape_part(pattern: text, index: int): ClassPart {
+    if index + 1 >= pattern.len() {
+        return make_class_part_error(index, "dangling escape in character class");
+    }
+
+    esc = pattern[index + 1];
+    if text.is_digit(esc) {
+        return make_class_part_error(index, "backreferences are not supported");
+    }
+
+    ranges = empty_ranges();
+    if esc == 'd' {
+        return make_class_part(digit_ranges(ranges), index + 2, false, 0);
+    }
+    if esc == 'w' {
+        return make_class_part(word_ranges(ranges), index + 2, false, 0);
+    }
+    if esc == 's' {
+        return make_class_part(space_ranges(ranges), index + 2, false, 0);
+    }
+
+    literal = escape_literal(esc);
+    if !is_ascii(literal) {
+        return make_class_part_error(index, "regex patterns are ASCII-only");
+    }
+
+    code: int = literal to int;
+    ranges.push(CharRange { start: code, end: code });
+    return make_class_part(ranges, index + 2, true, code);
+}
+
+fn class_part(pattern: text, index: int): ClassPart {
+    if index >= pattern.len() {
+        return make_class_part_error(index, "unclosed character class");
+    }
+
+    if pattern[index] == '\\' {
+        return class_escape_part(pattern, index);
+    }
+
+    value = pattern[index];
+    if !is_ascii(value) {
+        return make_class_part_error(index, "regex patterns are ASCII-only");
+    }
+
+    code: int = value to int;
+    ranges = empty_ranges();
+    ranges.push(CharRange { start: code, end: code });
+    return make_class_part(ranges, index + 1, true, code);
+}
+
+fn append_ranges(left: [CharRange], right: [CharRange]): [CharRange] {
+    for index = 0; index < right.len(); index = index + 1 {
+        left.push(right[index]);
+    }
+    return left;
+}
+
+fn parse_class(pattern: text, index: int): ClassResult {
+    cursor = index + 1;
+    negated = false;
+    if cursor < pattern.len() && pattern[cursor] == '^' {
+        negated = true;
+        cursor = cursor + 1;
+    }
+
+    if cursor < pattern.len() && pattern[cursor] == ']' {
+        return make_class_error(cursor, "empty character classes are not supported");
+    }
+
+    ranges = empty_ranges();
+    closed = false;
+    while cursor < pattern.len() {
+        if pattern[cursor] == ']' {
+            closed = true;
+            cursor = cursor + 1;
+            break;
+        }
+
+        part = class_part(pattern, cursor);
+        if part.error != "" {
+            return make_class_error(part.index, part.error);
+        }
+
+        if part.single && part.index + 1 < pattern.len() && pattern[part.index] == '-' && pattern[part.index + 1] != ']' {
+            end_part = class_part(pattern, part.index + 1);
+            if end_part.error != "" {
+                return make_class_error(end_part.index, end_part.error);
+            }
+            if !end_part.single {
+                return make_class_error(part.index, "character class range end must be a literal");
+            }
+            if part.code > end_part.code {
+                return make_class_error(part.index, "character class range start is greater than end");
+            }
+            ranges.push(CharRange { start: part.code, end: end_part.code });
+            cursor = end_part.index;
+        } else {
+            ranges = append_ranges(ranges, part.ranges);
+            cursor = part.index;
+        }
+    }
+
+    if !closed {
+        return make_class_error(cursor, "unclosed character class");
+    }
+
+    return ClassResult { term: class_term(ranges, negated), index: cursor, error: "" };
+}
+
+fn escape_atom(pattern: text, index: int): ClassResult {
+    if index + 1 >= pattern.len() {
+        return make_class_error(index, "dangling escape");
+    }
+
+    esc = pattern[index + 1];
+    if text.is_digit(esc) {
+        return make_class_error(index, "backreferences are not supported");
+    }
+
+    ranges = empty_ranges();
+    if esc == 'd' {
+        return ClassResult { term: class_term(digit_ranges(ranges), false), index: index + 2, error: "" };
+    }
+    if esc == 'w' {
+        return ClassResult { term: class_term(word_ranges(ranges), false), index: index + 2, error: "" };
+    }
+    if esc == 's' {
+        return ClassResult { term: class_term(space_ranges(ranges), false), index: index + 2, error: "" };
+    }
+    if esc == 'b' || esc == 'B' {
+        return make_class_error(index, "word-boundary escapes are not supported");
+    }
+    if esc == 'A' || esc == 'z' || esc == 'Z' {
+        return make_class_error(index, "absolute anchor escapes are not supported");
+    }
+    if esc == 'n' || esc == 'r' || esc == 't' {
+        return ClassResult { term: literal_term(escape_literal(esc)), index: index + 2, error: "" };
+    }
+    if text.is_alpha(esc) {
+        return make_class_error(index, fmt.format("unsupported escape \\{}", esc));
+    }
+
+    literal = escape_literal(esc);
+    if !is_ascii(literal) {
+        return make_class_error(index, "regex patterns are ASCII-only");
+    }
+
+    return ClassResult { term: literal_term(literal), index: index + 2, error: "" };
+}
+
+fn apply_quantifier(term: Term, quantifier: glyph): Term {
+    if quantifier == '*' {
+        term.min = 0;
+        term.max = INFINITY;
+        return term;
+    }
+    if quantifier == '+' {
+        term.min = 1;
+        term.max = INFINITY;
+        return term;
+    }
+
+    term.min = 0;
+    term.max = 1;
+    return term;
+}
+
+fn parse_sequence(pattern: text, index: int, group_count: int, stop_on_paren: bool): ParseResult {
+    terms = empty_terms();
+    cursor = index;
+
+    while cursor < pattern.len() {
+        current = pattern[cursor];
+        if current == ')' {
+            if stop_on_paren {
+                return make_parse_result(terms, cursor, group_count);
+            }
+            return make_error_result(cursor, group_count, "unmatched ')'");
+        }
+
+        before_len = terms.len();
+        if current == '|' {
+            return make_error_result(cursor, group_count, "alternation '|' is not supported");
+        }
+        if current == '{' || current == '}' {
+            return make_error_result(cursor, group_count, "counted repetition is not supported");
+        }
+        if current == '^' {
+            return make_error_result(cursor, group_count, "anchor '^' is only supported at the beginning of a pattern");
+        }
+        if current == '$' {
+            return make_error_result(cursor, group_count, "anchor '$' is only supported at the end of a pattern");
+        }
+        if is_quantifier(current) {
+            return make_error_result(cursor, group_count, "quantifier has no atom to repeat");
+        }
+
+        if current == '.' {
+            terms.push(dot_term());
+            cursor = cursor + 1;
+        } else {
+            if current == '[' {
+                class_result = parse_class(pattern, cursor);
+                if class_result.error != "" {
+                    return make_error_result(class_result.index, group_count, class_result.error);
+                }
+                terms.push(class_result.term);
+                cursor = class_result.index;
+            } else {
+                if current == '\\' {
+                    escaped = escape_atom(pattern, cursor);
+                    if escaped.error != "" {
+                        return make_error_result(escaped.index, group_count, escaped.error);
+                    }
+                    terms.push(escaped.term);
+                    cursor = escaped.index;
+                } else {
+                    if current == '(' {
+                        if cursor + 1 < pattern.len() && pattern[cursor + 1] == '?' {
+                            return make_error_result(cursor, group_count, "group extensions '(?' are not supported");
+                        }
+
+                        group_count = group_count + 1;
+                        group_id = group_count;
+                        terms.push(capture_marker(KIND_CAPTURE_START, group_id));
+                        inner = parse_sequence(pattern, cursor + 1, group_count, true);
+                        if inner.error != "" {
+                            return inner;
+                        }
+                        group_count = inner.group_count;
+                        terms = append_terms(terms, inner.terms);
+                        if inner.index >= pattern.len() || pattern[inner.index] != ')' {
+                            return make_error_result(inner.index, group_count, "unclosed capture group");
+                        }
+                        terms.push(capture_marker(KIND_CAPTURE_END, group_id));
+                        cursor = inner.index + 1;
+                    } else {
+                        if !is_ascii(current) {
+                            return make_error_result(cursor, group_count, "regex patterns are ASCII-only");
+                        }
+                        terms.push(literal_term(current));
+                        cursor = cursor + 1;
+                    }
+                }
+            }
+        }
+
+        if cursor < pattern.len() && is_quantifier(pattern[cursor]) {
+            if terms.len() - before_len != 1 {
+                return make_error_result(cursor, group_count, "quantified capture groups are not supported");
+            }
+
+            last_index = terms.len() - 1;
+            if !is_atom_kind(terms[last_index].kind) {
+                return make_error_result(cursor, group_count, "quantified capture groups are not supported");
+            }
+
+            terms[last_index] = apply_quantifier(terms[last_index], pattern[cursor]);
+            cursor = cursor + 1;
+            if cursor < pattern.len() && is_quantifier(pattern[cursor]) {
+                return make_error_result(cursor, group_count, "duplicate quantifier");
+            }
+        }
+    }
+
+    if stop_on_paren {
+        return make_error_result(cursor, group_count, "unclosed capture group");
+    }
+
+    return make_parse_result(terms, cursor, group_count);
+}
+
+fn append_terms(left: [Term], right: [Term]): [Term] {
+    for index = 0; index < right.len(); index = index + 1 {
+        left.push(right[index]);
+    }
+    return left;
+}
+
+// Compile a pattern into a Regex. Errors are explicit Outcome failures rather
+// than panics.
+export fn compile(pattern: text): outcome.Outcome<Regex, text> {
+    start = 0;
+    end = pattern.len();
+    anchored_start = false;
+    anchored_end = false;
+
+    if end > 0 && pattern[0] == '^' {
+        anchored_start = true;
+        start = 1;
+    }
+
+    if end > start && pattern[end - 1] == '$' && !is_escaped_at(pattern, end - 1) {
+        anchored_end = true;
+        end = end - 1;
+    }
+
+    body = pattern[start:end];
+    parsed = parse_sequence(body, 0, 0, false);
+    if parsed.error != "" {
+        return outcome.failed(never(), parsed.error);
+    }
+
+    return outcome.done(regex_value(pattern, parsed.terms, parsed.group_count, anchored_start, anchored_end, false), "");
+}
+
+fn repeat_int(value: int, count: int): [int] {
+    result: [int] = [];
+    for index = 0; index < count; index = index + 1 {
+        result.push(value);
+    }
+    return result;
+}
+
+fn copy_ints(values: [int]): [int] {
+    result: [int] = [];
+    for index = 0; index < values.len(); index = index + 1 {
+        result.push(values[index]);
+    }
+    return result;
+}
+
+fn range_contains(ranges: [CharRange], value: glyph): bool {
+    code: int = value to int;
+    for index = 0; index < ranges.len(); index = index + 1 {
+        if code >= ranges[index].start && code <= ranges[index].end {
+            return true;
+        }
+    }
+    return false;
+}
+
+fn class_matches(term: Term, value: glyph): bool {
+    inside = range_contains(term.ranges, value);
+    if term.negated {
+        return !inside && is_ascii(value);
+    }
+    return inside;
+}
+
+fn atom_matches_at(term: Term, input: text, pos: int): bool {
+    if pos >= input.len() {
+        return false;
+    }
+
+    value = input[pos];
+    if term.kind == KIND_LITERAL {
+        return value == term.literal;
+    }
+    if term.kind == KIND_DOT {
+        return is_ascii(value) && value != '\n' && value != '\r';
+    }
+    if term.kind == KIND_CLASS {
+        return class_matches(term, value);
+    }
+
+    return false;
+}
+
+fn match_terms(terms: [Term], term_index: int, input: text, pos: int, starts: [int], ends: [int], budget: [int]): maybe.Maybe<MatchState> {
+    // Charge one step per entry and bail out once the budget is spent so a
+    // pathological pattern degrades to "no match" instead of hanging.
+    budget[0] = budget[0] - 1;
+    if budget[0] <= 0 {
+        return maybe.absent(default_state());
+    }
+    if term_index >= terms.len() {
+        return maybe.present(MatchState { pos: pos, starts: starts, ends: ends });
+    }
+
+    term = terms[term_index];
+    if term.kind == KIND_CAPTURE_START {
+        next_starts = copy_ints(starts);
+        next_ends = copy_ints(ends);
+        next_starts[term.group] = pos;
+        return match_terms(terms, term_index + 1, input, pos, next_starts, next_ends, budget);
+    }
+    if term.kind == KIND_CAPTURE_END {
+        next_starts = copy_ints(starts);
+        next_ends = copy_ints(ends);
+        next_ends[term.group] = pos;
+        return match_terms(terms, term_index + 1, input, pos, next_starts, next_ends, budget);
+    }
+
+    positions: [int] = [pos];
+    current = pos;
+    count = 0;
+    while (term.max == INFINITY || count < term.max) && atom_matches_at(term, input, current) {
+        current = current + 1;
+        count = count + 1;
+        positions.push(current);
+    }
+
+    max_count = positions.len() - 1;
+    if max_count < term.min {
+        return maybe.absent(default_state());
+    }
+
+    candidate = max_count;
+    while candidate >= term.min {
+        found = match_terms(terms, term_index + 1, input, positions[candidate], copy_ints(starts), copy_ints(ends), budget);
+        if found.has_value() {
+            return found;
+        }
+
+        if candidate == 0 {
+            break;
+        }
+        candidate = candidate - 1;
+    }
+
+    return maybe.absent(default_state());
+}
+
+fn build_captures(input: text, starts: [int], ends: [int]): [Capture] {
+    captures: [Capture] = [];
+    for index = 1; index < starts.len(); index = index + 1 {
+        if starts[index] >= 0 && ends[index] >= starts[index] {
+            captures.push(Capture {
+                index: index,
+                start: starts[index],
+                end: ends[index],
+                value: input[starts[index]:ends[index]],
+            });
+        }
+    }
+    return captures;
+}
+
+fn build_match(input: text, start: int, state: MatchState): Match {
+    return Match {
+        start: start,
+        end: state.pos,
+        value: input[start:state.pos],
+        captures: build_captures(input, state.starts, state.ends),
+    };
+}
+
+fn capture_value(current: Match, index: int): text {
+    if index == 0 {
+        return current.value;
+    }
+    return current.capture_text(index, "");
+}
+
+fn expand_replacement(replacement: text, current: Match): text {
+    result = "";
+    index = 0;
+    while index < replacement.len() {
+        if replacement[index] == '$' && index + 1 < replacement.len() {
+            next = replacement[index + 1];
+            if next == '$' {
+                result = append_text(result, "$");
+                index = index + 2;
+                continue;
+            }
+            if text.is_digit(next) {
+                capture_index = (next to int) - ('0' to int);
+                result = append_text(result, capture_value(current, capture_index));
+                index = index + 2;
+                continue;
+            }
+        }
+
+        result = append_text(result, replacement[index:index + 1]);
+        index = index + 1;
+    }
+
+    return result;
+}

@@ -31,6 +31,7 @@
   - [outcome](stdlib/outcome.md)
   - [process](stdlib/process.md)
   - [random](stdlib/random.md)
+  - [regex](stdlib/regex.md)
   - [runtime](stdlib/runtime.md)
   - [set](stdlib/set.md)
   - [text](stdlib/text.md)
