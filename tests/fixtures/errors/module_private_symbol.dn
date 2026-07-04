@@ -1,0 +1,4 @@
+// Selectively importing a private (non-exported) symbol must be rejected.
+from hidden_module import hidden;
+
+print(hidden());

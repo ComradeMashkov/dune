@@ -510,6 +510,21 @@ bool Parser::looks_like_binding_declaration() const {
     return false;
 }
 
+// `module <name> ;` — the contextual `module` keyword must be followed by an
+// identifier module name and a terminating `;`, which distinguishes it from an
+// ordinary identifier named `module`.
+bool Parser::looks_like_module_declaration() const {
+    return peek().type == TokenType::identifier && peek().lexeme == "module" && check_next(TokenType::identifier) &&
+           current_ + 2 < tokens_.size() && tokens_[current_ + 2].type == TokenType::semicolon;
+}
+
+// `from <module> import ...` — the contextual `from` keyword is only special when
+// followed by an identifier module and the `import` keyword.
+bool Parser::looks_like_from_import() const {
+    return peek().type == TokenType::identifier && peek().lexeme == "from" && check_next(TokenType::identifier) &&
+           current_ + 2 < tokens_.size() && tokens_[current_ + 2].type == TokenType::import_keyword;
+}
+
 const Token& Parser::advance() {
     if (!is_at_end()) {
         ++current_;
@@ -586,6 +601,16 @@ Statement Parser::statement() {
 
     if (match(TokenType::type_keyword)) {
         return type_alias_statement();
+    }
+
+    // `module`, `from`, and `as` are contextual keywords: they are only special in
+    // these specific positions, so identifiers named `module`/`from` keep working.
+    if (looks_like_module_declaration()) {
+        return module_declaration_statement();
+    }
+
+    if (looks_like_from_import()) {
+        return from_import_statement();
     }
 
     if (looks_like_binding_declaration()) {
@@ -958,9 +983,48 @@ Statement Parser::contract_statement() {
 Statement Parser::import_statement() {
     const Token& keyword = previous();
     const Token name = consume_identifier_like("expected module name after import");
-    match(TokenType::semicolon);
 
     Statement statement{StatementKind::import_statement, name.lexeme, nullptr, {}, {}};
+    statement.location = location_from_token(keyword);
+
+    // Optional `as <alias>` binds the module under a different local name.
+    if (peek().type == TokenType::identifier && peek().lexeme == "as") {
+        advance();
+        const Token alias = consume_identifier_like("expected alias name after 'as'");
+        statement.module_alias = alias.lexeme;
+    }
+
+    match(TokenType::semicolon);
+    return statement;
+}
+
+// `from <module> import <sym1>, <sym2>, ...;` — a selective (and grouped) import
+// represented as an import_statement carrying the selected symbol names.
+Statement Parser::from_import_statement() {
+    const Token& keyword = advance(); // consume contextual `from`
+    const Token module = consume_identifier_like("expected module name after 'from'");
+    consume(TokenType::import_keyword, "expected 'import' in a 'from ... import' statement");
+
+    Statement statement{StatementKind::import_statement, module.lexeme, nullptr, {}, {}};
+    statement.location = location_from_token(keyword);
+
+    do {
+        const Token symbol = consume_identifier_like("expected symbol name in 'from ... import'");
+        statement.import_symbols.push_back(symbol.lexeme);
+    } while (match(TokenType::comma) && !check(TokenType::semicolon));
+
+    match(TokenType::semicolon);
+    return statement;
+}
+
+// `module <name>;` — an optional module-identity declaration. In this phase it is
+// metadata only: the module loader validates and then drops it.
+Statement Parser::module_declaration_statement() {
+    const Token& keyword = advance(); // consume contextual `module`
+    const Token name = consume_identifier_like("expected module name after 'module'");
+    match(TokenType::semicolon);
+
+    Statement statement{StatementKind::module_declaration, name.lexeme, nullptr, {}, {}};
     statement.location = location_from_token(keyword);
     return statement;
 }

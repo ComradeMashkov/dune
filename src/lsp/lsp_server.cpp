@@ -1099,6 +1099,7 @@ std::string declaration_hover(const Statement& statement) {
     case StatementKind::return_statement:
     case StatementKind::expression_statement:
     case StatementKind::import_statement:
+    case StatementKind::module_declaration:
         return {};
     }
 

@@ -192,6 +192,8 @@ Statement clone_statement(const Statement& statement) {
     for (const std::unique_ptr<Expression>& argument : statement.arguments) {
         result.arguments.push_back(clone_expression_pointer(argument));
     }
+    result.module_alias = statement.module_alias;
+    result.import_symbols = statement.import_symbols;
     return result;
 }
 
@@ -267,19 +269,18 @@ ModuleLoader::ModuleLoader(std::vector<std::filesystem::path> search_paths) : se
 
 Program ModuleLoader::resolve(Program program, const std::filesystem::path& source_directory) {
     loaded_modules_.clear();
+    module_exports_.clear();
     desugar_impls(program);
 
-    std::vector<Statement> resolved_statements;
-    for (const Statement& statement : program.statements) {
-        if (statement.kind == StatementKind::import_statement) {
-            std::vector<Statement> module_statements = load_module(statement.name, source_directory);
-            resolved_statements.insert(resolved_statements.end(), std::make_move_iterator(module_statements.begin()),
-                                       std::make_move_iterator(module_statements.end()));
-        }
-    }
+    // Load every imported module (recording aliases / selective imports), then
+    // rewrite the top-level file's own references to the canonical `module.symbol`
+    // names before prepending the resolved module statements.
+    ImportContext context;
+    std::vector<Statement> resolved_statements = collect_imports(program.statements, source_directory, context);
 
-    resolved_statements.insert(resolved_statements.end(), std::make_move_iterator(program.statements.begin()),
-                               std::make_move_iterator(program.statements.end()));
+    std::vector<Statement> own = rewrite_file(program.statements, context);
+    resolved_statements.insert(resolved_statements.end(), std::make_move_iterator(own.begin()),
+                               std::make_move_iterator(own.end()));
     program.statements = std::move(resolved_statements);
     return program;
 }
@@ -294,17 +295,18 @@ std::vector<Statement> ModuleLoader::load_module(const std::string& module_name,
     Program module = parse_file(module_path);
     desugar_impls(module);
 
-    std::vector<Statement> statements;
-    for (const Statement& statement : module.statements) {
-        if (statement.kind == StatementKind::import_statement) {
-            std::vector<Statement> imported = load_module(statement.name, module_path.parent_path());
-            statements.insert(statements.end(), std::make_move_iterator(imported.begin()),
-                              std::make_move_iterator(imported.end()));
-        }
-    }
+    // Resolve the module's own imports (including its aliases / selective imports),
+    // rewrite its references accordingly, then qualify its local declarations with
+    // the module name.
+    ImportContext context;
+    std::vector<Statement> statements = collect_imports(module.statements, module_path.parent_path(), context);
 
-    qualify_module_program(module, module_name);
-    for (Statement& statement : module.statements) {
+    Program own;
+    own.statements = rewrite_file(module.statements, context);
+    qualify_module_program(own, module_name);
+    record_module_exports(module_name, own.statements);
+
+    for (Statement& statement : own.statements) {
         if (statement.kind != StatementKind::function && statement.kind != StatementKind::const_statement &&
             statement.kind != StatementKind::struct_statement && statement.kind != StatementKind::enum_statement &&
             statement.kind != StatementKind::contract_statement &&
@@ -319,6 +321,126 @@ std::vector<Statement> ModuleLoader::load_module(const std::string& module_name,
     }
 
     return statements;
+}
+
+// Load every module referenced by a file's import statements, returning their
+// resolved statements to prepend and filling `context` with this file's alias and
+// selective-import rewrites. Validates selective symbols and alias conflicts.
+std::vector<Statement> ModuleLoader::collect_imports(const std::vector<Statement>& statements,
+                                                     const std::filesystem::path& importer_directory,
+                                                     ImportContext& context) {
+    std::vector<Statement> dependency_statements;
+    std::unordered_set<std::string> imported_modules;
+
+    for (const Statement& statement : statements) {
+        if (statement.kind != StatementKind::import_statement) {
+            continue;
+        }
+
+        const std::string& module = statement.name;
+        std::vector<Statement> loaded = load_module(module, importer_directory);
+        dependency_statements.insert(dependency_statements.end(), std::make_move_iterator(loaded.begin()),
+                                     std::make_move_iterator(loaded.end()));
+
+        // A plain module name must not collide with an alias bound elsewhere.
+        const auto alias_collision = context.aliases.find(module);
+        if (alias_collision != context.aliases.end() && alias_collision->second != module) {
+            throw std::runtime_error(diagnostic(
+                statement.location, "module '" + module + "' conflicts with an import alias of the same name"));
+        }
+        imported_modules.insert(module);
+
+        if (!statement.module_alias.empty()) {
+            const std::string& alias = statement.module_alias;
+            const auto existing = context.aliases.find(alias);
+            if (existing != context.aliases.end()) {
+                throw std::runtime_error(
+                    diagnostic(statement.location,
+                               "import alias '" + alias + "' is already bound to module '" + existing->second + "'"));
+            }
+            if (alias != module && imported_modules.contains(alias)) {
+                throw std::runtime_error(diagnostic(
+                    statement.location, "import alias '" + alias + "' conflicts with imported module '" + alias + "'"));
+            }
+
+            context.aliases.emplace(alias, module);
+        }
+
+        for (const std::string& symbol : statement.import_symbols) {
+            // Skip the export check on a not-yet-finished module (a cyclic import);
+            // otherwise a real typo is reported precisely.
+            const auto exports = module_exports_.find(module);
+            if (exports != module_exports_.end() && !exports->second.contains(symbol)) {
+                throw std::runtime_error(
+                    diagnostic(statement.location, "module '" + module + "' does not export '" + symbol + "'"));
+            }
+
+            const std::string qualified = module + "." + symbol;
+            const auto existing = context.selective.find(symbol);
+            if (existing != context.selective.end() && existing->second != qualified) {
+                throw std::runtime_error(
+                    diagnostic(statement.location, "symbol '" + symbol + "' is imported from more than one module"));
+            }
+
+            context.selective.emplace(symbol, qualified);
+        }
+    }
+
+    return dependency_statements;
+}
+
+// Drop `module` declarations, canonicalize import statements to plain
+// `import <module>;`, and rewrite every other statement's references through the
+// alias / selective-import maps.
+std::vector<Statement> ModuleLoader::rewrite_file(std::vector<Statement>& statements,
+                                                  const ImportContext& context) const {
+    std::vector<Statement> result;
+    result.reserve(statements.size());
+    for (Statement& statement : statements) {
+        if (statement.kind == StatementKind::module_declaration) {
+            continue;
+        }
+
+        if (statement.kind == StatementKind::import_statement) {
+            statement.module_alias.clear();
+            statement.import_symbols.clear();
+            result.push_back(std::move(statement));
+            continue;
+        }
+
+        apply_import_context(statement, context);
+        result.push_back(std::move(statement));
+    }
+
+    return result;
+}
+
+// Record the exported top-level members of a freshly qualified module so later
+// `from <module> import <symbol>` directives can be validated.
+void ModuleLoader::record_module_exports(const std::string& module_name, const std::vector<Statement>& statements) {
+    const std::string prefix = module_name + ".";
+    auto& exports = module_exports_[module_name];
+    for (const Statement& statement : statements) {
+        if (!statement.exported ||
+            (statement.kind != StatementKind::function && statement.kind != StatementKind::const_statement &&
+             statement.kind != StatementKind::struct_statement && statement.kind != StatementKind::enum_statement &&
+             statement.kind != StatementKind::contract_statement &&
+             statement.kind != StatementKind::type_alias_statement)) {
+            continue;
+        }
+
+        if (statement.name.rfind(prefix, 0) == 0) {
+            exports.insert(statement.name.substr(prefix.size()));
+        }
+
+        if (statement.kind == StatementKind::enum_statement) {
+            for (const Parameter& variant : statement.parameters) {
+                if (variant.name.rfind(prefix, 0) == 0) {
+                    exports.insert(variant.name.substr(prefix.size()));
+                }
+            }
+        }
+    }
 }
 
 std::filesystem::path ModuleLoader::find_module(const std::string& module_name,
@@ -621,6 +743,120 @@ void ModuleLoader::qualify_expression(Expression& expression, const std::string&
         if (argument != nullptr) {
             qualify_expression(*argument, module_name, local_functions, local_constants, local_structs,
                                local_type_aliases);
+        }
+    }
+}
+
+void ModuleLoader::apply_import_context(Statement& statement, const ImportContext& context) const {
+    apply_import_context_type_annotation(statement.type, context);
+    for (Type& contract : statement.contracts) {
+        apply_import_context_type(contract, context);
+    }
+
+    for (Parameter& parameter : statement.parameters) {
+        apply_import_context_type_annotation(parameter.type, context);
+        if (parameter.default_value != nullptr) {
+            apply_import_context_expression(*parameter.default_value, context);
+        }
+    }
+
+    if (statement.expression != nullptr) {
+        apply_import_context_expression(*statement.expression, context);
+    }
+
+    if (statement.target != nullptr) {
+        apply_import_context_expression(*statement.target, context);
+    }
+
+    for (std::unique_ptr<Expression>& argument : statement.arguments) {
+        if (argument != nullptr) {
+            apply_import_context_expression(*argument, context);
+        }
+    }
+
+    for (Statement& child : statement.body) {
+        apply_import_context(child, context);
+    }
+
+    for (Statement& child : statement.else_body) {
+        apply_import_context(child, context);
+    }
+
+    if (statement.initializer != nullptr) {
+        apply_import_context(*statement.initializer, context);
+    }
+
+    if (statement.increment != nullptr) {
+        apply_import_context(*statement.increment, context);
+    }
+}
+
+void ModuleLoader::apply_import_context_expression(Expression& expression, const ImportContext& context) const {
+    apply_import_context_type_annotation(expression.type, context);
+
+    // Rewrite a name through the import maps: an identifier head (`alias.member`),
+    // a selectively imported constant / free-function call / record literal, or an
+    // alias-qualified record literal such as `geo.Point`.
+    if (expression.kind == ExpressionKind::identifier || expression.kind == ExpressionKind::call ||
+        expression.kind == ExpressionKind::struct_literal) {
+        if (const auto alias = context.aliases.find(expression.lexeme); alias != context.aliases.end()) {
+            expression.lexeme = alias->second;
+        } else if (const auto selective = context.selective.find(expression.lexeme);
+                   selective != context.selective.end()) {
+            expression.lexeme = selective->second;
+        } else if (const std::size_t dot = expression.lexeme.find('.'); dot != std::string::npos) {
+            if (const auto prefix = context.aliases.find(expression.lexeme.substr(0, dot));
+                prefix != context.aliases.end()) {
+                expression.lexeme = prefix->second + expression.lexeme.substr(dot);
+            }
+        }
+    }
+
+    if (expression.left != nullptr) {
+        apply_import_context_expression(*expression.left, context);
+    }
+
+    if (expression.right != nullptr) {
+        apply_import_context_expression(*expression.right, context);
+    }
+
+    for (std::unique_ptr<Expression>& argument : expression.arguments) {
+        if (argument != nullptr) {
+            apply_import_context_expression(*argument, context);
+        }
+    }
+}
+
+void ModuleLoader::apply_import_context_type_annotation(TypeAnnotation& annotation,
+                                                        const ImportContext& context) const {
+    if (!annotation.has_type) {
+        return;
+    }
+
+    apply_import_context_type(annotation.type, context);
+}
+
+void ModuleLoader::apply_import_context_type(Type& type, const ImportContext& context) const {
+    if (type.element != nullptr) {
+        apply_import_context_type(*type.element, context);
+    }
+
+    for (Type& argument : type.arguments) {
+        apply_import_context_type(argument, context);
+    }
+
+    // A selectively imported bare type name becomes fully qualified.
+    if (const auto selective = context.selective.find(type.name); selective != context.selective.end()) {
+        type.name = selective->second;
+        return;
+    }
+
+    // An `alias.Type` reference has its alias head replaced by the real module.
+    const std::size_t dot = type.name.find('.');
+    if (dot != std::string::npos) {
+        const auto alias = context.aliases.find(type.name.substr(0, dot));
+        if (alias != context.aliases.end()) {
+            type.name = alias->second + type.name.substr(dot);
         }
     }
 }

@@ -1241,6 +1241,10 @@
           "named": true
         },
         {
+          "type": "from_import_statement",
+          "named": true
+        },
+        {
           "type": "function_declaration",
           "named": true
         },
@@ -1254,6 +1258,10 @@
         },
         {
           "type": "method_declaration",
+          "named": true
+        },
+        {
+          "type": "module_declaration",
           "named": true
         },
         {
@@ -2668,6 +2676,32 @@
     }
   },
   {
+    "type": "from_import_statement",
+    "named": true,
+    "fields": {
+      "module": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "symbol": {
+        "multiple": true,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "function_declaration",
     "named": true,
     "fields": {
@@ -3048,6 +3082,16 @@
     "type": "import_statement",
     "named": true,
     "fields": {
+      "alias": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
       "module": {
         "multiple": false,
         "required": true,
@@ -3440,6 +3484,22 @@
           "named": true
         }
       ]
+    }
+  },
+  {
+    "type": "module_declaration",
+    "named": true,
+    "fields": {
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
     }
   },
   {
@@ -4750,6 +4810,10 @@
           "named": true
         },
         {
+          "type": "from_import_statement",
+          "named": true
+        },
+        {
           "type": "function_declaration",
           "named": true
         },
@@ -4763,6 +4827,10 @@
         },
         {
           "type": "method_declaration",
+          "named": true
+        },
+        {
+          "type": "module_declaration",
           "named": true
         },
         {
@@ -5902,6 +5970,10 @@
     "named": false
   },
   {
+    "type": "as",
+    "named": false
+  },
+  {
     "type": "bool",
     "named": false
   },
@@ -5971,6 +6043,10 @@
     "named": false
   },
   {
+    "type": "from",
+    "named": false
+  },
+  {
     "type": "glyph",
     "named": false
   },
@@ -6020,6 +6096,10 @@
   },
   {
     "type": "method",
+    "named": false
+  },
+  {
+    "type": "module",
     "named": false
   },
   {

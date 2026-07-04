@@ -199,6 +199,8 @@ Statement clone_statement(const Statement& statement) {
     result.extern_symbol = statement.extern_symbol;
     result.owner_record = statement.owner_record;
     result.target = clone_expression_pointer(statement.target);
+    result.module_alias = statement.module_alias;
+    result.import_symbols = statement.import_symbols;
     return result;
 }
 
@@ -1272,6 +1274,9 @@ void TypeChecker::check_statement(const Statement& statement) {
         return;
     case StatementKind::import_statement:
         throw std::runtime_error(diagnostic(statement.location, "import statements are only allowed at top level"));
+    case StatementKind::module_declaration:
+        throw std::runtime_error(
+            diagnostic(statement.location, "'module' declarations are only allowed at the top of a file"));
     }
 }
 
@@ -3375,6 +3380,7 @@ bool TypeChecker::statement_returns(const Statement& statement) const {
     case StatementKind::continue_statement:
     case StatementKind::expression_statement:
     case StatementKind::import_statement:
+    case StatementKind::module_declaration:
         return false;
     }
 

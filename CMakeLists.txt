@@ -562,6 +562,38 @@ add_test(
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_failure_case.cmake
 )
 
+# Modules v2: a `module` declaration, aliased imports, and selective / grouped
+# `from ... import` for both a local module (shapes.dn) and the standard library.
+add_test(
+    NAME cli_modules_v2
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/stdlib/modules_v2.dn
+        -D EXPECTED_OUTPUT="7\n7\n10\n0\n10\n1"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
+    NAME cli_module_alias_conflict
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/errors/module_alias_conflict.dn
+        -D EXPECTED_ERROR="import alias 'm' is already bound to module 'math'"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_failure_case.cmake
+)
+
+add_test(
+    NAME cli_module_private_symbol
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/errors/module_private_symbol.dn
+        -D EXPECTED_ERROR="module 'hidden_module' does not export 'hidden'"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_failure_case.cmake
+)
+
 add_test(
     NAME cli_random_demo
     COMMAND
@@ -629,6 +661,16 @@ add_test(
         -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/examples/collection_pipeline.dn
         -D EXPECTED_OUTPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/examples/golden/collection_pipeline.out
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
+    NAME cli_example_geometry_demo
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/examples/geometry_demo.dn
+        -D EXPECTED_OUTPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/examples/golden/geometry_demo.out
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
 )
 

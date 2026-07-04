@@ -1,0 +1,12 @@
+// A module with an exported and a private function, used to check that a
+// `from ... import` of the private symbol is rejected.
+module hidden_module;
+
+export fn visible(): int {
+    return 1;
+}
+
+// Not exported: importing this from another module must fail.
+fn hidden(): int {
+    return 2;
+}

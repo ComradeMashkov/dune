@@ -1,0 +1,36 @@
+// A small reusable module demonstrating Modules v2 module identity and explicit
+// exports. Imported by geometry_demo.dn via alias and selective imports.
+module geometry;
+
+// Exported record; its fields are exported too so other modules can build one.
+export record Point {
+    export x: int,
+    export y: int,
+}
+
+// Exported constant.
+export const UNIT: int = 1;
+
+// Exported: the Manhattan (taxicab) distance between two points.
+export fn manhattan(a: Point, b: Point): int {
+    dx = a.x - b.x;
+    dy = a.y - b.y;
+    if dx < 0 { dx = 0 - dx; }
+    if dy < 0 { dy = 0 - dy; }
+    return dx + dy;
+}
+
+// Exported: the Chebyshev (chessboard) distance between two points.
+export fn chebyshev(a: Point, b: Point): int {
+    dx = a.x - b.x;
+    dy = a.y - b.y;
+    if dx < 0 { dx = 0 - dx; }
+    if dy < 0 { dy = 0 - dy; }
+    if dx > dy { return dx; }
+    return dy;
+}
+
+// Private helper: not exported, so it stays invisible to importers.
+fn double(value: int): int {
+    return value + value;
+}

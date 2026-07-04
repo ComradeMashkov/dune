@@ -1,0 +1,26 @@
+// Modules v2 in action: declare this file's module identity, alias the geometry
+// module, and pull specific symbols into scope with a grouped `from ... import`.
+module geometry_demo;
+
+// Alias the whole module: `geo.Name` refers to geometry.Name.
+import geometry as geo;
+// Selective + grouped import brings these symbols into scope unqualified.
+from geometry import Point, manhattan, chebyshev;
+// Alias a standard-library module too.
+import math as m;
+
+// `Point` is available unqualified thanks to the selective import.
+home = Point { x: 0, y: 0 };
+// `geo.Point` is the same record, reached through the alias.
+store = geo.Point { x: 3, y: 4 };
+
+// Selectively imported functions, called unqualified.
+print(manhattan(home, store));   // |0-3| + |0-4| = 7
+print(chebyshev(home, store));   // max(3, 4) = 4
+
+// The same functions via the module alias.
+print(geo.manhattan(home, store));   // 7
+print(geo.UNIT);                     // exported constant -> 1
+
+// Aliased standard-library access.
+print(m.max(manhattan(home, store), chebyshev(home, store)));  // max(7, 4) = 7

@@ -856,5 +856,38 @@ int main() {
                                    "expected generic-function-as-value diagnostic") &&
              passed;
 
+    // --- Modules v2: aliases, selective / grouped imports, visibility ---------
+    passed = expect_valid("import math as m; from array import range, sum; "
+                          "total: int = sum(range(1, 4)); ok: bool = m.PI > 3.0; print(total); print(ok);",
+                          "expected alias + selective/grouped stdlib imports to type check") &&
+             passed;
+    passed = expect_fixture_valid("module app; import shapes as sh; from shapes import Point, manhattan; "
+                                  "a = Point { x: 1, y: 2 }; b = sh.Point { x: 4, y: 6 }; "
+                                  "d: int = manhattan(a, b); print(d); print(sh.quadrant_sum(a));",
+                                  "expected local module with alias + selective import to type check") &&
+             passed;
+    passed = expect_error_contains("import math as m; import array as m; print(m.PI);",
+                                   "import alias 'm' is already bound to module 'math'",
+                                   "expected duplicate-alias diagnostic") &&
+             passed;
+    passed = expect_error_contains("import array; import math as array; print(1);",
+                                   "import alias 'array' conflicts with imported module 'array'",
+                                   "expected alias-vs-module diagnostic") &&
+             passed;
+    passed = expect_error_contains("from math import definitely_missing; print(1);",
+                                   "module 'math' does not export 'definitely_missing'",
+                                   "expected unknown-exported-symbol diagnostic") &&
+             passed;
+    // A private (non-exported) symbol cannot be selectively imported.
+    passed = expect_fixture_error_contains("from feature_exports import hidden; print(hidden());",
+                                           "module 'feature_exports' does not export 'hidden'",
+                                           "expected private-symbol import diagnostic") &&
+             passed;
+    // Non-exported members stay invisible even when the module is imported plainly.
+    passed = expect_fixture_error_contains("import feature_exports; print(feature_exports.hidden());",
+                                           "module 'feature_exports' does not export 'hidden'",
+                                           "expected private-member access diagnostic") &&
+             passed;
+
     return passed ? 0 : 1;
 }
