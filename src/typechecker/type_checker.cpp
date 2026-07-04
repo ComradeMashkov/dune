@@ -1488,6 +1488,19 @@ Type TypeChecker::check_member_assignment_target(const Expression& target, Sourc
 }
 
 Type TypeChecker::check_expression(const Expression& expression, const TypeAnnotation& expected) {
+    // Memoize resolved call/method-call types. A call node resolves
+    // deterministically from its (fixed) argument nodes, so re-checking it is
+    // pure recomputation. Overload resolution re-checks a call's receiver once
+    // per candidate module, and a fluent builder chain nests those receivers, so
+    // without this guard a length-N method chain is type-checked O(k^N) times.
+    // Literals whose type is inferred from `expected` are deliberately excluded.
+    if (expression.kind == ExpressionKind::method_call || expression.kind == ExpressionKind::call) {
+        const auto cached = expression_types_.find(&expression);
+        if (cached != expression_types_.end()) {
+            return cached->second;
+        }
+    }
+
     TypeAnnotation wanted = expected;
     if (wanted.has_type) {
         wanted.type = normalize_type(wanted.type);
