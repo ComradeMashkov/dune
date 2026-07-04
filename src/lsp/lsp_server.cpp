@@ -474,16 +474,69 @@ std::vector<Token> tokenize_best_effort(const std::string& source) {
     }
 }
 
-std::vector<std::string> imports_in_source(const std::string& source) {
+// The three Modules v2 import forms as they appear in a source file, scanned
+// straight from tokens so the editor can resolve symbols without a full parse.
+// `modules` lists every module brought into scope (canonical names, so an alias
+// resolves to its real module here); `aliases` maps an `import M as A` alias to
+// M; `selective` maps each symbol from `from M import a, b` to its module M.
+struct SourceImports {
+    std::vector<std::string> modules;
+    std::unordered_map<std::string, std::string> aliases;
+    std::unordered_map<std::string, std::string> selective;
+};
+
+SourceImports scan_imports(const std::string& source) {
     const std::vector<Token> tokens = tokenize_best_effort(source);
-    std::vector<std::string> imports;
+    SourceImports result;
     for (std::size_t index = 0; index + 1 < tokens.size(); ++index) {
+        // `import M;` and `import M as A;`
         if (tokens[index].type == TokenType::import_keyword && is_identifier_like(tokens[index + 1])) {
-            imports.push_back(tokens[index + 1].lexeme);
+            const std::string module_name = tokens[index + 1].lexeme;
+            result.modules.push_back(module_name);
+            if (index + 3 < tokens.size() && is_identifier_like(tokens[index + 2]) &&
+                tokens[index + 2].lexeme == "as" && is_identifier_like(tokens[index + 3])) {
+                result.aliases[tokens[index + 3].lexeme] = module_name;
+            }
+            continue;
+        }
+
+        // `from M import a, b, c;` — `from`/`as` are contextual keywords, so the
+        // module and symbols all arrive as plain identifiers.
+        if (is_identifier_like(tokens[index]) && tokens[index].lexeme == "from" && index + 2 < tokens.size() &&
+            is_identifier_like(tokens[index + 1]) && tokens[index + 2].type == TokenType::import_keyword) {
+            const std::string module_name = tokens[index + 1].lexeme;
+            result.modules.push_back(module_name);
+
+            bool expect_symbol = true;
+            for (std::size_t cursor = index + 3; cursor < tokens.size(); ++cursor) {
+                const Token& symbol = tokens[cursor];
+                if (symbol.type == TokenType::semicolon || symbol.type == TokenType::eof) {
+                    break;
+                }
+                if (expect_symbol && is_identifier_like(symbol)) {
+                    result.selective[symbol.lexeme] = module_name;
+                    expect_symbol = false;
+                } else if (symbol.type == TokenType::comma) {
+                    expect_symbol = true;
+                } else {
+                    break;
+                }
+            }
         }
     }
 
-    return imports;
+    return result;
+}
+
+std::vector<std::string> imports_in_source(const std::string& source) {
+    return scan_imports(source).modules;
+}
+
+// Resolves an import alias (`import M as A` -> A) to its module, leaving plain
+// module names and unknown qualifiers untouched.
+std::string resolve_module_alias(const SourceImports& imports, const std::string& qualifier) {
+    const auto alias = imports.aliases.find(qualifier);
+    return alias == imports.aliases.end() ? qualifier : alias->second;
 }
 
 void add_token_symbols(const std::string& source, std::vector<CompletionItem>& completions) {
@@ -1649,11 +1702,13 @@ std::vector<CompletionItem> complete_source(const std::string& source, const std
     std::vector<CompletionItem> completions;
     const std::filesystem::path directory = source_directory_for(uri, source_directory);
     const SourcePosition position{line, character};
-    const std::vector<std::string> imports = imports_in_source(source);
+    const SourceImports scanned = scan_imports(source);
+    const std::vector<std::string>& imports = scanned.modules;
 
     if (std::optional<std::string> qualifier = qualifier_before_cursor(source, position)) {
-        if (std::ranges::find(imports, *qualifier) != imports.end()) {
-            const std::optional<std::filesystem::path> module_path = find_module_file(*qualifier, directory);
+        const std::string module_qualifier = resolve_module_alias(scanned, *qualifier);
+        if (std::ranges::find(imports, module_qualifier) != imports.end()) {
+            const std::optional<std::filesystem::path> module_path = find_module_file(module_qualifier, directory);
             if (module_path.has_value()) {
                 const std::optional<Program> module_program = parse_program_best_effort(read_text_file(*module_path));
                 if (module_program.has_value()) {
@@ -1702,12 +1757,13 @@ std::optional<Hover> hover_source(const std::string& source, const std::string& 
         return std::nullopt;
     }
 
+    const SourceImports imports = scan_imports(source);
     const Token& token = tokens[*token_index];
     if (*token_index >= 2 && tokens[*token_index - 1].type == TokenType::dot &&
         is_identifier_like(tokens[*token_index - 2])) {
-        const std::string qualifier = tokens[*token_index - 2].lexeme;
-        const std::vector<std::string> imports = imports_in_source(source);
-        if (std::ranges::find(imports, qualifier) != imports.end()) {
+        // `module.member` or `alias.member`: resolve the alias to the real module.
+        const std::string qualifier = resolve_module_alias(imports, tokens[*token_index - 2].lexeme);
+        if (std::ranges::find(imports.modules, qualifier) != imports.modules.end()) {
             if (std::optional<std::string> contents = lookup_module_member_hover(qualifier, token.lexeme, directory)) {
                 return Hover{*contents};
             }
@@ -1721,9 +1777,11 @@ std::optional<Hover> hover_source(const std::string& source, const std::string& 
         }
     }
 
-    const std::vector<std::string> imports = imports_in_source(source);
-    if (std::ranges::find(imports, token.lexeme) != imports.end()) {
-        if (std::optional<std::string> contents = module_hover(token.lexeme, directory)) {
+    // A bare module name, whether written directly or through an `as` alias.
+    if (std::ranges::find(imports.modules, token.lexeme) != imports.modules.end() ||
+        imports.aliases.contains(token.lexeme)) {
+        if (std::optional<std::string> contents =
+                module_hover(resolve_module_alias(imports, token.lexeme), directory)) {
             return Hover{*contents};
         }
     }
@@ -1737,6 +1795,15 @@ std::optional<Hover> hover_source(const std::string& source, const std::string& 
 
     if (std::optional<Program> program = parse_program_best_effort(source)) {
         if (std::optional<std::string> contents = statement_hover(program->statements, token.lexeme)) {
+            return Hover{*contents};
+        }
+    }
+
+    // A symbol pulled in unqualified by `from M import ...`, once local lookups
+    // have had their chance (a same-file declaration shadows the import).
+    if (const auto selective = imports.selective.find(token.lexeme); selective != imports.selective.end()) {
+        if (std::optional<std::string> contents =
+                lookup_module_member_hover(selective->second, token.lexeme, directory)) {
             return Hover{*contents};
         }
     }
@@ -1903,15 +1970,15 @@ std::optional<DefinitionLocation> definition_source(const std::string& source, c
     }
 
     const Token& token = tokens[*token_index];
-    const std::vector<std::string> imports = imports_in_source(source);
+    const SourceImports imports = scan_imports(source);
 
-    // A `qualifier.member` access: the qualifier is either an imported module or
-    // a value whose type carries the method.
+    // A `qualifier.member` access: the qualifier is either an imported module
+    // (possibly via an `as` alias) or a value whose type carries the method.
     if (*token_index >= 2 && tokens[*token_index - 1].type == TokenType::dot &&
         is_identifier_like(tokens[*token_index - 2])) {
-        const std::string qualifier = tokens[*token_index - 2].lexeme;
+        const std::string qualifier = resolve_module_alias(imports, tokens[*token_index - 2].lexeme);
 
-        if (std::ranges::find(imports, qualifier) != imports.end()) {
+        if (std::ranges::find(imports.modules, qualifier) != imports.modules.end()) {
             // `module.member` -> the member's declaration inside the module file.
             if (std::optional<DefinitionLocation> member =
                     lookup_module_member_definition(qualifier, token.lexeme, directory)) {
@@ -1947,10 +2014,12 @@ std::optional<DefinitionLocation> definition_source(const std::string& source, c
         }
     }
 
-    // A bare module name (in `import math` or the `math` in `math.square`) opens
-    // the module file at its top.
-    if (std::ranges::find(imports, token.lexeme) != imports.end()) {
-        if (const std::optional<std::filesystem::path> path = find_module_file(token.lexeme, directory)) {
+    // A bare module name opens the module file at its top. This covers `math` in
+    // `import math`, the module in `from array import ...`, and an `as` alias.
+    if (std::ranges::find(imports.modules, token.lexeme) != imports.modules.end() ||
+        imports.aliases.contains(token.lexeme)) {
+        if (const std::optional<std::filesystem::path> path =
+                find_module_file(resolve_module_alias(imports, token.lexeme), directory)) {
             return DefinitionLocation{uri_from_path(*path), 1, 1, 1};
         }
     }
@@ -1963,6 +2032,15 @@ std::optional<DefinitionLocation> definition_source(const std::string& source, c
 
     if (const std::optional<SourceLocation> location = find_declaration_location(program->statements, token.lexeme)) {
         return DefinitionLocation{uri, location->line, location->column, location->length};
+    }
+
+    // A symbol brought in unqualified by `from M import ...` (checked after the
+    // same-file pass so a local declaration of the same name wins).
+    if (const auto selective = imports.selective.find(token.lexeme); selective != imports.selective.end()) {
+        if (std::optional<DefinitionLocation> member =
+                lookup_module_member_definition(selective->second, token.lexeme, directory)) {
+            return member;
+        }
     }
 
     return std::nullopt;
