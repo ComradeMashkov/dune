@@ -1,0 +1,33 @@
+1
+dune
+1
+input.txt
+3
+2.5
+1
+world
+0
+1
+missing positional argument 'input'
+missing required option '--config'
+1
+demo
+Simple demo
+
+Usage:
+  demo [options] <input>
+
+Arguments:
+  input  Input file
+
+Options:
+  -n, --name <value>  Name [default: world]
+  -c, --count <value>  Count [default: 1]
+      --scale <value>  Scale [default: 1.0]
+      --dry <value>  Dry run [default: false]
+  -v, --verbose  Verbose output
+  -h, --help  Show this help message
+      --version  Show version information
+
+1
+demo 1.2.3

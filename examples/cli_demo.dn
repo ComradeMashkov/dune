@@ -1,0 +1,14 @@
+import cli;
+import io;
+
+app = cli.command("demo")
+    .about("Simple demo")
+    .option("name", "n", "Name", "world")
+    .flag("verbose", "v", "Verbose output")
+    .positional("input", "Input file");
+
+matches = app.parse(["--name", "dune", "-v", "input.txt"]).value_or(cli.empty_result());
+
+io.println(matches.text("name").value_or("world"));
+io.println(matches.flag("verbose"));
+io.println(matches.positional("input").value_or(""));
