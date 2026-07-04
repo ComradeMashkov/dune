@@ -57,3 +57,25 @@ fn total(): outcome.Outcome<int, text> {
     return outcome.done(a + b, "");
 }
 ```
+
+## Printing choices
+
+Choices print by default — no boilerplate. `io.println(value)` and
+`fmt.format("{}", value)` render a choice as its variant name, plus the payload
+in parentheses when the variant carries one:
+
+```dn
+import io;
+
+choice Shape { Circle(int), Named(text), Empty }
+
+a: Shape = Circle(5);
+io.println(a);      // Circle(5)
+io.println(Empty);  // Empty
+```
+
+This works when every variant payload is a scalar or `text` (including generic
+choices instantiated with such types, like `Maybe<int>`). A choice whose variant
+carries a record, array, or tuple is not printable by default — give the payload
+type its own `to_text` rendering or format the fields explicitly. See
+[Display](../stdlib/display.md).

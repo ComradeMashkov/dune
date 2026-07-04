@@ -129,6 +129,25 @@ int main() {
                           "wide: i64 = 123i64; index: usize = 10usize; rough: real = 1_000.5_25;",
                           "expected numeric literal polish to validate") &&
              passed;
+    passed = expect_valid("choice Shape { Circle(int), Named(text), Empty, } "
+                          "a: Shape = Circle(5); b: Shape = Empty; "
+                          "io.println(a); io.println(fmt.format(\"{}\", b));",
+                          "expected choices with scalar payloads to print by default") &&
+             passed;
+    passed = expect_valid("choice Maybe2<T> { Some(T), None, } "
+                          "m: Maybe2<int> = Some(7); io.println(m);",
+                          "expected generic choice with printable argument to print") &&
+             passed;
+    passed = expect_error_contains("record Point { x: int } choice Wrap { Boxed(Point), Nothing, } "
+                                   "w: Wrap = Boxed(Point { x: 1 }); io.println(w);",
+                                   "choices print by default only when every variant payload is a scalar or text",
+                                   "expected choice with record payload to be rejected") &&
+             passed;
+    passed = expect_error_contains("record Point { x: int } choice Maybe2<T> { Some(T), None, } "
+                                   "m: Maybe2<Point> = Some(Point { x: 1 }); io.println(m);",
+                                   "cannot format type 'Maybe2<Point>'",
+                                   "expected generic choice with record argument to be rejected") &&
+             passed;
     passed =
         expect_valid(
             R"dune(path: text = r"C:\Users\name\data.csv"; literal: text = r"\x"; line: text = "hello\n"; tab: glyph = '\t'; newline: glyph = '\n'; carriage: glyph = '\r'; quote: glyph = '\''; slash: glyph = '\\'; zero: glyph = '\0';)dune",

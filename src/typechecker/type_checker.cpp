@@ -2024,6 +2024,39 @@ bool TypeChecker::record_has_display(const Type& type) const {
     return false;
 }
 
+bool TypeChecker::choice_is_printable(const Type& type) const {
+    if (type.kind != ValueType::enum_type) {
+        return false;
+    }
+
+    const auto definition = enums_.find(type.name);
+    if (definition == enums_.end()) {
+        return false;
+    }
+
+    // Map the choice's generic parameters to the concrete type arguments so a
+    // payload like `T` is checked as the actual type at this use site.
+    std::unordered_map<std::string, Type> substitutions;
+    for (std::size_t index = 0;
+         index < definition->second.generic_parameters.size() && index < type.arguments.size(); ++index) {
+        substitutions.emplace(definition->second.generic_parameters[index].name, type.arguments[index]);
+    }
+
+    for (const EnumVariant& variant : definition->second.variants) {
+        if (!variant.has_payload) {
+            continue;
+        }
+
+        const Type payload =
+            substitutions.empty() ? variant.payload_type : substitute_type(variant.payload_type, substitutions);
+        if (!is_printable_type(payload)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 void TypeChecker::check_format_arguments(const Expression& format,
                                          const std::vector<std::unique_ptr<Expression>>& arguments,
                                          std::size_t first_argument, std::string_view feature_name) {
@@ -2046,10 +2079,13 @@ void TypeChecker::check_format_arguments(const Expression& format,
 
     for (std::size_t index = first_argument; index < arguments.size(); ++index) {
         const Type argument_type = check_expression(*arguments[index]);
-        if (!is_printable_type(argument_type) && !record_has_display(argument_type)) {
+        if (!is_printable_type(argument_type) && !record_has_display(argument_type) &&
+            !choice_is_printable(argument_type)) {
             std::string message = "cannot " + action + " type '" + type_name(argument_type) + "'";
             if (argument_type.kind == ValueType::struct_type) {
                 message += "; add a 'to_text(): text' method to make it printable";
+            } else if (argument_type.kind == ValueType::enum_type) {
+                message += "; choices print by default only when every variant payload is a scalar or text";
             }
 
             throw DiagnosticError(arguments[index]->location, message);

@@ -1,0 +1,30 @@
+import io;
+import fmt;
+
+// Choices print by default as `Variant` or `Variant(payload)` — no boilerplate.
+choice Shape {
+    Circle(int),
+    Named(text),
+    Empty,
+}
+
+a: Shape = Circle(5);
+b: Shape = Named("hex");
+c: Shape = Empty;
+
+io.println(a);                             // Circle(5)
+io.println(b);                             // Named(hex)
+io.println(c);                             // Empty
+io.println(fmt.format("shape={}", a));     // shape=Circle(5)
+
+// Works for generic choices once the type argument is a scalar/text.
+choice Maybe2<T> {
+    Some(T),
+    None,
+}
+
+m: Maybe2<int> = Some(7);
+n: Maybe2<int> = None;
+
+io.println(m);                             // Some(7)
+io.println(n);                             // None

@@ -35,6 +35,9 @@ struct Value {
     std::shared_ptr<std::vector<Value>> tuple_value;
     std::shared_ptr<std::vector<Value>> record_value;
     std::size_t variant_tag = 0;
+    // For `variant`: the variant's simple name (e.g. "Circle"), used to render
+    // choices as text by default (`value_to_text`).
+    std::string variant_name;
     std::shared_ptr<Value> variant_payload;
     // For `callable`: index into Bytecode::functions of the referenced function.
     std::size_t function_index = 0;
