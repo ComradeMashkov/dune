@@ -937,7 +937,9 @@ cmake -S . -B build -D DUNE_ENABLE_NATIVE=OFF -D DUNE_ENABLE_LINT=OFF
 ## Zed
 
 Dune has a Zed extension in `editors/zed`. It provides Tree-sitter syntax
-highlighting for `.dn` files and compiler diagnostics through `dune lsp`.
+highlighting for `.dn` files plus completions, hover, symbol outline,
+go-to-definition (`Cmd`/`Ctrl`+click), and compiler diagnostics through
+`dune lsp`.
 Running or installing `dune lsp` by itself is not enough for Zed to recognize
 `.dn` files; the editor also needs this language extension so the file suffix,
 Tree-sitter grammar, queries, and LSP wiring are registered.

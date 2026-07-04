@@ -394,9 +394,9 @@ void add_completion(std::vector<CompletionItem>& completions, std::string label,
 
 void add_static_completions(std::vector<CompletionItem>& completions) {
     for (const std::string_view keyword :
-         {"break",  "choice", "const",  "continue", "contract", "else",   "export", "fn",     "foreign",
-          "for",    "if",     "import", "in",       "is",       "method", "print",  "record", "return",
-          "static", "to",     "type",   "when",     "while",    "with",   "true",   "false"}) {
+         {"break",   "choice", "const", "continue", "contract", "derive", "else",   "export", "fn",
+          "foreign", "for",    "if",    "import",   "in",       "is",     "method", "print",  "record",
+          "return",  "static", "to",    "type",     "when",     "while",  "with",   "true",   "false"}) {
         add_completion(completions, std::string(keyword), "keyword", completion_kind_keyword);
     }
 
@@ -1497,6 +1497,7 @@ std::optional<std::string> builtin_hover(const Token& token) {
     case TokenType::record_keyword:
     case TokenType::contract_keyword:
     case TokenType::with_keyword:
+    case TokenType::derive_keyword:
     case TokenType::choice_keyword:
     case TokenType::import_keyword:
     case TokenType::when_keyword:
@@ -1725,6 +1726,124 @@ std::optional<Hover> hover_source(const std::string& source, const std::string& 
     return std::nullopt;
 }
 
+bool declares_named_symbol(StatementKind kind) {
+    switch (kind) {
+    case StatementKind::binding:
+    case StatementKind::const_statement:
+    case StatementKind::function:
+    case StatementKind::struct_statement:
+    case StatementKind::enum_statement:
+    case StatementKind::contract_statement:
+    case StatementKind::type_alias_statement:
+        return true;
+    default:
+        return false;
+    }
+}
+
+// Walks the AST for the declaration that introduces `name` and returns where it
+// is written. Mirrors statement_hover's traversal so go-to-definition and hover
+// agree on which symbol a token refers to. Parameters cover function arguments,
+// record fields, and choice variants; the first match in document order wins.
+std::optional<SourceLocation> find_declaration_location(const std::vector<Statement>& statements,
+                                                        const std::string& name) {
+    for (const Statement& statement : statements) {
+        for (const Parameter& parameter : statement.parameters) {
+            if (parameter.name == name) {
+                return parameter.location;
+            }
+        }
+
+        if (statement.name == name &&
+            (declares_named_symbol(statement.kind) || statement.kind == StatementKind::for_in_statement)) {
+            return statement.location;
+        }
+
+        if (std::optional<SourceLocation> found = find_declaration_location(statement.body, name)) {
+            return found;
+        }
+
+        if (std::optional<SourceLocation> found = find_declaration_location(statement.else_body, name)) {
+            return found;
+        }
+
+        if (statement.initializer != nullptr && statement.initializer->name == name &&
+            declares_named_symbol(statement.initializer->kind)) {
+            return statement.initializer->location;
+        }
+
+        if (statement.increment != nullptr && statement.increment->name == name &&
+            declares_named_symbol(statement.increment->kind)) {
+            return statement.increment->location;
+        }
+    }
+
+    return std::nullopt;
+}
+
+// Finds the identifier token under the cursor. Unlike token_index_at_position,
+// this only considers identifiers and resolves boundary clicks toward the
+// identifier: on `p.x`, a click at the start of `x` must not snap to the `.` to
+// its left (whose inclusive end shares that column).
+std::optional<std::size_t> identifier_token_at_position(const std::vector<Token>& tokens, SourcePosition position) {
+    const std::size_t target_line = position.line + 1;
+    const std::size_t target_column = position.character + 1;
+
+    std::optional<std::size_t> boundary_match;
+    for (std::size_t index = 0; index < tokens.size(); ++index) {
+        const Token& token = tokens[index];
+        if (!is_identifier_like(token) || token.line != target_line) {
+            continue;
+        }
+
+        const std::size_t start = token.column;
+        const std::size_t end = token.column + token.lexeme.size();
+        if (target_column >= start && target_column < end) {
+            return index;
+        }
+
+        if (target_column == end) {
+            boundary_match = index;
+        }
+    }
+
+    return boundary_match;
+}
+
+std::optional<DefinitionLocation> definition_source(const std::string& source, const std::string& uri,
+                                                    const std::filesystem::path& source_directory, std::size_t line,
+                                                    std::size_t character) {
+    (void)source_directory;
+    const std::vector<Token> tokens = tokenize_best_effort(source);
+    const std::optional<std::size_t> token_index =
+        identifier_token_at_position(tokens, SourcePosition{line, character});
+    if (!token_index.has_value()) {
+        return std::nullopt;
+    }
+
+    const Token& token = tokens[*token_index];
+    const std::optional<Program> program = parse_program_best_effort(source);
+    if (!program.has_value()) {
+        return std::nullopt;
+    }
+
+    const std::optional<SourceLocation> location = find_declaration_location(program->statements, token.lexeme);
+    if (!location.has_value()) {
+        return std::nullopt;
+    }
+
+    return DefinitionLocation{uri, location->line, location->column, location->length};
+}
+
+std::string definition_json(const DefinitionLocation& definition) {
+    const std::size_t line = definition.line == 0 ? 0 : definition.line - 1;
+    const std::size_t start = definition.column == 0 ? 0 : definition.column - 1;
+    const std::size_t end = start + definition.length;
+    return "{\"uri\":\"" + json_escape(definition.uri) + "\",\"range\":{\"start\":{\"line\":" + std::to_string(line) +
+           ",\"character\":" + std::to_string(start) + "},\"end\":{\"line\":" + std::to_string(line) +
+           ",\"character\":" + std::to_string(end) + "}}}";
+}
+
 int run(std::istream& input, std::ostream& output) {
     std::unordered_map<std::string, std::string> documents;
 
@@ -1738,7 +1857,8 @@ int run(std::istream& input, std::ostream& output) {
             write_message(output,
                           "{\"jsonrpc\":\"2.0\",\"id\":" + response_id +
                               ",\"result\":{\"capabilities\":{\"textDocumentSync\":1,\"completionProvider\":{"
-                              "\"triggerCharacters\":[\".\",\":\"],\"resolveProvider\":false},\"hoverProvider\":true},"
+                              "\"triggerCharacters\":[\".\",\":\"],\"resolveProvider\":false},\"hoverProvider\":true,"
+                              "\"definitionProvider\":true},"
                               "\"serverInfo\":{\"name\":\"dune-"
                               "lsp\",\"version\":\"0.1.0\"}}}");
             continue;
@@ -1773,6 +1893,18 @@ int run(std::istream& input, std::ostream& output) {
             const std::optional<Hover> hover = hover_source(text, uri, {}, cursor.line, cursor.character);
             write_message(output, "{\"jsonrpc\":\"2.0\",\"id\":" + response_id +
                                       ",\"result\":" + (hover.has_value() ? hover_json(*hover) : "null") + "}");
+            continue;
+        }
+
+        if (method == "textDocument/definition") {
+            const std::string response_id = id.empty() ? "null" : id;
+            const std::string uri = find_json_string(message, "uri");
+            const std::string text = document_text_for(documents, uri);
+            const SourcePosition cursor = find_position(message).value_or(SourcePosition{});
+            const std::optional<DefinitionLocation> definition =
+                definition_source(text, uri, {}, cursor.line, cursor.character);
+            write_message(output, "{\"jsonrpc\":\"2.0\",\"id\":" + response_id + ",\"result\":" +
+                                      (definition.has_value() ? definition_json(*definition) : "null") + "}");
             continue;
         }
 
