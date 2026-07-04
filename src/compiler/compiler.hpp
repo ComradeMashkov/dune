@@ -29,7 +29,10 @@ private:
     void compile_statement(const Statement& statement);
     void compile_for_in_statement(const Statement& statement);
     void compile_range_for_in_statement(const Statement& statement, const Type& element_type);
-    void compile_array_for_in_statement(const Statement& statement, const Type& iterable_type);
+    void compile_array_for_in_statement(const Statement& statement, const Type& iterable_type, const Type& element_type);
+    void compile_iterable_storage(const Expression& expression, const Type& iterable_type);
+    Type iterable_storage_type(const Type& iterable_type, const Type& element_type) const;
+    bool known_iterable_record_field(const Type& iterable_type, std::string& field_name) const;
     void compile_array_comprehension(const Expression& expression);
     void compile_comprehension_body(const Expression& comprehension, std::size_t result_slot,
                                     const Expression* condition);
@@ -55,6 +58,7 @@ private:
     std::size_t declare_scoped_local(const std::string& name, const Type& type);
     std::size_t resolve_local(const std::string& name) const;
     const Type& expression_type(const Expression& expression) const;
+    const Type& iterable_element_type(const Expression& expression) const;
     std::size_t resolve_function(const std::string& name) const;
     Type normalize_type(const Type& type) const;
     Type normalize_type(const Type& type, std::unordered_set<std::string>& resolving_aliases) const;
@@ -91,6 +95,7 @@ private:
     std::unordered_map<std::string, Type> type_aliases_;
     std::vector<const Statement*> global_constants_;
     std::unordered_map<const Expression*, Type> expression_types_;
+    std::unordered_map<const Expression*, Type> iterable_element_types_;
     std::unordered_map<const Expression*, std::string> resolved_calls_;
     std::unordered_map<const Expression*, TypeChecker::VariantResolution> resolved_variants_;
     std::unordered_map<const Expression*, TypeChecker::TryResolution> resolved_tries_;

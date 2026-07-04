@@ -95,6 +95,7 @@ public:
 
     void check(const Program& program);
     const std::unordered_map<const Expression*, Type>& expression_types() const;
+    const std::unordered_map<const Expression*, Type>& iterable_element_types() const;
     const std::unordered_map<const Expression*, std::string>& resolved_calls() const;
     const std::unordered_map<const Expression*, VariantResolution>& resolved_variants() const;
     const std::unordered_map<const Expression*, TryResolution>& resolved_tries() const;
@@ -134,7 +135,8 @@ private:
     void check_statement(const Statement& statement);
     void check_for_in_statement(const Statement& statement);
     void check_statements(const std::vector<Statement>& statements);
-    Type check_for_in_iterable(const Expression& expression);
+    Type check_iterable_expression(const Expression& expression);
+    bool known_iterable_record_element_type(const Type& iterable, Type& element) const;
     Type check_assignment_target(const Expression& target, SourceLocation location);
     Type check_member_assignment_target(const Expression& target, SourceLocation location);
     Type check_expression(const Expression& expression, const TypeAnnotation& expected = {});
@@ -266,6 +268,7 @@ private:
     std::unordered_map<std::string, std::unordered_set<std::string>> module_exports_;
     std::unordered_set<std::string> known_modules_;
     std::unordered_map<const Expression*, Type> expression_types_;
+    std::unordered_map<const Expression*, Type> iterable_element_types_;
     std::unordered_map<const Expression*, std::string> resolved_calls_;
     std::unordered_map<const Expression*, VariantResolution> resolved_variants_;
     std::unordered_map<const Expression*, TryResolution> resolved_tries_;
