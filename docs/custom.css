@@ -16,7 +16,7 @@
      16px — so code renders far smaller than intended. rem sidesteps it entirely,
      and the doubled `monospace` above is the canonical belt-and-braces defeat of
      the same quirk. */
-  --code-font-size: 1.5rem; /* inline code ≈ 15px */
+  --code-font-size: 1.4rem; /* inline code ≈ 14px — a touch under the 16px prose */
 }
 
 /* Modern system font stack for prose; comfortable reading rhythm. */
@@ -75,9 +75,10 @@ html {
 }
 .content pre > code {
   padding: 1em 1.15em;
-  /* 16px, on par with prose. Explicit rem (not the `em` var) so the
-     monospace-shrink quirk can't shrink block code. */
-  font-size: 1.6rem;
+  /* ~14.5px: readable but slightly under the 16px prose, since monospace reads
+     larger than proportional text at the same size. Explicit rem (not the `em`
+     var) so the monospace-shrink quirk can't shrink block code. */
+  font-size: 1.45rem;
 }
 .navy .content pre,
 .coal .content pre,
