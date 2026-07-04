@@ -180,7 +180,8 @@ Statement clone_statement(const Statement& statement) {
     result.parameters.reserve(statement.parameters.size());
     for (const Parameter& parameter : statement.parameters) {
         result.parameters.push_back(Parameter{parameter.name, clone_type_annotation(parameter.type), parameter.location,
-                                              parameter.exported, clone_expression_pointer(parameter.default_value)});
+                                              parameter.exported, clone_expression_pointer(parameter.default_value),
+                                              parameter.doc_comment});
     }
 
     result.generic_parameters = statement.generic_parameters;
@@ -742,8 +743,8 @@ void TypeChecker::define_struct(const Statement& statement) {
 
         const std::size_t index = definition->second.fields.size();
         definition->second.field_indices.emplace(field.name, index);
-        definition->second.fields.push_back(
-            StructField{field.name, field_type, field.location, field.exported, field.default_value});
+        definition->second.fields.push_back(StructField{field.name, field_type, field.location, field.exported,
+                                                        field.default_value, field.doc_comment});
     }
 
     for (const Type& contract : statement.contracts) {
@@ -770,6 +771,7 @@ void TypeChecker::define_struct(const Statement& statement) {
         signature.exported = method.exported;
         signature.is_constructor = method.name == "new";
         signature.is_static = method.is_static_record_member;
+        signature.doc_comment = method.doc_comment;
         for (const Parameter& parameter : method.parameters) {
             signature.parameters.push_back(annotation_or_default(parameter.type, generic_names));
         }

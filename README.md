@@ -412,6 +412,8 @@ Runnable examples live in `examples/`:
 - `matrix_basics.dn`
 - `vector_stats.dn`
 - `linear_regression.dn`
+- `documented.dn` — every comment form plus `brief`/`param`/`returns` doc-comments
+  on a function and on record fields and methods
 
 Those examples are also covered by VM and native CLI golden tests.
 

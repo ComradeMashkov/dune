@@ -1143,12 +1143,16 @@ Statement Parser::struct_statement() {
     std::vector<Parameter> fields;
     std::vector<Statement> methods;
     while (!check(TokenType::right_brace) && !is_at_end()) {
+        // The member's doc-comment rides on the leading comment of whatever token
+        // opens it (`export`, `static`, `fn`, or the field name).
+        std::string member_doc = peek().leading_comment;
         const bool member_exported = match(TokenType::export_keyword);
         const bool member_static = match(TokenType::static_keyword);
         if (match(TokenType::fn_keyword)) {
             Statement method = function_statement();
             method.exported = member_exported;
             method.is_static_record_member = member_static;
+            method.doc_comment = std::move(member_doc);
             methods.push_back(std::move(method));
             match(TokenType::comma);
             continue;
@@ -1165,8 +1169,10 @@ Statement Parser::struct_statement() {
         if (match(TokenType::equal)) {
             default_value = expression();
         }
-        fields.push_back(
-            Parameter{field.lexeme, std::move(field_type), location_from_token(field), member_exported, default_value});
+        Parameter field_parameter{field.lexeme, std::move(field_type), location_from_token(field), member_exported,
+                                  default_value};
+        field_parameter.doc_comment = std::move(member_doc);
+        fields.push_back(std::move(field_parameter));
 
         if (check(TokenType::right_brace)) {
             break;
