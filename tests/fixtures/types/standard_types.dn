@@ -1,38 +1,66 @@
+// Function returning unit (no value): prints then explicitly returns.
 fn say(message: text): unit {
+    // Print the text argument.
     print(message);
+    // Bare return from a unit function.
     return;
 }
 
+// Unit function with an empty body: implicitly returns unit.
 fn noop(): unit {
 }
 
+// Function over i32 (signed 32-bit int), returning its successor.
 fn next(value: i32): i32 {
     return value + 1;
 }
 
+// i8: signed 8-bit integer.
 tiny: i8 = 12;
+// i16: signed 16-bit integer.
 small: i16 = 32000;
+// i32 produced by calling next(40) -> 41.
 mid: i32 = next(40);
+// i64: signed 64-bit integer holding a large value.
 wide: i64 = 9000000000;
+// usize: pointer-sized unsigned integer.
 count: usize = 5;
+// isize: pointer-sized signed integer.
 offset: isize = 6;
+// real32: 32-bit float.
 sample: real32 = 1.5;
+// real32 arithmetic: adds a 32-bit float literal.
 sample_sum: real32 = sample + 2.25;
+// real64: 64-bit float.
 precise: real64 = 2.25;
+// text: string value.
 status: text = "same";
 
+// Call the unit function with a text literal.
 say("types");
+// Call the empty unit function.
 noop();
+// Print the i8 value.
 print(tiny);
+// Print the i16 value.
 print(small);
+// Print the i32 value.
 print(mid);
+// Print the i64 value.
 print(wide);
+// Print the usize value.
 print(count);
+// Print the isize value.
 print(offset);
+// Print the real32 sum.
 print(sample_sum);
+// Print the real64 value.
 print(precise);
+// Branch on text equality using ==.
 if status == "same" {
+    // Taken branch: status equals "same".
     print(status);
 } else {
+    // Untaken branch for the non-matching case.
     print("bad");
 }

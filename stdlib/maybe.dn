@@ -1,31 +1,44 @@
+// `Maybe<T>` is an optional value: either a present value or nothing.
+// A `choice` is a tagged union; here it has two variants:
+//   `Present(T)` wraps a value of type T, and `Absent` carries no payload.
 export choice Maybe<T> {
     Present(T),
     Absent,
 }
 
+// Wrap a concrete value as `Present`.
 export fn present<T>(value: T): Maybe<T> {
     return Present(value);
 }
 
+// Produce an `Absent`. The `default` argument is only there to pin down the
+// generic type T (Dune infers T from it); the value itself is discarded.
 export fn absent<T>(default: T): Maybe<T> {
     return Absent;
 }
 
+// An `Absent` specialised to `Maybe<int>` (uses 0 just to fix T = int).
 export fn absent_int(): Maybe<int> {
     return absent(0);
 }
 
+// An `Absent` specialised to `Maybe<text>` (uses "" just to fix T = text).
 export fn absent_text(): Maybe<text> {
     return absent("");
 }
 
+// Method: true when this Maybe holds a value.
+// `when this { ... }` pattern-matches on the choice's variant.
 export method<T> Maybe<T>.has_value(): bool {
     return when this {
+        // Present carries a value, so there is a value: true.
         is Present(value) { true }
+        // Absent has nothing: false.
         is Absent { false }
     };
 }
 
+// Method: true when this Maybe is empty (the inverse of has_value).
 export method<T> Maybe<T>.is_absent(): bool {
     return when this {
         is Present(value) { false }
@@ -33,9 +46,12 @@ export method<T> Maybe<T>.is_absent(): bool {
     };
 }
 
+// Method: return the contained value, or `default` when Absent.
 export method<T> Maybe<T>.value_or(default: T): T {
     return when this {
+        // Unwrap the payload when present.
         is Present(value) { value }
+        // Fall back to the caller-supplied default otherwise.
         is Absent { default }
     };
 }

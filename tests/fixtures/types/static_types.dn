@@ -1,9 +1,14 @@
+// Function over int returning bool via the == comparison operator.
 fn is_equal(left: int, right: int): bool {
     return left == right;
 }
 
+// int binding.
 x: int = 10;
+// int binding.
 y: int = 20;
+// bool result of comparing the int sum x + y against 30 (statically typed as bool).
 done: bool = is_equal(x + y, 30);
 
+// Print the bool result (expected true).
 print(done);

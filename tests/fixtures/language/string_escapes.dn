@@ -1,11 +1,22 @@
+// Raw string literal (r"..."): backslashes are literal, not escape sequences.
 path: text = r"C:\Users\name\data.csv";
+// Prints the raw path with backslashes intact.
 print(path);
+// \n escape produces a newline, splitting output across "hello" and "world".
 print("hello\nworld");
+// \" escapes embed literal double-quote characters -> quote "ok".
 print("quote \"ok\"");
+// \\ escapes a single literal backslash -> slash \ ok.
 print("slash \\ ok");
+// glyph literal '\n' cast to its int code point -> 10 (newline).
 print('\n' to int);
+// glyph literal '\t' cast to int -> 9 (tab).
 print('\t' to int);
+// glyph literal '\r' cast to int -> 13 (carriage return).
 print('\r' to int);
+// glyph literal for a single backslash character.
 print('\\');
+// glyph literal for a single-quote character.
 print('\'');
+// glyph literal '\0' (null) cast to int -> 0.
 print('\0' to int);

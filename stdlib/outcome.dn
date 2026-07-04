@@ -1,32 +1,44 @@
+// `Outcome<T, E>` is a result type: either success carrying a `T` or failure
+// carrying an error `E`. It is the explicit error-handling type that the `?`
+// operator understands. The two variants are `Done(T)` and `Failed(E)`.
 export choice Outcome<T, E> {
     Done(T),
     Failed(E),
 }
 
+// Build a success. `error_default` is only present to fix the error type E
+// (Dune needs a value of E to infer it); it is not stored.
 export fn done<T, E>(value: T, error_default: E): Outcome<T, E> {
     return Done(value);
 }
 
+// Build a failure. `value_default` is only present to fix the success type T;
+// it is not stored.
 export fn failed<T, E>(value_default: T, error: E): Outcome<T, E> {
     return Failed(error);
 }
 
+// A success specialised to `Outcome<int, text>` (empty text pins E = text).
 export fn done_int(value: int): Outcome<int, text> {
     return done(value, "");
 }
 
+// A failure specialised to `Outcome<int, text>` (0 pins T = int).
 export fn failed_int(error: text): Outcome<int, text> {
     return failed(0, error);
 }
 
+// A success specialised to `Outcome<text, text>`.
 export fn done_text(value: text): Outcome<text, text> {
     return done(value, "");
 }
 
+// A failure specialised to `Outcome<text, text>`.
 export fn failed_text(error: text): Outcome<text, text> {
     return failed("", error);
 }
 
+// Method: true when this Outcome is a success.
 export method<T, E> Outcome<T, E>.is_done(): bool {
     return when this {
         is Done(value) { true }
@@ -34,6 +46,7 @@ export method<T, E> Outcome<T, E>.is_done(): bool {
     };
 }
 
+// Method: true when this Outcome is a failure.
 export method<T, E> Outcome<T, E>.is_failed(): bool {
     return when this {
         is Done(value) { false }
@@ -41,16 +54,22 @@ export method<T, E> Outcome<T, E>.is_failed(): bool {
     };
 }
 
+// Method: return the success value, or `default` if this is a failure.
 export method<T, E> Outcome<T, E>.value_or(default: T): T {
     return when this {
+        // Unwrap the success payload.
         is Done(value) { value }
+        // On failure, fall back to the supplied default.
         is Failed(error) { default }
     };
 }
 
+// Method: return the error value, or `default` if this is a success.
 export method<T, E> Outcome<T, E>.failure_or(default: E): E {
     return when this {
+        // On success there is no error, so use the supplied default.
         is Done(value) { default }
+        // Unwrap the failure payload.
         is Failed(error) { error }
     };
 }

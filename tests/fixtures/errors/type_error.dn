@@ -1,1 +1,6 @@
+// ERROR FIXTURE: this file is expected to FAIL type checking.
+// Declare x with the explicit annotation `int`, but initialize it with the
+// boolean literal `true`. The declared type (int) and the initializer type
+// (bool) do not match, so the type checker must reject this line.
+// THIS LINE CAUSES THE ERROR: type mismatch - int expected but bool given.
 x: int = true;

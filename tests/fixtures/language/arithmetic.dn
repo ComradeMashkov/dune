@@ -1,3 +1,6 @@
+// Bind x to the integer literal 10 (type inferred as int); ';' terminates the statement.
 x = 10;
+// Arithmetic with operator precedence: * and / bind tighter than -, so (10*3) - (4/2) = 30 - 2 = 28.
 y = x * 3 - 4 / 2;
+// print builtin writes the computed value (28) to stdout.
 print(y);

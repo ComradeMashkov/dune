@@ -1,3 +1,5 @@
+// `math` supplies sqrt/ln/cos for the normal-distribution sampler; `runtime`
+// supplies panic for argument validation.
 import math;
 import runtime;
 
@@ -12,10 +14,14 @@ import runtime;
 // raw-uniform helpers are `next_int`/`next_real` and the bounded
 // integer helper is `between`.
 export record Random {
+    // The generator's internal state, kept in [1, 2147483646].
     state: int,
 
+    // Build a generator from `seed`, normalising it into the valid range.
     export fn new(seed: int): Random {
+        // Reduce the seed modulo the Park-Miller prime 2147483647.
         normalized = seed % 2147483647;
+        // State must be strictly positive; shift non-positive seeds up.
         if normalized <= 0 {
             normalized = normalized + 2147483646;
         }
@@ -25,35 +31,44 @@ export record Random {
 
     // Advance the generator and return the raw state in [1, 2147483646].
     export fn next_int(): int {
+        // The core Park-Miller recurrence: multiply then take the modulus.
         this.state = (16807 * this.state) % 2147483647;
         return this.state;
     }
 
     // Uniform real64 in [0.0, 1.0). Never returns exactly 0.0 or 1.0.
     export fn next_real(): real64 {
+        // Scale the raw state into a fraction of the modulus.
         return (this.next_int() to real64) / 2147483647.0;
     }
 
     // Uniform integer in [lo, hi); `hi` is exclusive.
     export fn between(lo: int, hi: int): int {
+        // The range must be non-empty; otherwise the modulus is meaningless.
         if hi <= lo {
             runtime.panic("random.between requires hi > lo");
         }
 
+        // Map a raw draw into the half-open range via modulo of the width.
         return lo + this.next_int() % (hi - lo);
     }
 
     // Uniform real64 in [lo, hi).
     export fn real_between(lo: real64, hi: real64): real64 {
+        // Linearly interpolate a [0,1) draw across the interval width.
         return lo + this.next_real() * (hi - lo);
     }
 
     // One sample from a normal distribution via the Box-Muller transform.
     export fn normal(mean: real64, stddev: real64): real64 {
+        // Two independent uniform draws feed the transform.
         u1 = this.next_real();
         u2 = this.next_real();
+        // Radius comes from the first draw: sqrt(-2 ln u1).
         radius = math.sqrt((0.0 - 2.0) * math.ln(u1));
+        // Angle comes from the second draw scaled by 2*pi.
         angle = 6.283185307179586 * u2;
+        // Combine into one standard-normal sample, then shift and scale.
         return mean + stddev * radius * math.cos(angle);
     }
 }
@@ -65,6 +80,7 @@ export fn seed(value: int): Random {
 
 // `count` uniform real64 values in [lo, hi).
 export fn uniform(rng: Random, count: int, lo: real64, hi: real64): [real64] {
+    // Collect `count` independent uniform samples into an array.
     result: [real64] = [];
     for index = 0; index < count; index = index + 1 {
         result.push(rng.real_between(lo, hi));
@@ -75,6 +91,7 @@ export fn uniform(rng: Random, count: int, lo: real64, hi: real64): [real64] {
 
 // `count` samples from a normal distribution.
 export fn normal(rng: Random, count: int, mean: real64, stddev: real64): [real64] {
+    // Collect `count` independent normal samples into an array.
     result: [real64] = [];
     for index = 0; index < count; index = index + 1 {
         result.push(rng.normal(mean, stddev));

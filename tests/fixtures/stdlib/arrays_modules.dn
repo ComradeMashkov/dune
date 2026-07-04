@@ -1,31 +1,35 @@
+// Exercises the math stdlib module together with array push/indexing.
 import math;
 
+// Array literal whose middle element is computed by math.square(2) -> 4.
 values: [int] = [1, math.square(2), 5];
-base: u64 = 7;
+base: u64 = 7;              // unsigned scalar used with math.square below
+// array.push: append math.square(values[2]) = square(5) = 25 to the array.
 values.push(math.square(values[2]));
 
-print(values.len());
-print(values[1]);
-print(values[3]);
-print(math.square(base));
-print(math.square(1.5));
-print(math.abs(0 - 8));
-print(math.cube(3));
-print(math.min(4, 9));
-print(math.max(4, 9));
-print(math.clamp(12, 0, 10));
+print(values.len());        // array.len after the push -> 4
+print(values[1]);           // index the computed element -> 4
+print(values[3]);           // index the pushed element -> 25
+print(math.square(base));   // math.square on a u64 -> 49
+print(math.square(1.5));    // math.square on a real -> 2.25
+print(math.abs(0 - 8));     // math.abs of -8 -> 8
+print(math.cube(3));        // math.cube: 3^3 -> 27
+print(math.min(4, 9));      // math.min: smaller of two -> 4
+print(math.max(4, 9));      // math.max: larger of two -> 9
+print(math.clamp(12, 0, 10));  // math.clamp: bound 12 into [0,10] -> 10
 
+// real32 scalar to show math.max works across real widths.
 rough: real32 = 1.5;
-print(math.max(rough, 2.5));
-print(math.abs(0.0 - 2.5));
-print(math.round(math.PI));
-print(math.floor(2.9));
-print(math.ceil(2.1));
-print(math.sqrt(9.0));
-print(math.pow(2.0, 3));
-print(math.sin(0.0));
-print(math.cos(0.0));
-print(math.tan(0.0));
-print(math.exp(0.0));
-print(math.ln(1.0));
-print(math.normalize_radians(math.TAU));
+print(math.max(rough, 2.5));   // math.max on reals -> 2.5
+print(math.abs(0.0 - 2.5));    // math.abs of -2.5 -> 2.5
+print(math.round(math.PI));    // math.round of the PI constant -> 3
+print(math.floor(2.9));        // math.floor: round down -> 2
+print(math.ceil(2.1));         // math.ceil: round up -> 3
+print(math.sqrt(9.0));         // math.sqrt: square root -> 3
+print(math.pow(2.0, 3));       // math.pow: 2^3 -> 8
+print(math.sin(0.0));          // math.sin(0) -> 0
+print(math.cos(0.0));          // math.cos(0) -> 1
+print(math.tan(0.0));          // math.tan(0) -> 0
+print(math.exp(0.0));          // math.exp(0) -> 1
+print(math.ln(1.0));           // math.ln(1) -> 0
+print(math.normalize_radians(math.TAU));  // wrap TAU (2*PI) into [0,2*PI) -> 0

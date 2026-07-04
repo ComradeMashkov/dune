@@ -1,20 +1,32 @@
+// Array of ints to iterate over.
 values: [int] = [1, 2, 3, 4];
 
+// Accumulator initialized to 0.
 sum = 0;
+// for-in loop iterating the array elements directly (value bound to each element).
 for value in values {
+  // Add each element to the running sum -> 1+2+3+4 = 10.
   sum = sum + value;
 }
 
+// Second accumulator.
 weighted = 0;
+// for-in over an index range 0..values.len() yielding 0,1,2,3 (upper bound exclusive).
 for i in 0..values.len() {
+  // Weight each element by its index: 1*0 + 2*1 + 3*2 + 4*3 = 20.
   weighted = weighted + values[i] * i;
 }
 
+// Start at 9.
 empty = 9;
+// Range 5..2 is empty because start >= end, so the loop body never executes.
 for i in 5..2 {
   empty = empty + i;
 }
 
+// Prints 10.
 print(sum);
+// Prints 20.
 print(weighted);
+// Prints 9 (unchanged by the empty-range loop).
 print(empty);

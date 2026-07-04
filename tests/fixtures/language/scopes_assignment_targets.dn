@@ -1,45 +1,71 @@
+// Outer binding x = 1.
 x = 1;
+// A bare block introduces a new lexical scope.
 {
+    // Inner x shadows the outer x within this block only.
     x: int = 2;
+    // Prints the inner x -> 2.
     print(x);
 }
+// Outside the block the inner x is gone; prints the outer x -> 1.
 print(x);
 
+// Accumulator for a C-style for loop.
 total = 0;
+// Three-clause for loop: init 'i = 0'; condition 'i < 3'; post 'i = i + 1'.
 for i = 0; i < 3; i = i + 1 {
+    // Sum i over 0,1,2 -> total ends at 3.
     total = total + i;
 }
+// Prints 3.
 print(total);
 
+// Choice type reused in the 'when' below.
 choice Maybe {
     Present(int),
     Absent,
 }
 
+// Present(5) typed as Maybe.
 value: Maybe = Present(5);
+// 'when' expression with 'is' block-arm syntax; Present(5) yields 5.
 print(when value {
     is Present(x) { x }
     is Absent { 0 }
 });
+// Prints the outer x -> 1 (loop and match variables did not leak into this scope).
 print(x);
 
+// Record type used for field-assignment targets below.
 record Point {
     x: int,
     y: int,
 }
 
+// Array whose element will be reassigned.
 values: [int] = [1, 2];
+// Indexed assignment target: set element 1 to 9.
 values[1] = 9;
+// Prints 9.
 print(values[1]);
 
+// Nested array (a 2x2 matrix).
 grid: [[int]] = [[1, 2], [3, 4]];
+// Nested indexed assignment target: grid[1][0] = 8.
 grid[1][0] = 8;
+// Prints 8.
 print(grid[1][0]);
 
+// Record instance.
 point: Point = Point { x: 1, y: 2 };
+// Field assignment target: point.x = 7.
 point.x = 7;
+// Prints 7.
 print(point.x);
 
+// Array of records.
 points: [Point] = [Point { x: 3, y: 4 }];
+// Combined index + field assignment target: points[0].y = 11.
 points[0].y = 11;
+// Prints 11.
 print(points[0].y);

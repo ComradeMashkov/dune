@@ -3,66 +3,85 @@
 // Like `dict`, the first iteration stores items in a single array and
 // scans linearly, which keeps behaviour simple and identical across
 // backends. Insertion order is preserved.
+// A `record` bundles data (the `items` field) with methods that operate on it.
 export record Set {
+    // The backing store: unique values kept in insertion order.
     items: [text],
 
+    // Construct an empty set.
     export fn new(): Set {
         return Set { items: [] };
     }
 
+    // Find the position of `value`, or -1 when it is not present.
+    // Not exported: an internal helper for the public methods below.
     fn index_of(value: text): int {
+        // Linear scan over the backing array.
         for index = 0; index < this.items.len(); index = index + 1 {
+            // Return the first matching position.
             if this.items[index] == value {
                 return index;
             }
         }
 
+        // `0 - 1` is -1, the "not found" sentinel.
         return 0 - 1;
     }
 
     // Add `value`; duplicates are ignored.
     export fn add(value: text): unit {
+        // Only append when the value is not already stored (index < 0).
         if this.index_of(value) < 0 {
             this.items.push(value);
         }
     }
 
+    // True when `value` is a member of the set.
     export fn contains(value: text): bool {
+        // A non-negative index means the value was found.
         return this.index_of(value) >= 0;
     }
 
     // Remove `value`; returns whether it was present.
     export fn remove(value: text): bool {
+        // Locate the value; if missing there is nothing to remove.
         existing = this.index_of(value);
         if existing < 0 {
             return false;
         }
 
+        // Rebuild the backing array, skipping the element to remove.
         remaining: [text] = [];
         for index = 0; index < this.items.len(); index = index + 1 {
+            // Copy every element except the one at the found position.
             if index != existing {
                 remaining.push(this.items[index]);
             }
         }
 
+        // Swap in the filtered array and report success.
         this.items = remaining;
         return true;
     }
 
+    // The number of elements currently in the set.
     export fn len(): int {
         return this.items.len();
     }
 
+    // True when the set holds no elements.
     export fn is_empty(): bool {
         return this.items.len() == 0;
     }
 
+    // Drop all elements, leaving an empty set.
     export fn clear(): unit {
         this.items = [];
     }
 
     // A copy of the values in insertion order.
     export fn values(): [text] {
+        // Copy each element into a fresh array so callers cannot mutate ours.
         result: [text] = [];
         for index = 0; index < this.items.len(); index = index + 1 {
             result.push(this.items[index]);

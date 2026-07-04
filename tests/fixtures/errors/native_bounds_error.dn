@@ -1,2 +1,8 @@
+// ERROR FIXTURE: this file is expected to FAIL at runtime.
+// Declare `values` as a list of int ([int]) holding a single element: the value
+// 1 at index 0. The only valid index for this list is 0.
 values: [int] = [1];
+// Index the one-element list at position 2. Valid indices are just 0 here, so
+// index 2 is past the end of the list.
+// THIS LINE CAUSES THE ERROR: index out of bounds at runtime (len 1, index 2).
 print(values[2]);

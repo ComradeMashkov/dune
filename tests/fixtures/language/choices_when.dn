@@ -1,23 +1,39 @@
+// 'choice' declares a sum type (tagged union) named Maybe with two variants.
 choice Maybe {
+    // Variant carrying a single int payload.
     Present(int),
+    // Variant with no payload.
     Absent,
 }
 
+// Function taking a Maybe and an int default, returning an int.
 fn fallback(value: Maybe, default: int): int {
+    // 'when' expression pattern-matches on the choice; its result value is returned.
     return when value {
+        // 'is' block-arm: match Present, bind payload to x; arm evaluates to x.
         is Present(x) { x }
+        // Match Absent; arm evaluates to the provided default.
         is Absent { default }
     };
 }
 
+// Top-level int binding (independent of the pattern-local x inside fallback).
 x = 99;
+// Construct the Present variant holding 30, typed as Maybe.
 value: Maybe = Present(30);
+// Construct the Absent variant, typed as Maybe.
 missing: Maybe = Absent;
 
+// fallback(value, 0) matches Present(30) -> prints 30.
 print(fallback(value, 0));
+// fallback(missing, 7) matches Absent -> prints the default 7.
 print(fallback(missing, 7));
+// Inline 'when' expression used directly as print's argument.
 print(when value {
+    // Present arm adds 1 to the payload -> 30 + 1 = 31.
     is Present(x) { x + 1 }
+    // Absent arm would evaluate to 0.
     is Absent { 0 }
 });
+// Prints the top-level x (99); the arm-bound x did not leak into this scope.
 print(x);

@@ -1,5 +1,12 @@
+// Generic array utilities exposed both as methods on `[T]` and as free
+// functions. Most are written directly on top of indexing, `len()`, and
+// `push()`; nothing here needs native support. Methods with a `<T>` are generic
+// over the element type; some carry a `T is numeric` bound for arithmetic.
+
+// A shallow copy of this array (new backing array, same elements).
 export method<T> [T].copy(): [T] {
     result: [T] = [];
+    // Append each element in order into the fresh array.
     for index = 0; index < this.len(); index = index + 1 {
         result.push(this[index]);
     }
@@ -7,8 +14,10 @@ export method<T> [T].copy(): [T] {
     return result;
 }
 
+// A new array with the elements in reverse order.
 export method<T> [T].reverse(): [T] {
     result: [T] = [];
+    // Walk from the end toward the front, appending as we go.
     index = this.len();
     while index > 0 {
         index = index - 1;
@@ -18,10 +27,12 @@ export method<T> [T].reverse(): [T] {
     return result;
 }
 
+// True when `needle` appears in the array (delegates to index_of).
 export method<T> [T].contains(needle: T): bool {
     return index_of(this, needle) >= 0;
 }
 
+// The index of the first element equal to `needle`, or -1 if none.
 export method<T> [T].index_of(needle: T): int {
     for index = 0; index < this.len(); index = index + 1 {
         if this[index] == needle {
@@ -29,24 +40,31 @@ export method<T> [T].index_of(needle: T): int {
         }
     }
 
+    // -1 sentinel meaning "not found".
     return 0 - 1;
 }
 
+// The first element (indexing panics if the array is empty).
 export method<T> [T].first(): T {
     return this[0];
 }
 
+// The last element (index len-1).
 export method<T> [T].last(): T {
     return this[this.len() - 1];
 }
 
+// A copy of this array with `value` appended at the end.
 export method<T> [T].append(value: T): [T] {
+    // Copy first so the original array is left unchanged.
     result: [T] = copy(this);
     result.push(value);
     return result;
 }
 
+// A copy of this array with `value` inserted at the front.
 export method<T> [T].prepend(value: T): [T] {
+    // Start with the new value, then append the existing elements.
     result: [T] = [value];
     for index = 0; index < this.len(); index = index + 1 {
         result.push(this[index]);
@@ -55,7 +73,9 @@ export method<T> [T].prepend(value: T): [T] {
     return result;
 }
 
+// A new array made of this array followed by `other`.
 export method<T> [T].concat(other: [T]): [T] {
+    // Copy self, then append every element of `other`.
     result: [T] = copy(this);
     for index = 0; index < other.len(); index = index + 1 {
         result.push(other[index]);
@@ -64,6 +84,7 @@ export method<T> [T].concat(other: [T]): [T] {
     return result;
 }
 
+// The sub-array from `start` (inclusive) to `end` (exclusive).
 export method<T> [T].slice(start: int, end: int): [T] {
     result: [T] = [];
     for index = start; index < end; index = index + 1 {
@@ -73,14 +94,17 @@ export method<T> [T].slice(start: int, end: int): [T] {
     return result;
 }
 
+// The first `count` elements (a prefix slice).
 export method<T> [T].take(count: int): [T] {
     return slice(this, 0, count);
 }
 
+// Everything after the first `count` elements (a suffix slice).
 export method<T> [T].drop(count: int): [T] {
     return slice(this, count, this.len());
 }
 
+// How many elements equal `needle`.
 export method<T> [T].count_value(needle: T): int {
     count = 0;
     for index = 0; index < this.len(); index = index + 1 {
@@ -92,11 +116,14 @@ export method<T> [T].count_value(needle: T): int {
     return count;
 }
 
+// True when this array and `other` have equal length and equal elements.
 export method<T> [T].equals(other: [T]): bool {
+    // Different lengths cannot be equal.
     if this.len() != other.len() {
         return false;
     }
 
+    // Any differing element makes them unequal.
     for index = 0; index < this.len(); index = index + 1 {
         if this[index] != other[index] {
             return false;
@@ -106,12 +133,14 @@ export method<T> [T].equals(other: [T]): bool {
     return true;
 }
 
+// Overwrite every slot with `value` in place (returns unit, mutates self).
 export method<T> [T].fill(value: T): unit {
     for index = 0; index < this.len(); index = index + 1 {
         this[index] = value;
     }
 }
 
+// The half-open integer range [start, end) as an array.
 export fn range(start: int, end: int): [int] {
     result: [int] = [];
     for value = start; value < end; value = value + 1 {
@@ -121,12 +150,15 @@ export fn range(start: int, end: int): [int] {
     return result;
 }
 
+// The range [0, end); an overload that defaults the start to 0.
 export fn range(end: int): [int] {
     return range(0, end);
 }
 
+// The range [start, end) advancing by `step` (supports negative steps).
 export fn range(start: int, end: int, step: int): [int] {
     result: [int] = [];
+    // Positive step: count upward until reaching `end`.
     if step > 0 {
         value = start;
         while value < end {
@@ -137,6 +169,7 @@ export fn range(start: int, end: int, step: int): [int] {
         return result;
     }
 
+    // Otherwise (negative step): count downward until reaching `end`.
     value = start;
     while value > end {
         result.push(value);
@@ -146,6 +179,7 @@ export fn range(start: int, end: int, step: int): [int] {
     return result;
 }
 
+// An array containing `value` repeated `count` times (generic element type).
 export fn repeat<T>(value: T, count: int): [T] {
     result: [T] = [];
     for index = 0; index < count; index = index + 1 {
@@ -155,6 +189,7 @@ export fn repeat<T>(value: T, count: int): [T] {
     return result;
 }
 
+// `count` numeric zeros. The literal 0 takes on the requested numeric type T.
 export fn zeros<T is numeric>(count: int): [T] {
     result: [T] = [];
     for index = 0; index < count; index = index + 1 {
@@ -164,6 +199,7 @@ export fn zeros<T is numeric>(count: int): [T] {
     return result;
 }
 
+// `count` numeric ones (the literal 1 takes on the numeric type T).
 export fn ones<T is numeric>(count: int): [T] {
     result: [T] = [];
     for index = 0; index < count; index = index + 1 {
@@ -173,10 +209,12 @@ export fn ones<T is numeric>(count: int): [T] {
     return result;
 }
 
+// `count` copies of `value`; a named alias for `repeat`.
 export fn full<T>(count: int, value: T): [T] {
     return repeat(value, count);
 }
 
+// Sum of an int array (free-function form).
 export fn sum(values: [int]): int {
     result = 0;
     for index = 0; index < values.len(); index = index + 1 {
@@ -186,6 +224,7 @@ export fn sum(values: [int]): int {
     return result;
 }
 
+// Sum of a numeric array as a method. `result` starts at 0 typed as T.
 export method<T is numeric> [T].sum(): T {
     result: T = 0;
     for index = 0; index < this.len(); index = index + 1 {
@@ -195,6 +234,7 @@ export method<T is numeric> [T].sum(): T {
     return result;
 }
 
+// Product of all elements (starts from the multiplicative identity 1).
 export method<T is numeric> [T].product(): T {
     result: T = 1;
     for index = 0; index < this.len(); index = index + 1 {
@@ -204,6 +244,7 @@ export method<T is numeric> [T].product(): T {
     return result;
 }
 
+// The minimum element (assumes at least one element; seeds with index 0).
 export method<T is numeric> [T].min(): T {
     result: T = this[0];
     for index = 1; index < this.len(); index = index + 1 {
@@ -215,6 +256,7 @@ export method<T is numeric> [T].min(): T {
     return result;
 }
 
+// The maximum element (seeds with the first element, then scans the rest).
 export method<T is numeric> [T].max(): T {
     result: T = this[0];
     for index = 1; index < this.len(); index = index + 1 {
@@ -226,7 +268,9 @@ export method<T is numeric> [T].max(): T {
     return result;
 }
 
+// The index of the minimum element (argmin).
 export method<T is numeric> [T].argmin(): int {
+    // Track the index of the smallest value seen so far.
     result = 0;
     for index = 1; index < this.len(); index = index + 1 {
         if this[index] < this[result] {
@@ -237,7 +281,9 @@ export method<T is numeric> [T].argmin(): int {
     return result;
 }
 
+// The index of the maximum element (argmax).
 export method<T is numeric> [T].argmax(): int {
+    // Track the index of the largest value seen so far.
     result = 0;
     for index = 1; index < this.len(); index = index + 1 {
         if this[index] > this[result] {
@@ -248,8 +294,10 @@ export method<T is numeric> [T].argmax(): int {
     return result;
 }
 
+// True when every element of a bool array is true (logical AND-reduce).
 export method [bool].all(): bool {
     for index = 0; index < this.len(); index = index + 1 {
+        // A single false short-circuits the whole result.
         if !this[index] {
             return false;
         }
@@ -258,8 +306,10 @@ export method [bool].all(): bool {
     return true;
 }
 
+// True when any element of a bool array is true (logical OR-reduce).
 export method [bool].any(): bool {
     for index = 0; index < this.len(); index = index + 1 {
+        // A single true short-circuits the whole result.
         if this[index] {
             return true;
         }
@@ -268,6 +318,7 @@ export method [bool].any(): bool {
     return false;
 }
 
+// Sum of a real64 array (free-function overload; result seeded as 0.0).
 export fn sum(values: [real64]): real64 {
     result: real64 = 0.0;
     for index = 0; index < values.len(); index = index + 1 {

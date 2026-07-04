@@ -1,37 +1,40 @@
+// Exercises the dict and set stdlib collections (plus array for values().sum()).
 import array;
 import dict;
 import set;
 
+// dict.Dict.new: empty string-keyed map holding int values.
 scores: dict.Dict<int> = dict.Dict.new();
-scores.set("alice", 10);
-scores.set("bob", 7);
-scores.set("alice", 15);
+scores.set("alice", 10);   // dict.set: insert key "alice" -> 10
+scores.set("bob", 7);      // dict.set: insert key "bob" -> 7
+scores.set("alice", 15);   // dict.set on existing key overwrites -> 15
 
-print(scores.len());
-print(scores.get("alice").value_or(0 - 1));
-print(scores.get("bob").value_or(0 - 1));
-print(scores.get("carol").value_or(0 - 1));
-print(scores.contains("bob"));
-print(scores.contains("zzz"));
-print(scores.keys().len());
-print(scores.values().sum());
+print(scores.len());                          // dict.len: distinct keys -> 2
+print(scores.get("alice").value_or(0 - 1));   // dict.get returns option; value_or unwraps -> 15
+print(scores.get("bob").value_or(0 - 1));     // present key -> 7
+print(scores.get("carol").value_or(0 - 1));   // missing key falls back to -1
+print(scores.contains("bob"));                // dict.contains: key present -> true
+print(scores.contains("zzz"));                // dict.contains: key absent -> false
+print(scores.keys().len());                   // dict.keys: array of keys, len -> 2
+print(scores.values().sum());                 // dict.values then array.sum -> 22
 
-print(scores.remove("bob"));
-print(scores.remove("bob"));
-print(scores.len());
-print(scores.is_empty());
+print(scores.remove("bob"));   // dict.remove: true when key existed
+print(scores.remove("bob"));   // removing again: false, already gone
+print(scores.len());           // len after removal -> 1
+print(scores.is_empty());      // dict.is_empty: still has "alice" -> false
 
+// set.Set.new: empty set of strings.
 seen: set.Set = set.Set.new();
-seen.add("x");
-seen.add("y");
-seen.add("x");
+seen.add("x");             // set.add: insert "x"
+seen.add("y");             // set.add: insert "y"
+seen.add("x");             // duplicate add is a no-op
 
-print(seen.len());
-print(seen.contains("x"));
-print(seen.contains("z"));
-print(seen.values().len());
-print(seen.remove("x"));
-print(seen.len());
+print(seen.len());             // set.len: distinct members -> 2
+print(seen.contains("x"));     // set.contains: member present -> true
+print(seen.contains("z"));     // set.contains: member absent -> false
+print(seen.values().len());    // set.values: array of members, len -> 2
+print(seen.remove("x"));       // set.remove: true when member existed
+print(seen.len());             // len after removal -> 1
 
-seen.clear();
-print(seen.is_empty());
+seen.clear();                  // set.clear: drop all members
+print(seen.is_empty());        // set.is_empty after clear -> true

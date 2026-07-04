@@ -1,9 +1,14 @@
+// Function declaration: 'add' takes two int parameters and returns an int.
 fn add(a: int, b: int): int {
+    // return statement yields the sum of the two arguments.
     return a + b;
 }
 
+// Function 'twice' calls add(value, value), effectively doubling its input.
 fn twice(value: int): int {
+    // Function calling another function; returns value + value.
     return add(value, value);
 }
 
+// Nested calls: twice(5)=10, add(3,4)=7, add(10,7)=17 -> prints 17.
 print(add(twice(5), add(3, 4)));

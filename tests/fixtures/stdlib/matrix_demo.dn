@@ -1,105 +1,118 @@
+// Exercises the matrix stdlib module: vectors, matrices, and their operations.
 import matrix;
 
+// matrix.vector: build 1-D vectors to test elementwise and reduction ops.
 v = matrix.vector([1, 2, 3]);
 w = matrix.vector([4, 5, 6]);
-sum = v.add(w);
-print(sum.get(0));
-print(sum.get(2));
-print(v.dot(w));
-print(v.shape()[0]);
-print(v.same_shape(w));
+sum = v.add(w);            // vector.add: elementwise v + w -> [5, 7, 9]
+print(sum.get(0));         // vector.get: element at index 0 -> 5
+print(sum.get(2));         // element at index 2 -> 9
+print(v.dot(w));           // vector.dot: 1*4 + 2*5 + 3*6 -> 32
+print(v.shape()[0]);       // vector.shape: dimensions, [0] is length -> 3
+print(v.same_shape(w));    // vector.same_shape: equal length -> true
 
-scaled = v.scale(3);
-print(scaled.get(1));
-print(v.add(10).get(2));
-print(v.rsub(10).get(0));
-print(v.mul(w).get(1));
-print(w.div(v).get(1));
-print(v.concat(w).len());
-print(v.slice(1, 3).sum());
+scaled = v.scale(3);       // vector.scale: multiply every element by 3
+print(scaled.get(1));      // scaled[1] = 2*3 -> 6
+print(v.add(10).get(2));   // vector.add scalar: broadcast +10, index 2 -> 13
+print(v.rsub(10).get(0));  // vector.rsub: 10 - element, index 0 -> 9
+print(v.mul(w).get(1));    // vector.mul: elementwise product, index 1 -> 10
+print(w.div(v).get(1));    // vector.div: elementwise w/v, index 1 -> 2
+print(v.concat(w).len());  // vector.concat then len -> 6
+print(v.slice(1, 3).sum()); // vector.slice(1,3) -> [2,3], sum -> 5
 
+// Vector with a negative element to test abs/clip and arg reductions.
 u = matrix.vector([0 - 3, 2, 7]);
-print(u.abs().get(0));
-print(u.clip(0, 5).get(2));
-print(u.min());
-print(u.max());
-print(u.argmin());
-print(u.argmax());
-print(u.product());
+print(u.abs().get(0));     // vector.abs: |-3| at index 0 -> 3
+print(u.clip(0, 5).get(2)); // vector.clip to [0,5], index 2 (7->5) -> 5
+print(u.min());            // vector.min -> -3
+print(u.max());            // vector.max -> 7
+print(u.argmin());         // vector.argmin: index of min -> 0
+print(u.argmax());         // vector.argmax: index of max -> 2
+print(u.product());        // vector.product: -3*2*7 -> -42
 
-sequence = matrix.arange(1, 5);
-print(sequence.sum());
-reverse = matrix.arange(5, 1, 0 - 2);
-print(reverse.get(1));
+// matrix.arange: vector generators like array.range.
+sequence = matrix.arange(1, 5);   // 1,2,3,4
+print(sequence.sum());            // sum -> 10
+reverse = matrix.arange(5, 1, 0 - 2);  // 5,3 with step -2
+print(reverse.get(1));            // reverse[1] -> 3
 
+// matrix.from_flat(rows, cols, data): 2x3 matrix from a flat list.
 m = matrix.from_flat(2, 3, [1, 2, 3, 4, 5, 6]);
-print(m.rows());
-print(m.cols());
-print(m.get(1, 2));
-print(m.shape()[0]);
-print(m.shape()[1]);
-print(m.flatten().get(4));
-print(m.reshape(3, 2).get(2, 0));
-print(m.diagonal().sum());
-print(m.trace());
+print(m.rows());           // matrix.rows -> 2
+print(m.cols());           // matrix.cols -> 3
+print(m.get(1, 2));        // matrix.get(row,col): last element -> 6
+print(m.shape()[0]);       // matrix.shape: [rows, cols], rows -> 2
+print(m.shape()[1]);       // cols -> 3
+print(m.flatten().get(4)); // matrix.flatten to vector, index 4 -> 5
+print(m.reshape(3, 2).get(2, 0));  // matrix.reshape to 3x2, get(2,0) -> 5
+print(m.diagonal().sum()); // matrix.diagonal vector (1,5), sum -> 6
+print(m.trace());          // matrix.trace: sum of diagonal -> 6
 
+// matrix.transpose: swap rows and columns.
 t = m.transpose();
-print(t.rows());
-print(t.cols());
-print(t.get(2, 1));
+print(t.rows());           // transposed rows -> 3
+print(t.cols());           // transposed cols -> 2
+print(t.get(2, 1));        // t[2][1] = m[1][2] -> 6
 
+// Second matrix for matmul (3x2) so m(2x3) * n(3x2) is valid.
 n = matrix.from_flat(3, 2, [7, 8, 9, 10, 11, 12]);
-product = m.matmul(n);
-print(product.get(0, 0));
-print(product.get(1, 1));
-print(m.can_matmul(n));
-print(m.same_shape(n));
-print(m.add(1).get(0, 2));
-print(m.rsub(10).get(0, 0));
-print(m.mul(m).get(1, 0));
-print(m.div(2).get(1, 2));
-print(m.clip(2, 5).get(0, 0));
-print(m.clip(2, 5).get(1, 2));
+product = m.matmul(n);     // matrix.matmul: 2x3 * 3x2 -> 2x2
+print(product.get(0, 0));  // product[0][0] -> 58
+print(product.get(1, 1));  // product[1][1] -> 154
+print(m.can_matmul(n));    // matrix.can_matmul: inner dims agree -> true
+print(m.same_shape(n));    // matrix.same_shape: differing shapes -> false
+print(m.add(1).get(0, 2)); // matrix.add scalar, get(0,2) = 3+1 -> 4
+print(m.rsub(10).get(0, 0)); // matrix.rsub: 10 - element -> 9
+print(m.mul(m).get(1, 0)); // matrix.mul elementwise, [1][0] = 4*4 -> 16
+print(m.div(2).get(1, 2)); // matrix.div scalar, [1][2] = 6/2 -> 3
+print(m.clip(2, 5).get(0, 0)); // matrix.clip to [2,5], [0][0] (1->2) -> 2
+print(m.clip(2, 5).get(1, 2)); // clip, [1][2] (6->5) -> 5
 
+// matrix.mul_vector: matrix-vector product m(2x3) * [1,1,1] -> row sums.
 mv = m.mul_vector(matrix.vector([1, 1, 1]));
-print(mv.get(0));
-print(mv.get(1));
+print(mv.get(0));          // sum of row 0 -> 6
+print(mv.get(1));          // sum of row 1 -> 15
 
+// matrix.zeros / ones: typed constant matrices.
 z: matrix.Matrix<int> = matrix.zeros(2, 2);
-print(z.sum());
+print(z.sum());            // sum of zeros -> 0
 ones: matrix.Matrix<int> = matrix.ones(2, 2);
-print(ones.sum());
+print(ones.sum());         // sum of ones -> 4
 
+// matrix.identity / eye: identity matrices; diagonal builder.
 id: matrix.Matrix<int> = matrix.identity(3);
-print(id.get(0, 0));
-print(id.get(0, 1));
+print(id.get(0, 0));       // identity diagonal entry -> 1
+print(id.get(0, 1));       // identity off-diagonal -> 0
 eye: matrix.Matrix<int> = matrix.eye(2);
-print(eye.trace());
-diag = matrix.diagonal(matrix.vector([2, 3]));
-print(diag.get(1, 1));
-print(diag.sum());
-filled: matrix.Matrix<int> = matrix.full(2, 2, 1);
-filled.fill(7);
-print(filled.get(1, 1));
-print(filled.equals(matrix.full(2, 2, 7)));
+print(eye.trace());        // trace of 2x2 identity -> 2
+diag = matrix.diagonal(matrix.vector([2, 3]));  // diagonal matrix from vector
+print(diag.get(1, 1));     // diagonal entry -> 3
+print(diag.sum());         // off-diagonals are zero, sum -> 5
+filled: matrix.Matrix<int> = matrix.full(2, 2, 1);  // 2x2 filled with 1
+filled.fill(7);            // matrix.fill: overwrite every cell with 7
+print(filled.get(1, 1));   // any cell -> 7
+print(filled.equals(matrix.full(2, 2, 7)));  // matrix.equals -> true
 
+// Real-valued vector to show reductions on reals.
 r = matrix.vector([1.5, 2.5]);
-print(r.sum());
+print(r.sum());            // sum -> 4
 
-print(v.norm_squared());
-print(v.outer(w).get(2, 1));
-print(v.matmul(n).get(1));
-print(matrix.outer(v, w).get(1, 2));
+print(v.norm_squared());   // vector.norm_squared: 1+4+9 -> 14
+print(v.outer(w).get(2, 1)); // vector.outer product, [2][1] = 3*5 -> 15
+print(v.matmul(n).get(1)); // vector.matmul with matrix, index 1 -> 45
+print(matrix.outer(v, w).get(1, 2)); // free outer(v,w), [1][2] = 2*6 -> 12
 
+// matrix.from_rows: build a matrix from nested row lists.
 from_rows = matrix.from_rows([[1, 2], [3, 4]]);
-print(from_rows.det2());
-print(from_rows.mean());
-print(from_rows.sum_rows().get(1));
-print(from_rows.sum_columns().get(0));
-print(from_rows.mean_rows().get(0));
-print(from_rows.mean_columns().get(1));
-print(from_rows.hadamard(from_rows).get(1, 1));
-print(from_rows.norm_squared());
+print(from_rows.det2());   // matrix.det2: 1*4 - 2*3 -> -2
+print(from_rows.mean());   // matrix.mean of all cells -> 2
+print(from_rows.sum_rows().get(1));     // matrix.sum_rows, row 1 sum -> 7
+print(from_rows.sum_columns().get(0));  // matrix.sum_columns, col 0 sum -> 4
+print(from_rows.mean_rows().get(0));    // matrix.mean_rows, row 0 mean -> 1
+print(from_rows.mean_columns().get(1)); // matrix.mean_columns, col 1 mean -> 3
+print(from_rows.hadamard(from_rows).get(1, 1)); // matrix.hadamard, [1][1]=4*4 -> 16
+print(from_rows.norm_squared());        // matrix.norm_squared: 1+4+9+16 -> 30
 
+// 3x3 matrix to exercise the 3x3 determinant.
 three = matrix.from_rows([[1, 2, 3], [0, 1, 4], [5, 6, 0]]);
-print(three.det3());
+print(three.det3());       // matrix.det3: 3x3 determinant -> 1

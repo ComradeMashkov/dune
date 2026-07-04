@@ -1,30 +1,52 @@
+// 'record' declares a struct type Point with two int fields.
 record Point {
   x: int,
   y: int,
 }
 
+// Mutable array binding.
 values: [int] = [1];
+// alias binds to the same array (reference semantics), not a fresh copy.
 alias = values;
+// Mutating element 0 through the alias also affects values.
 alias[0] = 2;
+// Prints 2, demonstrating the array was shared by reference.
 print(values[0]);
 
+// 'const' declares frozen as an immutable binding.
 const frozen: [int] = [5];
+// Alias the const array into a non-const name.
 mutable_alias = frozen;
+// Assignment target: write element 0 through the alias (exercises const-under-aliasing).
 mutable_alias[0] = 6;
+// Prints frozen[0] after the aliased write.
 print(frozen[0]);
 
+// Record instance; struct value.
 point: Point = Point { x: 3, y: 0 };
+// Alias the record; records also share by reference.
 point_alias = point;
+// Field-assignment target through the alias.
 point_alias.x = 4;
+// Prints point.x, reflecting the shared record.
 print(point.x);
 
+// const record binding.
 const fixed_point: Point = Point { x: 7, y: 0 };
+// Alias the const record.
 mutable_point_alias = fixed_point;
+// Field write through the alias (exercises const record aliasing).
 mutable_point_alias.x = 9;
+// Prints fixed_point.x after the aliased write.
 print(fixed_point.x);
 
+// Scalars are value types: copied, not aliased.
 scalar = 1;
+// scalar_copy receives a copy of scalar's value.
 scalar_copy = scalar;
+// Reassigning the copy does not affect the original.
 scalar_copy = 2;
+// Prints 1 (original scalar unchanged).
 print(scalar);
+// Prints 2 (the reassigned copy).
 print(scalar_copy);

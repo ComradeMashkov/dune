@@ -1,38 +1,67 @@
+// Record with per-field default values: fields initialized when omitted in a literal.
 record Optimizer {
+    // Field with a default of 0.01; used when a literal does not set lr.
     lr: real64 = 0.01,
+    // Field defaulting to 0.0 momentum.
     momentum: real64 = 0.0,
+    // Text field defaulting to the string "sgd".
     name: text = "sgd",
 
+    // Associated constructor overriding only lr; remaining fields fall back to defaults.
     fn new(lr: real64): Optimizer {
+        // Record literal setting lr only; momentum and name use their declared defaults.
         return Optimizer { lr: lr };
     }
 }
 
+// Empty record literal: every field takes its default value.
 base: Optimizer = Optimizer {};
+// Override just lr; momentum and name keep defaults.
 fast: Optimizer = Optimizer { lr: 0.1 };
+// Override just momentum; lr and name keep defaults.
 heavy: Optimizer = Optimizer { momentum: 0.9 };
+// Build via the constructor, which itself relies on defaults for the unset fields.
 built: Optimizer = Optimizer.new(0.2);
 
+// base.lr defaults to 0.01.
 print(base.lr);
+// base.momentum defaults to 0.0.
 print(base.momentum);
+// base.name defaults to "sgd".
 print(base.name);
+// fast.lr was overridden to 0.1.
 print(fast.lr);
+// fast.momentum still the default 0.0.
 print(fast.momentum);
+// heavy.lr still the default 0.01.
 print(heavy.lr);
+// heavy.momentum was overridden to 0.9.
 print(heavy.momentum);
+// built.lr set to 0.2 by new().
 print(built.lr);
+// built.momentum defaulted to 0.0 inside new().
 print(built.momentum);
 
+// Record mixing a required field (no default) with a defaulted list field.
 record Config {
+    // Required field: has no default, so every literal must provide it.
     required: int,
+    // Defaulted list field: [int] initialized to [1] when omitted.
     values: [int] = [1],
 }
 
+// Provide the required field; values falls back to its default [1].
 first: Config = Config { required: 10 };
+// Another instance; each gets its own independent default list.
 second: Config = Config { required: 20 };
+// Mutate second's list in place via push, demonstrating per-instance default state.
 second.values.push(2);
 
+// first.required is 10.
 print(first.required);
+// first.values still the default single-element list, length 1.
 print(first.values.len());
+// second.required is 20.
 print(second.required);
+// second.values now has length 2 after the push.
 print(second.values.len());

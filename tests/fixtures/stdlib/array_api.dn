@@ -1,49 +1,63 @@
+// Exercises the array stdlib module: constructors, reductions, and slicing helpers.
 import array;
 
+// Build a small int array literal to drive the reduction methods below.
 values = [1, 2, 3];
-print(values.sum());
-print(values.product());
-print(values.min());
-print(values.max());
-print(values.argmin());
-print(values.argmax());
+print(values.sum());        // array.sum: add all elements -> 6
+print(values.product());    // array.product: multiply all elements -> 6
+print(values.min());        // array.min: smallest element -> 1
+print(values.max());        // array.max: largest element -> 3
+print(values.argmin());     // array.argmin: index of the smallest element -> 0
+print(values.argmax());     // array.argmax: index of the largest element -> 2
 
+// array.range(n): 0..n-1, then .last() returns the final element.
 print(array.range(5).last());
+// array.range(start, stop, step): 2, 5, 8 (stop exclusive).
 stepped = array.range(2, 9, 3);
-print(stepped.sum());
+print(stepped.sum());       // sum of the stepped range -> 15
+// Descending range with a negative step (0 - 2 keeps code literal-only).
 down = array.range(5, 0, 0 - 2);
-print(down[1]);
+print(down[1]);             // index into the descending range -> 3
 
+// array.repeat(value, count): build ["x", "x", "x"].
 repeated = array.repeat("x", 3);
-print(repeated.len());
-print(repeated[0]);
+print(repeated.len());      // array.len: element count -> 3
+print(repeated[0]);         // index the repeated array -> "x"
 
+// array.full(count, value): typed [u16] filled with 7.
 full_values: [u16] = array.full(3, 7);
-print(full_values.sum());
+print(full_values.sum());   // sum of the filled array -> 21
+// array.zeros(count): typed [int] of zeros.
 zeros: [int] = array.zeros(4);
-print(zeros.sum());
+print(zeros.sum());         // sum of zeros -> 0
+// array.ones(count): typed [real64] of ones.
 ones: [real64] = array.ones(3);
-print(ones.sum());
+print(ones.sum());          // sum of ones -> 3
 
+// Two literals to demonstrate chained structural operations.
 left = [1, 2];
 right = [3, 4];
+// concat then prepend(0) then append(5): [0, 1, 2, 3, 4, 5].
 combined = left.concat(right).prepend(0).append(5);
-print(combined.len());
-print(combined.first());
-print(combined.last());
-print(combined.slice(2, 5).sum());
-print(combined.take(3).sum());
-print(combined.drop(4).first());
-print(combined.count_value(2));
-print(combined.equals([0, 1, 2, 3, 4, 5]));
+print(combined.len());              // array.len after building -> 6
+print(combined.first());            // array.first: leading element -> 0
+print(combined.last());             // array.last: trailing element -> 5
+print(combined.slice(2, 5).sum());  // array.slice(2,5) -> [2,3,4], sum -> 9
+print(combined.take(3).sum());      // array.take(3) -> [0,1,2], sum -> 3
+print(combined.drop(4).first());    // array.drop(4) -> [4,5], first -> 4
+print(combined.count_value(2));     // array.count_value: occurrences of 2 -> 1
+print(combined.equals([0, 1, 2, 3, 4, 5]));  // array.equals: element-wise equality -> true
 
+// Mutating helper: fill overwrites every slot in place.
 mutable = [1, 2, 3];
-mutable.fill(9);
-print(mutable.sum());
+mutable.fill(9);            // array.fill: set all elements to 9
+print(mutable.sum());       // sum after fill -> 27
 
+// Boolean-array reductions.
 flags = [true, true, false];
-print(flags.all());
-print(flags.any());
+print(flags.all());         // array.all: true only if every element is true -> false
+print(flags.any());         // array.any: true if at least one is true -> true
 
+// Reductions also work on real-valued arrays.
 real_values = [1.5, 2.5];
-print(real_values.sum());
+print(real_values.sum());   // array.sum on reals -> 4

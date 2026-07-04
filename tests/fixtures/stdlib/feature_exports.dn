@@ -1,11 +1,18 @@
+// Module that demonstrates export visibility: private items stay hidden,
+// exported items are importable from other modules (see stdlib_primitives.dn).
+
+// Non-exported constant: visible only inside this module.
 const HIDDEN: int = 7;
 
+// Non-exported function: callable only within this module.
 fn hidden(): int {
-    return HIDDEN;
+    return HIDDEN;         // read the private constant
 }
 
+// Exported constant: importable as feature_exports.ANSWER.
 export const ANSWER: int = 42;
 
+// Exported function: importable as feature_exports.public().
 export fn public(): int {
-    return hidden();
+    return hidden();       // exported wrapper delegating to the private fn -> 7
 }

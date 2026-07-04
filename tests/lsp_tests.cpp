@@ -268,7 +268,9 @@ bool defines_module_member() {
     passed = expect(definition.has_value(), "expected definition for module member") && passed;
     if (definition.has_value()) {
         passed = expect(definition->uri.find("math.dn") != std::string::npos, "expected member module uri") && passed;
-        passed = expect(definition->line == 10, "expected square declaration line") && passed;
+        // Assert the column of the `square` name (after `fn `) rather than a line
+        // number, which shifts when stdlib comments change.
+        passed = expect(definition->column == 4, "expected square declaration column") && passed;
     }
     return passed;
 }

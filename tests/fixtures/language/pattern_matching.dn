@@ -1,59 +1,89 @@
+// Generic choice type Maybe<T>: a payload variant and an empty variant.
 choice Maybe<T> {
+    // Present holds a value of the generic type parameter T.
     Present(T),
+    // Absent has no payload.
     Absent,
 }
 
+// Generic choice Result<T>: success carries a T, failure carries a text message.
 choice Result<T> {
     Done(T),
     Failed(text),
 }
 
+// Record type with two int fields.
 record Point {
     x: int,
     y: int,
 }
 
+// unwrap: return the Present payload, or default when Absent.
 fn unwrap(value: Maybe<int>, default: int): int {
+    // 'when' with arrow-arm syntax: 'pattern => expr;'.
     return when value {
+        // Destructure Present, binding payload to x; arm yields x.
         Present(x) => x;
+        // Absent has no payload; arm yields default.
         Absent => default;
     };
 }
 
+// describe: map a Result to a text.
 fn describe(value: Result<int>): text {
     return when value {
+        // Success arm returns the literal "done".
         Done(value) => "done";
+        // Failure arm returns the bound error text.
         Failed(error) => error;
     };
 }
 
+// minmax: build and return a two-element tuple (int, int).
 fn minmax(values: [int]): (int, int) {
+    // Tuple construction from two array elements.
     return (values[0], values[1]);
 }
 
+// Construct Present(30), typed as Maybe<int>.
 value: Maybe<int> = Present(30);
+// The Absent variant of Maybe<int>.
 missing: Maybe<int> = Absent;
+// Done(1) as Result<int>.
 done: Result<int> = Done(1);
+// Failed("bad") as Result<int>.
 failed: Result<int> = Failed("bad");
+// Tuple-destructuring binding: lo=3, hi=8 from the returned tuple.
 (lo, hi) = minmax([3, 8]);
+// Use the destructured values to build a Point via record literal.
 point: Point = Point { x: lo, y: hi };
 
+// unwrap(value, 0) matches Present(30) -> 30.
 print(unwrap(value, 0));
+// unwrap(missing, 7) matches Absent -> 7.
 print(unwrap(missing, 7));
+// describe(done) -> "done".
 print(describe(done));
+// describe(failed) -> "bad".
 print(describe(failed));
+// lo -> 3.
 print(lo);
+// hi -> 8.
 print(hi);
+// 'when' with a record field-destructuring pattern -> x + y = 3 + 8 = 11.
 print(when point {
     Point { x, y } => x + y;
 });
+// 'when' with a tuple pattern -> left * right = 3 * 8 = 24.
 print(when (lo, hi) {
     (left, right) => left * right;
 });
+// 'when' with a wildcard '_' catch-all arm; missing is Absent so '_' -> 99.
 print(when missing {
     Present(x) => x;
     _ => 99;
 });
+// 'when' matching a literal int: 2 != 1, so the '_' arm -> 20.
 print(when 2 {
     1 => 10;
     _ => 20;
