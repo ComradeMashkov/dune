@@ -96,9 +96,43 @@ io.println(plot.svg(chart).contains("<svg")); // 1
 </svg>
 </figure>
 
-There are no subplots (a grid of separate axes) yet: compose a single chart with
-overlaid series as above, or render several charts to separate SVG/HTML files
-with `save_svg`/`save_html` and lay them out in your own document.
+## Grids
+
+Add a background grid with `.grid(cells)` (major divisions per axis) and, for a
+finer mesh, `.minor_grid(subdivisions)` (extra lines inside each major cell):
+
+```dn
+import plot;
+
+chart = plot.line([3.0, 7.0, 5.0, 9.0, 8.0, 12.0])
+    .title("With grid")
+    .grid(6)         // 6 major cells per axis
+    .minor_grid(4);  // 4 minor lines inside each cell
+```
+
+## Subplots
+
+`plot.subplots(charts, cols)` composes several charts into one figure as a grid
+of `cols` columns. Each chart keeps its own title, grid, and series and is scaled
+into an equal cell. The result is a normal SVG, so it works with every output
+path — `save_subplots_svg` / `save_subplots_html` to a file, or
+`show_subplots_native` to open it in the native window:
+
+```dn
+import plot;
+
+top_left = plot.line([1.0, 3.0, 2.0]).title("A").grid(4).size(380, 240);
+top_right = plot.bar([2.0, 5.0, 3.0]).title("B").grid(4).size(380, 240);
+
+figure = plot.subplots([top_left, top_right], 2); // one SVG, two cells
+```
+
+## More examples
+
+See the [**Plot gallery**](../guides/plot_gallery.md) for ten worked examples —
+sine and cosine, damped oscillation, Gaussian, logistic and polynomial curves,
+scatter clouds, bars, histograms, and a four-panel subplot — each with the Dune
+code and its rendered image.
 
 > Auto-generated from `stdlib/plot.dn` by `tools/gen_stdlib_docs.py`.
 
@@ -112,6 +146,8 @@ with `save_svg`/`save_html` and lay them out in your own document.
 - `fn y_label(value: text): Chart` — Return a copy with the y-axis label set. — e.g. `plot.line([1.0, 2.0]).y_label("value")`
 - `fn legend(enabled: bool): Chart` — Return a copy with the legend shown or hidden. — e.g. `plot.line([1.0, 2.0]).label("trend").legend(true)`
 - `fn size(width: int, height: int): Chart` — Return a copy sized to `width` x `height` pixels (both must be positive). — e.g. `plot.svg(plot.line([1.0, 2.0]).size(640, 480)).contains("width=\"640\"")  // 1`
+- `fn grid(cells: int): Chart` — Return a copy with a background grid of `cells` major divisions per axis — e.g. `plot.svg(plot.line([1.0, 2.0]).grid(5)).contains("plot-grid")  // 1`
+- `fn minor_grid(subdivisions: int): Chart` — Return a copy that also draws `subdivisions` minor grid lines inside each — e.g. `plot.svg(plot.line([1.0, 2.0]).grid(4).minor_grid(5)).contains("plot-grid-minor")  // 1`
 - `fn label(value: text): Chart`
 - `fn add_line(xs: [real64], ys: [real64]): Chart`
 - `fn add_line(ys: [real64]): Chart`
@@ -220,6 +256,15 @@ Render `chart` to deterministic standalone SVG text.
 plot.svg(plot.line([1.0, 2.0])).starts_with("<svg")  // 1
 ```
 
+### `fn subplots(charts: [Chart], cols: int): text`
+
+Arrange several charts into one SVG as a grid of `cols` columns (rows are filled left-to-right, top-to-bottom). Each chart keeps its own size and is scaled into an equal cell taken from the first chart's dimensions.
+
+**Example:**
+```dune
+plot.subplots([plot.line([1.0, 2.0]), plot.bar([3.0, 1.0])], 2).contains("<svg")  // 1
+```
+
 ### `fn html(chart: Chart): text`
 
 Render `chart` to a deterministic standalone HTML document wrapping the SVG.
@@ -250,5 +295,36 @@ plot.save_html(plot.line([1.0, 2.0]), "chart.html").is_done()  // 1
 ### `fn show_native(chart: Chart): outcome.Outcome<text, text>`
 
 Open `chart` in a native plot window where the VM supports it; returns an `Outcome` describing whether the window opened (a headless-safe error if not).
+
+### `fn subplots_html(charts: [Chart], cols: int): text`
+
+Wrap a grid of charts in a standalone HTML document.
+
+**Example:**
+```dune
+plot.subplots_html([plot.line([1.0, 2.0])], 1).contains("<!doctype")  // 1
+```
+
+### `fn save_subplots_svg(charts: [Chart], cols: int, path: text): outcome.Outcome<text, text>`
+
+Write a grid of charts as SVG to `path`.
+
+**Example:**
+```dune
+plot.save_subplots_svg([plot.line([1.0, 2.0]), plot.bar([2.0, 1.0])], 2, "grid.svg").is_done()  // 1
+```
+
+### `fn save_subplots_html(charts: [Chart], cols: int, path: text): outcome.Outcome<text, text>`
+
+Write a grid of charts as an HTML document to `path`.
+
+**Example:**
+```dune
+plot.save_subplots_html([plot.line([1.0, 2.0])], 1, "grid.html").is_done()  // 1
+```
+
+### `fn show_subplots_native(charts: [Chart], cols: int): outcome.Outcome<text, text>`
+
+Open a grid of charts in the native plot window where the VM supports it. The window renders the composed SVG, so subplots display exactly as they save.
 
 ### `fn show(chart: Chart): outcome.Outcome<text, text>`

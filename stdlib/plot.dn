@@ -44,6 +44,10 @@ export record Chart {
     legend_enabled: bool,
     width: int,
     height: int,
+    // Number of major grid cells per axis (0 = no grid).
+    grid_cells: int = 0,
+    // Minor subdivisions drawn inside each major cell (0 = no minor grid).
+    minor_cells: int = 0,
 
     export static fn empty(): Chart {
         empty_series: [Series] = [];
@@ -55,6 +59,8 @@ export record Chart {
             legend_enabled: false,
             width: DEFAULT_WIDTH,
             height: DEFAULT_HEIGHT,
+            grid_cells: 0,
+            minor_cells: 0,
         };
     }
 
@@ -69,6 +75,8 @@ export record Chart {
             legend_enabled: this.legend_enabled,
             width: this.width,
             height: this.height,
+            grid_cells: this.grid_cells,
+            minor_cells: this.minor_cells,
         };
     }
 
@@ -83,6 +91,8 @@ export record Chart {
             legend_enabled: this.legend_enabled,
             width: this.width,
             height: this.height,
+            grid_cells: this.grid_cells,
+            minor_cells: this.minor_cells,
         };
     }
 
@@ -97,6 +107,8 @@ export record Chart {
             legend_enabled: this.legend_enabled,
             width: this.width,
             height: this.height,
+            grid_cells: this.grid_cells,
+            minor_cells: this.minor_cells,
         };
     }
 
@@ -111,6 +123,8 @@ export record Chart {
             legend_enabled: enabled,
             width: this.width,
             height: this.height,
+            grid_cells: this.grid_cells,
+            minor_cells: this.minor_cells,
         };
     }
 
@@ -129,6 +143,42 @@ export record Chart {
             legend_enabled: this.legend_enabled,
             width: width,
             height: height,
+            grid_cells: this.grid_cells,
+            minor_cells: this.minor_cells,
+        };
+    }
+
+    // Return a copy with a background grid of `cells` major divisions per axis
+    // (0 disables it).
+    // example: plot.svg(plot.line([1.0, 2.0]).grid(5)).contains("plot-grid")  // 1
+    export fn grid(cells: int): Chart {
+        return Chart {
+            series: this.series,
+            title_text: this.title_text,
+            x_label_text: this.x_label_text,
+            y_label_text: this.y_label_text,
+            legend_enabled: this.legend_enabled,
+            width: this.width,
+            height: this.height,
+            grid_cells: cells,
+            minor_cells: this.minor_cells,
+        };
+    }
+
+    // Return a copy that also draws `subdivisions` minor grid lines inside each
+    // major cell. Pair it with `grid` to set the major divisions.
+    // example: plot.svg(plot.line([1.0, 2.0]).grid(4).minor_grid(5)).contains("plot-grid-minor")  // 1
+    export fn minor_grid(subdivisions: int): Chart {
+        return Chart {
+            series: this.series,
+            title_text: this.title_text,
+            x_label_text: this.x_label_text,
+            y_label_text: this.y_label_text,
+            legend_enabled: this.legend_enabled,
+            width: this.width,
+            height: this.height,
+            grid_cells: this.grid_cells,
+            minor_cells: subdivisions,
         };
     }
 
@@ -145,6 +195,8 @@ export record Chart {
             legend_enabled: this.legend_enabled,
             width: this.width,
             height: this.height,
+            grid_cells: this.grid_cells,
+            minor_cells: this.minor_cells,
         };
     }
 
@@ -292,6 +344,14 @@ export fn svg(chart: Chart): text {
     return render_svg(chart);
 }
 
+// Arrange several charts into one SVG as a grid of `cols` columns (rows are
+// filled left-to-right, top-to-bottom). Each chart keeps its own size and is
+// scaled into an equal cell taken from the first chart's dimensions.
+// example: plot.subplots([plot.line([1.0, 2.0]), plot.bar([3.0, 1.0])], 2).contains("<svg")  // 1
+export fn subplots(charts: [Chart], cols: int): text {
+    return render_subplots(charts, cols);
+}
+
 // Render `chart` to a deterministic standalone HTML document wrapping the SVG.
 // example: plot.html(plot.line([1.0, 2.0])).contains("<!doctype")  // 1
 export fn html(chart: Chart): text {
@@ -320,6 +380,36 @@ export fn save_html(chart: Chart, path: text): outcome.Outcome<text, text> {
 // `Outcome` describing whether the window opened (a headless-safe error if not).
 export fn show_native(chart: Chart): outcome.Outcome<text, text> {
     (ok, message) = __plot_show_native(svg(chart));
+    if ok {
+        return outcome.done_text(message);
+    }
+
+    return outcome.failed_text(message);
+}
+
+// Wrap a grid of charts in a standalone HTML document.
+// example: plot.subplots_html([plot.line([1.0, 2.0])], 1).contains("<!doctype")  // 1
+export fn subplots_html(charts: [Chart], cols: int): text {
+    return fmt.format("<!doctype html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<title>Dune subplots</title>\n</head>\n<body>\n{}\n</body>\n</html>\n",
+                  render_subplots(charts, cols));
+}
+
+// Write a grid of charts as SVG to `path`.
+// example: plot.save_subplots_svg([plot.line([1.0, 2.0]), plot.bar([2.0, 1.0])], 2, "grid.svg").is_done()  // 1
+export fn save_subplots_svg(charts: [Chart], cols: int, path: text): outcome.Outcome<text, text> {
+    return fs.write_text(path, render_subplots(charts, cols));
+}
+
+// Write a grid of charts as an HTML document to `path`.
+// example: plot.save_subplots_html([plot.line([1.0, 2.0])], 1, "grid.html").is_done()  // 1
+export fn save_subplots_html(charts: [Chart], cols: int, path: text): outcome.Outcome<text, text> {
+    return fs.write_text(path, subplots_html(charts, cols));
+}
+
+// Open a grid of charts in the native plot window where the VM supports it. The
+// window renders the composed SVG, so subplots display exactly as they save.
+export fn show_subplots_native(charts: [Chart], cols: int): outcome.Outcome<text, text> {
+    (ok, message) = __plot_show_native(render_subplots(charts, cols));
     if ok {
         return outcome.done_text(message);
     }
@@ -363,6 +453,8 @@ fn append_series(chart: Chart, series: Series): Chart {
         legend_enabled: chart.legend_enabled,
         width: chart.width,
         height: chart.height,
+        grid_cells: chart.grid_cells,
+        minor_cells: chart.minor_cells,
     };
 }
 
@@ -561,7 +653,10 @@ fn scale_y(chart: Chart, value: real64, minimum: real64, maximum: real64): real6
     return math.round(PLOT_TOP + ((maximum - value) / span) * plot_height(chart));
 }
 
-fn render_svg(chart: Chart): text {
+// Everything inside the <svg> element (title, background, grid, axes, series,
+// labels, legend) but not the <svg> wrapper itself, so it can be reused both as
+// a standalone chart and as a nested viewport inside `subplots`.
+fn render_svg_body(chart: Chart): text {
     require_chart_data(chart);
 
     xmin = x_min(chart);
@@ -569,10 +664,11 @@ fn render_svg(chart: Chart): text {
     ymin = y_min(chart);
     ymax = y_max(chart);
 
-    output = fmt.format("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{}\" height=\"{}\" viewBox=\"0 0 {} {}\">\n",
-                    chart.width, chart.height, chart.width, chart.height);
-    output = fmt.format("{}<title>{}</title>\n", output, escape_xml(chart.title_text));
+    output = fmt.format("<title>{}</title>\n", escape_xml(chart.title_text));
     output = fmt.format("{}<rect width=\"{}\" height=\"{}\" fill=\"#ffffff\"/>\n", output, chart.width, chart.height);
+    if chart.grid_cells > 0 {
+        output = fmt.format("{}{}\n", output, render_grid(chart));
+    }
     output = fmt.format("{}{}\n", output, render_axes(chart, xmin, xmax, ymin, ymax));
 
     for index = 0; index < chart.series.len(); index = index + 1 {
@@ -584,7 +680,81 @@ fn render_svg(chart: Chart): text {
         output = fmt.format("{}{}", output, render_legend(chart));
     }
 
+    return output;
+}
+
+fn render_svg(chart: Chart): text {
+    header = fmt.format("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{}\" height=\"{}\" viewBox=\"0 0 {} {}\">\n",
+                    chart.width, chart.height, chart.width, chart.height);
+    return fmt.format("{}{}</svg>\n", header, render_svg_body(chart));
+}
+
+fn render_subplots(charts: [Chart], cols: int): text {
+    if charts.len() == 0 {
+        runtime.panic("plot: subplots needs at least one chart");
+    }
+    if cols <= 0 {
+        runtime.panic("plot: subplots columns must be positive");
+    }
+
+    rows = (charts.len() + cols - 1) / cols;
+    cell_w = charts[0].width;
+    cell_h = charts[0].height;
+    total_w = cell_w * cols;
+    total_h = cell_h * rows;
+
+    output = fmt.format("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{}\" height=\"{}\" viewBox=\"0 0 {} {}\">\n",
+                    total_w, total_h, total_w, total_h);
+    output = fmt.format("{}<rect width=\"{}\" height=\"{}\" fill=\"#ffffff\"/>\n", output, total_w, total_h);
+
+    for index = 0; index < charts.len(); index = index + 1 {
+        col = index % cols;
+        row = index / cols;
+        cx = col * cell_w;
+        cy = row * cell_h;
+        chart = charts[index];
+        // Nested <svg> viewports position and scale each chart into its cell.
+        output = fmt.format("{}<svg x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\" viewBox=\"0 0 {} {}\">\n",
+                        output, cx, cy, cell_w, cell_h, chart.width, chart.height);
+        output = fmt.format("{}{}</svg>\n", output, render_svg_body(chart));
+    }
+
     return fmt.format("{}</svg>\n", output);
+}
+
+fn render_grid(chart: Chart): text {
+    left = PLOT_LEFT;
+    right = (chart.width to real64) - PLOT_RIGHT;
+    top = PLOT_TOP;
+    bottom = (chart.height to real64) - PLOT_BOTTOM;
+
+    output = "";
+
+    // Minor grid first, so the darker major lines draw on top of it.
+    if chart.minor_cells > 1 {
+        total_minor = chart.grid_cells * chart.minor_cells;
+        output = fmt.format("{}<g class=\"plot-grid-minor\" fill=\"none\" stroke=\"#eef2f7\" stroke-width=\"1\">\n", output);
+        for index = 1; index < total_minor; index = index + 1 {
+            f = (index to real64) / (total_minor to real64);
+            gx = left + (right - left) * f;
+            gy = top + (bottom - top) * f;
+            output = fmt.format("{}<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\"/>\n", output, gx, top, gx, bottom);
+            output = fmt.format("{}<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\"/>\n", output, left, gy, right, gy);
+        }
+        output = fmt.format("{}</g>\n", output);
+    }
+
+    // Major grid.
+    output = fmt.format("{}<g class=\"plot-grid\" fill=\"none\" stroke=\"#d7dee7\" stroke-width=\"1\">\n", output);
+    for index = 0; index <= chart.grid_cells; index = index + 1 {
+        f = (index to real64) / (chart.grid_cells to real64);
+        gx = left + (right - left) * f;
+        gy = top + (bottom - top) * f;
+        output = fmt.format("{}<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\"/>\n", output, gx, top, gx, bottom);
+        output = fmt.format("{}<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\"/>\n", output, left, gy, right, gy);
+    }
+
+    return fmt.format("{}</g>", output);
 }
 
 fn render_axes(chart: Chart, xmin: real64, xmax: real64, ymin: real64, ymax: real64): text {
