@@ -12,6 +12,10 @@ Runtime checks catch common mistakes such as invalid indexes and slices, while
 the type checker rejects mismatched assignments, calls, returns, and binary
 operations before execution.
 
+📖 **Documentation site:** <https://comrademashkov.github.io/dune/> — language
+reference, standard-library reference (generated from source doc-comments), and
+guides. Built with mdBook from [`docs/`](docs/).
+
 Good fits for Dune today:
 
 - experimenting with compiled language implementation
