@@ -6,6 +6,19 @@ Pure-Dune math: named constants plus elementary functions approximated with
 Taylor/Maclaurin series, Newton iteration, and range reduction. Nothing here
 calls native code, so results are identical across backends.
 
+`math` is a pure-Dune numeric module. It exposes real constants such as `PI`, `TAU`, and `E`, generic helpers such as `square`, `cube`, `abs`, `min`, `max`, and `clamp`, and elementary real functions implemented with series expansion, Newton iteration, and range reduction.
+
+Use it when you need portable numeric behavior in both the VM and native backend. The functions are intentionally small and deterministic; they do not call a native math library.
+
+```dn
+import math;
+
+print(math.square(7));
+print(math.clamp(15, 0, 10));
+print(math.sqrt(81.0));
+print(math.round(math.PI));
+```
+
 > Auto-generated from `stdlib/math.dn` by `tools/gen_stdlib_docs.py`.
 
 ### `const PI: real64`
