@@ -1,7 +1,8 @@
 #include "parser.hpp"
 
+#include "diagnostics/diagnostic.hpp"
+
 #include <memory>
-#include <stdexcept>
 #include <string>
 #include <utility>
 
@@ -291,7 +292,7 @@ std::string expression_to_type_name(const Expression& expression) {
         return expression_to_type_name(*expression.left) + "." + expression.lexeme;
     }
 
-    throw std::runtime_error("expected type name before record literal");
+    throw DiagnosticError("expected type name before record literal");
 }
 
 std::string decode_string_literal(const std::string& lexeme) {
@@ -309,7 +310,7 @@ std::string decode_string_literal(const std::string& lexeme) {
 
         ++index;
         if (index + 1 >= lexeme.size()) {
-            throw std::runtime_error("invalid string literal");
+            throw DiagnosticError("invalid string literal");
         }
 
         switch (lexeme[index]) {
@@ -332,7 +333,7 @@ std::string decode_string_literal(const std::string& lexeme) {
             result += '\\';
             break;
         default:
-            throw std::runtime_error("unknown string escape");
+            throw DiagnosticError("unknown string escape");
         }
     }
 
@@ -546,7 +547,7 @@ const Token& Parser::consume(TokenType type, std::string_view message) {
         return advance();
     }
 
-    throw std::runtime_error(std::string(message));
+    throw DiagnosticError(location_from_token(peek()), std::string(message));
 }
 
 Token Parser::consume_identifier_like(std::string_view message) {
@@ -554,7 +555,7 @@ Token Parser::consume_identifier_like(std::string_view message) {
         return advance();
     }
 
-    throw std::runtime_error(std::string(message));
+    throw DiagnosticError(location_from_token(peek()), std::string(message));
 }
 
 bool Parser::match_identifier_like() {
@@ -679,7 +680,7 @@ Statement Parser::statement_dispatch() {
 
     std::unique_ptr<Expression> value = expression();
     if (!match(TokenType::semicolon) && !check(TokenType::right_brace) && !check(TokenType::eof)) {
-        throw std::runtime_error("expected ';' after expression statement");
+        throw DiagnosticError(location_from_token(peek()), "expected ';' after expression statement");
     }
 
     Statement statement{StatementKind::expression_statement, "", std::move(value), {}, {}};
@@ -717,7 +718,7 @@ Statement Parser::tuple_assignment_statement() {
     parse_target();
     consume(TokenType::comma, "expected ',' in tuple destructuring target");
     if (check(TokenType::right_paren)) {
-        throw std::runtime_error("tuple destructuring target needs at least two bindings");
+        throw DiagnosticError(location_from_token(peek()), "tuple destructuring target needs at least two bindings");
     }
     do {
         parse_target();
@@ -808,7 +809,8 @@ Statement Parser::export_statement() {
         return statement;
     }
 
-    throw std::runtime_error(
+    throw DiagnosticError(
+        location_from_token(peek()),
         "expected fn, foreign function, record, contract, choice, method, constant, or type alias after export");
 }
 
@@ -833,7 +835,7 @@ Statement Parser::for_statement() {
     } else if (looks_like_assignment_statement()) {
         statement.initializer = std::make_unique<Statement>(assignment_statement());
     } else {
-        throw std::runtime_error("expected for initializer");
+        throw DiagnosticError(location_from_token(peek()), "expected for initializer");
     }
 
     if (check(TokenType::semicolon)) {
@@ -1069,7 +1071,7 @@ Statement Parser::binding_statement() {
     consume(TokenType::equal, "expected '=' after binding name");
     std::unique_ptr<Expression> value = expression();
     if (!match(TokenType::semicolon) && !check(TokenType::right_brace) && !check(TokenType::eof)) {
-        throw std::runtime_error("expected ';' after binding statement");
+        throw DiagnosticError(location_from_token(peek()), "expected ';' after binding statement");
     }
 
     Statement statement{StatementKind::binding, name.lexeme, std::move(value), {}, {}};
@@ -1132,7 +1134,8 @@ Statement Parser::struct_statement() {
         while (true) {
             const Token& derive_name = consume(TokenType::identifier, "expected derive name after 'derive'");
             if (derive_name.lexeme != "eq" && derive_name.lexeme != "copy" && derive_name.lexeme != "debug") {
-                throw std::runtime_error("unknown derive '" + derive_name.lexeme + "' (expected eq, copy, or debug)");
+                throw DiagnosticError(location_from_token(peek()),
+                                      "unknown derive '" + derive_name.lexeme + "' (expected eq, copy, or debug)");
             }
 
             derives.push_back(derive_name.lexeme);
@@ -1163,7 +1166,7 @@ Statement Parser::struct_statement() {
         }
 
         if (member_static) {
-            throw std::runtime_error("expected static record function");
+            throw DiagnosticError(location_from_token(peek()), "expected static record function");
         }
 
         const Token& field = consume_identifier_like("expected record field name");
@@ -1211,7 +1214,7 @@ Statement Parser::type_alias_statement() {
     const Token& keyword = previous();
     const Token& name = consume(TokenType::identifier, "expected type alias name after type");
     if (check(TokenType::less)) {
-        throw std::runtime_error("generic type aliases are not supported yet");
+        throw DiagnosticError(location_from_token(peek()), "generic type aliases are not supported yet");
     }
 
     consume(TokenType::equal, "expected '=' after type alias name");
@@ -1297,7 +1300,7 @@ std::vector<Statement> Parser::block() {
 
 std::string Parser::qualified_name() {
     if (!check_identifier_like() && !check(TokenType::int_keyword) && !check(TokenType::real_keyword)) {
-        throw std::runtime_error("expected name");
+        throw DiagnosticError(location_from_token(peek()), "expected name");
     }
 
     std::string name = advance().lexeme;
@@ -1484,7 +1487,7 @@ TypeAnnotation Parser::type_annotation() {
         elements.push_back(type_annotation().type);
         consume(TokenType::comma, "expected ',' in tuple type");
         if (check(TokenType::right_paren)) {
-            throw std::runtime_error("tuple type needs at least two elements");
+            throw DiagnosticError(location_from_token(peek()), "tuple type needs at least two elements");
         }
         do {
             elements.push_back(type_annotation().type);
@@ -1516,7 +1519,7 @@ TypeAnnotation Parser::type_annotation() {
         return TypeAnnotation{true, with_type_arguments(make_generic_type(std::move(name)), std::move(arguments))};
     }
 
-    throw std::runtime_error("expected type annotation");
+    throw DiagnosticError(location_from_token(peek()), "expected type annotation");
 }
 
 std::unique_ptr<Expression> Parser::assignment_target() {
@@ -1705,7 +1708,7 @@ std::unique_ptr<Expression> Parser::when_expression() {
         } else {
             cases.push_back(expression());
             if (!match(TokenType::semicolon) && !match(TokenType::comma) && !check(TokenType::right_brace)) {
-                throw std::runtime_error("expected ';' or ',' after when arm");
+                throw DiagnosticError(location_from_token(peek()), "expected ';' or ',' after when arm");
             }
         }
 
@@ -1773,7 +1776,7 @@ std::unique_ptr<Expression> Parser::call() {
         if (match(TokenType::left_paren)) {
             const SourceLocation location = expr->location;
             if (expr->kind != ExpressionKind::identifier) {
-                throw std::runtime_error("expected function name before arguments");
+                throw DiagnosticError(location_from_token(peek()), "expected function name before arguments");
             }
 
             std::vector<std::unique_ptr<Expression>> parsed_arguments = arguments();
@@ -1842,7 +1845,7 @@ std::unique_ptr<Expression> Parser::call() {
             }
 
             if (start == nullptr) {
-                throw std::runtime_error("expected index expression");
+                throw DiagnosticError(location_from_token(peek()), "expected index expression");
             }
 
             consume(TokenType::right_bracket, "expected ']' after array index");
@@ -1923,7 +1926,7 @@ std::unique_ptr<Expression> Parser::primary() {
             std::vector<std::unique_ptr<Expression>> elements;
             elements.push_back(std::move(expr));
             if (check(TokenType::right_paren)) {
-                throw std::runtime_error("tuple literal needs at least two elements");
+                throw DiagnosticError(location_from_token(peek()), "tuple literal needs at least two elements");
             }
             do {
                 elements.push_back(expression());
@@ -1937,7 +1940,7 @@ std::unique_ptr<Expression> Parser::primary() {
         return expr;
     }
 
-    throw std::runtime_error("expected expression");
+    throw DiagnosticError(location_from_token(peek()), "expected expression");
 }
 
 } // namespace dune

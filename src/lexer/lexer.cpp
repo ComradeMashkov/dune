@@ -1,7 +1,8 @@
 #include "lexer.hpp"
 
+#include "diagnostics/diagnostic.hpp"
+
 #include <cctype>
-#include <stdexcept>
 #include <string_view>
 #include <utility>
 
@@ -210,7 +211,7 @@ Token Lexer::scan_token() {
         break;
     }
 
-    throw std::runtime_error("unexpected character in source");
+    throw DiagnosticError(SourceLocation{line_, column_, 1}, "unexpected character in source");
 }
 
 std::vector<Token> Lexer::tokenize() {
@@ -606,7 +607,7 @@ Token Lexer::number(std::size_t start, std::size_t line, std::size_t column) {
         while (is_digit(peek()) || peek() == '_') {
             if (peek() == '_') {
                 if (!saw_digit || previous_separator) {
-                    throw std::runtime_error("invalid numeric separator");
+                    throw DiagnosticError(SourceLocation{line_, column_, 1}, "invalid numeric separator");
                 }
                 previous_separator = true;
                 advance();
@@ -619,11 +620,12 @@ Token Lexer::number(std::size_t start, std::size_t line, std::size_t column) {
         }
 
         if (!saw_digit) {
-            throw std::runtime_error("expected digit in " + std::string(description) + " literal");
+            throw DiagnosticError(SourceLocation{line_, column_, 1},
+                                  "expected digit in " + std::string(description) + " literal");
         }
 
         if (previous_separator) {
-            throw std::runtime_error("invalid numeric separator");
+            throw DiagnosticError(SourceLocation{line_, column_, 1}, "invalid numeric separator");
         }
     };
 
@@ -639,7 +641,7 @@ Token Lexer::number(std::size_t start, std::size_t line, std::size_t column) {
 
         const std::string suffix = source_.substr(suffix_start, current_ - suffix_start);
         if (!is_integer_suffix(suffix)) {
-            throw std::runtime_error("invalid numeric literal suffix '" + suffix + "'");
+            throw DiagnosticError(SourceLocation{line_, column_, 1}, "invalid numeric literal suffix '" + suffix + "'");
         }
     };
 
@@ -654,7 +656,7 @@ Token Lexer::number(std::size_t start, std::size_t line, std::size_t column) {
         advance();
         consume_digits(is_binary_digit, "binary");
         if (std::isdigit(static_cast<unsigned char>(peek()))) {
-            throw std::runtime_error("invalid digit in binary literal");
+            throw DiagnosticError(SourceLocation{line_, column_, 1}, "invalid digit in binary literal");
         }
         consume_suffix();
         return make_token(TokenType::number, start, line, column);
@@ -668,7 +670,7 @@ Token Lexer::number(std::size_t start, std::size_t line, std::size_t column) {
 
         consume_digits([](char value) { return std::isdigit(static_cast<unsigned char>(value)); }, "decimal", true);
         if (std::isalpha(static_cast<unsigned char>(peek()))) {
-            throw std::runtime_error("float literal suffixes are not supported");
+            throw DiagnosticError(SourceLocation{line_, column_, 1}, "float literal suffixes are not supported");
         }
 
         return make_token(TokenType::float_number, start, line, column);
@@ -680,26 +682,27 @@ Token Lexer::number(std::size_t start, std::size_t line, std::size_t column) {
 
 Token Lexer::character(std::size_t start, std::size_t line, std::size_t column) {
     if (is_at_end() || peek() == '\n') {
-        throw std::runtime_error("unterminated character literal");
+        throw DiagnosticError(SourceLocation{line_, column_, 1}, "unterminated character literal");
     }
 
     if (peek() == '\\') {
         advance();
         if (is_at_end() || peek() == '\n') {
-            throw std::runtime_error("unterminated character literal");
+            throw DiagnosticError(SourceLocation{line_, column_, 1}, "unterminated character literal");
         }
 
         if (!is_glyph_escape(peek())) {
-            throw std::runtime_error("unknown glyph escape '" + escape_name(peek()) + "'");
+            throw DiagnosticError(SourceLocation{line_, column_, 1},
+                                  "unknown glyph escape '" + escape_name(peek()) + "'");
         }
     } else if (peek() == '\'') {
-        throw std::runtime_error("invalid glyph literal");
+        throw DiagnosticError(SourceLocation{line_, column_, 1}, "invalid glyph literal");
     }
 
     advance();
 
     if (!match('\'')) {
-        throw std::runtime_error("expected closing quote after character literal");
+        throw DiagnosticError(SourceLocation{line_, column_, 1}, "expected closing quote after character literal");
     }
 
     return make_token(TokenType::char_literal, start, line, column);
@@ -708,17 +711,18 @@ Token Lexer::character(std::size_t start, std::size_t line, std::size_t column) 
 Token Lexer::string(std::size_t start, std::size_t line, std::size_t column) {
     while (!is_at_end() && peek() != '"') {
         if (peek() == '\n') {
-            throw std::runtime_error("unterminated string literal");
+            throw DiagnosticError(SourceLocation{line_, column_, 1}, "unterminated string literal");
         }
 
         if (peek() == '\\') {
             advance();
             if (is_at_end() || peek() == '\n') {
-                throw std::runtime_error("unterminated string literal");
+                throw DiagnosticError(SourceLocation{line_, column_, 1}, "unterminated string literal");
             }
 
             if (!is_text_escape(peek())) {
-                throw std::runtime_error("unknown text escape '" + escape_name(peek()) + "'");
+                throw DiagnosticError(SourceLocation{line_, column_, 1},
+                                      "unknown text escape '" + escape_name(peek()) + "'");
             }
         }
 
@@ -726,7 +730,7 @@ Token Lexer::string(std::size_t start, std::size_t line, std::size_t column) {
     }
 
     if (!match('"')) {
-        throw std::runtime_error("unterminated string literal");
+        throw DiagnosticError(SourceLocation{line_, column_, 1}, "unterminated string literal");
     }
 
     return make_token(TokenType::string_literal, start, line, column);
@@ -735,14 +739,14 @@ Token Lexer::string(std::size_t start, std::size_t line, std::size_t column) {
 Token Lexer::raw_string(std::size_t start, std::size_t line, std::size_t column) {
     while (!is_at_end() && peek() != '"') {
         if (peek() == '\n') {
-            throw std::runtime_error("unterminated raw string literal");
+            throw DiagnosticError(SourceLocation{line_, column_, 1}, "unterminated raw string literal");
         }
 
         advance();
     }
 
     if (!match('"')) {
-        throw std::runtime_error("unterminated raw string literal");
+        throw DiagnosticError(SourceLocation{line_, column_, 1}, "unterminated raw string literal");
     }
 
     return make_token(TokenType::string_literal, start, line, column);

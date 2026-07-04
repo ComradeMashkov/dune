@@ -1,5 +1,6 @@
 #include "module_loader.hpp"
 
+#include "diagnostics/diagnostic.hpp"
 #include "lexer/lexer.hpp"
 #include "parser/parser.hpp"
 
@@ -64,11 +65,6 @@ bool is_relative_to_parent(const std::filesystem::path& path) {
     }
 
     return false;
-}
-
-std::string diagnostic(SourceLocation location, const std::string& message) {
-    return "line " + std::to_string(location.line) + ", columns " + std::to_string(location.column) + "-" +
-           std::to_string(location.column + location.length - 1) + ": " + message;
 }
 
 Type clone_type(const Type& type) {
@@ -209,7 +205,7 @@ void desugar_impls(Program& program) {
             TypeAnnotation receiver_type = receiver_type_for_record(statement);
             for (const Statement& method : statement.body) {
                 if (method.kind != StatementKind::function) {
-                    throw std::runtime_error(diagnostic(method.location, "record method must be a function"));
+                    throw DiagnosticError(method.location, "record method must be a function");
                 }
 
                 Statement function = clone_statement(method);
@@ -240,12 +236,12 @@ void desugar_impls(Program& program) {
         }
 
         if (!statement.type.has_type) {
-            throw std::runtime_error(diagnostic(statement.location, "method declaration needs a receiver type"));
+            throw DiagnosticError(statement.location, "method declaration needs a receiver type");
         }
 
         for (const Statement& method : statement.body) {
             if (method.kind != StatementKind::function) {
-                throw std::runtime_error(diagnostic(method.location, "method block can only contain functions"));
+                throw DiagnosticError(method.location, "method block can only contain functions");
             }
 
             Statement function = clone_statement(method);
@@ -347,8 +343,8 @@ std::vector<Statement> ModuleLoader::collect_imports(const std::vector<Statement
         // A plain module name must not collide with an alias bound elsewhere.
         const auto alias_collision = context.aliases.find(module);
         if (alias_collision != context.aliases.end() && alias_collision->second != module) {
-            throw std::runtime_error(diagnostic(
-                statement.location, "module '" + module + "' conflicts with an import alias of the same name"));
+            throw DiagnosticError(statement.location,
+                                  "module '" + module + "' conflicts with an import alias of the same name");
         }
         imported_modules.insert(module);
 
@@ -356,13 +352,12 @@ std::vector<Statement> ModuleLoader::collect_imports(const std::vector<Statement
             const std::string& alias = statement.module_alias;
             const auto existing = context.aliases.find(alias);
             if (existing != context.aliases.end()) {
-                throw std::runtime_error(
-                    diagnostic(statement.location,
-                               "import alias '" + alias + "' is already bound to module '" + existing->second + "'"));
+                throw DiagnosticError(statement.location, "import alias '" + alias + "' is already bound to module '" +
+                                                              existing->second + "'");
             }
             if (alias != module && imported_modules.contains(alias)) {
-                throw std::runtime_error(diagnostic(
-                    statement.location, "import alias '" + alias + "' conflicts with imported module '" + alias + "'"));
+                throw DiagnosticError(statement.location,
+                                      "import alias '" + alias + "' conflicts with imported module '" + alias + "'");
             }
 
             context.aliases.emplace(alias, module);
@@ -373,15 +368,14 @@ std::vector<Statement> ModuleLoader::collect_imports(const std::vector<Statement
             // otherwise a real typo is reported precisely.
             const auto exports = module_exports_.find(module);
             if (exports != module_exports_.end() && !exports->second.contains(symbol)) {
-                throw std::runtime_error(
-                    diagnostic(statement.location, "module '" + module + "' does not export '" + symbol + "'"));
+                throw DiagnosticError(statement.location, "module '" + module + "' does not export '" + symbol + "'");
             }
 
             const std::string qualified = module + "." + symbol;
             const auto existing = context.selective.find(symbol);
             if (existing != context.selective.end() && existing->second != qualified) {
-                throw std::runtime_error(
-                    diagnostic(statement.location, "symbol '" + symbol + "' is imported from more than one module"));
+                throw DiagnosticError(statement.location,
+                                      "symbol '" + symbol + "' is imported from more than one module");
             }
 
             context.selective.emplace(symbol, qualified);

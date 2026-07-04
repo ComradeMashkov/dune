@@ -1,5 +1,6 @@
 #include "lsp_server.hpp"
 
+#include "diagnostics/diagnostic.hpp"
 #include "lexer/lexer.hpp"
 #include "modules/module_loader.hpp"
 #include "parser/parser.hpp"
@@ -191,6 +192,23 @@ Diagnostic diagnostic_from_error(const std::string& message) {
     }
 
     return Diagnostic{1, 1, 1, message};
+}
+
+// Prefer a front-end error's structured span when it carries one; otherwise fall
+// back to parsing the legacy `"line X, columns A-B: "` message shape. The
+// structured path avoids the regex entirely for located errors (including parser
+// and lexer errors, which previously collapsed to line 1) and is robust to
+// messages that themselves contain colons or newlines.
+Diagnostic diagnostic_from_exception(const std::exception& error) {
+    if (const auto* located = dynamic_cast<const DiagnosticError*>(&error)) {
+        const dune::Diagnostic& structured = located->diagnostic();
+        if (structured.has_location) {
+            return Diagnostic{structured.location.line, structured.location.column,
+                              structured.location.column + structured.location.length - 1, structured.message};
+        }
+    }
+
+    return diagnostic_from_error(error.what());
 }
 
 std::string find_json_string(const std::string& json, const std::string& key, std::size_t offset = 0) {
@@ -1902,7 +1920,7 @@ std::vector<Diagnostic> diagnose_source(const std::string& source, const std::st
         checker.check(loader.resolve(parser.parse(), directory));
         return {};
     } catch (const std::exception& error) {
-        return {diagnostic_from_error(error.what())};
+        return {diagnostic_from_exception(error)};
     }
 }
 

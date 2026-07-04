@@ -1,5 +1,7 @@
 #pragma once
 
+#include "diagnostics/source_location.hpp"
+
 #include <cstddef>
 #include <memory>
 #include <string>
@@ -8,12 +10,6 @@
 namespace dune {
 
 struct Expression;
-
-struct SourceLocation {
-    std::size_t line = 1;
-    std::size_t column = 1;
-    std::size_t length = 1;
-};
 
 enum class ValueType {
     int_type,

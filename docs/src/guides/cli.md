@@ -75,6 +75,27 @@ source exactly. Only exported declarations appear (a module with no `export` is
 treated as fully public). `--check` regenerates in memory and exits non-zero on
 any drift, which keeps generated docs current in CI.
 
+## Diagnostics
+
+When a command fails to lex, parse, or type-check the main file, `dune` prints a
+source snippet that points at the exact span the error refers to:
+
+```text
+error: expected type 'int' but got 'text'
+  --> program.dn:1:10
+  |
+1 | x: int = "hello";
+  |          ^^^^^^^
+```
+
+The `-->` line gives `file:line:column`, and the caret underline marks the
+offending token or expression. Lexer, parser, and type-check errors all use this
+format; `dune check`, `dune build`, and `dune llvm` show it beneath their
+per-stage progress trace. Errors from imported modules and runtime failures fall
+back to a single-line message (source snippets for other files are a follow-up).
+The same locations are sent to editors over the [language server](editor.md), so
+squiggles land on the right span.
+
 ## Version
 
 ```sh

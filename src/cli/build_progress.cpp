@@ -1,5 +1,7 @@
 #include "cli/build_progress.hpp"
 
+#include "diagnostics/snippet.hpp"
+
 #include <array>
 #include <chrono>
 #include <cstdio>
@@ -138,10 +140,21 @@ void BuildProgress::done(std::string_view step) {
     cv_.notify_all();
 }
 
-void BuildProgress::error(std::string_view step, std::string_view message) {
+void BuildProgress::set_source(std::string source, std::string filename) {
+    source_ = std::move(source);
+    filename_ = std::move(filename);
+    has_source_ = true;
+}
+
+void BuildProgress::error(std::string_view step, const std::exception& error) {
+    // Module-resolution locations point into the imported file, not the source
+    // we hold, so never quote our source for that step.
+    const bool allow_snippet = has_source_ && step != "resolve modules";
+    const std::string body = dune::render_error_body(error, source_, filename_, allow_snippet);
+
     if (!tty_) {
         std::cerr << "  " << colorize("[error]", kRed) << ' ' << step << '\n';
-        std::cerr << "          " << message << '\n';
+        std::cerr << body;
         return;
     }
 
@@ -149,7 +162,7 @@ void BuildProgress::error(std::string_view step, std::string_view message) {
     active_ = false;
     std::cerr << '\r' << kClearToEol << colorize(kCrossMark, kRed) << ' ' << step << ' '
               << colorize(format_elapsed(elapsed_seconds_locked()), kDim) << '\n';
-    std::cerr << "          " << message << '\n';
+    std::cerr << body;
     std::cerr.flush();
     cv_.notify_all();
 }
