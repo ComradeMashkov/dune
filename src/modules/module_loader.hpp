@@ -21,6 +21,7 @@ public:
     ModuleLoader();
     explicit ModuleLoader(std::vector<std::filesystem::path> search_paths);
 
+    void set_project_source_roots(std::vector<std::filesystem::path> source_roots);
     Program resolve(Program program, const std::filesystem::path& source_directory = {});
     Program resolve(Program program, const std::filesystem::path& source_directory, const std::string& source_name);
     Program resolve(Program program, const std::filesystem::path& source_directory,
@@ -72,6 +73,7 @@ private:
                       const std::unordered_set<std::string>& local_type_aliases) const;
 
     std::vector<std::filesystem::path> search_paths_;
+    std::vector<std::filesystem::path> project_source_roots_;
     std::unordered_set<std::string> loaded_modules_;
     // Exported top-level member names per loaded module, used to validate
     // `from <module> import <symbol>` directives.

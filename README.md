@@ -89,12 +89,28 @@ elsewhere.
 | `dune check <file.dn>` | Type-check only, printing a short pipeline trace. |
 | `dune repl` | Start an interactive VM session with persistent definitions. |
 | `dune notebook <command>` | Create, run, check, export, or serve `.dnb` notebooks. |
-| `dune test <file.dn>` | Run every `@test` function and `test "..." { ... }` block. |
+| `dune test <file.dn>` | Run every `@test` function and `test "..."` block. |
 | `dune doc <path> [-o dir]` | Generate Markdown API docs from source doc-comments. |
 | `dune lsp` | Start the editor language server (diagnostics, hover, completion). |
 
 Color is automatic on terminals; force it with `DUNE_COLOR=always` or disable it
 with `DUNE_COLOR=never` / `NO_COLOR=1`.
+
+## Projects
+
+Place a `dune.toml` file at the root of a multi-file project:
+
+```toml
+name = "my_app"
+version = "0.1.0"
+sources = ["src"]
+tests = ["tests"]
+```
+
+Dune discovers the nearest manifest by walking upward from the source file or
+workspace. Imports resolve beside the importing file, then through configured
+source roots, and finally through the standard library. Without a manifest,
+single-file programs retain their existing local-directory behavior.
 
 Start an interactive session with `dune repl`. Bindings, imports, functions,
 records, choices, and aliases remain available between entries; a bare
