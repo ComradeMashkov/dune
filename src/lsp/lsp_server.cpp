@@ -136,6 +136,31 @@ std::filesystem::path path_from_uri(const std::string& uri) {
     return std::filesystem::path(path);
 }
 
+std::string uri_from_path(const std::filesystem::path& path) {
+    std::error_code error;
+    std::filesystem::path absolute = std::filesystem::absolute(path, error);
+    const std::string native = (error ? path : absolute).generic_string();
+
+    std::string encoded;
+    for (const unsigned char character : native) {
+        if (std::isalnum(character) != 0 || character == '/' || character == '-' || character == '_' ||
+            character == '.' || character == '~' || character == ':') {
+            encoded += static_cast<char>(character);
+        } else {
+            constexpr char digits[] = "0123456789ABCDEF";
+            encoded += '%';
+            encoded += digits[character >> 4];
+            encoded += digits[character & 0x0f];
+        }
+    }
+
+#if defined(_WIN32)
+    return "file:///" + encoded;
+#else
+    return "file://" + encoded;
+#endif
+}
+
 std::filesystem::path source_directory_for(const std::string& uri, const std::filesystem::path& fallback) {
     if (!fallback.empty()) {
         return fallback;
@@ -1781,6 +1806,61 @@ std::optional<SourceLocation> find_declaration_location(const std::vector<Statem
     return std::nullopt;
 }
 
+// Locates an exported `member` inside a resolved module program. Mirrors
+// module_member_hover's visibility rules so go-to-definition lands on the same
+// declaration hover describes, including methods declared in `method` blocks.
+std::optional<SourceLocation> find_module_member_location(const Program& program, const std::string& member) {
+    for (const Statement& statement : program.statements) {
+        const bool visible = is_visible_module_statement(program, statement);
+        if (visible && statement.name == member && declares_named_symbol(statement.kind)) {
+            return statement.location;
+        }
+
+        if (visible && statement.kind == StatementKind::enum_statement) {
+            for (const Parameter& variant : statement.parameters) {
+                if (variant.name == member) {
+                    return variant.location;
+                }
+            }
+        }
+
+        if (statement.kind != StatementKind::method_block) {
+            continue;
+        }
+
+        for (const Statement& method : statement.body) {
+            const bool method_visible = !module_has_explicit_exports(program) || statement.exported || method.exported;
+            if (method_visible && method.kind == StatementKind::function && method.name == member) {
+                return method.location;
+            }
+        }
+    }
+
+    return std::nullopt;
+}
+
+// Resolves `module.member` to the member's declaration in the module file.
+std::optional<DefinitionLocation> lookup_module_member_definition(const std::string& module_name,
+                                                                  const std::string& member,
+                                                                  const std::filesystem::path& source_directory) {
+    const std::optional<std::filesystem::path> path = find_module_file(module_name, source_directory);
+    if (!path.has_value()) {
+        return std::nullopt;
+    }
+
+    const std::optional<Program> program = parse_program_best_effort(read_text_file(*path));
+    if (!program.has_value()) {
+        return std::nullopt;
+    }
+
+    const std::optional<SourceLocation> location = find_module_member_location(*program, member);
+    if (!location.has_value()) {
+        return std::nullopt;
+    }
+
+    return DefinitionLocation{uri_from_path(*path), location->line, location->column, location->length};
+}
+
 // Finds the identifier token under the cursor. Unlike token_index_at_position,
 // this only considers identifiers and resolves boundary clicks toward the
 // identifier: on `p.x`, a click at the start of `x` must not snap to the `.` to
@@ -1813,7 +1893,7 @@ std::optional<std::size_t> identifier_token_at_position(const std::vector<Token>
 std::optional<DefinitionLocation> definition_source(const std::string& source, const std::string& uri,
                                                     const std::filesystem::path& source_directory, std::size_t line,
                                                     std::size_t character) {
-    (void)source_directory;
+    const std::filesystem::path directory = source_directory_for(uri, source_directory);
     const std::vector<Token> tokens = tokenize_best_effort(source);
     const std::optional<std::size_t> token_index =
         identifier_token_at_position(tokens, SourcePosition{line, character});
@@ -1822,17 +1902,69 @@ std::optional<DefinitionLocation> definition_source(const std::string& source, c
     }
 
     const Token& token = tokens[*token_index];
+    const std::vector<std::string> imports = imports_in_source(source);
+
+    // A `qualifier.member` access: the qualifier is either an imported module or
+    // a value whose type carries the method.
+    if (*token_index >= 2 && tokens[*token_index - 1].type == TokenType::dot &&
+        is_identifier_like(tokens[*token_index - 2])) {
+        const std::string qualifier = tokens[*token_index - 2].lexeme;
+
+        if (std::ranges::find(imports, qualifier) != imports.end()) {
+            // `module.member` -> the member's declaration inside the module file.
+            if (std::optional<DefinitionLocation> member =
+                    lookup_module_member_definition(qualifier, token.lexeme, directory)) {
+                return member;
+            }
+        } else if (std::optional<CheckedProgram> checked = check_program_best_effort(source, directory)) {
+            // `value.method()` -> the method on the receiver's record type. A
+            // module-qualified type name (`matrix.Vector`) sends us to that
+            // module file; a local record keeps us in this document.
+            if (std::optional<Type> receiver = symbol_type_in_program(*checked, qualifier);
+                receiver.has_value() && receiver->kind == ValueType::struct_type) {
+                const auto record = checked->structs.find(receiver->name);
+                if (record != checked->structs.end()) {
+                    for (const TypeChecker::StructMethod& method : record->second.methods) {
+                        if (method.is_static || method.is_constructor || method.name != token.lexeme) {
+                            continue;
+                        }
+
+                        const std::size_t dot = receiver->name.find('.');
+                        if (dot == std::string::npos) {
+                            return DefinitionLocation{uri, method.location.line, method.location.column,
+                                                      method.location.length};
+                        }
+
+                        if (const std::optional<std::filesystem::path> path =
+                                find_module_file(receiver->name.substr(0, dot), directory)) {
+                            return DefinitionLocation{uri_from_path(*path), method.location.line,
+                                                      method.location.column, method.location.length};
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // A bare module name (in `import math` or the `math` in `math.square`) opens
+    // the module file at its top.
+    if (std::ranges::find(imports, token.lexeme) != imports.end()) {
+        if (const std::optional<std::filesystem::path> path = find_module_file(token.lexeme, directory)) {
+            return DefinitionLocation{uri_from_path(*path), 1, 1, 1};
+        }
+    }
+
+    // A same-file declaration.
     const std::optional<Program> program = parse_program_best_effort(source);
     if (!program.has_value()) {
         return std::nullopt;
     }
 
-    const std::optional<SourceLocation> location = find_declaration_location(program->statements, token.lexeme);
-    if (!location.has_value()) {
-        return std::nullopt;
+    if (const std::optional<SourceLocation> location = find_declaration_location(program->statements, token.lexeme)) {
+        return DefinitionLocation{uri, location->line, location->column, location->length};
     }
 
-    return DefinitionLocation{uri, location->line, location->column, location->length};
+    return std::nullopt;
 }
 
 std::string definition_json(const DefinitionLocation& definition) {

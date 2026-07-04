@@ -247,6 +247,46 @@ bool resolves_no_definition_for_literal() {
     return expect(!definition.has_value(), "expected no definition for a numeric literal");
 }
 
+bool defines_module_from_import() {
+    const std::optional<dune::lsp::DefinitionLocation> definition =
+        dune::lsp::definition_source("import math;\nprint(math.square(3));", {}, {}, 0, 8);
+
+    bool passed = true;
+    passed = expect(definition.has_value(), "expected definition for module import") && passed;
+    if (definition.has_value()) {
+        passed = expect(definition->uri.find("math.dn") != std::string::npos, "expected module file uri") && passed;
+        passed = expect(definition->line == 1, "expected module file top") && passed;
+    }
+    return passed;
+}
+
+bool defines_module_member() {
+    const std::optional<dune::lsp::DefinitionLocation> definition =
+        dune::lsp::definition_source("import math;\nprint(math.square(3));", {}, {}, 1, 12);
+
+    bool passed = true;
+    passed = expect(definition.has_value(), "expected definition for module member") && passed;
+    if (definition.has_value()) {
+        passed = expect(definition->uri.find("math.dn") != std::string::npos, "expected member module uri") && passed;
+        passed = expect(definition->line == 10, "expected square declaration line") && passed;
+    }
+    return passed;
+}
+
+bool defines_receiver_method() {
+    const std::optional<dune::lsp::DefinitionLocation> definition =
+        dune::lsp::definition_source("import matrix;\nv = matrix.vector([1, 2, 3]);\nprint(v.mean());", {}, {}, 2, 9);
+
+    bool passed = true;
+    passed = expect(definition.has_value(), "expected definition for receiver method") && passed;
+    if (definition.has_value()) {
+        passed =
+            expect(definition->uri.find("matrix.dn") != std::string::npos, "expected receiver method module uri") &&
+            passed;
+    }
+    return passed;
+}
+
 bool serves_lsp_definition() {
     const std::string uri = "file:///tmp/main.dn";
     const std::string source = "fn value(): int { return 7; }\\nprint(value());";
@@ -351,6 +391,9 @@ int main() {
     passed = defines_record_field() && passed;
     passed = defines_choice_variant() && passed;
     passed = resolves_no_definition_for_literal() && passed;
+    passed = defines_module_from_import() && passed;
+    passed = defines_module_member() && passed;
+    passed = defines_receiver_method() && passed;
     passed = serves_lsp_definition() && passed;
     passed = publishes_lsp_diagnostics() && passed;
     passed = serves_lsp_completions_and_hover() && passed;
