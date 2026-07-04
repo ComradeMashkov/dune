@@ -167,6 +167,10 @@ target_link_libraries(dune PRIVATE dune_codegen dune_doc dune_lsp dune_modules d
 target_compile_definitions(dune PRIVATE DUNE_CLANGXX_PATH="${DUNE_NATIVE_CLANGXX}")
 dune_add_lint_dependencies(dune)
 
+add_executable(diagnostics_tests tests/diagnostics_tests.cpp)
+target_link_libraries(diagnostics_tests PRIVATE dune_lexer)
+dune_add_lint_dependencies(diagnostics_tests)
+
 add_executable(lexer_tests tests/lexer_tests.cpp)
 target_link_libraries(lexer_tests PRIVATE dune_lexer)
 dune_add_lint_dependencies(lexer_tests)
@@ -199,6 +203,7 @@ enable_testing()
 add_test(NAME smoke COMMAND dune --version)
 set_tests_properties(smoke PROPERTIES PASS_REGULAR_EXPRESSION "dune 0.13.1")
 
+add_test(NAME diagnostics_tests COMMAND diagnostics_tests)
 add_test(NAME lexer_tests COMMAND lexer_tests)
 add_test(NAME parser_tests COMMAND parser_tests)
 add_test(NAME compiler_tests COMMAND compiler_tests)
@@ -247,6 +252,16 @@ add_test(
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/test/failing.dn
         -D EXPECTED_ERROR=test result: FAILED
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_test_failure_case.cmake
+)
+
+# A located compile error renders a Rust-style source snippet with a caret span.
+add_test(
+    NAME cli_error_snippet
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/errors/type_snippet.dn
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_snippet_case.cmake
 )
 
 add_test(

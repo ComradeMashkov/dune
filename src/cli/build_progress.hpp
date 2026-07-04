@@ -3,6 +3,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
+#include <exception>
 #include <mutex>
 #include <string>
 #include <string_view>
@@ -35,9 +36,12 @@ public:
     // otherwise it only records the start time used for the elapsed suffix.
     void begin(std::string_view step);
 
+    // Records the source text + path so a failed phase can render a snippet.
+    void set_source(std::string source, std::string filename);
+
     // Resolves the in-flight phase as succeeded or failed.
     void done(std::string_view step);
-    void error(std::string_view step, std::string_view message);
+    void error(std::string_view step, const std::exception& error);
 
 private:
     void animate();
@@ -47,6 +51,10 @@ private:
 
     bool tty_ = false;
     bool color_ = false;
+
+    std::string source_;
+    std::string filename_;
+    bool has_source_ = false;
 
     std::mutex mutex_;
     std::condition_variable cv_;

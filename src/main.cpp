@@ -1,6 +1,8 @@
 #include "cli/build_progress.hpp"
 #include "codegen/llvm_ir_generator.hpp"
 #include "compiler/compiler.hpp"
+#include "diagnostics/diagnostic.hpp"
+#include "diagnostics/snippet.hpp"
 #include "doc/doc_generator.hpp"
 #include "lexer/lexer.hpp"
 #include "lsp/lsp_server.hpp"
@@ -80,9 +82,19 @@ public:
         std::cerr << "  " << style("[done]", "\033[32m") << ' ' << step << '\n';
     }
 
-    void error(std::string_view step, std::string_view message) const {
+    // Records the source text + path so a failed step can render a snippet.
+    void set_source(std::string source, std::string filename) {
+        source_ = std::move(source);
+        filename_ = std::move(filename);
+        has_source_ = true;
+    }
+
+    void error(std::string_view step, const std::exception& error) const {
         std::cerr << "  " << style("[error]", "\033[31m") << ' ' << step << '\n';
-        std::cerr << "          " << message << '\n';
+        // Module-resolution locations point into the imported file, not the main
+        // source we hold, so never quote our source for that step.
+        const bool allow_snippet = has_source_ && step != "resolve modules";
+        std::cerr << dune::render_error_body(error, source_, filename_, allow_snippet);
     }
 
 private:
@@ -95,6 +107,9 @@ private:
     }
 
     bool color_ = false;
+    std::string source_;
+    std::string filename_;
+    bool has_source_ = false;
 };
 
 class CliReportedError : public std::runtime_error {
@@ -115,7 +130,7 @@ template <typename Reporter, typename Fn> decltype(auto) run_step(Reporter& repo
             return result;
         }
     } catch (const std::exception& error) {
-        reporter.error(step, error.what());
+        reporter.error(step, error);
         throw CliReportedError(error.what());
     }
 }
@@ -211,6 +226,7 @@ template <typename Reporter>
 dune::Program load_program_with_status(const std::string& source_path, Reporter& reporter) {
     const std::filesystem::path source_directory = std::filesystem::path(source_path).parent_path();
     const std::string source = run_step(reporter, "read source", [&] { return read_file(source_path); });
+    reporter.set_source(source, source_path);
     const std::vector<dune::Token> tokens = run_step(reporter, "lex", [&] { return lex_source(source); });
     dune::Program parsed = run_step(reporter, "parse AST", [&] { return parse_tokens(tokens); });
     return run_step(reporter, "resolve modules", [&] { return resolve_modules(std::move(parsed), source_directory); });
@@ -237,10 +253,28 @@ void compile_llvm_ir(const std::string& llvm_ir_path, const std::string& output_
     }
 }
 
+// Prints a compile-time diagnostic for the plain (non-status) subcommands: a
+// Rust-style source snippet when the error carries a location inside `source`,
+// otherwise the familiar `error: <message>` line.
+void report_diagnostic(const dune::DiagnosticError& error, std::string_view source, std::string_view filename) {
+    const std::string snippet = dune::render_snippet(error.diagnostic(), source, filename);
+    if (!snippet.empty()) {
+        std::cerr << snippet;
+    } else {
+        std::cerr << "error: " << error.what() << '\n';
+    }
+}
+
 int run_source_file(const std::string& path, std::vector<std::string> script_arguments) {
-    dune::VirtualMachine vm(compile_bytecode(parse_source(read_file(path), std::filesystem::path(path).parent_path())),
-                            std::move(script_arguments));
-    vm.run(std::cout);
+    const std::string source = read_file(path);
+    try {
+        dune::VirtualMachine vm(compile_bytecode(parse_source(source, std::filesystem::path(path).parent_path())),
+                                std::move(script_arguments));
+        vm.run(std::cout);
+    } catch (const dune::DiagnosticError& error) {
+        report_diagnostic(error, source, path);
+        return 1;
+    }
 
     return 0;
 }
@@ -250,8 +284,14 @@ int run_source_file(const std::string& path, std::vector<std::string> script_arg
 // which is caught and reported without stopping the rest. Exits non-zero if any
 // test fails. Top-level executable code is not run — only the test blocks.
 int run_test_file(const std::string& path) {
-    dune::Bytecode bytecode =
-        compile_bytecode(parse_source(read_file(path), std::filesystem::path(path).parent_path()));
+    const std::string source = read_file(path);
+    dune::Bytecode bytecode;
+    try {
+        bytecode = compile_bytecode(parse_source(source, std::filesystem::path(path).parent_path()));
+    } catch (const dune::DiagnosticError& error) {
+        report_diagnostic(error, source, path);
+        return 1;
+    }
     const std::vector<dune::Bytecode::Test> tests(bytecode.tests);
     dune::VirtualMachine vm(std::move(bytecode));
 

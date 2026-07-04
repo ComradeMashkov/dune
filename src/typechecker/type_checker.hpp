@@ -230,7 +230,6 @@ private:
     bool is_known_module(const std::string& module) const;
     bool is_external_record_access(const std::string& record_name) const;
     std::string current_access_module() const;
-    std::string diagnostic(SourceLocation location, const std::string& message) const;
     void reset_scopes();
     void push_scope();
     void pop_scope();
