@@ -141,6 +141,10 @@
         },
         {
           "type": "SYMBOL",
+          "name": "test_declaration"
+        },
+        {
+          "type": "SYMBOL",
           "name": "block"
         },
         {
@@ -1802,6 +1806,31 @@
           "content": {
             "type": "SYMBOL",
             "name": "_expression"
+          }
+        },
+        {
+          "type": "FIELD",
+          "name": "body",
+          "content": {
+            "type": "SYMBOL",
+            "name": "block"
+          }
+        }
+      ]
+    },
+    "test_declaration": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "test"
+        },
+        {
+          "type": "FIELD",
+          "name": "name",
+          "content": {
+            "type": "SYMBOL",
+            "name": "string"
           }
         },
         {

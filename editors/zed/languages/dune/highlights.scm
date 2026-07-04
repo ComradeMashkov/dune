@@ -22,6 +22,7 @@
   "record"
   "return"
   "static"
+  "test"
   "to"
   "type"
   "when"

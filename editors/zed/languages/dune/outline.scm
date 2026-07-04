@@ -36,3 +36,7 @@
 (const_statement
   "const" @context
   name: (identifier) @name) @item
+
+(test_declaration
+  "test" @context
+  name: (string) @name) @item

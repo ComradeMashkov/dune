@@ -1,0 +1,5 @@
+running 2 tests
+test "clamp caps at the limit" ... ok
+test "boolean assertions" ... ok
+
+test result: ok. 2 passed; 0 failed

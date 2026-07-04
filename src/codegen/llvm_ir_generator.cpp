@@ -633,6 +633,8 @@ bool LlvmIrGenerator::emit_statement(const Statement& statement, std::ostream& o
         return false;
     case StatementKind::import_statement:
     case StatementKind::module_declaration:
+    // Test blocks are VM-only; they contribute nothing to native codegen.
+    case StatementKind::test_block:
         return false;
     }
 

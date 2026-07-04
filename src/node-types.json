@@ -1277,6 +1277,10 @@
           "named": true
         },
         {
+          "type": "test_declaration",
+          "named": true
+        },
+        {
           "type": "tuple_assignment_statement",
           "named": true
         },
@@ -4846,6 +4850,10 @@
           "named": true
         },
         {
+          "type": "test_declaration",
+          "named": true
+        },
+        {
           "type": "tuple_assignment_statement",
           "named": true
         },
@@ -4858,6 +4866,32 @@
           "named": true
         }
       ]
+    }
+  },
+  {
+    "type": "test_declaration",
+    "named": true,
+    "fields": {
+      "body": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "block",
+            "named": true
+          }
+        ]
+      },
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "string",
+            "named": true
+          }
+        ]
+      }
     }
   },
   {
@@ -6137,6 +6171,10 @@
   {
     "type": "string",
     "named": true
+  },
+  {
+    "type": "test",
+    "named": false
   },
   {
     "type": "text",

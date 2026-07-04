@@ -48,6 +48,7 @@ private:
     Statement export_statement();
     Statement extern_statement();
     Statement for_statement();
+    Statement test_statement();
     Statement for_in_statement(const Token& keyword);
     Statement function_statement(bool is_extern = false);
     Statement finish_function_statement(const Token& name, std::vector<GenericParameter> leading_generics = {},

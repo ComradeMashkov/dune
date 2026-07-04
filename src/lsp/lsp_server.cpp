@@ -1323,6 +1323,7 @@ std::string declaration_hover(const Statement& statement) {
     case StatementKind::expression_statement:
     case StatementKind::import_statement:
     case StatementKind::module_declaration:
+    case StatementKind::test_block:
         return {};
     }
 
@@ -1797,6 +1798,7 @@ std::optional<std::string> builtin_hover(const Token& token) {
     case TokenType::in_keyword:
     case TokenType::break_keyword:
     case TokenType::continue_keyword:
+    case TokenType::test_keyword:
     case TokenType::static_keyword:
     case TokenType::to_keyword:
     case TokenType::type_keyword:

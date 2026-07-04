@@ -124,6 +124,15 @@ struct Bytecode {
     };
 
     std::vector<Function> functions;
+
+    // A `test "name" { ... }` block, compiled as a zero-arg function chunk in
+    // `functions`. Run one-by-one by `dune test`, never during normal execution.
+    struct Test {
+        std::string name;
+        std::size_t function_index = 0;
+    };
+
+    std::vector<Test> tests;
 };
 
 } // namespace dune
