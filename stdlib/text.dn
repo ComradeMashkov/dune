@@ -14,11 +14,13 @@ export method text.is_empty(): bool {
 }
 
 // True when `needle` occurs somewhere in this text.
+// example: "hello world".contains("wor")  // 1
 export method text.contains(needle: text): bool {
     return this.contains(needle);
 }
 
 // True when this text begins with `prefix`.
+// example: "hello".starts_with("he")  // 1
 export method text.starts_with(prefix: text): bool {
     return this.starts_with(prefix);
 }
@@ -43,6 +45,7 @@ export method text.char_at(index: int): glyph {
 }
 
 // The substring from `start` (inclusive) to `end` (exclusive).
+// example: "hello world".slice(0, 5)  // hello
 export method text.slice(start: int, end: int): text {
     return this[start:end];
 }
@@ -58,6 +61,7 @@ export method text.suffix(start: int): text {
 }
 
 // The index of the first occurrence of glyph `needle`, or -1 if absent.
+// example: "hello".index_of('l')  // 2
 export method text.index_of(needle: glyph): int {
     // Scan glyph by glyph, returning the first matching position.
     for index = 0; index < this.len(); index = index + 1 {
@@ -108,6 +112,7 @@ export method text.trim_end(): text {
 }
 
 // Drop whitespace from both ends by composing the two trims.
+// example: "  hi  ".trim()  // hi
 export method text.trim(): text {
     return trim_end(trim_start(this));
 }
@@ -118,6 +123,7 @@ export fn is_space(value: glyph): bool {
 }
 
 // True when `value` is an ASCII decimal digit '0'..'9'.
+// example: text.is_digit('5')  // 1
 export fn is_digit(value: glyph): bool {
     // Convert the glyph to its integer code point for range comparison.
     code: int = value to int;
@@ -137,6 +143,7 @@ export fn is_upper(value: glyph): bool {
 }
 
 // True when `value` is any ASCII letter (upper or lower case).
+// example: text.is_alpha('a')  // 1
 export fn is_alpha(value: glyph): bool {
     return is_lower(value) || is_upper(value);
 }

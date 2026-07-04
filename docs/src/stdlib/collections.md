@@ -28,18 +28,43 @@ print(repeated.len());
 
 A one-element int array holding `value`.
 
+**Example:**
+```dune
+collections.singleton_int(5)[0]  // 5
+```
+
 ### `fn pair_int(left: int, right: int): [int]`
 
 A two-element int array holding `left` then `right`.
+
+**Example:**
+```dune
+collections.pair_int(1, 2)[1]  // 2
+```
 
 ### `fn singleton_text(value: text): [text]`
 
 A one-element text array holding `value`.
 
+**Example:**
+```dune
+collections.singleton_text("hi")[0]  // hi
+```
+
 ### `fn pair_text(left: text, right: text): [text]`
 
 A two-element text array holding `left` then `right`.
 
+**Example:**
+```dune
+collections.pair_text("a", "b")[1]  // b
+```
+
 ### `fn repeat_int(value: int, count: int): [int]`
 
 Build an int array that repeats `value` exactly `count` times.
+
+**Example:**
+```dune
+collections.repeat_int(9, 3)[2]  // 9
+```

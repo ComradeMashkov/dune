@@ -26,16 +26,28 @@ print(rows[1][1]);
 
 Parse CSV `content` into rows of text cells. A trailing newline is ignored.
 
+**Example:**
+```dune
+csv.parse_rows("a,b\n1,2\n")  // [["a", "b"], ["1", "2"]]
+```
+
 ### `fn read_rows(path: text): outcome.Outcome<[[text]], text>`
 
-Read a CSV file into rows of text cells.
-On success returns `Done(rows)`, otherwise `Failed(message)`.
+Read a CSV file into rows of text cells. On success returns `Done(rows)`, otherwise `Failed(message)`.
+
+**Example:**
+```dune
+csv.read_rows("data.csv")
+```
 
 ### `fn read_matrix_real64(path: text): outcome.Outcome<matrix.Matrix<real64>, text>`
 
-Convert parsed text rows into a rectangular real64 matrix. Trims each cell,
-enforces a consistent row width, and reports the first parse or shape error.
-Returns Done(Matrix) or Failed(message).
+Convert parsed text rows into a rectangular real64 matrix. Trims each cell, enforces a consistent row width, and reports the first parse or shape error. Returns Done(Matrix) or Failed(message).
+
+**Example:**
+```dune
+csv.read_matrix_real64("data.csv")
+```
 
 ### `fn read_matrix_int(path: text): outcome.Outcome<matrix.Matrix<int>, text>`
 
@@ -43,9 +55,18 @@ Same as `read_matrix_real64` but parses cells as integers.
 
 ### `fn write_rows(path: text, rows: [[text]]): outcome.Outcome<text, text>`
 
-Write rows of text cells back out as CSV (comma-separated, newline-terminated).
-Returns Done(path-like text) or Failed(message) from the underlying write.
+Write rows of text cells back out as CSV (comma-separated, newline-terminated). Returns Done(path-like text) or Failed(message) from the underlying write.
+
+**Example:**
+```dune
+csv.write_rows("out.csv", [["a", "b"], ["1", "2"]])
+```
 
 ### `fn write_matrix_real64(path: text, data: matrix.Matrix<real64>): outcome.Outcome<text, text>`
 
 Serialize a real64 matrix to CSV and write it to `path`.
+
+**Example:**
+```dune
+csv.write_matrix_real64("out.csv", matrix.from_rows([[1.0, 2.0], [3.0, 4.0]]))
+```

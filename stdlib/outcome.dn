@@ -8,12 +8,14 @@ export choice Outcome<T, E> {
 
 // Build a success. `error_default` is only present to fix the error type E
 // (Dune needs a value of E to infer it); it is not stored.
+// example: outcome.done(7, "").is_done()  // 1
 export fn done<T, E>(value: T, error_default: E): Outcome<T, E> {
     return Done(value);
 }
 
 // Build a failure. `value_default` is only present to fix the success type T;
 // it is not stored.
+// example: outcome.failed(0, "bad").is_failed()  // 1
 export fn failed<T, E>(value_default: T, error: E): Outcome<T, E> {
     return Failed(error);
 }
@@ -39,6 +41,7 @@ export fn failed_text(error: text): Outcome<text, text> {
 }
 
 // Method: true when this Outcome is a success.
+// example: outcome.failed(0, "bad").is_done()  // 0
 export method<T, E> Outcome<T, E>.is_done(): bool {
     return when this {
         is Done(value) { true }
@@ -47,6 +50,7 @@ export method<T, E> Outcome<T, E>.is_done(): bool {
 }
 
 // Method: true when this Outcome is a failure.
+// example: outcome.done(7, "").is_failed()  // 0
 export method<T, E> Outcome<T, E>.is_failed(): bool {
     return when this {
         is Done(value) { false }
@@ -55,6 +59,7 @@ export method<T, E> Outcome<T, E>.is_failed(): bool {
 }
 
 // Method: return the success value, or `default` if this is a failure.
+// example: outcome.failed(0, "bad").value_or(9)  // 9
 export method<T, E> Outcome<T, E>.value_or(default: T): T {
     return when this {
         // Unwrap the success payload.
@@ -65,6 +70,7 @@ export method<T, E> Outcome<T, E>.value_or(default: T): T {
 }
 
 // Method: return the error value, or `default` if this is a success.
+// example: outcome.done(7, "").failure_or("none")  // none
 export method<T, E> Outcome<T, E>.failure_or(default: E): E {
     return when this {
         // On success there is no error, so use the supplied default.

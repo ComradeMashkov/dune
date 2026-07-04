@@ -98,13 +98,11 @@ A new array holding only the elements for which `keep` returns true.
 
 ### `method<T, Acc> [T].fold(initial: Acc, combine: fn(Acc, T): Acc): Acc`
 
-Left fold: seed an accumulator with `initial`, then combine it with each
-element in order. `combine` receives (accumulator, element).
+Left fold: seed an accumulator with `initial`, then combine it with each element in order. `combine` receives (accumulator, element).
 
 ### `method<T> [T].reduce(combine: fn(T, T): T): T`
 
-Reduce with the first element as the seed (panics on an empty array, since
-there is no element to start from). `combine` receives (accumulator, element).
+Reduce with the first element as the seed (panics on an empty array, since there is no element to start from). `combine` receives (accumulator, element).
 
 ### `method<T> [T].any(predicate: fn(T): bool): bool`
 
@@ -112,8 +110,7 @@ True when `predicate` holds for at least one element (short-circuits).
 
 ### `method<T> [T].all(predicate: fn(T): bool): bool`
 
-True when `predicate` holds for every element (short-circuits on the first
-failure; vacuously true for an empty array).
+True when `predicate` holds for every element (short-circuits on the first failure; vacuously true for an empty array).
 
 ### `method<T> [T].count_where(predicate: fn(T): bool): int`
 
@@ -122,6 +119,11 @@ How many elements satisfy `predicate`.
 ### `fn range(start: int, end: int): [int]`
 
 The half-open integer range [start, end) as an array.
+
+**Example:**
+```dune
+array.range(2, 6).sum()  // 14
+```
 
 ### `fn range(end: int): [int]`
 
@@ -134,6 +136,11 @@ The range [start, end) advancing by `step` (supports negative steps).
 ### `fn repeat<T>(value: T, count: int): [T]`
 
 An array containing `value` repeated `count` times (generic element type).
+
+**Example:**
+```dune
+array.repeat(4, 3).sum()  // 12
+```
 
 ### `fn zeros<T is numeric>(count: int): [T]`
 
@@ -155,17 +162,37 @@ Sum of an int array (free-function form).
 
 Sum of a numeric array as a method. `result` starts at 0 typed as T.
 
+**Example:**
+```dune
+[1, 2, 3].sum()  // 6
+```
+
 ### `method<T is numeric> [T].product(): T`
 
 Product of all elements (starts from the multiplicative identity 1).
+
+**Example:**
+```dune
+[1, 2, 3, 4].product()  // 24
+```
 
 ### `method<T is numeric> [T].min(): T`
 
 The minimum element (assumes at least one element; seeds with index 0).
 
+**Example:**
+```dune
+[3, 1, 4, 1, 5].min()  // 1
+```
+
 ### `method<T is numeric> [T].max(): T`
 
 The maximum element (seeds with the first element, then scans the rest).
+
+**Example:**
+```dune
+[3, 1, 4, 1, 5].max()  // 5
+```
 
 ### `method<T is numeric> [T].argmin(): int`
 
@@ -179,9 +206,19 @@ The index of the maximum element (argmax).
 
 True when every element of a bool array is true (logical AND-reduce).
 
+**Example:**
+```dune
+[true, true, false].all()  // 0
+```
+
 ### `method [bool].any(): bool`
 
 True when any element of a bool array is true (logical OR-reduce).
+
+**Example:**
+```dune
+[false, false, true].any()  // 1
+```
 
 ### `fn sum(values: [real64]): real64`
 

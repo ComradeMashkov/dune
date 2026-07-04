@@ -3,26 +3,31 @@
 // by hand for the most common one- and two-element cases.
 
 // A one-element int array holding `value`.
+// example: collections.singleton_int(5)[0]  // 5
 export fn singleton_int(value: int): [int] {
     return [value];
 }
 
 // A two-element int array holding `left` then `right`.
+// example: collections.pair_int(1, 2)[1]  // 2
 export fn pair_int(left: int, right: int): [int] {
     return [left, right];
 }
 
 // A one-element text array holding `value`.
+// example: collections.singleton_text("hi")[0]  // hi
 export fn singleton_text(value: text): [text] {
     return [value];
 }
 
 // A two-element text array holding `left` then `right`.
+// example: collections.pair_text("a", "b")[1]  // b
 export fn pair_text(left: text, right: text): [text] {
     return [left, right];
 }
 
 // Build an int array that repeats `value` exactly `count` times.
+// example: collections.repeat_int(9, 3)[2]  // 9
 export fn repeat_int(value: int, count: int): [int] {
     // Start from an empty array and grow it one element at a time.
     values: [int] = [];

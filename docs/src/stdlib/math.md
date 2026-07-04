@@ -45,29 +45,64 @@ Lower-precision real32 mirrors of the same constants.
 
 Square of `value` (generic over any numeric type T).
 
+**Example:**
+```dune
+math.square(7)  // 49
+```
+
 ### `fn cube<T is numeric>(value: T): T`
 
 Cube of `value`.
+
+**Example:**
+```dune
+math.cube(3)  // 27
+```
 
 ### `fn abs<T is numeric>(value: T): T`
 
 Absolute value: negate when the input is negative.
 
+**Example:**
+```dune
+math.abs(0 - 5)  // 5
+```
+
 ### `fn min<T is numeric>(left: T, right: T): T`
 
 The smaller of two numbers.
+
+**Example:**
+```dune
+math.min(3, 8)  // 3
+```
 
 ### `fn max<T is numeric>(left: T, right: T): T`
 
 The larger of two numbers.
 
+**Example:**
+```dune
+math.max(3, 8)  // 8
+```
+
 ### `fn clamp<T is numeric>(value: T, lower: T, upper: T): T`
 
 Constrain `value` to the inclusive range [lower, upper].
 
+**Example:**
+```dune
+math.clamp(15, 0, 10)  // 10
+```
+
 ### `fn sqrt<T is real>(value: T): T`
 
 Square root via Newton's method (real types only).
+
+**Example:**
+```dune
+math.sqrt(81.0)  // 9
+```
 
 ### `fn normalize_radians<T is real>(value: T): T`
 
@@ -77,9 +112,19 @@ Reduce an angle into (-pi, pi] so the sin/cos series converge quickly.
 
 Sine via the Maclaurin series after range reduction.
 
+**Example:**
+```dune
+math.sin(0.0)  // 0
+```
+
 ### `fn cos<T is real>(value: T): T`
 
 Cosine via the Maclaurin series after range reduction.
+
+**Example:**
+```dune
+math.cos(0.0)  // 1
+```
 
 ### `fn tan<T is real>(value: T): T`
 
@@ -89,27 +134,56 @@ Tangent as sine over cosine.
 
 Exponential e^value using range reduction plus the Taylor series.
 
+**Example:**
+```dune
+math.exp(0.0)  // 1
+```
+
 ### `fn ln<T is real>(value: T): T`
 
 Natural logarithm via range reduction and the artanh series.
+
+**Example:**
+```dune
+math.ln(1.0)  // 0
+```
 
 ### `fn pow<T is real>(base: T, exponent: int): T`
 
 Integer power: base raised to an integer exponent by repeated multiplication.
 
+**Example:**
+```dune
+math.pow(2.0, 10)  // 1024
+```
+
 ### `fn pow<T is real>(base: T, exponent: T): T`
 
-Real power: base^exponent for a real exponent via exp(exponent * ln(base)).
-This overload is chosen when the exponent has the same real type as the base.
+Real power: base^exponent for a real exponent via exp(exponent * ln(base)). This overload is chosen when the exponent has the same real type as the base.
 
 ### `fn floor<T is real>(value: T): T`
 
 Largest whole number not greater than `value`.
 
+**Example:**
+```dune
+math.floor(3.7)  // 3
+```
+
 ### `fn ceil<T is real>(value: T): T`
 
 Smallest whole number not less than `value`.
 
+**Example:**
+```dune
+math.ceil(3.2)  // 4
+```
+
 ### `fn round<T is real>(value: T): T`
 
 Round to the nearest whole number (halves round away from zero).
+
+**Example:**
+```dune
+math.round(2.5)  // 3
+```

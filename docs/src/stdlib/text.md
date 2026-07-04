@@ -36,9 +36,19 @@ True when the text has zero length (forwards to the native operation).
 
 True when `needle` occurs somewhere in this text.
 
+**Example:**
+```dune
+"hello world".contains("wor")  // 1
+```
+
 ### `method text.starts_with(prefix: text): bool`
 
 True when this text begins with `prefix`.
+
+**Example:**
+```dune
+"hello".starts_with("he")  // 1
+```
 
 ### `method text.ends_with(suffix: text): bool`
 
@@ -52,6 +62,11 @@ The glyph at `index` (0-based) via indexing.
 
 The substring from `start` (inclusive) to `end` (exclusive).
 
+**Example:**
+```dune
+"hello world".slice(0, 5)  // hello
+```
+
 ### `method text.prefix(end: int): text`
 
 The first `end` glyphs of the text.
@@ -63,6 +78,11 @@ Everything from `start` to the end of the text.
 ### `method text.index_of(needle: glyph): int`
 
 The index of the first occurrence of glyph `needle`, or -1 if absent.
+
+**Example:**
+```dune
+"hello".index_of('l')  // 2
+```
 
 ### `method text.count(needle: glyph): int`
 
@@ -80,6 +100,11 @@ Drop trailing whitespace and return the remainder.
 
 Drop whitespace from both ends by composing the two trims.
 
+**Example:**
+```dune
+"  hi  ".trim()  // hi
+```
+
 ### `fn is_space(value: glyph): bool`
 
 True when `value` is a space, newline, carriage return, or tab.
@@ -87,6 +112,11 @@ True when `value` is a space, newline, carriage return, or tab.
 ### `fn is_digit(value: glyph): bool`
 
 True when `value` is an ASCII decimal digit '0'..'9'.
+
+**Example:**
+```dune
+text.is_digit('5')  // 1
+```
 
 ### `fn is_lower(value: glyph): bool`
 
@@ -99,3 +129,8 @@ True when `value` is an uppercase ASCII letter 'A'..'Z'.
 ### `fn is_alpha(value: glyph): bool`
 
 True when `value` is any ASCII letter (upper or lower case).
+
+**Example:**
+```dune
+text.is_alpha('a')  // 1
+```

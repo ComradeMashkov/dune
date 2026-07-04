@@ -30,6 +30,7 @@ export record Random {
     }
 
     // Advance the generator and return the raw state in [1, 2147483646].
+    // example: random.seed(1).next_int()
     export fn next_int(): int {
         // The core Park-Miller recurrence: multiply then take the modulus.
         this.state = (16807 * this.state) % 2147483647;
@@ -43,6 +44,7 @@ export record Random {
     }
 
     // Uniform integer in [lo, hi); `hi` is exclusive.
+    // example: random.seed(42).between(1, 10)
     export fn between(lo: int, hi: int): int {
         // The range must be non-empty; otherwise the modulus is meaningless.
         if hi <= lo {
@@ -54,12 +56,14 @@ export record Random {
     }
 
     // Uniform real64 in [lo, hi).
+    // example: random.seed(42).real_between(0.0, 1.0)
     export fn real_between(lo: real64, hi: real64): real64 {
         // Linearly interpolate a [0,1) draw across the interval width.
         return lo + this.next_real() * (hi - lo);
     }
 
     // One sample from a normal distribution via the Box-Muller transform.
+    // example: random.seed(42).normal(0.0, 1.0)
     export fn normal(mean: real64, stddev: real64): real64 {
         // Two independent uniform draws feed the transform.
         u1 = this.next_real();
@@ -74,11 +78,13 @@ export record Random {
 }
 
 // Convenience constructor matching `random.seed(42)`.
+// example: random.seed(42).next_int()
 export fn seed(value: int): Random {
     return Random.new(value);
 }
 
 // `count` uniform real64 values in [lo, hi).
+// example: random.uniform(random.seed(42), 3, 0.0, 1.0)
 export fn uniform(rng: Random, count: int, lo: real64, hi: real64): [real64] {
     // Collect `count` independent uniform samples into an array.
     result: [real64] = [];

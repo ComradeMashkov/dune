@@ -30,10 +30,18 @@ if written.is_done() {
 
 ### `fn read_text(path: text): outcome.Outcome<text, text>`
 
-Read the whole file at `path` as text.
-On success returns `Done(contents)`, otherwise `Failed(message)`.
+Read the whole file at `path` as text. On success returns `Done(contents)`, otherwise `Failed(message)`.
+
+**Example:**
+```dune
+fs.read_text("dune_example_tmp.txt")
+```
 
 ### `fn write_text(path: text, content: text): outcome.Outcome<text, text>`
 
-Write `content` to `path`, replacing any existing file.
-On success returns `Done(path)`, otherwise `Failed(message)`.
+Write `content` to `path`, replacing any existing file. On success returns `Done(path)`, otherwise `Failed(message)`.
+
+**Example:**
+```dune
+fs.write_text("dune_example_tmp.txt", "hello")
+```

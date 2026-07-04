@@ -109,16 +109,19 @@ fn zero_grad_visit(value: Value): unit {
 }
 
 // Create a leaf variable (participates in gradients, no parents).
+// example: autograd.variable(3.0).data  // 3
 export fn variable(data: real64): Value {
     return Value.new(data, true, empty_parents());
 }
 
 // Create a leaf constant (does not participate in gradients).
+// example: autograd.constant(5.0).data  // 5
 export fn constant(data: real64): Value {
     return Value.new(data, false, empty_parents());
 }
 
 // Alias for `variable`: the default way to introduce a differentiable value.
+// example: autograd.value(2.0).data  // 2
 export fn value(data: real64): Value {
     return variable(data);
 }
@@ -134,6 +137,7 @@ export fn grad(value: Value): real64 {
 }
 
 // Addition: d/dleft = 1, d/dright = 1.
+// example: autograd.variable(2.0).add(autograd.variable(3.0)).data  // 5
 export fn add(left: Value, right: Value): Value {
     return binary(left.data + right.data, left, 1.0, right, 1.0);
 }
@@ -164,6 +168,7 @@ export fn sub(left: real64, right: Value): Value {
 }
 
 // Multiplication: d/dleft = right.data, d/dright = left.data (product rule).
+// example: autograd.variable(3.0).mul(autograd.variable(4.0)).data  // 12
 export fn mul(left: Value, right: Value): Value {
     return binary(left.data * right.data, left, right.data, right, left.data);
 }
@@ -179,6 +184,7 @@ export fn mul(left: real64, right: Value): Value {
 }
 
 // Division: d/dleft = 1/right, d/dright = -left/right^2 (quotient rule).
+// example: autograd.variable(10.0).div(autograd.variable(4.0)).data  // 2.5
 export fn div(left: Value, right: Value): Value {
     return binary(left.data / right.data, left, 1.0 / right.data, right, (0.0 - left.data) / (right.data * right.data));
 }
@@ -199,6 +205,7 @@ export fn neg(value: Value): Value {
 }
 
 // Power with a constant exponent: d/dbase = exponent * base^(exponent-1).
+// example: autograd.variable(3.0).pow(2.0).data  // 9
 export fn pow(base: Value, exponent: real64): Value {
     // Forward value: base^exponent.
     data: real64 = math.pow(base.data, exponent);
@@ -212,6 +219,7 @@ export fn pow(base: Value, exponent: real64): Value {
 }
 
 // ReLU: passes positives through (derivative 1) and clamps negatives to 0.
+// example: autograd.variable(0.0 - 5.0).relu().data  // 0
 export fn relu(value: Value): Value {
     // Positive input: identity, gradient flows with weight 1.
     if value.data > 0.0 {
@@ -223,6 +231,7 @@ export fn relu(value: Value): Value {
 }
 
 // Hyperbolic tangent computed from exp, with derivative 1 - tanh^2.
+// example: autograd.variable(0.0).tanh().data  // 0
 export fn tanh(value: Value): Value {
     // scale = e^(2x); tanh(x) = (scale - 1) / (scale + 1).
     scale: real64 = math.exp(2.0 * value.data);
@@ -231,17 +240,20 @@ export fn tanh(value: Value): Value {
 }
 
 // Exponential: d/dvalue = exp(value), which equals the forward result itself.
+// example: autograd.variable(0.0).exp().data  // 1
 export fn exp(value: Value): Value {
     data: real64 = math.exp(value.data);
     return unary(data, value, data);
 }
 
 // Natural log: d/dvalue = 1/value.
+// example: autograd.variable(1.0).ln().data  // 0
 export fn ln(value: Value): Value {
     return unary(math.ln(value.data), value, 1.0 / value.data);
 }
 
 // Square root: d/dvalue = 0.5 / sqrt(value).
+// example: autograd.variable(9.0).sqrt().data  // 3
 export fn sqrt(value: Value): Value {
     data: real64 = math.sqrt(value.data);
     weight: real64 = 0.0;
@@ -260,6 +272,7 @@ export fn zero_grad(value: Value): unit {
 
 // Run a full backward pass: clear old gradients, then seed the output with 1.0
 // and propagate. After this, each input's `grad` holds d(value)/d(input).
+// example: autograd.variable(3.0).backward()
 export fn backward(value: Value): unit {
     zero_grad(value);
     accumulate(value, 1.0);

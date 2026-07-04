@@ -24,14 +24,34 @@ print(assert.equals_text("dune", "dune"));
 
 True when `value` is already true (identity predicate on a bool).
 
+**Example:**
+```dune
+assert.is_true(true)  // 1
+```
+
 ### `fn is_false(value: bool): bool`
 
 True when `value` is false (logical negation of the input).
+
+**Example:**
+```dune
+assert.is_false(false)  // 1
+```
 
 ### `fn equals_int(actual: int, expected: int): bool`
 
 True when the observed integer `actual` matches the `expected` integer.
 
+**Example:**
+```dune
+assert.equals_int(2, 2)  // 1
+```
+
 ### `fn equals_text(actual: text, expected: text): bool`
 
 True when the observed text `actual` matches the `expected` text.
+
+**Example:**
+```dune
+assert.equals_text("a", "a")  // 1
+```
