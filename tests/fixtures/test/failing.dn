@@ -1,0 +1,9 @@
+from assert import assert_eq;
+
+test "this assertion holds" {
+    assert_eq(2 + 2, 4);
+}
+
+test "this assertion fails" {
+    assert_eq(2 + 2, 5);
+}

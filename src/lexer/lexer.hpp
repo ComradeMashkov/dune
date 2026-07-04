@@ -28,6 +28,7 @@ enum class TokenType {
     in_keyword,
     break_keyword,
     continue_keyword,
+    test_keyword,
     static_keyword,
     to_keyword,
     type_keyword,

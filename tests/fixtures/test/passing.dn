@@ -1,0 +1,20 @@
+from assert import assert_eq, assert_true, assert_false;
+
+const LIMIT: int = 100;
+
+fn clamp(value: int): int {
+    if value > LIMIT {
+        return LIMIT;
+    }
+    return value;
+}
+
+test "clamp caps at the limit" {
+    assert_eq(clamp(250), LIMIT);
+    assert_eq(clamp(50), 50);
+}
+
+test "boolean assertions" {
+    assert_true(1 + 1 == 2);
+    assert_false(1 + 1 == 3);
+}

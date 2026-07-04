@@ -1007,6 +1007,14 @@ real AST and its doc-comments:
 ./build/dune doc stdlib -o docs/api         # a page per module, plus index.md
 ```
 
+Run every `test "..." { ... }` block in a file and report the results. Each
+block runs in isolation (top-level code does not run), and a failed assertion
+marks only that test as failed. The command exits non-zero if any test fails:
+
+```bash
+./build/dune test tests/fixtures/test/passing.dn
+```
+
 ## Build And Test
 
 ```bash
@@ -1128,6 +1136,7 @@ The current release implements a small compiled language with:
 - `dune check`
 - `dune lsp`
 - `dune doc`
+- `dune test`
 - Zed syntax highlighting
 - native heap cleanup on normal program exit and runtime panic paths
 - comparison operators
@@ -1139,6 +1148,7 @@ The current release implements a small compiled language with:
 - for-in loops
 - integer range expressions for loops
 - break/continue
+- `test` blocks with `assert_eq`/`assert_true`/`assert_false`
 - bytecode
 - VM
 - LLVM native backend

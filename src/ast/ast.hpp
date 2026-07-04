@@ -130,6 +130,7 @@ enum class StatementKind {
     expression_statement,
     import_statement,
     module_declaration,
+    test_block,
 };
 
 struct Statement {

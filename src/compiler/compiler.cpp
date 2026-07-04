@@ -254,9 +254,36 @@ Bytecode Compiler::compile(const Program& program) {
     for (const Statement& statement : instantiated_functions) {
         compile_function(statement);
     }
+    for (const Statement& statement : program.statements) {
+        if (statement.kind == StatementKind::test_block) {
+            compile_test(statement);
+        }
+    }
 
     instructions_ = nullptr;
     return bytecode_;
+}
+
+void Compiler::compile_test(const Statement& statement) {
+    const std::size_t function_index = bytecode_.functions.size();
+    bytecode_.functions.push_back(
+        Bytecode::Function{"__test_" + std::to_string(function_index), "", 0, 0, {}, false});
+    bytecode_.tests.push_back(Bytecode::Test{statement.name, function_index});
+
+    Bytecode::Function& function = bytecode_.functions.at(function_index);
+    locals_.clear();
+    local_types_.clear();
+    local_scopes_.clear();
+    loop_stack_.clear();
+    temporary_count_ = 0;
+    local_count_ = 0;
+    instructions_ = &function.instructions;
+    reset_scopes();
+    compile_global_constants();
+    compile_statements(statement.body);
+    emit(OpCode::push_constant, add_constant(default_value(make_type(ValueType::unit_type))));
+    emit(OpCode::return_value);
+    function.local_count = local_count_;
 }
 
 void Compiler::collect_functions(const std::vector<Statement>& statements) {
@@ -554,6 +581,9 @@ void Compiler::compile_statement(const Statement& statement) {
         return;
     case StatementKind::import_statement:
     case StatementKind::module_declaration:
+    // Test bodies are compiled into their own chunks by compile_test(), never
+    // into the main instruction stream, so they do not run during `dune run`.
+    case StatementKind::test_block:
         return;
     }
 }

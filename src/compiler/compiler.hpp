@@ -24,6 +24,7 @@ private:
     void collect_type_aliases(const std::vector<Statement>& statements);
     void collect_global_constants(const std::vector<Statement>& statements);
     void compile_function(const Statement& statement);
+    void compile_test(const Statement& statement);
     void compile_global_constants();
     void compile_statements(const std::vector<Statement>& statements);
     void compile_statement(const Statement& statement);

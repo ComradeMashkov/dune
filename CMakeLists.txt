@@ -227,6 +227,28 @@ add_test(
             --check -o ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/golden/doc_sample.out
 )
 
+# `dune test` runs every `test "..." { ... }` block and reports pass/fail.
+add_test(
+    NAME cli_test_passing
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/test/passing.dn
+        -D EXPECTED_OUTPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/golden/test_passing.out
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_test_case.cmake
+)
+
+# A failing assertion must make `dune test` exit non-zero and report the failure.
+add_test(
+    NAME cli_test_failing
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/test/failing.dn
+        -D EXPECTED_ERROR=test result: FAILED
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_test_failure_case.cmake
+)
+
 add_test(
     NAME cli_build_native_status
     COMMAND

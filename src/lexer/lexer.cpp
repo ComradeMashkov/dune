@@ -464,6 +464,10 @@ Token Lexer::identifier(std::size_t start, std::size_t line, std::size_t column)
         return Token{TokenType::while_keyword, lexeme, line, column};
     }
 
+    if (lexeme == "test") {
+        return Token{TokenType::test_keyword, lexeme, line, column};
+    }
+
     if (lexeme == "for") {
         return Token{TokenType::for_keyword, lexeme, line, column};
     }

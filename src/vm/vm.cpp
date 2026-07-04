@@ -655,7 +655,22 @@ void VirtualMachine::run(std::ostream& output) {
     stack_.clear();
     frames_.clear();
     frames_.push_back(CallFrame{&bytecode_.instructions, 0, std::vector<Value>(bytecode_.local_count), 0});
+    execute(output);
+}
 
+// Runs a single compiled test chunk to completion. The caller (`dune test`)
+// wraps this in try/catch: a failed assertion aborts via `runtime.panic`
+// (a thrown std::runtime_error), which unwinds out of here and marks the test
+// failed without killing the process.
+void VirtualMachine::run_test(std::size_t function_index, std::ostream& output) {
+    const Bytecode::Function& function = bytecode_.functions.at(function_index);
+    stack_.clear();
+    frames_.clear();
+    frames_.push_back(CallFrame{&function.instructions, 0, std::vector<Value>(function.local_count), 0});
+    execute(output);
+}
+
+void VirtualMachine::execute(std::ostream& output) {
     while (!frames_.empty()) {
         CallFrame& frame = frames_.back();
         if (frame.ip >= frame.instructions->size()) {

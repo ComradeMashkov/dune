@@ -20,6 +20,18 @@ dune check path/to/program.dn
 Type-checks the program and reports diagnostics without executing it. Exits
 non-zero if there are errors.
 
+## Run tests
+
+```sh
+dune test path/to/program.dn
+```
+
+Runs every [`test "..." { ... }`](testing.md) block in the file and prints a
+per-test `ok`/`FAILED` line plus a summary. Each block runs in isolation — the
+file's top-level code is skipped, so only the tests execute — while top-level
+functions, constants, and imports remain in scope. A failed assertion aborts
+just that test; the command exits non-zero if any test fails.
+
 ## Build a native binary
 
 ```sh

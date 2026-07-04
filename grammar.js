@@ -61,6 +61,7 @@ module.exports = grammar({
       $.for_statement,
       $.break_statement,
       $.continue_statement,
+      $.test_declaration,
       $.block,
       $.expression_statement,
     ),
@@ -275,6 +276,12 @@ module.exports = grammar({
     while_statement: $ => seq(
       "while",
       field("condition", $._expression),
+      field("body", $.block),
+    ),
+
+    test_declaration: $ => seq(
+      "test",
+      field("name", $.string),
       field("body", $.block),
     ),
 

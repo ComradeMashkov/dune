@@ -245,6 +245,36 @@ int run_source_file(const std::string& path, std::vector<std::string> script_arg
     return 0;
 }
 
+// Runs every `test "..." { ... }` block in a file. Each test runs in isolation;
+// a failed assertion aborts that test (via runtime.panic → a thrown exception),
+// which is caught and reported without stopping the rest. Exits non-zero if any
+// test fails. Top-level executable code is not run — only the test blocks.
+int run_test_file(const std::string& path) {
+    dune::Bytecode bytecode =
+        compile_bytecode(parse_source(read_file(path), std::filesystem::path(path).parent_path()));
+    const std::vector<dune::Bytecode::Test> tests(bytecode.tests);
+    dune::VirtualMachine vm(std::move(bytecode));
+
+    std::cout << "running " << tests.size() << (tests.size() == 1 ? " test\n" : " tests\n");
+    std::size_t passed = 0;
+    std::size_t failed = 0;
+    for (const dune::Bytecode::Test& test : tests) {
+        try {
+            vm.run_test(test.function_index, std::cout);
+            std::cout << "test \"" << test.name << "\" ... ok\n";
+            ++passed;
+        } catch (const std::exception& error) {
+            std::cout << "test \"" << test.name << "\" ... FAILED\n";
+            std::cout << "    " << error.what() << '\n';
+            ++failed;
+        }
+    }
+
+    std::cout << "\ntest result: " << (failed == 0 ? "ok" : "FAILED") << ". " << passed << " passed; " << failed
+              << " failed\n";
+    return failed == 0 ? 0 : 1;
+}
+
 int build_native_file(const std::string& source_path, const std::string& output_path) {
     dune::cli::BuildProgress reporter("build " + source_path);
     const std::string llvm_ir_path = output_path + ".ll";
@@ -388,6 +418,7 @@ void print_usage() {
     std::cerr << "  dune build <file.dn> -o <output>\n";
     std::cerr << "  dune llvm <file.dn> -o <file.ll>\n";
     std::cerr << "  dune doc <file.dn|dir> [-o <out>] [--check]\n";
+    std::cerr << "  dune test <file.dn>\n";
 }
 
 } // namespace
@@ -422,9 +453,13 @@ int main(int argc, char* argv[]) {
                 return run_doc(std::vector<std::string>(argv + 2, argv + argc));
             }
 
+            if (command == "test" && argc == 3) {
+                return run_test_file(argv[2]);
+            }
+
             // `dune <file.dn> [args...]` runs a script; args are exposed via process.args().
-            const bool is_subcommand =
-                command == "lsp" || command == "check" || command == "build" || command == "llvm" || command == "doc";
+            const bool is_subcommand = command == "lsp" || command == "check" || command == "build" ||
+                                       command == "llvm" || command == "doc" || command == "test";
             if (!is_subcommand) {
                 return run_source_file(command, std::vector<std::string>(argv + 2, argv + argc));
             }

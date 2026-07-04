@@ -649,6 +649,10 @@ Statement Parser::statement_dispatch() {
         return while_statement();
     }
 
+    if (match(TokenType::test_keyword)) {
+        return test_statement();
+    }
+
     if (match(TokenType::for_keyword)) {
         return for_statement();
     }
@@ -1267,6 +1271,15 @@ Statement Parser::while_statement() {
     std::unique_ptr<Expression> condition = expression();
     consume(TokenType::left_brace, "expected '{' before while body");
     Statement statement{StatementKind::while_statement, "", std::move(condition), block(), {}};
+    statement.location = location_from_token(keyword);
+    return statement;
+}
+
+Statement Parser::test_statement() {
+    const Token& keyword = previous();
+    const Token name = consume(TokenType::string_literal, "expected a test name string after 'test'");
+    consume(TokenType::left_brace, "expected '{' before test body");
+    Statement statement{StatementKind::test_block, decode_string_literal(name.lexeme), nullptr, block(), {}};
     statement.location = location_from_token(keyword);
     return statement;
 }

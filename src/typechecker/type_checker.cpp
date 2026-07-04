@@ -613,11 +613,21 @@ void TypeChecker::check(const Program& program) {
         if (statement.kind != StatementKind::function && statement.kind != StatementKind::import_statement &&
             statement.kind != StatementKind::struct_statement && statement.kind != StatementKind::enum_statement &&
             statement.kind != StatementKind::contract_statement &&
-            statement.kind != StatementKind::type_alias_statement) {
+            statement.kind != StatementKind::type_alias_statement && statement.kind != StatementKind::test_block) {
             const std::string previous_module = current_module_;
             current_module_ = module_name(statement.name);
             check_statement(statement);
             current_module_ = previous_module;
+        }
+    }
+
+    // Test blocks are checked after top-level globals and functions are in
+    // scope; each body is an ordinary block. They run only under `dune test`.
+    for (const Statement& statement : program.statements) {
+        if (statement.kind == StatementKind::test_block) {
+            push_scope();
+            check_statements(statement.body);
+            pop_scope();
         }
     }
 
@@ -1280,6 +1290,8 @@ void TypeChecker::check_statement(const Statement& statement) {
     case StatementKind::module_declaration:
         throw std::runtime_error(
             diagnostic(statement.location, "'module' declarations are only allowed at the top of a file"));
+    case StatementKind::test_block:
+        throw std::runtime_error(diagnostic(statement.location, "test blocks are only allowed at top level"));
     }
 }
 
@@ -3384,6 +3396,7 @@ bool TypeChecker::statement_returns(const Statement& statement) const {
     case StatementKind::expression_statement:
     case StatementKind::import_statement:
     case StatementKind::module_declaration:
+    case StatementKind::test_block:
         return false;
     }
 
