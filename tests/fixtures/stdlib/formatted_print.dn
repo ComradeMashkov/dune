@@ -1,12 +1,16 @@
-name: text = "Dune";
-version: int = 1;
-mark: glyph = 'Z';
-ratio: real64 = 2.5;
+// Exercises formatted printing: print with {} placeholders and the format builtin.
+name: text = "Dune";        // text (string) value
+version: int = 1;           // int value
+mark: glyph = 'Z';          // glyph (single character) value
+ratio: real64 = 2.5;        // real64 value
 
+// print with placeholders: each {} consumes the next argument.
 print("{} v{}", name, version);
+// format: build a text value from a template instead of printing directly.
 message: text = format("{} v{} {}", name, version, mark);
-print(message);
-print(format("inline {}", 42));
+print(message);             // print the pre-formatted text
+print(format("inline {}", 42));  // format an int inline, then print
+// Mixed types (bool, glyph, real) all fill {} placeholders.
 print("bool={}, glyph={}, real={}", true, mark, ratio);
-print("plain text still works");
-print(42);
+print("plain text still works");  // print with no placeholders
+print(42);                        // print a bare int

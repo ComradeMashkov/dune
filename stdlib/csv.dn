@@ -1,3 +1,4 @@
+// File reading, the Outcome result type, and text helpers used below.
 import fs;
 import outcome;
 import text;
@@ -6,43 +7,60 @@ import text;
 // primitives. The first iteration handles comma-separated cells and
 // newline-separated rows (LF or CRLF); quoting and escaping are a follow-up.
 
+// Drop a trailing carriage return so CRLF line endings behave like LF.
 fn strip_cr(line: text): text {
+    // Length of the line so we can inspect its last character.
     length = line.len();
+    // Only non-empty lines can have a trailing '\r'.
     if length > 0 {
+        // If the final glyph is a carriage return, cut it off.
         if line[length - 1] == '\r' {
             return line[:length - 1];
         }
     }
 
+    // No trailing CR: return the line unchanged.
     return line;
 }
 
 // Split one line into its comma-separated cells.
 fn split_cells(line: text): [text] {
+    // Accumulator for the cells found so far.
     cells: [text] = [];
+    // `start` marks the beginning of the current (not yet closed) cell.
     start = 0;
+    // Walk each character looking for comma separators.
     for index = 0; index < line.len(); index = index + 1 {
+        // At a comma, the cell is the slice from `start` up to this comma.
         if line[index] == ',' {
             cells.push(line[start:index]);
+            // The next cell begins just after the comma.
             start = index + 1;
         }
     }
 
+    // Push the final cell (the text after the last comma, or the whole line).
     cells.push(line[start:]);
     return cells;
 }
 
 // Parse CSV `content` into rows of text cells. A trailing newline is ignored.
 export fn parse_rows(content: text): [[text]] {
+    // Accumulator for the parsed rows (each row is an array of cells).
     rows: [[text]] = [];
+    // `start` marks the beginning of the current line within `content`.
     start = 0;
+    // Scan character by character for line breaks.
     for index = 0; index < content.len(); index = index + 1 {
+        // At a newline, take the line, strip any CR, and split into cells.
         if content[index] == '\n' {
             rows.push(split_cells(strip_cr(content[start:index])));
+            // The next line begins after the newline.
             start = index + 1;
         }
     }
 
+    // If there is leftover text after the last newline, it is a final row.
     if start < content.len() {
         rows.push(split_cells(strip_cr(content[start:])));
     }
@@ -53,11 +71,14 @@ export fn parse_rows(content: text): [[text]] {
 // Read a CSV file into rows of text cells.
 // On success returns `Done(rows)`, otherwise `Failed(message)`.
 export fn read_rows(path: text): outcome.Outcome<[[text]], text> {
+    // Read the file contents as an Outcome<text, text>.
     result = fs.read_text(path);
+    // On a successful read, parse the contents into rows.
     if result.is_done() {
         return outcome.done(parse_rows(result.value_or("")), "");
     }
 
+    // On failure, produce an empty rows value and forward the error message.
     empty: [[text]] = [];
     return outcome.failed(empty, result.failure_or(""));
 }

@@ -1,14 +1,25 @@
+// Int array (element type inferred).
 values = [1, 2, 3];
+// Text (string) array (element type inferred).
 words = ["dune", "lang"];
+// Explicitly typed text value.
 message: text = "dune language";
+// Boolean binding.
 enabled: bool = true;
 
+// 'in' membership test over an int array: 2 is an element -> true.
 print(2 in values);
+// 4 is not an element -> false.
 print(4 in values);
+// 'in' over a text array uses exact element equality: "lang" is an element -> true.
 print("lang" in words);
+// 'in' over a text value tests substring containment: "lang" occurs in message -> true.
 print("lang" in message);
+// "go" is not a substring of message -> false.
 print("go" in message);
 
+// Combine membership with logical &&: (1+1) in values is true AND enabled is true.
 if 1 + 1 in values && enabled {
+  // Both conditions hold -> prints 99.
   print(99);
 }

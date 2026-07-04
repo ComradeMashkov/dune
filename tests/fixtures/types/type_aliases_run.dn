@@ -1,22 +1,33 @@
+// Transparent type alias: Count is just another name for int.
 type Count = int;
+// Alias for a list of Count, i.e. [int].
 type Counts = [Count];
 
+// Function using the Count alias in its signature; since Count = int, this is int arithmetic.
 fn inc(value: Count): Count {
     return value + 1;
 }
 
+// Record using the Count alias as a field type.
 record Point {
+    // Field typed via the alias (resolves to int).
     x: Count,
 
+    // Constructor taking and returning through the alias types.
     fn new(x: Count): Point {
         return Point { x: x };
     }
 }
 
+// Alias naming the record type Point.
 type PointAlias = Point;
 
+// Build a Counts list ([int]) using inc() plus integer literals.
 values: Counts = [inc(1), 3, 5];
+// Construct a Point (via its alias) from the sum of the first two list elements.
 point: PointAlias = Point.new(values[0] + values[1]);
 
+// Print the list length.
 print(values.len());
+// Print the point's x field.
 print(point.x);

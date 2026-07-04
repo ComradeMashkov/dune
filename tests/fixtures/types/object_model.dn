@@ -1,29 +1,48 @@
+// Import the sibling module that exports the Shape contract and Counter/Circle records.
 import object_model_api;
 
+// Generic function bounded by an imported contract: `T is object_model_api.Shape`.
+// Only types that satisfy the Shape contract (declaring area) may be passed as T.
 fn area_of<T is object_model_api.Shape>(shape: T): real64 {
+    // Contract-bounded call: the Shape bound guarantees the .area() method exists on T.
     return shape.area();
 }
 
+// Construct a Counter via its exported associated function new() using the module-qualified path.
 counter: object_model_api.Counter = object_model_api.Counter.new();
+// Call the exported mutating method inc() (uses `this` internally) to bump the counter.
 counter.inc();
+// Second mutation; state persists on the record instance.
 counter.inc();
+// Read back the internal value through the exported accessor current().
 print(counter.current());
 
+// Construct a Circle (which satisfies the Shape contract) passing radius 2.0 to new().
 circle: object_model_api.Circle = object_model_api.Circle.new(2.0);
+// Call the record method area() directly on the circle instance.
 print(circle.area());
+// Pass the circle to the contract-bounded generic; Circle satisfies Shape so this type-checks.
 print(area_of(circle));
 
+// Generic record: Box parameterized by T, defining a single field plus associated functions.
 record Box<T> {
+    // Generic field whose type is the record's type parameter T.
     value: T,
 
+    // Static associated function (constructor) returning the fully applied generic type Box<T>.
     fn new(value: T): Box<T> {
+        // Record literal constructing a Box<T> from the given value.
         return Box { value: value };
     }
 
+    // Instance method with implicit `this`, returning the stored T.
     fn get(): T {
+        // Read the generic field through `this`.
         return this.value;
     }
 }
 
+// Instantiate Box<int> via the associated function new; T is fixed to int here.
 boxed: Box<int> = Box.new(42);
+// Call the instance method get() to retrieve the boxed int.
 print(boxed.get());

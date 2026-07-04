@@ -1,21 +1,49 @@
+// Bring in the standard-library matrix module, which provides Vector and
+// Matrix types along with numeric helpers (mean, dot, norm, etc.).
 import matrix;
 
+// This example fits a straight line y = slope * x + intercept to a set of
+// (x, y) points using ordinary least squares. The data is chosen so the fit
+// is exact: every y equals 2 * x + 1.
+
+// xs holds the independent-variable samples (the x coordinates) as a Vector.
 xs = matrix.vector([1.0, 2.0, 3.0, 4.0, 5.0]);
+// ys holds the matching dependent-variable samples (the y coordinates).
+// Note each ys value is exactly 2 * x + 1, so the true line is slope 2, intercept 1.
 ys = matrix.vector([3.0, 5.0, 7.0, 9.0, 11.0]);
 
+// Compute the arithmetic mean of the x samples (the x "center of mass").
 x_mean = xs.mean();
+// Compute the arithmetic mean of the y samples.
 y_mean = ys.mean();
+// Subtract the x mean from every x, giving x deviations from the average.
 centered_x = xs.sub(x_mean);
+// Subtract the y mean from every y, giving y deviations from the average.
 centered_y = ys.sub(y_mean);
 
+// Least-squares slope: covariance(x, y) / variance(x). Using centered vectors,
+// the numerator is the dot product of the deviations and the denominator is
+// the sum of squared x deviations. Both share the same 1/n factor, which cancels.
 slope = centered_x.dot(centered_y) / centered_x.dot(centered_x);
+// The best-fit line passes through the point (x_mean, y_mean), so the
+// intercept is recovered by rearranging y_mean = slope * x_mean + intercept.
 intercept = y_mean - slope * x_mean;
+// Use the fitted line to extrapolate the predicted y at a new x = 6.0.
 prediction = slope * 6.0 + intercept;
 
+// Label the block of output that follows.
 print("linear regression");
+// Print the fitted slope (should be 2, matching the data's true slope).
 print(slope);
+// Print the fitted intercept (should be 1, matching the data's true intercept).
 print(intercept);
+// Print the extrapolated value at x = 6.0 (should be 2 * 6 + 1 = 13).
 print(prediction);
 
+// Residuals are the differences between the observed ys and the model's
+// predictions. Here we build the prediction vector by scaling every x by the
+// slope (xs.mul(slope)) then adding the intercept, and subtract from ys.
 residuals = ys.sub(xs.mul(slope).add(intercept));
+// Print the sum of squared residuals. Because this data lies exactly on the
+// line, every residual is zero and the total is 0.
 print(residuals.norm_squared());

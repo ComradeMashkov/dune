@@ -1,10 +1,15 @@
+// Exported record Point with a single int field and a constructor.
 export record Point {
+    // Coordinate field.
     x: int,
 
+    // Exported associated constructor building a Point from an int.
     export fn new(x: int): Point {
         return Point { x: x };
     }
 }
 
+// Exported transparent type alias: PointAlias is another name for the record type Point.
 export type PointAlias = Point;
+// Exported type alias for a list of PointAlias (list-of-alias), i.e. [Point].
 export type PointList = [PointAlias];

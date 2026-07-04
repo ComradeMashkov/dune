@@ -4,12 +4,16 @@
 // provides a `to_text(): text` method, so declaring `with display.Display` is
 // optional. It documents the intent and lets generic functions require the
 // capability through a `T is Display` bound.
+// A `contract` is like an interface: any type that provides these methods
+// satisfies it. Here the single required method is `to_text`.
 export contract Display {
+    // Types satisfying Display must be able to render themselves to text.
     to_text(): text;
 }
 
 // Render any Display value to text. Useful when a function wants the text
 // instead of printing it directly.
+// The bound `T is Display` guarantees `value` has a `to_text` method to call.
 export fn show<T is Display>(value: T): text {
     return value.to_text();
 }

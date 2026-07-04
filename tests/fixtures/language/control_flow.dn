@@ -1,11 +1,17 @@
+// Bind x to 3.
 x = 3;
 
+// while loop: repeat the body as long as the condition x > 0 holds.
 while x > 0 {
+  // Decrement x each iteration; the loop runs until x reaches 0.
   x = x - 1;
 }
 
+// if/else conditional on the final value of x (now 0).
 if x == 0 {
+  // Taken branch: prints 42.
   print(42);
 } else {
+  // Untaken branch in this run.
   print(0);
 }

@@ -1,31 +1,58 @@
+// Bind value to 17.
 value = 17;
+// Binary subtraction from zero -> -17.
 print(0 - value);
+// Unary negation operator -> -17.
 print(-value);
+// Modulo (remainder) operator: 17 % 5 = 2.
 print(17 % 5);
+// Logical NOT of false -> true.
 print(!false);
+// Short-circuit &&: left is false, so the right operand (1/0) is never evaluated -> false.
 print(false && (1 / 0 == 0));
+// Short-circuit ||: left is true, so the right operand (1/0) is never evaluated -> true.
 print(true || (1 / 0 == 0));
 
+// 'to' cast operator: convert int 17 to real64 (floating point) -> 17.0.
 count: real64 = value to real64;
+// Floating-point division 17.0 / 2.0 -> 8.5.
 print(count / 2.0);
 
+// Cast a glyph (character) literal 'A' to its int code point (65).
 code: int = 'A' to int;
+// Cast int 66 to a glyph -> 'B'.
 letter: glyph = 66 to glyph;
+// Cast int 0 to bool -> false.
 flag: bool = 0 to bool;
+// Prints 65.
 print(code);
+// Prints B.
 print(letter);
+// Prints false.
 print(flag);
 
+// Array of ints used to demonstrate mutating array methods.
 values: [int] = [1, 2];
+// .is_empty() -> false (array has elements).
 print(values.is_empty());
+// .push() appends 3 in place -> [1,2,3].
 values.push(3);
+// .pop() removes and returns the last element -> 3.
 print(values.pop());
+// .len() after the pop -> 2.
 print(values.len());
+// .clear() empties the array in place.
 values.clear();
+// .is_empty() now -> true.
 print(values.is_empty());
 
+// A text (string) value for string methods.
 message: text = "dune language";
+// .len() counts characters in "dune language" -> 13.
 print(message.len());
+// .contains() substring test -> true.
 print(message.contains("lang"));
+// .starts_with() prefix test -> true.
 print(message.starts_with("dune"));
+// .is_empty() on the empty string literal -> true.
 print("".is_empty());

@@ -1,11 +1,21 @@
+// Underscores act as digit separators in a decimal int literal (value 1000000).
 size: int = 1_000_000;
+// Hexadecimal literal with explicit u64 suffix: 0xff = 255.
 mask: u64 = 0xffu64;
+// Binary literal with digit separators and u8 suffix: 0b1010_0101 = 165.
 bits: u8 = 0b1010_0101u8;
+// Decimal literal with i64 (signed 64-bit) suffix.
 wide: i64 = 123i64;
+// Decimal literal with usize (pointer-sized unsigned) suffix.
 index: usize = 10usize;
 
+// Prints 1000000.
 print(size);
+// Prints 255.
 print(mask);
+// Prints 165.
 print(bits);
+// Prints 123.
 print(wide);
+// Prints 10.
 print(index);

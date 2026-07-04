@@ -1,43 +1,60 @@
+// Exported contract (interface-like): any type declaring these methods satisfies Shape.
 export contract Shape {
+    // Contract requirement: implementers must provide an area() returning real64.
     area(): real64;
 }
 
+// Exported record type Counter with one field and several associated/instance functions.
 export record Counter {
+    // Instance field storing the counter's current integer value.
     value: int,
 
+    // Exported associated function (constructor) building a fresh Counter at zero.
     export fn new(): Counter {
+        // Record literal initializing the value field to 0.
         return Counter { value: 0 };
     }
 
+    // Exported STATIC associated function: called on the type (Counter.zero()), no `this`.
     export static fn zero(): Counter {
         return Counter { value: 0 };
     }
 
+    // Non-exported static associated function; visible only within this module.
     static fn secret(): Counter {
         return Counter { value: -1 };
     }
 
+    // Exported mutating instance method: uses `this` to increment the field, returns unit.
     export fn inc(): unit {
+        // Reassign the field through `this`, exercising mutable record state.
         this.value = this.value + 1;
     }
 
+    // Non-exported instance method resetting the value; internal-only helper.
     fn reset(): unit {
         this.value = 0;
     }
 
+    // Exported accessor returning the current int value via `this`.
     export fn current(): int {
         return this.value;
     }
 }
 
+// Exported record Circle that declares conformance to the Shape contract via `with Shape`.
 export record Circle with Shape {
+    // Field holding the circle's radius as real64.
     radius: real64,
 
+    // Exported constructor taking a radius and building a Circle.
     export fn new(radius: real64): Circle {
         return Circle { radius: radius };
     }
 
+    // Exported method satisfying the Shape contract's area() requirement.
     export fn area(): real64 {
+        // Compute area using the stored radius through `this` (pi approximated as 3.0).
         return 3.0 * this.radius * this.radius;
     }
 }

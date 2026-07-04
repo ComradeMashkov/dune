@@ -1,28 +1,57 @@
+// Import the matrix module for the Matrix type and its construction helpers
+// (from_rows, identity, diag) plus operations like dot, transpose, and trace.
 import matrix;
 
+// This example demonstrates core matrix operations: multiplication, transpose,
+// building an identity matrix, and reading diagonals.
+
+// Build a 2x3 matrix from a list of rows: row 0 is [1,2,3], row 1 is [4,5,6].
 left = matrix.from_rows([[1, 2, 3], [4, 5, 6]]);
+// Build a 3x2 matrix from three rows of two elements each.
 right = matrix.from_rows([[7, 8], [9, 10], [11, 12]]);
+// Matrix product left (2x3) times right (3x2) yields a 2x2 matrix. The inner
+// dimensions (3) match, so multiplication is defined; the result is 2x2.
 product = matrix.dot(left, right);
 
+// Label this block of output.
 print("matrix product");
+// Number of rows in the product: 2.
 print(product.rows());
+// Number of columns in the product: 2.
 print(product.cols());
+// Entry (0,0) = dot of left row 0 with right col 0 = 1*7 + 2*9 + 3*11 = 58.
 print(product.get(0, 0));
+// Entry (1,1) = dot of left row 1 with right col 1 = 4*8 + 5*10 + 6*12 = 154.
 print(product.get(1, 1));
 
+// Label the transpose demonstration.
 print("transpose");
+// Transposing left (2x3) swaps rows and columns to give a 3x2 matrix.
 transposed = left.transpose();
+// Transposed row count is the original column count: 3.
 print(transposed.rows());
+// Transposed column count is the original row count: 2.
 print(transposed.cols());
+// Entry (2,1) of the transpose equals entry (1,2) of the original = 6.
 print(transposed.get(2, 1));
 
+// Label the identity-matrix demonstration.
 print("identity");
+// Build a 3x3 identity matrix (ones on the diagonal, zeros elsewhere).
+// The explicit type annotation fixes the element type as int.
 id: matrix.Matrix<int> = matrix.identity(3);
+// Trace is the sum of the diagonal entries: 1 + 1 + 1 = 3.
 print(id.trace());
+// An off-diagonal entry of the identity is 0.
 print(id.get(0, 1));
 
+// Label the diagonal-extraction demonstration.
 print("diagonal");
+// left.diag() pulls the main diagonal [1, 5] from the 2x3 matrix; summing gives 6.
 print(left.diag().sum());
+// Build a diagonal matrix whose diagonal is [2, 4, 6] (off-diagonals are 0).
 diag = matrix.diag(matrix.vector([2, 4, 6]));
+// Trace of that diagonal matrix = 2 + 4 + 6 = 12.
 print(diag.trace());
+// Sum of all entries equals the diagonal sum since everything else is 0: 12.
 print(diag.sum());

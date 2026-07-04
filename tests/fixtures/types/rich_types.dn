@@ -1,14 +1,25 @@
+// Function over the default real type (real is the platform's standard float alias).
 fn add_real(left: real, right: real): real {
+    // Simple addition of two real values.
     return left + right;
 }
 
+// u8: unsigned 8-bit integer holding 250 (fits in 0..255).
 small: u8 = 250;
+// uint64: unsigned 64-bit integer holding a value beyond 32-bit range.
 large: uint64 = 10000000000;
+// uint64 arithmetic: add 5, staying within the unsigned 64-bit type.
 total: uint64 = large + 5;
+// real binding produced by the add_real function.
 ratio: real = add_real(1.25, 2.5);
+// glyph: a single Unicode character literal 'Q'.
 mark: glyph = 'Q';
 
+// Print the u8 value.
 print(small);
+// Print the uint64 sum.
 print(total);
+// Print the real ratio.
 print(ratio);
+// Print the glyph.
 print(mark);

@@ -1,42 +1,73 @@
+// Stdlib module providing assertion helpers.
 import assert;
+// Stdlib collections module (repeat_int used below).
 import collections;
+// Stdlib Maybe optional type module.
 import maybe;
+// Stdlib Outcome result type module.
 import outcome;
 
+// Plain record Point with two int fields and a method.
 record Point {
+    // First coordinate field.
     x: int,
+    // Second coordinate field.
     y: int,
 
+    // Instance method summing the two fields via `this`.
     fn sum(): int {
         return this.x + this.y;
     }
 }
 
+// Construct a Point via a record literal with both fields set.
 point: Point = Point { x: 10, y: 20 };
+// Access a field directly.
 print(point.x);
+// Call the record method sum().
 print(point.sum());
 
+// Generic optional maybe.Maybe<int> holding a present value 42.
 maybe_value: maybe.Maybe<int> = maybe.present(42);
+// Generic optional holding an absent value with fallback 0.
 missing: maybe.Maybe<int> = maybe.absent(0);
+// value_or returns the contained value (42) since it is present.
 print(maybe_value.value_or(0));
+// value_or returns the provided default (7) since missing is absent.
 print(missing.value_or(7));
+// has_value queries presence, expected true here.
 print(maybe_value.has_value());
+// is_absent queries absence, expected true here.
 print(missing.is_absent());
+// `when` expression pattern-matching on the unwrapped int value.
 print(when maybe_value.value_or(0) {
+    // Match arm for the literal 42, yielding 100.
     is 42 { 100 }
+    // Wildcard arm catching anything else, yielding 0.
     is _ { 0 }
 });
 
+// Generic result outcome.Outcome<int, text>: success carrying 9 with empty failure text.
 done: outcome.Outcome<int, text> = outcome.done(9, "");
+// Failure Outcome carrying default 0 and failure message "bad".
 failed: outcome.Outcome<int, text> = outcome.failed(0, "bad");
+// value_or on a success returns the success value 9.
 print(done.value_or(0));
+// value_or on a failure returns the provided default 5.
 print(failed.value_or(5));
+// failure_or returns the failure text "bad".
 print(failed.failure_or("absent"));
+// `when` matching on the failure text string.
 print(when failed.failure_or("absent") {
+    // Match the exact failure string "bad", yielding 1.
     is "bad" { 1 }
+    // Wildcard fallback yielding 0.
     is _ { 0 }
 });
 
+// collections.repeat_int builds an [int] repeating value 3, count 4 -> length 4.
 repeated: [int] = collections.repeat_int(3, 4);
+// Length of the repeated list.
 print(repeated.len());
+// assert.equals_int checks the first element equals 3.
 print(assert.equals_int(repeated[0], 3));

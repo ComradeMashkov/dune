@@ -1,22 +1,37 @@
+// Pull in the stdlib array module (used below for array.reverse).
 import array;
+// Pull in the stdlib math module (used below for math.square).
 import math;
 
 // Generic functions are instantiated only for call sites.
+// identity is an unbounded generic function: type parameter T with no constraint.
 fn identity<T>(value: T): T {
+    // Return the argument unchanged; works for any concrete T substituted at a call site.
     return value;
 }
 
+// twice is a bounded generic: `T is numeric` constrains T to numeric types so `+` is allowed.
 fn twice<T is numeric>(value: T): T {
+    // Uses the numeric bound to add the value to itself; the bound guarantees `+` exists for T.
     return value + value;
 }
 
+// Array literal typed as [text] (list of text); exercises the list type and element inference.
 words: [text] = ["dune", "lang"];
+// array.reverse returns a new [text]; the generic stdlib function is instantiated for text here.
 reversed: [text] = array.reverse(words);
+// real32 typed binding: 32-bit floating point literal.
 rough: real32 = 1.5;
 
+// Instantiate identity with int (T = int) from the integer literal argument.
 print(identity(42));
+// Instantiate identity with text (T = text); same generic, different concrete type.
 print(identity("done"));
+// Call the list method .first() on a [text] value to get its first element.
 print(reversed.first());
+// math.square instantiated for int (T inferred from the literal 12).
 print(math.square(12));
+// math.square instantiated for real32 (T inferred from `rough`); shows generic reuse across numeric types.
 print(math.square(rough));
+// twice with the numeric bound satisfied by int; returns 9 + 9.
 print(twice(9));

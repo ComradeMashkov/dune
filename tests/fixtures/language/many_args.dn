@@ -1,5 +1,8 @@
+// Function with nine int parameters, exercising many-argument passing; returns their sum.
 fn sum9(a: int, b: int, c: int, d: int, e: int, f: int, g: int, h: int, i: int): int {
+    // Add all nine parameters together.
     return a + b + c + d + e + f + g + h + i;
 }
 
+// 1+2+3+4+5+6+7+8+9 = 45 -> prints 45.
 print(sum9(1, 2, 3, 4, 5, 6, 7, 8, 9));

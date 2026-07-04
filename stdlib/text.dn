@@ -1,56 +1,78 @@
+// String utilities implemented as methods on the built-in `text` type and a
+// few free predicate functions on `glyph` (a single character). Several
+// methods simply forward to the VM's native text operations of the same name;
+// others are written in Dune on top of indexing and slicing.
+
+// The length in glyphs of this text (forwards to the native operation).
 export method text.len(): int {
     return this.len();
 }
 
+// True when the text has zero length (forwards to the native operation).
 export method text.is_empty(): bool {
     return this.is_empty();
 }
 
+// True when `needle` occurs somewhere in this text.
 export method text.contains(needle: text): bool {
     return this.contains(needle);
 }
 
+// True when this text begins with `prefix`.
 export method text.starts_with(prefix: text): bool {
     return this.starts_with(prefix);
 }
 
+// True when this text ends with `suffix`.
 export method text.ends_with(suffix: text): bool {
+    // Compare lengths first so the slice below is always valid.
     suffix_len = suffix.len();
     value_len = this.len();
+    // A suffix longer than the text can never match.
     if suffix_len > value_len {
         return false;
     }
 
+    // Slice off the last `suffix_len` glyphs and compare to `suffix`.
     return this[value_len - suffix_len:] == suffix;
 }
 
+// The glyph at `index` (0-based) via indexing.
 export method text.char_at(index: int): glyph {
     return this[index];
 }
 
+// The substring from `start` (inclusive) to `end` (exclusive).
 export method text.slice(start: int, end: int): text {
     return this[start:end];
 }
 
+// The first `end` glyphs of the text.
 export method text.prefix(end: int): text {
     return this[:end];
 }
 
+// Everything from `start` to the end of the text.
 export method text.suffix(start: int): text {
     return this[start:];
 }
 
+// The index of the first occurrence of glyph `needle`, or -1 if absent.
 export method text.index_of(needle: glyph): int {
+    // Scan glyph by glyph, returning the first matching position.
     for index = 0; index < this.len(); index = index + 1 {
         if this[index] == needle {
             return index;
         }
     }
 
+    // -1 sentinel meaning "not found".
     return 0 - 1;
 }
 
+// How many times glyph `needle` occurs in the text.
 export method text.count(needle: glyph): int {
+    // Running tally of matches.
     total = 0;
     for index = 0; index < this.len(); index = index + 1 {
         if this[index] == needle {
@@ -61,47 +83,60 @@ export method text.count(needle: glyph): int {
     return total;
 }
 
+// Drop leading whitespace and return the remainder.
 export method text.trim_start(): text {
+    // Advance `start` past every leading space-like glyph.
     start = 0;
     while start < this.len() && is_space(this[start]) {
         start = start + 1;
     }
 
+    // Return the text from the first non-space glyph onward.
     return this[start:];
 }
 
+// Drop trailing whitespace and return the remainder.
 export method text.trim_end(): text {
+    // Move `end` back past every trailing space-like glyph.
     end = this.len();
     while end > 0 && is_space(this[end - 1]) {
         end = end - 1;
     }
 
+    // Return the text up to the last non-space glyph.
     return this[:end];
 }
 
+// Drop whitespace from both ends by composing the two trims.
 export method text.trim(): text {
     return trim_end(trim_start(this));
 }
 
+// True when `value` is a space, newline, carriage return, or tab.
 export fn is_space(value: glyph): bool {
     return value == ' ' || value == '\n' || value == '\r' || value == '\t';
 }
 
+// True when `value` is an ASCII decimal digit '0'..'9'.
 export fn is_digit(value: glyph): bool {
+    // Convert the glyph to its integer code point for range comparison.
     code: int = value to int;
     return code >= ('0' to int) && code <= ('9' to int);
 }
 
+// True when `value` is a lowercase ASCII letter 'a'..'z'.
 export fn is_lower(value: glyph): bool {
     code: int = value to int;
     return code >= ('a' to int) && code <= ('z' to int);
 }
 
+// True when `value` is an uppercase ASCII letter 'A'..'Z'.
 export fn is_upper(value: glyph): bool {
     code: int = value to int;
     return code >= ('A' to int) && code <= ('Z' to int);
 }
 
+// True when `value` is any ASCII letter (upper or lower case).
 export fn is_alpha(value: glyph): bool {
     return is_lower(value) || is_upper(value);
 }

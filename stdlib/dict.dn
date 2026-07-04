@@ -1,3 +1,4 @@
+// Bring in the Maybe optional type used by `get`.
 import maybe;
 
 // A small associative collection mapping `text` keys to `V` values.
@@ -6,30 +7,40 @@ import maybe;
 // parallel arrays, so lookups are linear. That is simple, predictable,
 // and identical across backends; hashing can come later without changing
 // this API.
+// Generic over the value type `V`; keys are always text.
 export record Dict<V> {
+    // Parallel arrays: entry_keys[i] maps to entry_values[i].
     entry_keys: [text],
     entry_values: [V],
 
+    // Construct an empty dictionary.
     export fn new(): Dict<V> {
         return Dict { entry_keys: [], entry_values: [] };
     }
 
+    // Find the slot index for `key`, or -1 when the key is absent.
+    // Internal helper shared by the public methods.
     fn index_of(key: text): int {
+        // Linear scan over the key array.
         for index = 0; index < this.entry_keys.len(); index = index + 1 {
             if this.entry_keys[index] == key {
                 return index;
             }
         }
 
+        // -1 sentinel meaning "not found".
         return 0 - 1;
     }
 
     // Insert or overwrite the value for `key`.
     export fn set(key: text, value: V): unit {
+        // Check whether the key already exists.
         existing = this.index_of(key);
+        // If so, overwrite the value in place at the same slot.
         if existing >= 0 {
             this.entry_values[existing] = value;
         } else {
+            // Otherwise append a new key/value pair to both arrays.
             this.entry_keys.push(key);
             this.entry_values.push(value);
         }
@@ -37,47 +48,58 @@ export record Dict<V> {
 
     // Look up `key`, returning `Present(value)` or `Absent`.
     export fn get(key: text): maybe.Maybe<V> {
+        // Locate the key's slot.
         existing = this.index_of(key);
+        // Found: return the paired value wrapped as Present.
         if existing >= 0 {
             return maybe.present(this.entry_values[existing]);
         }
 
+        // Missing: signal absence.
         return maybe.Absent;
     }
 
+    // True when `key` has an associated value.
     export fn contains(key: text): bool {
         return this.index_of(key) >= 0;
     }
 
     // Remove `key`; returns whether a value was actually removed.
     export fn remove(key: text): bool {
+        // Nothing to do if the key is not present.
         existing = this.index_of(key);
         if existing < 0 {
             return false;
         }
 
+        // Rebuild both parallel arrays, dropping the removed slot.
         remaining_keys: [text] = [];
         remaining_values: [V] = [];
         for index = 0; index < this.entry_keys.len(); index = index + 1 {
+            // Keep every entry except the one at the found position.
             if index != existing {
                 remaining_keys.push(this.entry_keys[index]);
                 remaining_values.push(this.entry_values[index]);
             }
         }
 
+        // Swap in the filtered arrays and report success.
         this.entry_keys = remaining_keys;
         this.entry_values = remaining_values;
         return true;
     }
 
+    // The number of key/value pairs stored.
     export fn len(): int {
         return this.entry_keys.len();
     }
 
+    // True when the dictionary holds no entries.
     export fn is_empty(): bool {
         return this.entry_keys.len() == 0;
     }
 
+    // Drop all entries, leaving an empty dictionary.
     export fn clear(): unit {
         this.entry_keys = [];
         this.entry_values = [];
@@ -85,6 +107,7 @@ export record Dict<V> {
 
     // A copy of the keys in insertion order.
     export fn keys(): [text] {
+        // Copy each key into a fresh array.
         result: [text] = [];
         for index = 0; index < this.entry_keys.len(); index = index + 1 {
             result.push(this.entry_keys[index]);
@@ -95,6 +118,7 @@ export record Dict<V> {
 
     // A copy of the values in insertion order.
     export fn values(): [V] {
+        // Copy each value into a fresh array.
         result: [V] = [];
         for index = 0; index < this.entry_values.len(); index = index + 1 {
             result.push(this.entry_values[index]);

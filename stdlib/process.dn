@@ -1,3 +1,4 @@
+// Bring in the Maybe optional type for lookups that may not find a value.
 import maybe;
 
 // Access to command-line arguments and environment variables.
@@ -9,54 +10,69 @@ import maybe;
 
 // The arguments passed after the script path (`dune script.dn a b c`).
 export fn args(): [text] {
+    // Delegate directly to the VM intrinsic, which returns a text array.
     return __process_args();
 }
 
 // The number of command-line arguments.
 export fn arg_count(): int {
+    // Fetch the argument array and report its length.
     return __process_args().len();
 }
 
 // The argument at `index`, or `Absent` when out of range.
 export fn arg(index: int): maybe.Maybe<text> {
+    // Snapshot the arguments once so the bounds checks use a stable array.
     values = __process_args();
+    // Negative indices can never be valid.
     if index < 0 {
         return maybe.Absent;
     }
 
+    // Index at or beyond the length is out of range.
     if index >= values.len() {
         return maybe.Absent;
     }
 
+    // In range: return the argument wrapped as Present.
     return maybe.present(values[index]);
 }
 
 // The value of environment variable `name`, or `Absent` when unset.
 export fn env(name: text): maybe.Maybe<text> {
+    // The intrinsic returns a presence flag and the value (empty when unset).
     (present, value) = __env_get(name);
+    // Only wrap the value when the variable was actually set.
     if present {
         return maybe.present(value);
     }
 
+    // Unset variables map to Absent.
     return maybe.Absent;
 }
 
 // The value of environment variable `name`, or `default` when unset.
 export fn env_or(name: text, default: text): text {
+    // Look up presence flag and value as above.
     (present, value) = __env_get(name);
+    // Return the real value when present.
     if present {
         return value;
     }
 
+    // Otherwise substitute the caller-provided default.
     return default;
 }
 
 // The current working directory, or `Absent` when it cannot be determined.
 export fn cwd(): maybe.Maybe<text> {
+    // The intrinsic returns a success flag and the directory path.
     (ok, value) = __process_cwd();
+    // Wrap the path when the lookup succeeded.
     if ok {
         return maybe.present(value);
     }
 
+    // Otherwise report that it is unavailable.
     return maybe.Absent;
 }

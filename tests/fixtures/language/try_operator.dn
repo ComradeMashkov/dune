@@ -1,32 +1,51 @@
+// Import the standard-library 'outcome' module (provides the Outcome result type).
 import outcome;
 
+// Returns Outcome<int, text>: a done value if positive, otherwise a failure.
 fn checked(value: int): outcome.Outcome<int, text> {
     if value > 0 {
+        // Success case wraps value in a 'done' Outcome.
         return outcome.done_int(value);
     }
 
+    // Failure case carries an error message.
     return outcome.failed_int("not positive");
 }
 
+// add_checked uses the '?' operator to short-circuit on failure.
 fn add_checked(a: int, b: int): outcome.Outcome<int, text> {
+    // '?' unwraps a done Outcome to int, or returns early with the failure.
     first: int = checked(a)?;
+    // Same for b: if checked(b) fails, add_checked returns that failure immediately.
     second: int = checked(b)?;
+    // Both succeeded: wrap the sum in a done Outcome.
     return outcome.done_int(first + second);
 }
 
+// The '?' operator may also appear inside a larger expression.
 fn sum_in_expression(a: int, b: int): outcome.Outcome<int, text> {
+    // Each checked(...)? contributes its unwrapped int to the arithmetic (else short-circuits).
     total: int = 100 + checked(a)? + checked(b)?;
     return outcome.done_int(total);
 }
 
+// report prints the Outcome's status plus its value/failure accessors; returns unit.
 fn report(result: outcome.Outcome<int, text>): unit {
+    // .is_done() -> true if the Outcome represents success.
     print(result.is_done());
+    // .value_or(default) returns the value, or the default (-1) on failure.
     print(result.value_or(0 - 1));
+    // .failure_or(default) returns the error text, or the default ("ok") on success.
     print(result.failure_or("ok"));
 }
 
+// Both args positive: 3+4 succeeds -> done 7.
 report(add_checked(3, 4));
+// First arg -1 fails checked -> add_checked short-circuits to that failure.
 report(add_checked(0 - 1, 4));
+// Second arg -2 fails -> failure surfaced via the second '?'.
 report(add_checked(3, 0 - 2));
+// Both positive in the expression form -> done 100+3+4 = 107.
 report(sum_in_expression(3, 4));
+// Second arg -9 fails -> the expression short-circuits to that failure.
 report(sum_in_expression(3, 0 - 9));
