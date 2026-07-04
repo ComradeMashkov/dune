@@ -6,6 +6,9 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_package(Threads REQUIRED)
+
 option(DUNE_ENABLE_LINT "Run clang-format and clang-tidy checks before building targets" ON)
 option(DUNE_ENABLE_NATIVE "Require clang++ so `dune build` can produce native binaries" ON)
 
@@ -149,8 +152,8 @@ target_link_libraries(dune_vm
         dune_compiler
 )
 
-add_executable(dune src/main.cpp)
-target_link_libraries(dune PRIVATE dune_codegen dune_lsp dune_modules dune_vm)
+add_executable(dune src/main.cpp src/cli/build_progress.cpp)
+target_link_libraries(dune PRIVATE dune_codegen dune_lsp dune_modules dune_vm Threads::Threads)
 target_compile_definitions(dune PRIVATE DUNE_CLANGXX_PATH="${DUNE_NATIVE_CLANGXX}")
 dune_add_lint_dependencies(dune)
 
@@ -204,6 +207,16 @@ add_test(
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/language/hello.dn
         -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/status_hello_native
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_status_case.cmake
+)
+
+add_test(
+    NAME cli_build_native_plain
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/language/hello.dn
+        -D NATIVE_FILE=${CMAKE_CURRENT_BINARY_DIR}/plain_hello_native
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_build_plain_case.cmake
 )
 
 add_test(

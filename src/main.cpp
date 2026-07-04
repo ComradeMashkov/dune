@@ -1,3 +1,4 @@
+#include "cli/build_progress.hpp"
 #include "codegen/llvm_ir_generator.hpp"
 #include "compiler/compiler.hpp"
 #include "lexer/lexer.hpp"
@@ -69,6 +70,10 @@ public:
         std::cerr << style("dune " + std::move(command), "\033[1m") << '\n';
     }
 
+    // No-op phase marker so CliReporter satisfies the same interface as
+    // BuildProgress and can be driven by the shared run_step helper.
+    void begin(std::string_view /*step*/) const {}
+
     void done(std::string_view step) const {
         std::cerr << "  " << style("[done]", "\033[32m") << ' ' << step << '\n';
     }
@@ -95,7 +100,8 @@ public:
     using std::runtime_error::runtime_error;
 };
 
-template <typename Fn> decltype(auto) run_step(const CliReporter& reporter, std::string_view step, Fn&& fn) {
+template <typename Reporter, typename Fn> decltype(auto) run_step(Reporter& reporter, std::string_view step, Fn&& fn) {
+    reporter.begin(step);
     try {
         if constexpr (std::is_void_v<std::invoke_result_t<Fn&>>) {
             std::invoke(std::forward<Fn>(fn));
@@ -199,7 +205,8 @@ std::string generate_llvm_ir(const dune::Program& program) {
     return output.str();
 }
 
-dune::Program load_program_with_status(const std::string& source_path, const CliReporter& reporter) {
+template <typename Reporter>
+dune::Program load_program_with_status(const std::string& source_path, Reporter& reporter) {
     const std::filesystem::path source_directory = std::filesystem::path(source_path).parent_path();
     const std::string source = run_step(reporter, "read source", [&] { return read_file(source_path); });
     const std::vector<dune::Token> tokens = run_step(reporter, "lex", [&] { return lex_source(source); });
@@ -237,7 +244,7 @@ int run_source_file(const std::string& path, std::vector<std::string> script_arg
 }
 
 int build_native_file(const std::string& source_path, const std::string& output_path) {
-    CliReporter reporter("build " + source_path);
+    dune::cli::BuildProgress reporter("build " + source_path);
     const std::string llvm_ir_path = output_path + ".ll";
     const dune::Program program = load_program_with_status(source_path, reporter);
     run_step(reporter, "type check", [&] { check_program(program); });
