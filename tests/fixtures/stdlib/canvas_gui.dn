@@ -1,0 +1,43 @@
+// Exercises the canvas stdlib module: deterministic SVG rendering, drawing
+// primitives, immediate-mode GUI widgets, file output, and native tool metadata.
+import canvas;
+import fs;
+import io;
+import text;
+
+scene: canvas.Canvas = canvas.new("Canvas GUI <demo>", 520, 360);
+scene = scene.background("#f8fafc");
+scene = scene.grid(80.0, "#94a3b8");
+scene = scene.axes(40.0, 320.0, "#334155");
+scene = scene.line(24.0, 310.0, 120.0, 230.0, canvas.stroke("#2563eb").with_width(2.0).with_dash("4 2"));
+scene = scene.polyline([24.0, 64.0, 104.0, 144.0], [58.0, 42.0, 72.0, 46.0], "#9333ea");
+scene = scene.polygon([164.0, 198.0, 232.0, 210.0], [46.0, 28.0, 56.0, 82.0], "#0f766e", "#ccfbf1");
+scene = scene.rect(250.0, 32.0, 56.0, 42.0, "#dc2626", "#fee2e2");
+scene = scene.rounded_rect(322.0, 32.0, 72.0, 42.0, 8.0, "#1d4ed8", "#dbeafe");
+scene = scene.ellipse(440.0, 53.0, 34.0, 20.0, "#7c3aed", "#ede9fe");
+scene = scene.path("M 24 104 C 72 86 112 120 152 104", canvas.stroke("#ea580c").with_width(2.0));
+scene = scene.image(170.0, 92.0, 44.0, 30.0, "asset<&>.png");
+scene = scene.text(232.0, 112.0, "hello & canvas", canvas.fill("#0f172a").with_font_size(14));
+scene = scene.panel(24.0, 142.0, 190.0, 86.0, "Panel");
+scene = scene.button(40.0, 186.0, 70.0, 28.0, "Run", true);
+scene = scene.button(120.0, 186.0, 70.0, 28.0, "Stop", false);
+scene = scene.checkbox(232.0, 148.0, "grid", true);
+scene = scene.toggle(232.0, 178.0, 44.0, "snap", false);
+scene = scene.slider(322.0, 160.0, 150.0, 0.0, 100.0, 42.0, "zoom");
+scene = scene.progress(322.0, 210.0, 150.0, 12.0, 0.72, "#16a34a");
+scene = scene.tabs(24.0, 250.0, 180.0, ["Draw", "Data", "View"], 1);
+scene = scene.toolbar(222.0, 250.0, ["Pan", "Zoom", "Save"], 2);
+scene = scene.badge(24.0, 302.0, "LIVE", "#16a34a");
+scene = scene.input(84.0, 296.0, 110.0, "", "search");
+scene = scene.select_box(212.0, 296.0, 112.0, "mode", "native");
+scene = scene.metric(342.0, 282.0, 90.0, 56.0, "fps", "60");
+scene = scene.table(344.0, 112.0, [54.0, 58.0], ["tool", "key"], [["grid", "g"], ["ruler", "r"]]);
+
+io.println(canvas.svg(scene).trim_end());
+io.println(scene.save_svg("canvas_gui_fixture.svg").is_done());
+saved = fs.read_text("canvas_gui_fixture.svg").value_or("");
+io.println(saved.contains("hello &amp; canvas"));
+io.println(saved.contains("stroke-dasharray=\"4 2\""));
+io.println(saved.contains("asset&lt;&amp;&gt;.png"));
+io.println(canvas.native_tools().len());
+io.println(canvas.native_tools()[4] == "ruler");

@@ -38,9 +38,13 @@ MODULE_BLURBS = {
     "maybe": "The optional `Maybe<T>` choice and helpers.",
     "outcome": "The result-style `Outcome<T, E>` choice and helpers.",
     "autograd": "Scalar reverse-mode automatic differentiation.",
+    "canvas": "Deterministic SVG canvas and immediate-mode GUI widgets.",
     "random": "A small deterministic pseudo-random generator.",
     "regex": "Safe ASCII regular expressions for validation and text cleanup.",
     "runtime": "Runtime helpers such as `panic`.",
+    "io": "Standard input/output: print, read a line, and flush streams.",
+    "fmt": "String formatting with `{}` placeholders.",
+    "cli": "Command-line argument parsing and help output.",
     "fs": "File-system access (read, write, list).",
     "process": "Process access: arguments and environment.",
     "csv": "CSV parsing and numeric-matrix I/O.",
@@ -146,6 +150,27 @@ def parse_doc(doc: str) -> tuple[list[str], list[tuple[str, str]], str, list[str
     return description, params, returns, example
 
 
+LIST_ITEM_RE = re.compile(r"^(?:[-*+]\s|\d+[.)]\s)")
+
+
+def render_paragraph(run: list[str]) -> str:
+    """Render one run of non-blank lines, keeping Markdown list items on their own
+    lines while still word-wrapping ordinary prose into a single line."""
+    out: list[str] = []
+    prose: list[str] = []
+    for text in run:
+        if LIST_ITEM_RE.match(text):
+            if prose:
+                out.append(" ".join(prose))
+                prose = []
+            out.append(text)
+        else:
+            prose.append(text)
+    if prose:
+        out.append(" ".join(prose))
+    return "\n".join(out)
+
+
 def render_doc(doc: str) -> str:
     """Render a doc-comment's tags to Markdown (prose, Parameters, Returns, Example)."""
     description, params, returns, example = parse_doc(doc)
@@ -156,12 +181,12 @@ def render_doc(doc: str) -> str:
     for text in description:
         if not text:
             if current:
-                paragraphs.append(" ".join(current))
+                paragraphs.append(render_paragraph(current))
                 current = []
         else:
             current.append(text)
     if current:
-        paragraphs.append(" ".join(current))
+        paragraphs.append(render_paragraph(current))
     if paragraphs:
         blocks.append("\n\n".join(paragraphs))
 

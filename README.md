@@ -175,11 +175,8 @@ Modules are loaded from `.dn` files. The standard library currently includes
 `stdlib/outcome.dn`, `stdlib/assert.dn`, `stdlib/collections.dn`,
 `stdlib/dict.dn`, `stdlib/set.dn`, `stdlib/random.dn`, `stdlib/runtime.dn`,
 `stdlib/autograd.dn`, `stdlib/matrix.dn`, `stdlib/process.dn`, `stdlib/fs.dn`,
-<<<<<<< HEAD
-`stdlib/csv.dn`, `stdlib/regex.dn`, and `stdlib/display.dn`. Low-level
-=======
-`stdlib/csv.dn`, `stdlib/display.dn`, and `stdlib/plot.dn`. Low-level
->>>>>>> afa3caa (feat: add plot stdlib svg backend)
+`stdlib/csv.dn`, `stdlib/regex.dn`, `stdlib/display.dn`, `stdlib/plot.dn`, and
+`stdlib/canvas.dn`. Low-level
 array and text operations such as `len`, `push`, indexing, and slicing remain
 runtime primitives; higher-level helpers are ordinary Dune functions in the
 standard library. Operating-system access (reading and writing files,
@@ -910,6 +907,7 @@ Standard library receiver methods are enabled by importing their module:
 - `import regex;` exposes safe ASCII regex validation and cleanup with `compile(pattern)`, `is_match`, `find`, `find_all`, `split`, `replace`, and `replace_all`
 - `import display;` exposes the `Display` contract and `show(value)` for rendering records to `text`
 - `import plot;` builds deterministic SVG/HTML line, scatter, bar, and histogram charts with `svg()`, `html()`, `save_svg()`, `save_html()`, and headless-safe `show()`
+- `import canvas;` builds deterministic SVG canvases with drawing primitives, GUI widgets, `save_svg()`, and `show_native()`
 
 Associative collections and deterministic randomness:
 
@@ -981,6 +979,26 @@ chart = plot.line([1.0, 2.0, 3.0], [2.0, 4.0, 8.0])
 plot.save_svg(chart, "growth.svg");
 plot.use_backend("native");
 print(plot.show(chart).is_done());
+```
+
+Canvas is the lower-level drawing and GUI toolkit behind native display work. It
+records pure Dune drawing commands and renders deterministic SVG, so the same
+scene can be saved, golden-tested, or opened in the VM native canvas window:
+
+```dn
+import canvas;
+
+scene: canvas.Canvas = canvas.new("controls", 420, 260);
+scene = scene.background("#f8fafc")
+    .grid(40.0, "#94a3b8")
+    .panel(24.0, 24.0, 180.0, 92.0, "Tools")
+    .button(40.0, 68.0, 72.0, 28.0, "Run", true)
+    .checkbox(128.0, 74.0, "snap", true)
+    .slider(240.0, 72.0, 140.0, 0.0, 100.0, 42.0, "zoom")
+    .tabs(24.0, 150.0, 180.0, ["Draw", "Data", "View"], 0);
+
+scene.save_svg("controls.svg");
+print(scene.show_native().is_done());
 ```
 
 ## Run

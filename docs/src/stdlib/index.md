@@ -5,11 +5,15 @@ The standard library is ordinary Dune loaded from `.dn` files. Each page below i
 - [`array`](array.md) — Generic helpers and higher-order pipelines for arrays.
 - [`assert`](assert.md) — Assertion helpers for tests.
 - [`autograd`](autograd.md) — Scalar reverse-mode automatic differentiation.
+- [`canvas`](canvas.md) — Deterministic SVG canvas and immediate-mode GUI widgets.
+- [`cli`](cli.md) — Command-line argument parsing and help output.
 - [`collections`](collections.md) — Shared collection utilities.
 - [`csv`](csv.md) — CSV parsing and numeric-matrix I/O.
 - [`dict`](dict.md) — A hash-map style dictionary built in Dune.
 - [`display`](display.md) — The `Display` contract and `show` helper.
+- [`fmt`](fmt.md) — String formatting with `{}` placeholders.
 - [`fs`](fs.md) — File-system access (read, write, list).
+- [`io`](io.md) — Standard input/output: print, read a line, and flush streams.
 - [`log`](log.md) — Levelled diagnostics with stderr output and filtering.
 - [`math`](math.md) — Numeric constants and generic math functions.
 - [`matrix`](matrix.md) — A small NumPy-style foundation: vectors and matrices.

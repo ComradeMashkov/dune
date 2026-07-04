@@ -822,6 +822,17 @@ int main() {
                           "native_result = plot.show_native(chart); io.println(native_result.is_done());",
                           "expected plot module to type check") &&
              passed;
+    passed = expect_valid("import io; import canvas; import text; "
+                          "scene: canvas.Canvas = canvas.new(\"demo\", 320, 200); "
+                          "scene = scene.grid(40.0, \"#94a3b8\"); "
+                          "scene = scene.button(16.0, 16.0, 80.0, 28.0, \"Run\", true); "
+                          "scene = scene.checkbox(16.0, 58.0, \"snap\", false); "
+                          "scene = scene.slider(16.0, 104.0, 120.0, 0.0, 10.0, 4.0, \"zoom\"); "
+                          "scene = scene.table(160.0, 16.0, [54.0, 54.0], [\"tool\", \"key\"], [[\"grid\", \"g\"]]); "
+                          "io.println(canvas.svg(scene).contains(\"<svg\")); "
+                          "native_result = scene.show_native(); io.println(native_result.is_done());",
+                          "expected canvas module to type check") &&
+             passed;
     passed = expect_error_contains("x = __read_file(1);", "expected type 'text' but got 'int'",
                                    "expected __read_file argument type error") &&
              passed;
@@ -839,6 +850,12 @@ int main() {
              passed;
     passed = expect_error_contains("__plot_show_native(1);", "expected type 'text' but got 'int'",
                                    "expected __plot_show_native argument type error") &&
+             passed;
+    passed = expect_error_contains("x = __canvas_show_native(\"demo\");", "__canvas_show_native expects 2 arguments",
+                                   "expected __canvas_show_native arity error") &&
+             passed;
+    passed = expect_error_contains("__canvas_show_native(1, \"<svg/>\");", "expected type 'text' but got 'int'",
+                                   "expected __canvas_show_native argument type error") &&
              passed;
 
     passed = expect_valid("record Point { x: int, fn to_text(): text { return fmt.format(\"{}\", this.x); } } "

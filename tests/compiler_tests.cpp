@@ -741,6 +741,62 @@ bool compiles_plot_module_as_dune_code() {
     return passed;
 }
 
+bool compiles_canvas_module_as_dune_code() {
+    const dune::Bytecode bytecode = compile_source(
+        "import canvas; import text; "
+        "scene: canvas.Canvas = canvas.new(\"demo\", 320, 200); "
+        "scene = scene.grid(40.0, \"#94a3b8\"); "
+        "scene = scene.button(16.0, 16.0, 80.0, 28.0, \"Run\", true); "
+        "scene = scene.slider(16.0, 72.0, 120.0, 0.0, 10.0, 4.0, \"zoom\"); "
+        "scene = scene.table(160.0, 16.0, [54.0, 54.0], [\"tool\", \"key\"], [[\"grid\", \"g\"]]); "
+        "io.println(canvas.svg(scene).contains(\"<svg\"));");
+
+    bool saw_new = false;
+    bool saw_render_svg = false;
+    bool saw_button_method = false;
+    bool saw_table_method = false;
+    bool saw_make_record = false;
+    bool saw_field_load = false;
+    bool saw_canvas_show_native = false;
+    bool saw_canvas_extern = false;
+
+    auto inspect = [&](const std::vector<dune::Instruction>& instructions) {
+        for (const dune::Instruction& instruction : instructions) {
+            saw_make_record = saw_make_record || instruction.op == dune::OpCode::make_record;
+            saw_field_load = saw_field_load || instruction.op == dune::OpCode::load_field;
+            saw_canvas_show_native = saw_canvas_show_native || instruction.op == dune::OpCode::canvas_show_native;
+        }
+    };
+
+    inspect(bytecode.instructions);
+    for (const dune::Bytecode::Function& function : bytecode.functions) {
+        if (function.name.rfind("canvas.", 0) == 0 && function.is_extern) {
+            saw_canvas_extern = true;
+        }
+
+        saw_new = saw_new || (function.name == "canvas.new" && !function.is_extern);
+        saw_render_svg = saw_render_svg || (function.name == "canvas.render_svg" && !function.is_extern);
+        saw_button_method =
+            saw_button_method || (function.name.rfind("canvas.", 0) == 0 &&
+                                  function.name.find("button") != std::string::npos && !function.is_extern);
+        saw_table_method = saw_table_method || (function.name.rfind("canvas.", 0) == 0 &&
+                                                function.name.find("table") != std::string::npos &&
+                                                !function.is_extern);
+        inspect(function.instructions);
+    }
+
+    bool passed = true;
+    passed = expect(saw_new, "expected canvas.new Dune function") && passed;
+    passed = expect(saw_render_svg, "expected canvas.render_svg Dune function") && passed;
+    passed = expect(saw_button_method, "expected canvas button method") && passed;
+    passed = expect(saw_table_method, "expected canvas table method") && passed;
+    passed = expect(!saw_canvas_extern, "expected no canvas foreign functions") && passed;
+    passed = expect(saw_make_record, "expected canvas record construction") && passed;
+    passed = expect(saw_field_load, "expected canvas field access") && passed;
+    passed = expect(saw_canvas_show_native, "expected canvas native display opcode") && passed;
+    return passed;
+}
+
 // The stdlib is self-hosted in pure Dune: our own modules must not lean on the
 // C/C++ FFI. The single sanctioned native primitive is `runtime.panic`
 // ("dune_panic"), which aborts execution and cannot be expressed in Dune. This
@@ -750,7 +806,8 @@ bool stdlib_stays_pure_dune_except_panic() {
                                "import dict; import set; import array; import text; "
                                "import collections; import maybe; import outcome; "
                                "import fs; import process; import fmt; import io; import csv; import display; "
-                               "import cli; import log; import plot; import assert; import runtime; io.println(0);";
+                               "import cli; import log; import plot; import canvas; import assert; import runtime; "
+                               "io.println(0);";
 
     dune::Lexer lexer(source);
     dune::Parser parser(lexer.tokenize());
@@ -868,6 +925,7 @@ int main() {
     passed = compiles_autograd_module_as_dune_code() && passed;
     passed = compiles_matrix_module_as_dune_code() && passed;
     passed = compiles_plot_module_as_dune_code() && passed;
+    passed = compiles_canvas_module_as_dune_code() && passed;
     passed = stdlib_stays_pure_dune_except_panic() && passed;
     passed = rejects_local_module_shadowing_stdlib() && passed;
 
