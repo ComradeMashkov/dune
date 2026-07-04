@@ -103,6 +103,9 @@ enum class OpCode {
     env_get,
     process_args,
     process_cwd,
+    log_emit,
+    log_set_level,
+    log_level,
     format_text,
     halt,
 };

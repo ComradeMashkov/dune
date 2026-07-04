@@ -976,6 +976,12 @@ bool Compiler::compile_io_builtin_expression(const Expression& expression) {
         op = OpCode::process_args;
     } else if (expression.lexeme == "__process_cwd") {
         op = OpCode::process_cwd;
+    } else if (expression.lexeme == "__log_emit") {
+        op = OpCode::log_emit;
+    } else if (expression.lexeme == "__log_set_level") {
+        op = OpCode::log_set_level;
+    } else if (expression.lexeme == "__log_level") {
+        op = OpCode::log_level;
     } else {
         return false;
     }

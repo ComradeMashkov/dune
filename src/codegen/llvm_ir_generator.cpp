@@ -835,7 +835,9 @@ LlvmIrGenerator::TypedValue LlvmIrGenerator::emit_expression(const Expression& e
             expression.lexeme == "__env_get" || expression.lexeme == "__process_args" ||
             expression.lexeme == "__process_cwd" || expression.lexeme == "__stdout_write" ||
             expression.lexeme == "__stderr_write" || expression.lexeme == "__stdout_flush" ||
-            expression.lexeme == "__stderr_flush" || expression.lexeme == "__stdin_read_line") {
+            expression.lexeme == "__stderr_flush" || expression.lexeme == "__stdin_read_line" ||
+            expression.lexeme == "__log_emit" || expression.lexeme == "__log_set_level" ||
+            expression.lexeme == "__log_level") {
             throw std::runtime_error("stdlib I/O is not supported in the native backend yet");
         }
         return emit_call_expression(expression, output);

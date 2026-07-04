@@ -1,0 +1,10 @@
+import log;
+import io;
+
+log.set_level(log.DEBUG);
+log.trace("hidden trace");
+log.debug("cache miss");
+log.info("building target");
+log.warn("native backend disabled");
+log.error("failed");
+io.println("stdout-ok");

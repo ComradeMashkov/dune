@@ -20,6 +20,51 @@ std::string test_source(const std::string& source) {
     return "import io; import fmt; " + source;
 }
 
+struct RunStreams {
+    std::string output;
+    std::string diagnostics;
+};
+
+class EnvGuard {
+public:
+    explicit EnvGuard(const char* name) : name_(name) {
+        const char* value = std::getenv(name_);
+        if (value != nullptr) {
+            had_value_ = true;
+            old_value_ = value;
+        }
+    }
+
+    ~EnvGuard() {
+        set(old_value_.c_str(), had_value_);
+    }
+
+    void set(const char* value) {
+        set(value, true);
+    }
+
+    void unset() {
+        set("", false);
+    }
+
+private:
+    void set(const char* value, bool present) {
+#if defined(_WIN32)
+        _putenv_s(name_, present ? value : "");
+#else
+        if (present) {
+            setenv(name_, value, 1);
+        } else {
+            unsetenv(name_);
+        }
+#endif
+    }
+
+    const char* name_;
+    bool had_value_ = false;
+    std::string old_value_;
+};
+
 std::string run_source(const std::string& source) {
     dune::Lexer lexer(test_source(source));
     dune::Parser parser(lexer.tokenize());
@@ -30,6 +75,20 @@ std::string run_source(const std::string& source) {
     std::ostringstream output;
     vm.run(output);
     return output.str();
+}
+
+RunStreams run_source_streams(const std::string& source) {
+    dune::Lexer lexer(source);
+    dune::Parser parser(lexer.tokenize());
+    dune::ModuleLoader loader;
+    dune::Compiler compiler;
+    dune::VirtualMachine vm(compiler.compile(loader.resolve(parser.parse())));
+
+    std::ostringstream output;
+    std::ostringstream diagnostics;
+    std::istringstream input("");
+    vm.run(output, diagnostics, input);
+    return RunStreams{output.str(), diagnostics.str()};
 }
 
 std::string run_source_with_args(const std::string& source, std::vector<std::string> arguments) {
@@ -170,6 +229,32 @@ bool runs_io_stdlib() {
     passed = expect_eq(prompt_result.output, "name: Ada\n", "expected io prompt output") && passed;
     passed = expect_eq(prompt_result.error, "", "expected no io prompt stderr") && passed;
 
+    return passed;
+}
+
+bool runs_log_stdlib() {
+    bool passed = true;
+    RunStreams streams = run_source_streams("import io; import log; "
+                                            "log.set_level(log.WARN); "
+                                            "log.debug(\"debug hidden\"); "
+                                            "log.info(\"info hidden\"); "
+                                            "log.warn(\"heads up\"); "
+                                            "log.error(\"bad\"); "
+                                            "io.println(log.enabled(log.INFO)); "
+                                            "io.println(log.enabled(log.ERROR));");
+    passed = expect_eq(streams.output, "0\n1\n", "expected log.enabled filtering output") && passed;
+    passed = expect_eq(streams.diagnostics, "[warn] heads up\n[error] bad\n",
+                       "expected filtered log diagnostics") &&
+             passed;
+
+    EnvGuard dune_log("DUNE_LOG");
+    EnvGuard dune_log_level("DUNE_LOG_LEVEL");
+    dune_log.set("error");
+    dune_log_level.unset();
+    streams = run_source_streams(
+        "import io; import log; log.warn(\"hidden\"); log.error(\"visible\"); io.println(log.level());");
+    passed = expect_eq(streams.output, "4\n", "expected DUNE_LOG to configure initial log level") && passed;
+    passed = expect_eq(streams.diagnostics, "[error] visible\n", "expected DUNE_LOG filtering") && passed;
     return passed;
 }
 
@@ -656,6 +741,7 @@ io.println('\0' to int);)dune"),
 
     passed = runs_process_stdlib() && passed;
     passed = runs_io_stdlib() && passed;
+    passed = runs_log_stdlib() && passed;
     passed = runs_fs_stdlib() && passed;
     passed = runs_csv_stdlib() && passed;
     passed = runs_csv_matrix_stdlib() && passed;
