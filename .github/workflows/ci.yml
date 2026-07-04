@@ -8,9 +8,11 @@ on:
 jobs:
   # Required gate: the bytecode VM is the canonical backend, so its tests (plus
   # the shared front end) must pass on every platform. This builds VM-only
-  # (`-D DUNE_ENABLE_NATIVE=OFF`), so it needs no LLVM toolchain — macOS uses the
-  # preinstalled Apple clang instead of `brew install llvm`. Linting still runs
-  # on Linux, where clang-format/clang-tidy are cheap to install.
+  # (`-D DUNE_ENABLE_NATIVE=OFF`), so it needs no LLVM toolchain; macOS uses the
+  # preinstalled Apple clang instead of `brew install llvm`. Linting runs with
+  # `-D DUNE_ENABLE_LINT=OFF` on every platform: clang-tidy over the whole tree
+  # is sequential and made the Linux leg ~5x slower than the others, so format
+  # and tidy are left to the default local build instead of gating CI.
   build-test:
     strategy:
       fail-fast: false
@@ -30,7 +32,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang clang-format clang-tidy ninja-build
+          sudo apt-get install -y clang ninja-build
 
       - name: Install tools on macOS
         if: runner.os == 'macOS'
@@ -44,12 +46,7 @@ jobs:
           echo "C:/Program Files/LLVM/bin" >> "$GITHUB_PATH"
 
       - name: Configure
-        run: |
-          lint_flag="-D DUNE_ENABLE_LINT=OFF"
-          if [ "$RUNNER_OS" = "Linux" ]; then
-            lint_flag="-D DUNE_ENABLE_LINT=ON"
-          fi
-          cmake -S . -B build -G Ninja -D CMAKE_CXX_COMPILER=clang++ -D DUNE_ENABLE_NATIVE=OFF "$lint_flag"
+        run: cmake -S . -B build -G Ninja -D CMAKE_CXX_COMPILER=clang++ -D DUNE_ENABLE_NATIVE=OFF -D DUNE_ENABLE_LINT=OFF
 
       - name: Build
         run: cmake --build build -j
