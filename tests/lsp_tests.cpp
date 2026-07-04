@@ -162,6 +162,119 @@ bool hovers_inferred_call_assignments() {
     return passed;
 }
 
+bool defines_function_from_call() {
+    const std::optional<dune::lsp::DefinitionLocation> definition = dune::lsp::definition_source(
+        "fn add(a: int, b: int): int { return a + b; }\ntotal: int = add(10, 20);", {}, {}, 1, 14);
+
+    bool passed = true;
+    passed = expect(definition.has_value(), "expected definition for function call") && passed;
+    if (definition.has_value()) {
+        passed = expect(definition->line == 1, "expected function definition line") && passed;
+        passed = expect(definition->column == 4, "expected function definition column") && passed;
+        passed = expect(definition->length == 3, "expected function name length") && passed;
+    }
+    return passed;
+}
+
+bool defines_local_variable() {
+    const std::optional<dune::lsp::DefinitionLocation> definition =
+        dune::lsp::definition_source("total: int = 42;\nprint(total);", {}, {}, 1, 7);
+
+    bool passed = true;
+    passed = expect(definition.has_value(), "expected definition for local variable") && passed;
+    if (definition.has_value()) {
+        passed =
+            expect(definition->line == 1 && definition->column == 1, "expected variable definition position") && passed;
+    }
+    return passed;
+}
+
+bool defines_record_type() {
+    const std::optional<dune::lsp::DefinitionLocation> definition =
+        dune::lsp::definition_source("record Point { x: int, y: int }\np: Point = Point { x: 1, y: 2 };", {}, {}, 1, 3);
+
+    bool passed = true;
+    passed = expect(definition.has_value(), "expected definition for record type") && passed;
+    if (definition.has_value()) {
+        passed =
+            expect(definition->line == 1 && definition->column == 1, "expected record definition position") && passed;
+    }
+    return passed;
+}
+
+bool defines_function_parameter() {
+    const std::optional<dune::lsp::DefinitionLocation> definition =
+        dune::lsp::definition_source("fn scale(factor: int): int { return factor * 2; }", {}, {}, 0, 38);
+
+    bool passed = true;
+    passed = expect(definition.has_value(), "expected definition for parameter") && passed;
+    if (definition.has_value()) {
+        passed = expect(definition->line == 1 && definition->column == 10, "expected parameter definition position") &&
+                 passed;
+    }
+    return passed;
+}
+
+bool defines_record_field() {
+    const std::optional<dune::lsp::DefinitionLocation> definition = dune::lsp::definition_source(
+        "record Point { x: int, y: int }\np: Point = Point { x: 1, y: 2 };\nprint(p.x);", {}, {}, 2, 8);
+
+    bool passed = true;
+    passed = expect(definition.has_value(), "expected definition for record field") && passed;
+    if (definition.has_value()) {
+        passed =
+            expect(definition->line == 1 && definition->column == 16, "expected field definition position") && passed;
+    }
+    return passed;
+}
+
+bool defines_choice_variant() {
+    const std::optional<dune::lsp::DefinitionLocation> definition =
+        dune::lsp::definition_source("choice Maybe { Present(int), Absent }\nm: Maybe = Absent;", {}, {}, 1, 12);
+
+    bool passed = true;
+    passed = expect(definition.has_value(), "expected definition for choice variant") && passed;
+    if (definition.has_value()) {
+        passed =
+            expect(definition->line == 1 && definition->column == 30, "expected variant definition position") && passed;
+    }
+    return passed;
+}
+
+bool resolves_no_definition_for_literal() {
+    const std::optional<dune::lsp::DefinitionLocation> definition =
+        dune::lsp::definition_source("x = 42;", {}, {}, 0, 5);
+    return expect(!definition.has_value(), "expected no definition for a numeric literal");
+}
+
+bool serves_lsp_definition() {
+    const std::string uri = "file:///tmp/main.dn";
+    const std::string source = "fn value(): int { return 7; }\\nprint(value());";
+    const std::string initialize = R"({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}})";
+    const std::string opened = R"({"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":")" +
+                               uri + R"(","languageId":"dune","version":1,"text":")" + source + R"("}}})";
+    const std::string definition =
+        R"({"jsonrpc":"2.0","id":2,"method":"textDocument/definition","params":{"textDocument":{"uri":")" + uri +
+        R"("},"position":{"line":1,"character":8}}})";
+    const std::string shutdown = R"({"jsonrpc":"2.0","id":3,"method":"shutdown","params":null})";
+    const std::string exit = R"({"jsonrpc":"2.0","method":"exit","params":null})";
+
+    std::istringstream input(lsp_message(initialize) + lsp_message(opened) + lsp_message(definition) +
+                             lsp_message(shutdown) + lsp_message(exit));
+    std::ostringstream output;
+    dune::lsp::run(input, output);
+    const std::string text = output.str();
+
+    bool passed = true;
+    passed = expect(text.find("\"definitionProvider\":true") != std::string::npos, "expected definition capability") &&
+             passed;
+    passed = expect(text.find("\"uri\":\"" + uri + "\"") != std::string::npos, "expected definition uri") && passed;
+    passed = expect(text.find("\"range\":{\"start\":{\"line\":0,\"character\":3}") != std::string::npos,
+                    "expected definition range at the function name") &&
+             passed;
+    return passed;
+}
+
 bool publishes_lsp_diagnostics() {
     const std::string uri = "file:///tmp/bad.dn";
     const std::string initialize = R"({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}})";
@@ -231,6 +344,14 @@ int main() {
     passed = hovers_typed_record_methods() && passed;
     passed = hovers_imported_module_members() && passed;
     passed = hovers_inferred_call_assignments() && passed;
+    passed = defines_function_from_call() && passed;
+    passed = defines_local_variable() && passed;
+    passed = defines_record_type() && passed;
+    passed = defines_function_parameter() && passed;
+    passed = defines_record_field() && passed;
+    passed = defines_choice_variant() && passed;
+    passed = resolves_no_definition_for_literal() && passed;
+    passed = serves_lsp_definition() && passed;
     passed = publishes_lsp_diagnostics() && passed;
     passed = serves_lsp_completions_and_hover() && passed;
     return passed ? 0 : 1;

@@ -26,6 +26,13 @@ struct Hover {
     std::string contents;
 };
 
+struct DefinitionLocation {
+    std::string uri;
+    std::size_t line = 1;   // 1-based, matching the lexer's source locations
+    std::size_t column = 1; // 1-based
+    std::size_t length = 1;
+};
+
 std::vector<Diagnostic> diagnose_source(const std::string& source, const std::string& uri = {},
                                         const std::filesystem::path& source_directory = {});
 
@@ -36,6 +43,10 @@ std::vector<CompletionItem> complete_source(const std::string& source, const std
 std::optional<Hover> hover_source(const std::string& source, const std::string& uri = {},
                                   const std::filesystem::path& source_directory = {}, std::size_t line = 0,
                                   std::size_t character = 0);
+
+std::optional<DefinitionLocation> definition_source(const std::string& source, const std::string& uri = {},
+                                                    const std::filesystem::path& source_directory = {},
+                                                    std::size_t line = 0, std::size_t character = 0);
 
 int run(std::istream& input, std::ostream& output);
 
