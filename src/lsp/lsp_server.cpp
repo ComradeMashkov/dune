@@ -438,9 +438,9 @@ void add_completion(std::vector<CompletionItem>& completions, std::string label,
 
 void add_static_completions(std::vector<CompletionItem>& completions) {
     for (const std::string_view keyword :
-         {"break",   "choice", "const", "continue", "contract", "derive", "else",   "export", "fn",
-          "foreign", "for",    "if",    "import",   "in",       "is",     "method", "print",  "record",
-          "return",  "static", "to",    "type",     "when",     "while",  "with",   "true",   "false"}) {
+         {"break",   "choice", "const", "continue", "contract", "derive", "else",   "export", "fn",     "foreknown",
+          "foreign", "for",    "if",    "import",   "in",       "is",     "method", "print",  "record", "return",
+          "static",  "to",     "type",  "when",     "while",    "with",   "true",   "false"}) {
         add_completion(completions, std::string(keyword), "keyword", completion_kind_keyword);
     }
 
@@ -1312,7 +1312,8 @@ std::string declaration_hover(const Statement& statement) {
         signature = statement.name + ": " + variable_type_text(statement);
         break;
     case StatementKind::const_statement:
-        signature = "const " + statement.name + ": " + variable_type_text(statement);
+        signature = (statement.is_foreknown ? "foreknown const " : "const ") + statement.name + ": " +
+                    variable_type_text(statement);
         break;
     case StatementKind::function:
         signature = function_signature(statement);
@@ -1456,7 +1457,9 @@ std::string typed_variable_hover(const Statement& statement,
     }
 
     if (statement.kind == StatementKind::const_statement) {
-        return with_doc(code_hover("const " + statement.name + ": " + type_name(type->second)), statement.doc_comment);
+        return with_doc(code_hover((statement.is_foreknown ? "foreknown const " : "const ") + statement.name + ": " +
+                                   type_name(type->second)),
+                        statement.doc_comment);
     }
 
     const std::string name = statement.target != nullptr && statement.target->kind == ExpressionKind::identifier
@@ -1797,6 +1800,7 @@ std::optional<std::string> builtin_hover(const Token& token) {
         return std::nullopt;
     case TokenType::const_keyword:
     case TokenType::export_keyword:
+    case TokenType::foreknown_keyword:
     case TokenType::foreign_keyword:
     case TokenType::fn_keyword:
     case TokenType::method_keyword:

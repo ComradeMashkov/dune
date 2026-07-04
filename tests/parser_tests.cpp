@@ -627,6 +627,28 @@ bool parses_constants_and_module_members() {
     return passed;
 }
 
+bool parses_foreknown_declarations() {
+    const dune::Program program = parse_source("export foreknown const KB: int = 1024; "
+                                               "foreknown fn scale(n: int): int { return n * KB; }");
+
+    if (!expect(program.statements.size() == 2, "expected foreknown const and function")) {
+        return false;
+    }
+
+    bool passed = true;
+    const dune::Statement& constant = program.statements[0];
+    passed = expect(constant.kind == dune::StatementKind::const_statement, "expected foreknown const") && passed;
+    passed = expect(constant.exported, "expected exported foreknown const") && passed;
+    passed = expect(constant.is_foreknown, "expected const foreknown flag") && passed;
+    passed = expect(constant.name == "KB", "expected foreknown const name") && passed;
+
+    const dune::Statement& function = program.statements[1];
+    passed = expect(function.kind == dune::StatementKind::function, "expected foreknown function") && passed;
+    passed = expect(function.is_foreknown, "expected function foreknown flag") && passed;
+    passed = expect(function.name == "scale", "expected foreknown function name") && passed;
+    return passed;
+}
+
 bool parses_casts_unary_logical_and_methods() {
     const dune::Program program = parse_source("done: bool = !false && true || (17 % 5 == 2); "
                                                "exact: real64 = 17 to real64; "
@@ -1304,6 +1326,7 @@ int main() {
     passed = parses_standard_types_and_unit_calls() && passed;
     passed = parses_arrays_imports_and_module_calls() && passed;
     passed = parses_constants_and_module_members() && passed;
+    passed = parses_foreknown_declarations() && passed;
     passed = parses_casts_unary_logical_and_methods() && passed;
     passed = parses_stdlib_primitives() && passed;
     passed = parses_for_in_and_ranges() && passed;

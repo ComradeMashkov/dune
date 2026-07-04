@@ -588,6 +588,10 @@ Statement Parser::statement_dispatch() {
         return export_statement();
     }
 
+    if (match(TokenType::foreknown_keyword)) {
+        return foreknown_statement();
+    }
+
     if (match(TokenType::foreign_keyword)) {
         return extern_statement();
     }
@@ -761,6 +765,12 @@ Statement Parser::continue_statement() {
 }
 
 Statement Parser::export_statement() {
+    if (match(TokenType::foreknown_keyword)) {
+        Statement statement = foreknown_statement();
+        statement.exported = true;
+        return statement;
+    }
+
     if (match(TokenType::foreign_keyword)) {
         Statement statement = extern_statement();
         statement.exported = true;
@@ -811,12 +821,29 @@ Statement Parser::export_statement() {
 
     throw DiagnosticError(
         location_from_token(peek()),
-        "expected fn, foreign function, record, contract, choice, method, constant, or type alias after export");
+        "expected fn, foreign function, foreknown declaration, record, contract, choice, method, constant, or type "
+        "alias after export");
 }
 
 Statement Parser::extern_statement() {
     consume(TokenType::fn_keyword, "expected 'fn' after foreign");
     return function_statement(true);
+}
+
+Statement Parser::foreknown_statement() {
+    if (match(TokenType::const_keyword)) {
+        Statement statement = const_statement();
+        statement.is_foreknown = true;
+        return statement;
+    }
+
+    if (match(TokenType::fn_keyword)) {
+        Statement statement = function_statement();
+        statement.is_foreknown = true;
+        return statement;
+    }
+
+    throw std::runtime_error("expected const or fn after foreknown");
 }
 
 Statement Parser::for_statement() {

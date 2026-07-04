@@ -8,6 +8,7 @@
 #include <memory>
 #include <stdexcept>
 #include <tuple>
+#include <unordered_map>
 #include <utility>
 
 namespace dune {
@@ -207,6 +208,751 @@ Value default_value(const Type& type) {
     return make_unit();
 }
 
+void expect_same_kind(const Value& left, const Value& right) {
+    if (left.kind != right.kind) {
+        throw std::runtime_error("foreknown evaluation type mismatch");
+    }
+}
+
+Value add_values(const Value& left, const Value& right) {
+    expect_same_kind(left, right);
+    switch (left.kind) {
+    case ValueKind::signed_integer:
+        return make_signed(left.signed_value + right.signed_value);
+    case ValueKind::unsigned_integer:
+        return make_unsigned(left.unsigned_value + right.unsigned_value);
+    case ValueKind::real:
+        return make_real(left.real_value + right.real_value);
+    case ValueKind::boolean:
+    case ValueKind::glyph:
+    case ValueKind::text:
+    case ValueKind::unit:
+    case ValueKind::array:
+    case ValueKind::tuple:
+    case ValueKind::record:
+    case ValueKind::variant:
+    case ValueKind::callable:
+        break;
+    }
+
+    throw std::runtime_error("invalid foreknown addition operands");
+}
+
+Value subtract_values(const Value& left, const Value& right) {
+    expect_same_kind(left, right);
+    switch (left.kind) {
+    case ValueKind::signed_integer:
+        return make_signed(left.signed_value - right.signed_value);
+    case ValueKind::unsigned_integer:
+        return make_unsigned(left.unsigned_value - right.unsigned_value);
+    case ValueKind::real:
+        return make_real(left.real_value - right.real_value);
+    case ValueKind::boolean:
+    case ValueKind::glyph:
+    case ValueKind::text:
+    case ValueKind::unit:
+    case ValueKind::array:
+    case ValueKind::tuple:
+    case ValueKind::record:
+    case ValueKind::variant:
+    case ValueKind::callable:
+        break;
+    }
+
+    throw std::runtime_error("invalid foreknown subtraction operands");
+}
+
+Value multiply_values(const Value& left, const Value& right) {
+    expect_same_kind(left, right);
+    switch (left.kind) {
+    case ValueKind::signed_integer:
+        return make_signed(left.signed_value * right.signed_value);
+    case ValueKind::unsigned_integer:
+        return make_unsigned(left.unsigned_value * right.unsigned_value);
+    case ValueKind::real:
+        return make_real(left.real_value * right.real_value);
+    case ValueKind::boolean:
+    case ValueKind::glyph:
+    case ValueKind::text:
+    case ValueKind::unit:
+    case ValueKind::array:
+    case ValueKind::tuple:
+    case ValueKind::record:
+    case ValueKind::variant:
+    case ValueKind::callable:
+        break;
+    }
+
+    throw std::runtime_error("invalid foreknown multiplication operands");
+}
+
+Value divide_values(const Value& left, const Value& right) {
+    expect_same_kind(left, right);
+    switch (left.kind) {
+    case ValueKind::signed_integer:
+        if (right.signed_value == 0) {
+            throw std::runtime_error("division by zero in foreknown expression");
+        }
+        return make_signed(left.signed_value / right.signed_value);
+    case ValueKind::unsigned_integer:
+        if (right.unsigned_value == 0) {
+            throw std::runtime_error("division by zero in foreknown expression");
+        }
+        return make_unsigned(left.unsigned_value / right.unsigned_value);
+    case ValueKind::real:
+        if (right.real_value == 0.0) {
+            throw std::runtime_error("division by zero in foreknown expression");
+        }
+        return make_real(left.real_value / right.real_value);
+    case ValueKind::boolean:
+    case ValueKind::glyph:
+    case ValueKind::text:
+    case ValueKind::unit:
+    case ValueKind::array:
+    case ValueKind::tuple:
+    case ValueKind::record:
+    case ValueKind::variant:
+    case ValueKind::callable:
+        break;
+    }
+
+    throw std::runtime_error("invalid foreknown division operands");
+}
+
+Value modulo_values(const Value& left, const Value& right) {
+    expect_same_kind(left, right);
+    switch (left.kind) {
+    case ValueKind::signed_integer:
+        if (right.signed_value == 0) {
+            throw std::runtime_error("division by zero in foreknown expression");
+        }
+        return make_signed(left.signed_value % right.signed_value);
+    case ValueKind::unsigned_integer:
+        if (right.unsigned_value == 0) {
+            throw std::runtime_error("division by zero in foreknown expression");
+        }
+        return make_unsigned(left.unsigned_value % right.unsigned_value);
+    case ValueKind::real:
+    case ValueKind::boolean:
+    case ValueKind::glyph:
+    case ValueKind::text:
+    case ValueKind::unit:
+    case ValueKind::array:
+    case ValueKind::tuple:
+    case ValueKind::record:
+    case ValueKind::variant:
+    case ValueKind::callable:
+        break;
+    }
+
+    throw std::runtime_error("invalid foreknown modulo operands");
+}
+
+Value negate_value(const Value& value) {
+    switch (value.kind) {
+    case ValueKind::signed_integer:
+        return make_signed(0 - value.signed_value);
+    case ValueKind::unsigned_integer:
+        return make_unsigned(0 - value.unsigned_value);
+    case ValueKind::real:
+        return make_real(0.0 - value.real_value);
+    case ValueKind::boolean:
+    case ValueKind::glyph:
+    case ValueKind::text:
+    case ValueKind::unit:
+    case ValueKind::array:
+    case ValueKind::tuple:
+    case ValueKind::record:
+    case ValueKind::variant:
+    case ValueKind::callable:
+        break;
+    }
+
+    throw std::runtime_error("invalid foreknown unary minus operand");
+}
+
+Value not_value(const Value& value) {
+    if (value.kind != ValueKind::boolean) {
+        throw std::runtime_error("invalid foreknown logical not operand");
+    }
+
+    return make_bool(!value.bool_value);
+}
+
+bool values_equal(const Value& left, const Value& right) {
+    expect_same_kind(left, right);
+    switch (left.kind) {
+    case ValueKind::signed_integer:
+        return left.signed_value == right.signed_value;
+    case ValueKind::unsigned_integer:
+        return left.unsigned_value == right.unsigned_value;
+    case ValueKind::real:
+        return left.real_value == right.real_value;
+    case ValueKind::boolean:
+        return left.bool_value == right.bool_value;
+    case ValueKind::glyph:
+        return left.glyph_value == right.glyph_value;
+    case ValueKind::text:
+        return left.text_value == right.text_value;
+    case ValueKind::unit:
+        return true;
+    case ValueKind::array:
+    case ValueKind::tuple:
+    case ValueKind::record:
+    case ValueKind::variant:
+    case ValueKind::callable:
+        break;
+    }
+
+    throw std::runtime_error("invalid foreknown equality operands");
+}
+
+int compare_values(const Value& left, const Value& right) {
+    expect_same_kind(left, right);
+    switch (left.kind) {
+    case ValueKind::signed_integer:
+        return (left.signed_value > right.signed_value) - (left.signed_value < right.signed_value);
+    case ValueKind::unsigned_integer:
+        return (left.unsigned_value > right.unsigned_value) - (left.unsigned_value < right.unsigned_value);
+    case ValueKind::real:
+        return (left.real_value > right.real_value) - (left.real_value < right.real_value);
+    case ValueKind::boolean:
+    case ValueKind::glyph:
+    case ValueKind::text:
+    case ValueKind::unit:
+    case ValueKind::array:
+    case ValueKind::tuple:
+    case ValueKind::record:
+    case ValueKind::variant:
+    case ValueKind::callable:
+        break;
+    }
+
+    throw std::runtime_error("invalid foreknown comparison operands");
+}
+
+bool bool_value(const Value& value) {
+    if (value.kind != ValueKind::boolean) {
+        throw std::runtime_error("foreknown condition must be bool");
+    }
+
+    return value.bool_value;
+}
+
+Value cast_signed_value(const Value& value) {
+    switch (value.kind) {
+    case ValueKind::signed_integer:
+        return value;
+    case ValueKind::unsigned_integer:
+        return make_signed(static_cast<std::int64_t>(value.unsigned_value));
+    case ValueKind::real:
+        return make_signed(static_cast<std::int64_t>(value.real_value));
+    case ValueKind::boolean:
+        return make_signed(value.bool_value ? 1 : 0);
+    case ValueKind::glyph:
+        return make_signed(static_cast<unsigned char>(value.glyph_value));
+    case ValueKind::text:
+    case ValueKind::unit:
+    case ValueKind::array:
+    case ValueKind::tuple:
+    case ValueKind::record:
+    case ValueKind::variant:
+    case ValueKind::callable:
+        break;
+    }
+
+    throw std::runtime_error("invalid foreknown signed cast operand");
+}
+
+Value cast_unsigned_value(const Value& value) {
+    switch (value.kind) {
+    case ValueKind::signed_integer:
+        return make_unsigned(static_cast<std::uint64_t>(value.signed_value));
+    case ValueKind::unsigned_integer:
+        return value;
+    case ValueKind::real:
+        return make_unsigned(static_cast<std::uint64_t>(value.real_value));
+    case ValueKind::boolean:
+        return make_unsigned(value.bool_value ? 1 : 0);
+    case ValueKind::glyph:
+        return make_unsigned(static_cast<unsigned char>(value.glyph_value));
+    case ValueKind::text:
+    case ValueKind::unit:
+    case ValueKind::array:
+    case ValueKind::tuple:
+    case ValueKind::record:
+    case ValueKind::variant:
+    case ValueKind::callable:
+        break;
+    }
+
+    throw std::runtime_error("invalid foreknown unsigned cast operand");
+}
+
+Value cast_real_value(const Value& value) {
+    switch (value.kind) {
+    case ValueKind::signed_integer:
+        return make_real(static_cast<double>(value.signed_value));
+    case ValueKind::unsigned_integer:
+        return make_real(static_cast<double>(value.unsigned_value));
+    case ValueKind::real:
+        return value;
+    case ValueKind::boolean:
+        return make_real(value.bool_value ? 1.0 : 0.0);
+    case ValueKind::glyph:
+        return make_real(static_cast<unsigned char>(value.glyph_value));
+    case ValueKind::text:
+    case ValueKind::unit:
+    case ValueKind::array:
+    case ValueKind::tuple:
+    case ValueKind::record:
+    case ValueKind::variant:
+    case ValueKind::callable:
+        break;
+    }
+
+    throw std::runtime_error("invalid foreknown real cast operand");
+}
+
+Value cast_bool_value(const Value& value) {
+    switch (value.kind) {
+    case ValueKind::signed_integer:
+        return make_bool(value.signed_value != 0);
+    case ValueKind::unsigned_integer:
+        return make_bool(value.unsigned_value != 0);
+    case ValueKind::real:
+        return make_bool(value.real_value != 0.0);
+    case ValueKind::boolean:
+        return value;
+    case ValueKind::glyph:
+        return make_bool(value.glyph_value != '\0');
+    case ValueKind::text:
+    case ValueKind::unit:
+    case ValueKind::array:
+    case ValueKind::tuple:
+    case ValueKind::record:
+    case ValueKind::variant:
+    case ValueKind::callable:
+        break;
+    }
+
+    throw std::runtime_error("invalid foreknown bool cast operand");
+}
+
+Value cast_glyph_value(const Value& value) {
+    switch (value.kind) {
+    case ValueKind::signed_integer:
+        return make_glyph(static_cast<char>(value.signed_value));
+    case ValueKind::unsigned_integer:
+        return make_glyph(static_cast<char>(value.unsigned_value));
+    case ValueKind::real:
+        return make_glyph(static_cast<char>(value.real_value));
+    case ValueKind::boolean:
+        return make_glyph(static_cast<char>(value.bool_value ? 1 : 0));
+    case ValueKind::glyph:
+        return value;
+    case ValueKind::text:
+    case ValueKind::unit:
+    case ValueKind::array:
+    case ValueKind::tuple:
+    case ValueKind::record:
+    case ValueKind::variant:
+    case ValueKind::callable:
+        break;
+    }
+
+    throw std::runtime_error("invalid foreknown glyph cast operand");
+}
+
+class ForeknownEvaluator {
+public:
+    ForeknownEvaluator(const std::unordered_map<std::string, Value>& constants,
+                       const std::unordered_map<std::string, const Statement*>& functions,
+                       const std::unordered_map<const Expression*, Type>& expression_types,
+                       const std::unordered_map<const Expression*, std::string>& resolved_calls)
+        : constants_(constants), functions_(functions), expression_types_(expression_types),
+          resolved_calls_(resolved_calls) {}
+
+    Value evaluate(const Expression& expression) {
+        scopes_.clear();
+        scopes_.emplace_back();
+        return evaluate_expression(expression);
+    }
+
+private:
+    struct ReturnSignal {
+        Value value;
+    };
+
+    struct BreakSignal {};
+    struct ContinueSignal {};
+
+    static constexpr std::size_t step_limit_ = 100000;
+
+    void tick() {
+        if (++steps_ > step_limit_) {
+            throw std::runtime_error("foreknown evaluation exceeded step limit");
+        }
+    }
+
+    const Type& expression_type(const Expression& expression) const {
+        const auto found = expression_types_.find(&expression);
+        if (found == expression_types_.end()) {
+            throw std::runtime_error("missing foreknown expression type");
+        }
+
+        return found->second;
+    }
+
+    Value* find_local(const std::string& name) {
+        for (auto scope = scopes_.rbegin(); scope != scopes_.rend(); ++scope) {
+            const auto found = scope->find(name);
+            if (found != scope->end()) {
+                return &found->second;
+            }
+        }
+
+        return nullptr;
+    }
+
+    Value load_name(const std::string& name) {
+        if (Value* local = find_local(name); local != nullptr) {
+            return *local;
+        }
+
+        const auto constant = constants_.find(name);
+        if (constant != constants_.end()) {
+            return constant->second;
+        }
+
+        throw std::runtime_error("unknown foreknown value '" + name + "'");
+    }
+
+    void store_local(const std::string& name, Value value) {
+        if (Value* local = find_local(name); local != nullptr) {
+            *local = std::move(value);
+            return;
+        }
+
+        throw std::runtime_error("unknown foreknown local '" + name + "'");
+    }
+
+    Value evaluate_expression(const Expression& expression) {
+        tick();
+        switch (expression.kind) {
+        case ExpressionKind::identifier:
+            return load_name(expression.lexeme);
+        case ExpressionKind::number:
+            return make_number(expression.lexeme, expression_type(expression));
+        case ExpressionKind::floating:
+            return make_real(std::stod(clean_real_literal(expression.lexeme)));
+        case ExpressionKind::character:
+            return make_glyph(decode_glyph_literal(expression.lexeme));
+        case ExpressionKind::string:
+            return make_text(decode_text_literal(expression.lexeme));
+        case ExpressionKind::boolean:
+            return make_bool(expression.lexeme == "true");
+        case ExpressionKind::member:
+            if (expression.left != nullptr && expression.left->kind == ExpressionKind::identifier) {
+                return load_name(expression.left->lexeme + "." + expression.lexeme);
+            }
+            break;
+        case ExpressionKind::unary: {
+            const Value value = evaluate_expression(*expression.right);
+            if (expression.lexeme == "-") {
+                return negate_value(value);
+            }
+            if (expression.lexeme == "!") {
+                return not_value(value);
+            }
+            break;
+        }
+        case ExpressionKind::cast:
+            return cast_value(evaluate_expression(*expression.left), expression.type.type);
+        case ExpressionKind::binary:
+            return evaluate_binary(expression);
+        case ExpressionKind::when_expression:
+            return evaluate_when(expression);
+        case ExpressionKind::call:
+        case ExpressionKind::method_call:
+            return evaluate_call(expression);
+        case ExpressionKind::array:
+        case ExpressionKind::array_comprehension:
+        case ExpressionKind::tuple:
+        case ExpressionKind::struct_literal:
+        case ExpressionKind::index:
+        case ExpressionKind::slice:
+        case ExpressionKind::try_expression:
+        case ExpressionKind::range:
+            break;
+        }
+
+        throw std::runtime_error("unsupported foreknown expression");
+    }
+
+    Value cast_value(Value value, const Type& target) {
+        if (is_signed_type(target.kind)) {
+            return cast_signed_value(value);
+        }
+        if (is_unsigned_type(target.kind)) {
+            return cast_unsigned_value(value);
+        }
+        if (is_real_type(target.kind)) {
+            return cast_real_value(value);
+        }
+        if (target.kind == ValueType::bool_type) {
+            return cast_bool_value(value);
+        }
+        if (target.kind == ValueType::glyph_type) {
+            return cast_glyph_value(value);
+        }
+        if (target.kind == ValueType::text_type) {
+            return value;
+        }
+
+        throw std::runtime_error("unsupported foreknown cast");
+    }
+
+    Value evaluate_binary(const Expression& expression) {
+        if (expression.lexeme == "&&") {
+            const bool left = bool_value(evaluate_expression(*expression.left));
+            return make_bool(left && bool_value(evaluate_expression(*expression.right)));
+        }
+
+        if (expression.lexeme == "||") {
+            const bool left = bool_value(evaluate_expression(*expression.left));
+            return make_bool(left || bool_value(evaluate_expression(*expression.right)));
+        }
+
+        if (expression.lexeme == "in") {
+            throw std::runtime_error("operator 'in' is not supported in foreknown expressions");
+        }
+
+        const Value left = evaluate_expression(*expression.left);
+        const Value right = evaluate_expression(*expression.right);
+        if (expression.lexeme == "+") {
+            return add_values(left, right);
+        }
+        if (expression.lexeme == "-") {
+            return subtract_values(left, right);
+        }
+        if (expression.lexeme == "*") {
+            return multiply_values(left, right);
+        }
+        if (expression.lexeme == "/") {
+            return divide_values(left, right);
+        }
+        if (expression.lexeme == "%") {
+            return modulo_values(left, right);
+        }
+        if (expression.lexeme == "==") {
+            return make_bool(values_equal(left, right));
+        }
+        if (expression.lexeme == "!=") {
+            return make_bool(!values_equal(left, right));
+        }
+        if (expression.lexeme == ">") {
+            return make_bool(compare_values(left, right) > 0);
+        }
+        if (expression.lexeme == ">=") {
+            return make_bool(compare_values(left, right) >= 0);
+        }
+        if (expression.lexeme == "<") {
+            return make_bool(compare_values(left, right) < 0);
+        }
+        if (expression.lexeme == "<=") {
+            return make_bool(compare_values(left, right) <= 0);
+        }
+
+        throw std::runtime_error("unknown foreknown binary operator");
+    }
+
+    Value evaluate_when(const Expression& expression) {
+        const Value subject = evaluate_expression(*expression.left);
+        for (std::size_t index = 0; index < expression.arguments.size(); index += 2) {
+            const Expression& pattern = *expression.arguments[index];
+            const Expression& result = *expression.arguments[index + 1];
+            const bool wildcard = pattern.kind == ExpressionKind::identifier && pattern.lexeme == "_";
+            if (wildcard || values_equal(subject, evaluate_expression(pattern))) {
+                return evaluate_expression(result);
+            }
+        }
+
+        throw std::runtime_error("foreknown when expression did not match");
+    }
+
+    Value evaluate_call(const Expression& expression) {
+        const auto resolved = resolved_calls_.find(&expression);
+        if (resolved == resolved_calls_.end()) {
+            throw std::runtime_error("foreknown call was not resolved");
+        }
+
+        std::vector<Value> arguments;
+        arguments.reserve(expression.arguments.size());
+        for (const std::unique_ptr<Expression>& argument : expression.arguments) {
+            arguments.push_back(evaluate_expression(*argument));
+        }
+
+        return call_function(resolved->second, std::move(arguments));
+    }
+
+    Value call_function(const std::string& key, std::vector<Value> arguments) {
+        const auto function = functions_.find(key);
+        if (function == functions_.end()) {
+            throw std::runtime_error("function is not foreknown");
+        }
+
+        const Statement& statement = *function->second;
+        if (arguments.size() != statement.parameters.size()) {
+            throw std::runtime_error("foreknown function argument count mismatch");
+        }
+
+        std::vector<std::unordered_map<std::string, Value>> saved_scopes = std::move(scopes_);
+        scopes_.clear();
+        scopes_.emplace_back();
+        for (std::size_t index = 0; index < statement.parameters.size(); ++index) {
+            scopes_.back().emplace(statement.parameters[index].name, std::move(arguments[index]));
+        }
+
+        try {
+            const Type return_type = statement.type.has_type ? statement.type.type : make_type(ValueType::int_type);
+            const bool has_tail_expression =
+                !statement.body.empty() && statement.body.back().kind == StatementKind::expression_statement &&
+                statement.body.back().expression != nullptr && return_type.kind != ValueType::unit_type;
+            if (has_tail_expression) {
+                for (std::size_t index = 0; index + 1 < statement.body.size(); ++index) {
+                    execute_statement(statement.body[index]);
+                }
+                Value result = evaluate_expression(*statement.body.back().expression);
+                scopes_ = std::move(saved_scopes);
+                return result;
+            }
+
+            execute_statements(statement.body);
+            Value result = default_value(return_type);
+            scopes_ = std::move(saved_scopes);
+            return result;
+        } catch (const ReturnSignal& signal) {
+            Value result = signal.value;
+            scopes_ = std::move(saved_scopes);
+            return result;
+        }
+    }
+
+    void execute_statements(const std::vector<Statement>& statements) {
+        for (const Statement& statement : statements) {
+            execute_statement(statement);
+        }
+    }
+
+    void execute_scoped_statements(const std::vector<Statement>& statements) {
+        scopes_.emplace_back();
+        try {
+            execute_statements(statements);
+        } catch (...) {
+            scopes_.pop_back();
+            throw;
+        }
+        scopes_.pop_back();
+    }
+
+    void execute_statement(const Statement& statement) {
+        tick();
+        switch (statement.kind) {
+        case StatementKind::binding:
+        case StatementKind::const_statement:
+            scopes_.back().emplace(statement.name, evaluate_expression(*statement.expression));
+            return;
+        case StatementKind::assign:
+            if (statement.target == nullptr || statement.target->kind != ExpressionKind::identifier) {
+                throw std::runtime_error("unsupported foreknown assignment target");
+            }
+            store_local(statement.target->lexeme, evaluate_expression(*statement.expression));
+            return;
+        case StatementKind::block:
+            execute_scoped_statements(statement.body);
+            return;
+        case StatementKind::if_statement:
+            if (bool_value(evaluate_expression(*statement.expression))) {
+                execute_scoped_statements(statement.body);
+            } else {
+                execute_scoped_statements(statement.else_body);
+            }
+            return;
+        case StatementKind::while_statement:
+            while (bool_value(evaluate_expression(*statement.expression))) {
+                try {
+                    execute_scoped_statements(statement.body);
+                } catch (const ContinueSignal&) {
+                    continue;
+                } catch (const BreakSignal&) {
+                    break;
+                }
+            }
+            return;
+        case StatementKind::for_statement:
+            execute_for_statement(statement);
+            return;
+        case StatementKind::break_statement:
+            throw BreakSignal{};
+        case StatementKind::continue_statement:
+            throw ContinueSignal{};
+        case StatementKind::return_statement:
+            throw ReturnSignal{statement.expression == nullptr ? make_unit()
+                                                               : evaluate_expression(*statement.expression)};
+        case StatementKind::expression_statement:
+            evaluate_expression(*statement.expression);
+            return;
+        case StatementKind::for_in_statement:
+        case StatementKind::function:
+        case StatementKind::method_block:
+        case StatementKind::struct_statement:
+        case StatementKind::enum_statement:
+        case StatementKind::contract_statement:
+        case StatementKind::type_alias_statement:
+        case StatementKind::import_statement:
+        case StatementKind::module_declaration:
+        case StatementKind::test_block:
+            break;
+        }
+
+        throw std::runtime_error("unsupported foreknown statement");
+    }
+
+    void execute_for_statement(const Statement& statement) {
+        scopes_.emplace_back();
+        try {
+            if (statement.initializer != nullptr) {
+                execute_statement(*statement.initializer);
+            }
+
+            while (statement.expression == nullptr || bool_value(evaluate_expression(*statement.expression))) {
+                try {
+                    execute_scoped_statements(statement.body);
+                } catch (const ContinueSignal&) {
+                } catch (const BreakSignal&) {
+                    break;
+                }
+
+                if (statement.increment != nullptr) {
+                    execute_statement(*statement.increment);
+                }
+            }
+        } catch (...) {
+            scopes_.pop_back();
+            throw;
+        }
+        scopes_.pop_back();
+    }
+
+    const std::unordered_map<std::string, Value>& constants_;
+    const std::unordered_map<std::string, const Statement*>& functions_;
+    const std::unordered_map<const Expression*, Type>& expression_types_;
+    const std::unordered_map<const Expression*, std::string>& resolved_calls_;
+    std::vector<std::unordered_map<std::string, Value>> scopes_;
+    std::size_t steps_ = 0;
+};
+
 } // namespace
 
 Bytecode Compiler::compile(const Program& program) {
@@ -218,6 +964,8 @@ Bytecode Compiler::compile(const Program& program) {
     local_types_.clear();
     local_scopes_.clear();
     functions_.clear();
+    foreknown_functions_.clear();
+    foreknown_values_.clear();
     structs_.clear();
     enums_.clear();
     type_aliases_.clear();
@@ -242,6 +990,7 @@ Bytecode Compiler::compile(const Program& program) {
     for (const Statement& statement : instantiated_functions) {
         collect_function(statement);
     }
+    evaluate_foreknown_constants();
     compile_statements(program.statements);
 
     emit(OpCode::halt);
@@ -306,7 +1055,11 @@ void Compiler::collect_function(const Statement& statement) {
                                                      : make_type(ValueType::int_type));
     }
 
-    functions_.emplace(function_key(statement.name, parameters), index);
+    const std::string key = function_key(statement.name, parameters);
+    functions_.emplace(key, index);
+    if (statement.is_foreknown) {
+        foreknown_functions_[key] = &statement;
+    }
     const std::string extern_symbol = statement.extern_symbol.empty() ? statement.name : statement.extern_symbol;
     bytecode_.functions.push_back(
         Bytecode::Function{statement.name, extern_symbol, statement.parameters.size(), 0, {}, statement.is_extern});
@@ -345,6 +1098,17 @@ void Compiler::collect_global_constants(const std::vector<Statement>& statements
         if (statement.kind == StatementKind::const_statement) {
             global_constants_.push_back(&statement);
         }
+    }
+}
+
+void Compiler::evaluate_foreknown_constants() {
+    for (const Statement* statement : global_constants_) {
+        if (!statement->is_foreknown) {
+            continue;
+        }
+
+        ForeknownEvaluator evaluator(foreknown_values_, foreknown_functions_, expression_types_, resolved_calls_);
+        foreknown_values_[statement->name] = evaluator.evaluate(*statement->expression);
     }
 }
 
@@ -412,7 +1176,11 @@ void Compiler::compile_function(const Statement& statement) {
 
 void Compiler::compile_global_constants() {
     for (const Statement* statement : global_constants_) {
-        compile_expression(*statement->expression);
+        if (statement->is_foreknown) {
+            emit(OpCode::push_constant, add_constant(foreknown_values_.at(statement->name)));
+        } else {
+            compile_expression(*statement->expression);
+        }
         const Type type =
             statement->type.has_type ? normalize_type(statement->type.type) : expression_type(*statement->expression);
         emit(OpCode::store_local, declare_scoped_local(statement->name, type));
@@ -429,7 +1197,11 @@ void Compiler::compile_statement(const Statement& statement) {
     switch (statement.kind) {
     case StatementKind::binding:
     case StatementKind::const_statement: {
-        compile_expression(*statement.expression);
+        if (statement.is_foreknown) {
+            emit(OpCode::push_constant, add_constant(foreknown_values_.at(statement.name)));
+        } else {
+            compile_expression(*statement.expression);
+        }
         const Type type =
             statement.type.has_type ? normalize_type(statement.type.type) : expression_type(*statement.expression);
         emit(OpCode::store_local, declare_scoped_local(statement.name, type));

@@ -148,6 +148,7 @@ struct Statement {
     bool is_record_member = false;
     bool is_constructor = false;
     bool is_static_record_member = false;
+    bool is_foreknown = false;
     std::string extern_symbol;
     std::string owner_record;
     std::unique_ptr<Expression> target;

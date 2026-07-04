@@ -73,6 +73,10 @@
         },
         {
           "type": "SYMBOL",
+          "name": "foreknown_declaration"
+        },
+        {
+          "type": "SYMBOL",
           "name": "foreign_function_declaration"
         },
         {
@@ -162,6 +166,10 @@
             {
               "type": "SYMBOL",
               "name": "function_declaration"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "foreknown_declaration"
             },
             {
               "type": "SYMBOL",
@@ -466,6 +474,28 @@
           }
         ]
       }
+    },
+    "foreknown_declaration": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "foreknown"
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SYMBOL",
+              "name": "const_statement"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "function_declaration"
+            }
+          ]
+        }
+      ]
     },
     "foreign_function_declaration": {
       "type": "SEQ",

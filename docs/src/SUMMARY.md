@@ -7,6 +7,7 @@
 - [Syntax basics](language/syntax.md)
 - [Types](language/types.md)
 - [Functions and generics](language/functions.md)
+- [Compile-time evaluation (`foreknown`)](language/foreknown.md)
 - [Records, methods, and contracts](language/records.md)
 - [Choices, `when`, and `?`](language/choices.md)
 - [Loops, ranges, and comprehensions](language/comprehensions.md)
