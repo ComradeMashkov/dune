@@ -506,6 +506,16 @@ io.println('\0' to int);)dune"),
                                   "for empty in 5..2 { total = total + empty; } io.println(total);"),
                        "10\n", "expected for-in arrays ranges break continue and empty range output") &&
              passed;
+    passed = expect_eq(run_source("import io; import set; import matrix; "
+                                  "seen: set.Set = set.Set.new(); seen.add(\"a\"); seen.add(\"bb\"); seen.add(\"a\"); "
+                                  "set_total = 0; for value in seen { set_total = set_total + value.len(); } "
+                                  "values = matrix.arange(1, 4); vector_total = 0; "
+                                  "for value in values { vector_total = vector_total + value; } "
+                                  "doubled: [int] = [value * 2 for value in values if value > 1]; "
+                                  "io.println(set_total); io.println(vector_total); io.println(doubled.len()); "
+                                  "io.println(doubled[0]); io.println(doubled[1]);"),
+                       "3\n6\n2\n4\n6\n", "expected record-backed for-in and comprehensions output") &&
+             passed;
     passed = expect_eq(run_source("import array; import text; "
                                   "values: [int] = [1, 2, 3]; reversed: [int] = array.reverse(values); "
                                   "io.println(array.sum(reversed)); io.println(array.first(reversed)); "

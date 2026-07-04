@@ -307,6 +307,36 @@ bool compiles_for_in_arrays_and_ranges() {
     return passed;
 }
 
+bool compiles_known_record_iterables() {
+    const dune::Bytecode bytecode =
+        compile_source("import io; import set; import matrix; "
+                       "seen: set.Set = set.Set.new(); seen.add(\"a\"); seen.add(\"bb\"); "
+                       "total = 0; for value in seen { total = total + value.len(); } "
+                       "values = matrix.arange(1, 4); doubled: [int] = [value * 2 for value in values]; "
+                       "io.println(total); io.println(doubled.len());");
+
+    bool saw_field_load = false;
+    bool saw_array_len = false;
+    bool saw_load_index = false;
+    bool saw_backward_jump = false;
+    for (std::size_t index = 0; index < bytecode.instructions.size(); ++index) {
+        const dune::Instruction& instruction = bytecode.instructions[index];
+        saw_field_load = saw_field_load || instruction.op == dune::OpCode::load_field;
+        saw_array_len = saw_array_len || instruction.op == dune::OpCode::array_len;
+        saw_load_index = saw_load_index || instruction.op == dune::OpCode::load_index;
+        if (instruction.op == dune::OpCode::jump && instruction.operand < index) {
+            saw_backward_jump = true;
+        }
+    }
+
+    bool passed = true;
+    passed = expect(saw_field_load, "expected record-backed iterable field load") && passed;
+    passed = expect(saw_array_len, "expected record-backed iterable length check") && passed;
+    passed = expect(saw_load_index, "expected record-backed iterable element load") && passed;
+    passed = expect(saw_backward_jump, "expected record-backed iterable loop jump") && passed;
+    return passed;
+}
+
 bool compiles_generic_functions() {
     const dune::Bytecode bytecode = compile_source("fn identity<T>(value: T): T { return value; } "
                                                    "fn twice<T is numeric>(value: T): T { return value + value; } "
@@ -910,6 +940,7 @@ int main() {
     passed = compiles_membership_operator() && passed;
     passed = compiles_stdlib_primitives() && passed;
     passed = compiles_for_in_arrays_and_ranges() && passed;
+    passed = compiles_known_record_iterables() && passed;
     passed = compiles_generic_functions() && passed;
     passed = compiles_stdlib_receiver_methods() && passed;
     passed = compiles_record_literals_fields_and_methods() && passed;

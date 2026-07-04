@@ -1,0 +1,30 @@
+// Exercises the shared iteration protocol for record-backed stdlib collections.
+import io;
+import matrix;
+import set;
+
+seen: set.Set = set.Set.new();
+seen.add("a");
+seen.add("bb");
+seen.add("a");  // duplicate add is ignored, so direct iteration sees two values.
+
+set_total = 0;
+for value in seen {
+    set_total = set_total + value.len();
+}
+io.println(set_total);  // "a" + "bb" lengths -> 3
+
+values = matrix.arange(1, 4);
+vector_total = 0;
+for value in values {
+    vector_total = vector_total + value;
+}
+io.println(vector_total);  // 1 + 2 + 3 -> 6
+
+doubled: [int] = [value * 2 for value in values if value > 1];
+io.println(doubled.len());
+io.println(doubled[0]);
+io.println(doubled[1]);
+
+direct_values: [text] = [value for value in seen if value.len() > 0];
+io.println(direct_values.len());

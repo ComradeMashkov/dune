@@ -458,6 +458,14 @@ int main() {
                           "for i in 0..values.len() { total = total + values[i]; }",
                           "expected for-in arrays and ranges to validate") &&
              passed;
+    passed = expect_valid("import set; import matrix; "
+                          "seen: set.Set = set.Set.new(); seen.add(\"a\"); seen.add(\"bb\"); "
+                          "set_total = 0; for value in seen { set_total = set_total + value.len(); } "
+                          "values = matrix.arange(1, 4); vector_total = 0; "
+                          "for value in values { vector_total = vector_total + value; } "
+                          "doubled: [int] = [value * 2 for value in values];",
+                          "expected known record iterables to validate") &&
+             passed;
     passed = expect_valid("record Point { x: int, y: int } "
                           "values: [int] = [1, 2]; values[1] = 9; "
                           "grid: [[int]] = [[1, 2], [3, 4]]; grid[1][0] = 8; "
@@ -488,6 +496,11 @@ int main() {
              passed;
     passed = expect_error_contains("for value in 42 { io.println(value); }", "type 'int' is not iterable",
                                    "expected non-iterable for-in error") &&
+             passed;
+    passed = expect_error_contains("import io; import dict; scores: dict.Dict<int> = dict.Dict.new(); "
+                                   "for entry in scores { io.println(entry); }",
+                                   "type 'dict.Dict<int>' is not iterable",
+                                   "expected direct dict iteration to stay explicit") &&
              passed;
     passed = expect_error_contains("for value in [1, 2] { value = value + 1; }", "cannot assign to constant 'value'",
                                    "expected read-only for-in binding") &&
@@ -816,6 +829,10 @@ int main() {
              passed;
     passed = expect_valid("evens: [int] = [i for i in 0..10 if i % 2 == 0]; io.println(evens.len());",
                           "expected range comprehension with filter to validate") &&
+             passed;
+    passed = expect_valid("import io; import set; seen: set.Set = set.Set.new(); seen.add(\"a\"); "
+                          "values: [text] = [value for value in seen if value.len() > 0]; io.println(values.len());",
+                          "expected set comprehension to validate") &&
              passed;
     passed = expect_error_contains("nums: [int] = [1, 2, 3]; bad: [int] = [n for n in nums if n + 1];",
                                    "expected type 'bool'", "expected non-boolean comprehension filter error") &&
