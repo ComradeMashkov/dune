@@ -169,7 +169,8 @@ Statement clone_statement(const Statement& statement) {
     result.parameters.reserve(statement.parameters.size());
     for (const Parameter& parameter : statement.parameters) {
         result.parameters.push_back(Parameter{parameter.name, clone_type_annotation(parameter.type), parameter.location,
-                                              parameter.exported, clone_expression_pointer(parameter.default_value)});
+                                              parameter.exported, clone_expression_pointer(parameter.default_value),
+                                              parameter.doc_comment});
     }
 
     result.generic_parameters = statement.generic_parameters;

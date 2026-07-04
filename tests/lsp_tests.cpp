@@ -348,6 +348,51 @@ bool hovers_module_member_doc_comment() {
     return passed;
 }
 
+bool hovers_record_field_doc_comment() {
+    // A comment above a record field shows when hovering `value.field`. The
+    // field name is a single glyph, exercising the token-boundary resolution.
+    const std::optional<dune::lsp::Hover> hover = dune::lsp::hover_source("record Point {\n"
+                                                                          "    // The horizontal coordinate.\n"
+                                                                          "    x: int,\n"
+                                                                          "    y: int,\n"
+                                                                          "}\n"
+                                                                          "p: Point = Point { x: 1, y: 2 };\n"
+                                                                          "print(p.x);",
+                                                                          {}, {}, 6, 8);
+
+    bool passed = true;
+    passed = expect(hover.has_value(), "expected record field hover") && passed;
+    if (hover.has_value()) {
+        passed = expect(hover->contents.find("x: int") != std::string::npos, "expected field type") && passed;
+        passed = expect(hover->contents.find("The horizontal coordinate.") != std::string::npos,
+                        "expected field doc comment") &&
+                 passed;
+    }
+    return passed;
+}
+
+bool hovers_record_method_doc_comment() {
+    const std::optional<dune::lsp::Hover> hover = dune::lsp::hover_source("record Counter {\n"
+                                                                          "    value: int,\n"
+                                                                          "\n"
+                                                                          "    // Returns the current value.\n"
+                                                                          "    fn get(): int { return this.value; }\n"
+                                                                          "}\n"
+                                                                          "c: Counter = Counter { value: 5 };\n"
+                                                                          "print(c.get());",
+                                                                          {}, {}, 7, 9);
+
+    bool passed = true;
+    passed = expect(hover.has_value(), "expected record method hover") && passed;
+    if (hover.has_value()) {
+        passed = expect(hover->contents.find("get(") != std::string::npos, "expected method signature") && passed;
+        passed = expect(hover->contents.find("Returns the current value.") != std::string::npos,
+                        "expected method doc comment") &&
+                 passed;
+    }
+    return passed;
+}
+
 bool defines_module_from_from_import() {
     // Regression: `from array import ...` must register `array` as a module so
     // go-to-definition on the module name opens the module file.
@@ -529,6 +574,8 @@ int main() {
     passed = hovers_local_doc_comment_with_tags() && passed;
     passed = hovers_plain_comment_as_prose() && passed;
     passed = hovers_module_member_doc_comment() && passed;
+    passed = hovers_record_field_doc_comment() && passed;
+    passed = hovers_record_method_doc_comment() && passed;
     passed = defines_module_from_from_import() && passed;
     passed = defines_selective_import_symbol() && passed;
     passed = hovers_selective_import_symbol() && passed;

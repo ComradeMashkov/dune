@@ -20,6 +20,7 @@ public:
         SourceLocation location;
         bool exported = false;
         std::shared_ptr<Expression> default_value;
+        std::string doc_comment;
     };
 
     struct StructMethod {
@@ -30,6 +31,7 @@ public:
         bool exported = false;
         bool is_constructor = false;
         bool is_static = false;
+        std::string doc_comment;
     };
 
     struct StructDefinition {

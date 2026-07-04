@@ -62,6 +62,9 @@ struct Parameter {
     SourceLocation location;
     bool exported = false;
     std::shared_ptr<Expression> default_value;
+    // Doc-comment written above a record field (markers stripped), or empty.
+    // Function parameters and choice variants leave this unset.
+    std::string doc_comment;
 };
 
 struct GenericParameter {

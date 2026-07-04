@@ -906,6 +906,10 @@ std::optional<std::size_t> token_index_at_position(const std::vector<Token>& tok
     const std::size_t target_line = position.line + 1;
     const std::size_t target_column = position.character + 1;
 
+    // Prefer the token the cursor sits inside; only fall back to a token's
+    // trailing edge when nothing contains the cursor. Otherwise a click on the
+    // start of `x` in `p.x` snaps to the `.` whose end shares that column.
+    std::optional<std::size_t> boundary_match;
     for (std::size_t index = 0; index < tokens.size(); ++index) {
         const Token& token = tokens[index];
         if (token.lexeme.empty() || token.type == TokenType::eof || token.line != target_line) {
@@ -914,12 +918,16 @@ std::optional<std::size_t> token_index_at_position(const std::vector<Token>& tok
 
         const std::size_t start = token.column;
         const std::size_t end = token.column + token.lexeme.size();
-        if (target_column >= start && target_column <= end) {
+        if (target_column >= start && target_column < end) {
             return index;
+        }
+
+        if (target_column == end) {
+            boundary_match = index;
         }
     }
 
-    return std::nullopt;
+    return boundary_match;
 }
 
 std::string type_annotation_name(const TypeAnnotation& annotation, std::string_view fallback = "int") {
@@ -1328,7 +1336,8 @@ std::string declaration_hover(const Statement& statement) {
 std::optional<std::string> parameter_hover(const std::vector<Parameter>& parameters, const std::string& name) {
     for (const Parameter& parameter : parameters) {
         if (parameter.name == name) {
-            return code_hover("param " + parameter.name + ": " + type_annotation_name(parameter.type));
+            return with_doc(code_hover("param " + parameter.name + ": " + type_annotation_name(parameter.type)),
+                            parameter.doc_comment);
         }
     }
 
@@ -1644,6 +1653,7 @@ receiver_method_hover(const Type& receiver, const std::string& method,
     }
 
     std::string signatures;
+    std::string doc;
     for (const TypeChecker::StructMethod& candidate : record->second.methods) {
         if (candidate.is_constructor || candidate.is_static || candidate.name != method) {
             continue;
@@ -1657,13 +1667,45 @@ receiver_method_hover(const Type& receiver, const std::string& method,
             signatures += "\n";
         }
         signatures += struct_method_signature(candidate, record->second, receiver);
+        if (doc.empty()) {
+            doc = candidate.doc_comment;
+        }
     }
 
     if (signatures.empty()) {
         return std::nullopt;
     }
 
-    return code_hover(signatures);
+    return with_doc(code_hover(signatures), doc);
+}
+
+// Hover for a record field accessed as `value.field`, respecting cross-module
+// visibility. Fields declared with a doc-comment show it beneath the type.
+std::optional<std::string>
+receiver_field_hover(const Type& receiver, const std::string& field,
+                     const std::unordered_map<std::string, TypeChecker::StructDefinition>& structs) {
+    if (receiver.kind != ValueType::struct_type) {
+        return std::nullopt;
+    }
+
+    const auto record = structs.find(receiver.name);
+    if (record == structs.end()) {
+        return std::nullopt;
+    }
+
+    for (const TypeChecker::StructField& candidate : record->second.fields) {
+        if (candidate.name != field) {
+            continue;
+        }
+
+        if (is_external_record_type(receiver) && !candidate.exported) {
+            return std::nullopt;
+        }
+
+        return with_doc(code_hover(candidate.name + ": " + type_name(candidate.type)), candidate.doc_comment);
+    }
+
+    return std::nullopt;
 }
 
 std::optional<std::string> module_hover(const std::string& module_name, const std::filesystem::path& source_directory) {
@@ -1937,6 +1979,10 @@ std::optional<Hover> hover_source(const std::string& source, const std::string& 
             if (std::optional<Type> receiver = symbol_type_in_program(*checked, qualifier)) {
                 if (std::optional<std::string> contents =
                         receiver_method_hover(*receiver, token.lexeme, checked->structs)) {
+                    return Hover{*contents};
+                }
+                if (std::optional<std::string> contents =
+                        receiver_field_hover(*receiver, token.lexeme, checked->structs)) {
                     return Hover{*contents};
                 }
             }
