@@ -1618,6 +1618,24 @@ Type TypeChecker::check_expression(const Expression& expression, const TypeAnnot
     return actual;
 }
 
+// Maps an overloadable binary operator to the record method it dispatches to.
+// Returns an empty string for operators that are never overloaded (e.g. `%`).
+std::string operator_method_name(const std::string& op) {
+    if (op == "+") {
+        return "add";
+    }
+    if (op == "-") {
+        return "sub";
+    }
+    if (op == "*") {
+        return "mul";
+    }
+    if (op == "/") {
+        return "div";
+    }
+    return "";
+}
+
 Type TypeChecker::check_binary_expression(const Expression& expression, const TypeAnnotation& expected) {
     if (expression.lexeme == "&&" || expression.lexeme == "||") {
         const Type left = check_expression(*expression.left);
@@ -1638,6 +1656,23 @@ Type TypeChecker::check_binary_expression(const Expression& expression, const Ty
 
     Type left = check_expression(*expression.left, operand_expected);
     Type right = check_expression(*expression.right, operand_expected);
+
+    // Operator overloading: when the left operand is a record, dispatch `+ - * /`
+    // to the conventional method (add/sub/mul/div) defined on that record. This
+    // powers `a + b`, `matrix * vector`, `vector * scalar`, etc. for stdlib
+    // numeric-like types without opening arbitrary operator magic.
+    if (is_arithmetic && left.kind == ValueType::struct_type) {
+        const std::string method_name = operator_method_name(expression.lexeme);
+        if (!method_name.empty()) {
+            const FunctionSignature* overload = resolve_operator_overload(expression, method_name, left);
+            if (overload != nullptr) {
+                return overload->return_type;
+            }
+        }
+
+        throw DiagnosticError(expression.location, "operator '" + expression.lexeme + "' is not defined for type '" +
+                                                       type_name(left) + "'");
+    }
 
     if (!same_type(left, right)) {
         left = coerce_numeric_literal(*expression.left, left, right);
@@ -2256,6 +2291,63 @@ Type TypeChecker::check_receiver_method_call(const Expression& expression, const
 
     throw DiagnosticError(expression.location,
                           "type '" + type_name(receiver) + "' has no method '" + expression.lexeme + "'");
+}
+
+const TypeChecker::FunctionSignature* TypeChecker::resolve_operator_overload(const Expression& expression,
+                                                                            const std::string& method_name,
+                                                                            const Type& receiver) {
+    // The left operand is the method receiver; the right operand is the sole argument.
+    const std::vector<const Expression*> arguments = {expression.left.get(), expression.right.get()};
+
+    const FunctionSignature* best_match = try_resolve_overload(method_name, arguments, expression.location, {});
+
+    // A record declared in the currently-compiled module can reach its own methods
+    // through the module-qualified name.
+    if (!module_name(receiver.name).empty() && module_name(receiver.name) == current_access_module()) {
+        const FunctionSignature* match =
+            try_resolve_overload(module_name(receiver.name) + "." + method_name, arguments, expression.location, {});
+        if (match != nullptr) {
+            best_match = match;
+        }
+    }
+
+    // Methods defined in imported modules (e.g. matrix's Vector.add) are keyed under
+    // `module.method`; only consider modules that actually export this method name.
+    for (const std::string& module : imports_) {
+        const auto exports = module_exports_.find(module);
+        if (exports == module_exports_.end() || !exports->second.contains(method_name)) {
+            continue;
+        }
+
+        const FunctionSignature* match =
+            try_resolve_overload(module + "." + method_name, arguments, expression.location, {});
+        if (match == nullptr) {
+            continue;
+        }
+
+        if (best_match != nullptr && best_match->key != match->key) {
+            // Ambiguous operator target across modules — leave it unresolved so the
+            // caller reports "operator not defined" rather than silently guessing.
+            return nullptr;
+        }
+
+        best_match = match;
+    }
+
+    if (best_match == nullptr) {
+        return nullptr;
+    }
+
+    // Finalize operand types (so numeric literals size to the method's parameters)
+    // and record the resolved call for the compiler to emit as a method invocation.
+    for (std::size_t index = 0; index < arguments.size(); ++index) {
+        expect_type(best_match->parameters[index],
+                    check_expression(*arguments[index], expected_type(best_match->parameters[index])),
+                    arguments[index]->location);
+    }
+
+    resolved_calls_[&expression] = best_match->key;
+    return best_match;
 }
 
 Type TypeChecker::check_unary_expression(const Expression& expression) {

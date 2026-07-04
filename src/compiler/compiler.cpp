@@ -1411,6 +1411,16 @@ void Compiler::compile_binary_expression(const Expression& expression) {
         return;
     }
 
+    // Overloaded operator: the type checker resolved this `+ - * /` to a record
+    // method, so emit a method call (receiver = left, argument = right).
+    if (resolved_calls_.contains(&expression)) {
+        const std::size_t function_index = resolve_function(resolved_calls_.at(&expression));
+        compile_expression(*expression.left);
+        compile_expression(*expression.right);
+        emit(OpCode::call, function_index);
+        return;
+    }
+
     compile_expression(*expression.left);
     compile_expression(*expression.right);
 

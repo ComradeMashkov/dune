@@ -1,0 +1,44 @@
+import io;
+import matrix;
+
+// Operator overloading dispatches `+ - * /` on a record to the conventional
+// method (add/sub/mul/div). It works for user records and for stdlib types.
+
+// A user record that defines add/sub/mul.
+record Vec2 {
+    x: int,
+    y: int,
+    // `a + b` -> a.add(b)
+    fn add(other: Vec2): Vec2 { return Vec2 { x: this.x + other.x, y: this.y + other.y }; }
+    // `a - b` -> a.sub(b)
+    fn sub(other: Vec2): Vec2 { return Vec2 { x: this.x - other.x, y: this.y - other.y }; }
+    // `a * k` -> a.mul(k) (scalar scale)
+    fn mul(factor: int): Vec2 { return Vec2 { x: this.x * factor, y: this.y * factor }; }
+}
+
+a: Vec2 = Vec2 { x: 1, y: 2 };
+b: Vec2 = Vec2 { x: 10, y: 20 };
+
+sum: Vec2 = a + b;
+io.println(sum.x);         // 11
+io.println(sum.y);         // 22
+
+diff: Vec2 = b - a;
+io.println(diff.x);        // 9
+
+scaled: Vec2 = a * 3;
+io.println(scaled.y);      // 6
+
+// Stdlib vectors: `+` uses Vector.add, `*` scalar uses Vector.mul(T),
+// `*` vector uses Vector.mul(Vector) (element-wise).
+v: matrix.Vector<int> = matrix.vector([1, 2, 3]);
+w: matrix.Vector<int> = matrix.vector([4, 5, 6]);
+
+vsum: matrix.Vector<int> = v + w;
+io.println(vsum.get(2));   // 9
+
+velem: matrix.Vector<int> = v * w;
+io.println(velem.get(1));  // 10
+
+vscale: matrix.Vector<int> = v * 10;
+io.println(vscale.get(0)); // 10

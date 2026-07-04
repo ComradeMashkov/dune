@@ -359,6 +359,13 @@ int main() {
                           "ok: bool = spans(1, 2);",
                           "expected repeated generic bounds (T is A, T is B) to validate") &&
              passed;
+    passed = expect_valid("record Vec2 { x: int, y: int, "
+                          "fn add(other: Vec2): Vec2 { return Vec2 { x: this.x + other.x, y: this.y + other.y }; } "
+                          "fn mul(factor: int): Vec2 { return Vec2 { x: this.x * factor, y: this.y * factor }; } } "
+                          "a: Vec2 = Vec2 { x: 1, y: 2 }; b: Vec2 = Vec2 { x: 3, y: 4 }; "
+                          "sum: Vec2 = a + b; scaled: Vec2 = a * 5;",
+                          "expected operator overloading via add/mul methods to validate") &&
+             passed;
     passed = expect_valid("import maybe; import outcome; import assert; import collections; "
                           "maybe_value: maybe.Maybe<int> = maybe.present(42); "
                           "fallback: int = maybe.absent(0).value_or(7); "
@@ -664,6 +671,11 @@ int main() {
     passed = expect_error_contains("fn needs<T is comparable + numeric>(v: T): T { return v; } io.println(needs(\"x\"));",
                                    "does not satisfy bound 'numeric'",
                                    "expected multi-bound violation to name the unmet bound") &&
+             passed;
+    passed = expect_error_contains("record Point { x: int } p: Point = Point { x: 1 }; q: Point = Point { x: 2 }; "
+                                   "bad: Point = p + q;",
+                                   "operator '+' is not defined for type 'Point'",
+                                   "expected operator-not-defined error for records without the method") &&
              passed;
     passed = expect_error_contains("fn invalid<T>(left: T, right: T): bool { return left == right; } "
                                    "values: [int] = [1]; io.println(invalid(values, values));",
