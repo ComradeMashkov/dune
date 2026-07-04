@@ -1,0 +1,22 @@
+import io;
+import plot;
+
+// Major + minor grid render into the SVG.
+single = plot.line([1.0, 3.0, 2.0, 5.0, 4.0]).grid(5).minor_grid(4);
+grid_svg = plot.svg(single);
+io.println(grid_svg.contains("plot-grid"));        // 1
+io.println(grid_svg.contains("plot-grid-minor"));  // 1
+
+// Subplots compose several charts into one SVG, preserving each title.
+a = plot.line([1.0, 2.0, 3.0]).title("A").grid(4).size(300, 200);
+b = plot.bar([3.0, 1.0, 2.0]).title("B").size(300, 200);
+c = plot.scatter([1.0, 2.0, 3.0], [2.0, 3.0, 1.0]).title("C").size(300, 200);
+d = plot.line([4.0, 2.0, 5.0]).title("D").size(300, 200);
+figure = plot.subplots([a, b, c, d], 2);
+io.println(figure.starts_with("<svg"));           // 1
+io.println(figure.contains("<title>A</title>"));  // 1
+io.println(figure.contains("<title>D</title>"));  // 1
+
+// Subplots reach every output path a single chart has.
+io.println(plot.subplots_html([a, b], 2).contains("<!doctype"));       // 1
+io.println(plot.save_subplots_svg([a, b], 2, "/tmp/dune_grid.svg").is_done()); // 1

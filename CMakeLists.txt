@@ -469,6 +469,16 @@ add_test(
 )
 
 add_test(
+    NAME cli_plot_features
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/stdlib/plot_features.dn
+        -D EXPECTED_OUTPUT="1\n1\n1\n1\n1\n1\n1"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
     NAME cli_choice_printing
     COMMAND
         ${CMAKE_COMMAND}

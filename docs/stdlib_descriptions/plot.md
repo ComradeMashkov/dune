@@ -92,6 +92,40 @@ io.println(plot.svg(chart).contains("<svg")); // 1
 </svg>
 </figure>
 
-There are no subplots (a grid of separate axes) yet: compose a single chart with
-overlaid series as above, or render several charts to separate SVG/HTML files
-with `save_svg`/`save_html` and lay them out in your own document.
+## Grids
+
+Add a background grid with `.grid(cells)` (major divisions per axis) and, for a
+finer mesh, `.minor_grid(subdivisions)` (extra lines inside each major cell):
+
+```dn
+import plot;
+
+chart = plot.line([3.0, 7.0, 5.0, 9.0, 8.0, 12.0])
+    .title("With grid")
+    .grid(6)         // 6 major cells per axis
+    .minor_grid(4);  // 4 minor lines inside each cell
+```
+
+## Subplots
+
+`plot.subplots(charts, cols)` composes several charts into one figure as a grid
+of `cols` columns. Each chart keeps its own title, grid, and series and is scaled
+into an equal cell. The result is a normal SVG, so it works with every output
+path — `save_subplots_svg` / `save_subplots_html` to a file, or
+`show_subplots_native` to open it in the native window:
+
+```dn
+import plot;
+
+top_left = plot.line([1.0, 3.0, 2.0]).title("A").grid(4).size(380, 240);
+top_right = plot.bar([2.0, 5.0, 3.0]).title("B").grid(4).size(380, 240);
+
+figure = plot.subplots([top_left, top_right], 2); // one SVG, two cells
+```
+
+## More examples
+
+See the [**Plot gallery**](../guides/plot_gallery.md) for ten worked examples —
+sine and cosine, damped oscillation, Gaussian, logistic and polynomial curves,
+scatter clouds, bars, histograms, and a four-panel subplot — each with the Dune
+code and its rendered image.
