@@ -33,6 +33,7 @@ private:
 
     Bytecode bytecode_;
     std::vector<std::string> program_arguments_;
+    int log_level_ = 2;
     std::vector<Value> stack_;
     std::vector<CallFrame> frames_;
 };

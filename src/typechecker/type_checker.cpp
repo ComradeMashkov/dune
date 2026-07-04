@@ -1882,15 +1882,15 @@ Type TypeChecker::check_format_call_expression(const Expression& expression) {
     return make_type(ValueType::text_type);
 }
 
-// Low-level OS intrinsics. These are the only compiler-known primitives behind
-// the pure-Dune `fs`/`process` stdlib modules; they lower to dedicated VM
-// opcodes instead of C/C++ foreign functions. Each returns primitives (a tuple
-// or array) so the Dune wrappers can shape the result into Outcome/Maybe.
+// Low-level intrinsics. These are the only compiler-known primitives behind
+// the pure-Dune `fs`/`process`/`log` stdlib modules; they lower to dedicated VM
+// opcodes instead of C/C++ foreign functions.
 bool TypeChecker::is_io_builtin(const std::string& name) {
     return name == "__read_file" || name == "__write_file" || name == "__stdout_write" ||
            name == "__stderr_write" || name == "__stdout_flush" || name == "__stderr_flush" ||
            name == "__stdin_read_line" || name == "__env_get" || name == "__process_args" ||
-           name == "__process_cwd";
+           name == "__process_cwd" || name == "__log_emit" || name == "__log_set_level" ||
+           name == "__log_level";
 }
 
 Type TypeChecker::check_io_builtin_call(const Expression& expression) {
@@ -1900,12 +1900,36 @@ Type TypeChecker::check_io_builtin_call(const Expression& expression) {
         expected_arguments = 1;
     } else if (name == "__write_file") {
         expected_arguments = 2;
+    } else if (name == "__log_emit") {
+        expected_arguments = 3;
+    } else if (name == "__log_set_level") {
+        expected_arguments = 1;
     }
 
     if (expression.arguments.size() != expected_arguments) {
         throw DiagnosticError(expression.location, name + " expects " + std::to_string(expected_arguments) +
                                                        " arguments but got " +
                                                        std::to_string(expression.arguments.size()));
+    }
+
+    if (name == "__log_emit") {
+        expect_type(make_type(ValueType::int_type), check_expression(*expression.arguments[0]),
+                    expression.arguments[0]->location);
+        expect_type(make_type(ValueType::text_type), check_expression(*expression.arguments[1]),
+                    expression.arguments[1]->location);
+        expect_type(make_type(ValueType::text_type), check_expression(*expression.arguments[2]),
+                    expression.arguments[2]->location);
+        return make_type(ValueType::unit_type);
+    }
+
+    if (name == "__log_set_level") {
+        expect_type(make_type(ValueType::int_type), check_expression(*expression.arguments[0]),
+                    expression.arguments[0]->location);
+        return make_type(ValueType::unit_type);
+    }
+
+    if (name == "__log_level") {
+        return make_type(ValueType::int_type);
     }
 
     for (const std::unique_ptr<Expression>& argument : expression.arguments) {

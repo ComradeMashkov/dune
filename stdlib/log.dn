@@ -1,0 +1,78 @@
+// Structured diagnostics for Dune programs.
+//
+// The first stage exposes levelled human logging with process-wide filtering.
+// Logs are written to stderr by the VM `__log_emit` intrinsic so normal program
+// output on stdout stays separate. The active level defaults to `info`, can be
+// set from `DUNE_LOG` or `DUNE_LOG_LEVEL`, and can be changed at runtime with
+// `set_level`.
+
+// The most verbose level.
+// example: log.set_level(log.TRACE)
+export const TRACE: int = 0;
+
+// Debug-level diagnostics.
+export const DEBUG: int = 1;
+
+// Informational diagnostics; this is the default active level.
+export const INFO: int = 2;
+
+// Warnings for recoverable problems.
+export const WARN: int = 3;
+
+// Errors for failed operations that the program can still report.
+export const ERROR: int = 4;
+
+// Disable all log output.
+export const OFF: int = 5;
+
+// Set the active minimum level. Messages below this level are suppressed.
+// example: log.set_level(log.WARN)
+export fn set_level(level: int): unit {
+    __log_set_level(level);
+}
+
+// Return the active minimum level.
+// example: log.level()
+export fn level(): int {
+    return __log_level();
+}
+
+// True when a message at `level` would be emitted.
+// example: log.enabled(log.DEBUG)
+export fn enabled(level: int): bool {
+    return level >= __log_level();
+}
+
+fn emit(level: int, label: text, message: text): unit {
+    __log_emit(level, label, message);
+}
+
+// Emit a trace message.
+// example: log.trace("starting parser")
+export fn trace(message: text): unit {
+    emit(TRACE, "trace", message);
+}
+
+// Emit a debug message.
+// example: log.debug("cache miss")
+export fn debug(message: text): unit {
+    emit(DEBUG, "debug", message);
+}
+
+// Emit an informational message.
+// example: log.info("building target")
+export fn info(message: text): unit {
+    emit(INFO, "info", message);
+}
+
+// Emit a warning message.
+// example: log.warn("native backend disabled")
+export fn warn(message: text): unit {
+    emit(WARN, "warn", message);
+}
+
+// Emit an error message.
+// example: log.error("failed")
+export fn error(message: text): unit {
+    emit(ERROR, "error", message);
+}

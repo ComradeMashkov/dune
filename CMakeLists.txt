@@ -695,6 +695,17 @@ add_test(
 )
 
 add_test(
+    NAME cli_log_module
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/stdlib/logging.dn
+        -D EXPECTED_OUTPUT="stdout-ok"
+        -D EXPECTED_ERROR="[debug] cache miss\n[info] building target\n[warn] native backend disabled\n[error] failed"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_stderr_case.cmake
+)
+
+add_test(
     NAME cli_comprehensions
     COMMAND
         ${CMAKE_COMMAND}

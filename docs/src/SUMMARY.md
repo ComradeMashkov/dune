@@ -24,6 +24,7 @@
   - [dict](stdlib/dict.md)
   - [display](stdlib/display.md)
   - [fs](stdlib/fs.md)
+  - [log](stdlib/log.md)
   - [math](stdlib/math.md)
   - [matrix](stdlib/matrix.md)
   - [maybe](stdlib/maybe.md)

@@ -10,6 +10,7 @@ The standard library is ordinary Dune loaded from `.dn` files. Each page below i
 - [`dict`](dict.md) — A hash-map style dictionary built in Dune.
 - [`display`](display.md) — The `Display` contract and `show` helper.
 - [`fs`](fs.md) — File-system access (read, write, list).
+- [`log`](log.md) — Levelled diagnostics with stderr output and filtering.
 - [`math`](math.md) — Numeric constants and generic math functions.
 - [`matrix`](matrix.md) — A small NumPy-style foundation: vectors and matrices.
 - [`maybe`](maybe.md) — The optional `Maybe<T>` choice and helpers.

@@ -1,5 +1,7 @@
 #include "vm.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstddef>
 #include <cstdlib>
@@ -64,6 +66,49 @@ Value make_unit() {
     Value result;
     result.kind = ValueKind::unit;
     return result;
+}
+
+std::string lowercase_ascii(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(),
+                   [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
+    return value;
+}
+
+int parse_log_level(const char* value) {
+    if (value == nullptr || *value == '\0') {
+        return 2;
+    }
+
+    const std::string level = lowercase_ascii(value);
+    if (level == "trace" || level == "0") {
+        return 0;
+    }
+    if (level == "debug" || level == "1") {
+        return 1;
+    }
+    if (level == "info" || level == "2") {
+        return 2;
+    }
+    if (level == "warn" || level == "warning" || level == "3") {
+        return 3;
+    }
+    if (level == "error" || level == "4") {
+        return 4;
+    }
+    if (level == "off" || level == "none" || level == "quiet" || level == "5") {
+        return 5;
+    }
+
+    return 2;
+}
+
+int initial_log_level() {
+    const char* level = std::getenv("DUNE_LOG");
+    if (level != nullptr && *level != '\0') {
+        return parse_log_level(level);
+    }
+
+    return parse_log_level(std::getenv("DUNE_LOG_LEVEL"));
 }
 
 Value make_array(std::vector<Value> values) {
@@ -606,10 +651,11 @@ Value cast_glyph(const Value& value) {
 
 } // namespace
 
-VirtualMachine::VirtualMachine(Bytecode bytecode) : bytecode_(std::move(bytecode)) {}
+VirtualMachine::VirtualMachine(Bytecode bytecode) : bytecode_(std::move(bytecode)), log_level_(initial_log_level()) {}
 
 VirtualMachine::VirtualMachine(Bytecode bytecode, std::vector<std::string> program_arguments)
-    : bytecode_(std::move(bytecode)), program_arguments_(std::move(program_arguments)) {}
+    : bytecode_(std::move(bytecode)), program_arguments_(std::move(program_arguments)), log_level_(initial_log_level()) {
+}
 
 void VirtualMachine::run(std::ostream& output) {
     run(output, std::cerr, std::cin);
@@ -1281,6 +1327,42 @@ void VirtualMachine::execute(std::ostream& output, std::ostream& error, std::ist
             ++frame.ip;
             break;
         }
+        case OpCode::log_emit: {
+            const Value message = pop();
+            const Value label = pop();
+            const Value level = pop();
+            if (level.kind != ValueKind::signed_integer) {
+                throw std::runtime_error("log_emit expects an integer level");
+            }
+            if (label.kind != ValueKind::text) {
+                throw std::runtime_error("log_emit expects a text label");
+            }
+            if (message.kind != ValueKind::text) {
+                throw std::runtime_error("log_emit expects a text message");
+            }
+
+            if (level.signed_value >= log_level_) {
+                error << '[' << label.text_value << "] " << message.text_value << '\n';
+            }
+            stack_.push_back(make_unit());
+            ++frame.ip;
+            break;
+        }
+        case OpCode::log_set_level: {
+            const Value level = pop();
+            if (level.kind != ValueKind::signed_integer) {
+                throw std::runtime_error("log_set_level expects an integer level");
+            }
+
+            log_level_ = static_cast<int>(level.signed_value);
+            stack_.push_back(make_unit());
+            ++frame.ip;
+            break;
+        }
+        case OpCode::log_level:
+            stack_.push_back(make_signed(log_level_));
+            ++frame.ip;
+            break;
         case OpCode::format_text: {
             std::vector<Value> arguments(instruction.operand);
             for (std::size_t index = instruction.operand; index > 0; --index) {

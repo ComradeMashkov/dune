@@ -701,7 +701,7 @@ bool stdlib_stays_pure_dune_except_panic() {
                                "import dict; import set; import array; import text; "
                                "import collections; import maybe; import outcome; "
                                "import fs; import process; import fmt; import io; import csv; import display; "
-                               "import cli; import assert; import runtime; io.println(0);";
+                               "import cli; import log; import assert; import runtime; io.println(0);";
 
     dune::Lexer lexer(source);
     dune::Parser parser(lexer.tokenize());
