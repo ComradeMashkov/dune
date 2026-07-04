@@ -1,6 +1,7 @@
 // Exercises the plot stdlib module: deterministic SVG rendering, escaped text,
 // file backends, and headless-safe display backend selection.
 import fs;
+import io;
 import plot;
 import text;
 
@@ -15,17 +16,17 @@ chart = plot.line([1.0, 2.0, 3.0], [2.0, 4.0, 8.0])
     .y_label("value \"y\"")
     .legend(true);
 
-print(plot.svg(chart).trim_end());
+io.println(plot.svg(chart).trim_end());
 
-print(plot.save_svg(chart, "plot_svg_fixture.svg").is_done());
-print(plot.save_html(chart, "plot_svg_fixture.html").is_done());
-print(fs.read_text("plot_svg_fixture.svg").value_or("").contains("series &amp; one"));
+io.println(plot.save_svg(chart, "plot_svg_fixture.svg").is_done());
+io.println(plot.save_html(chart, "plot_svg_fixture.html").is_done());
+io.println(fs.read_text("plot_svg_fixture.svg").value_or("").contains("series &amp; one"));
 
-print(plot.show(chart).failure_or("").contains("no display backend"));
+io.println(plot.show(chart).failure_or("").contains("no display backend"));
 plot.use_backend("svg");
-print(plot.show(chart).value_or("").contains("<polyline"));
+io.println(plot.show(chart).value_or("").contains("<polyline"));
 plot.use_backend("html");
-print(plot.show(chart).value_or("").contains("<!doctype html>"));
-print(plot.available_backends().len());
-print(plot.available_backends()[3] == "native");
-print(plot.svg(plot.histogram([0.0, 1.0, 2.0, 3.0], 2)).contains("series bar"));
+io.println(plot.show(chart).value_or("").contains("<!doctype html>"));
+io.println(plot.available_backends().len());
+io.println(plot.available_backends()[3] == "native");
+io.println(plot.svg(plot.histogram([0.0, 1.0, 2.0, 3.0], 2)).contains("series bar"));

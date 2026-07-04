@@ -6,6 +6,7 @@
 // of trying to open a GUI process. Future native/browser/notebook backends can
 // plug in behind the same API.
 import fs;
+import fmt;
 import math;
 import outcome;
 import process;
@@ -266,7 +267,7 @@ export fn html(chart: Chart): text {
         title = "Dune plot";
     }
 
-    return format("<!doctype html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<title>{}</title>\n</head>\n<body>\n{}\n</body>\n</html>\n",
+    return fmt.format("<!doctype html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<title>{}</title>\n</head>\n<body>\n{}\n</body>\n</html>\n",
                   escape_xml(title), svg(chart));
 }
 
@@ -305,7 +306,7 @@ export fn show(chart: Chart): outcome.Outcome<text, text> {
         return show_native(chart);
     }
 
-    return outcome.failed_text(format("plot.show backend '{}' is not available", selected));
+    return outcome.failed_text(fmt.format("plot.show backend '{}' is not available", selected));
 }
 
 fn append_series(chart: Chart, series: Series): Chart {
@@ -389,21 +390,21 @@ fn escape_xml(value: text): text {
     for index = 0; index < value.len(); index = index + 1 {
         ch = value[index];
         if ch == '&' {
-            escaped = format("{}&amp;", escaped);
+            escaped = fmt.format("{}&amp;", escaped);
         } else {
             if ch == '<' {
-                escaped = format("{}&lt;", escaped);
+                escaped = fmt.format("{}&lt;", escaped);
             } else {
                 if ch == '>' {
-                    escaped = format("{}&gt;", escaped);
+                    escaped = fmt.format("{}&gt;", escaped);
                 } else {
                     if ch == '"' {
-                        escaped = format("{}&quot;", escaped);
+                        escaped = fmt.format("{}&quot;", escaped);
                     } else {
                         if ch == '\'' {
-                            escaped = format("{}&apos;", escaped);
+                            escaped = fmt.format("{}&apos;", escaped);
                         } else {
-                            escaped = format("{}{}", escaped, ch);
+                            escaped = fmt.format("{}{}", escaped, ch);
                         }
                     }
                 }
@@ -529,22 +530,22 @@ fn render_svg(chart: Chart): text {
     ymin = y_min(chart);
     ymax = y_max(chart);
 
-    output = format("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{}\" height=\"{}\" viewBox=\"0 0 {} {}\">\n",
+    output = fmt.format("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{}\" height=\"{}\" viewBox=\"0 0 {} {}\">\n",
                     chart.width, chart.height, chart.width, chart.height);
-    output = format("{}<title>{}</title>\n", output, escape_xml(chart.title_text));
-    output = format("{}<rect width=\"{}\" height=\"{}\" fill=\"#ffffff\"/>\n", output, chart.width, chart.height);
-    output = format("{}{}\n", output, render_axes(chart, xmin, xmax, ymin, ymax));
+    output = fmt.format("{}<title>{}</title>\n", output, escape_xml(chart.title_text));
+    output = fmt.format("{}<rect width=\"{}\" height=\"{}\" fill=\"#ffffff\"/>\n", output, chart.width, chart.height);
+    output = fmt.format("{}{}\n", output, render_axes(chart, xmin, xmax, ymin, ymax));
 
     for index = 0; index < chart.series.len(); index = index + 1 {
-        output = format("{}{}\n", output, render_series(chart, chart.series[index], xmin, xmax, ymin, ymax));
+        output = fmt.format("{}{}\n", output, render_series(chart, chart.series[index], xmin, xmax, ymin, ymax));
     }
 
-    output = format("{}{}", output, render_labels(chart, xmin, xmax, ymin, ymax));
+    output = fmt.format("{}{}", output, render_labels(chart, xmin, xmax, ymin, ymax));
     if chart.legend_enabled {
-        output = format("{}{}", output, render_legend(chart));
+        output = fmt.format("{}{}", output, render_legend(chart));
     }
 
-    return format("{}</svg>\n", output);
+    return fmt.format("{}</svg>\n", output);
 }
 
 fn render_axes(chart: Chart, xmin: real64, xmax: real64, ymin: real64, ymax: real64): text {
@@ -553,41 +554,41 @@ fn render_axes(chart: Chart, xmin: real64, xmax: real64, ymin: real64, ymax: rea
     top = PLOT_TOP;
     bottom = (chart.height to real64) - PLOT_BOTTOM;
 
-    output = format("<g class=\"axes\" fill=\"none\" stroke=\"#334155\" stroke-width=\"1\">\n");
-    output = format("{}<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\"/>\n", output, left, bottom, right, bottom);
-    output = format("{}<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\"/>\n", output, left, top, left, bottom);
-    output = format("{}</g>\n", output);
+    output = fmt.format("<g class=\"axes\" fill=\"none\" stroke=\"#334155\" stroke-width=\"1\">\n");
+    output = fmt.format("{}<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\"/>\n", output, left, bottom, right, bottom);
+    output = fmt.format("{}<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\"/>\n", output, left, top, left, bottom);
+    output = fmt.format("{}</g>\n", output);
 
-    output = format("{}<g class=\"ticks\" fill=\"#475569\" font-family=\"sans-serif\" font-size=\"11\">\n", output);
-    output = format("{}<text x=\"{}\" y=\"{}\" text-anchor=\"middle\">{}</text>\n",
-                    output, left, bottom + 18.0, escape_xml(format("{}", xmin)));
-    output = format("{}<text x=\"{}\" y=\"{}\" text-anchor=\"middle\">{}</text>\n",
-                    output, right, bottom + 18.0, escape_xml(format("{}", xmax)));
-    output = format("{}<text x=\"{}\" y=\"{}\" text-anchor=\"end\">{}</text>\n",
-                    output, left - 8.0, bottom + 4.0, escape_xml(format("{}", ymin)));
-    output = format("{}<text x=\"{}\" y=\"{}\" text-anchor=\"end\">{}</text>\n",
-                    output, left - 8.0, top + 4.0, escape_xml(format("{}", ymax)));
-    return format("{}</g>", output);
+    output = fmt.format("{}<g class=\"ticks\" fill=\"#475569\" font-family=\"sans-serif\" font-size=\"11\">\n", output);
+    output = fmt.format("{}<text x=\"{}\" y=\"{}\" text-anchor=\"middle\">{}</text>\n",
+                    output, left, bottom + 18.0, escape_xml(fmt.format("{}", xmin)));
+    output = fmt.format("{}<text x=\"{}\" y=\"{}\" text-anchor=\"middle\">{}</text>\n",
+                    output, right, bottom + 18.0, escape_xml(fmt.format("{}", xmax)));
+    output = fmt.format("{}<text x=\"{}\" y=\"{}\" text-anchor=\"end\">{}</text>\n",
+                    output, left - 8.0, bottom + 4.0, escape_xml(fmt.format("{}", ymin)));
+    output = fmt.format("{}<text x=\"{}\" y=\"{}\" text-anchor=\"end\">{}</text>\n",
+                    output, left - 8.0, top + 4.0, escape_xml(fmt.format("{}", ymax)));
+    return fmt.format("{}</g>", output);
 }
 
 fn render_labels(chart: Chart, xmin: real64, xmax: real64, ymin: real64, ymax: real64): text {
     output = "<g class=\"labels\" fill=\"#0f172a\" font-family=\"sans-serif\">\n";
     if chart.title_text != "" {
-        output = format("{}<text x=\"{}\" y=\"28\" text-anchor=\"middle\" font-size=\"18\" font-weight=\"700\">{}</text>\n",
+        output = fmt.format("{}<text x=\"{}\" y=\"28\" text-anchor=\"middle\" font-size=\"18\" font-weight=\"700\">{}</text>\n",
                         output, (chart.width to real64) / 2.0, escape_xml(chart.title_text));
     }
     if chart.x_label_text != "" {
-        output = format("{}<text x=\"{}\" y=\"{}\" text-anchor=\"middle\" font-size=\"13\">{}</text>\n",
+        output = fmt.format("{}<text x=\"{}\" y=\"{}\" text-anchor=\"middle\" font-size=\"13\">{}</text>\n",
                         output, (chart.width to real64) / 2.0, (chart.height to real64) - 16.0,
                         escape_xml(chart.x_label_text));
     }
     if chart.y_label_text != "" {
-        output = format("{}<text x=\"18\" y=\"{}\" text-anchor=\"middle\" font-size=\"13\" transform=\"rotate(-90 18 {})\">{}</text>\n",
+        output = fmt.format("{}<text x=\"18\" y=\"{}\" text-anchor=\"middle\" font-size=\"13\" transform=\"rotate(-90 18 {})\">{}</text>\n",
                         output, (chart.height to real64) / 2.0, (chart.height to real64) / 2.0,
                         escape_xml(chart.y_label_text));
     }
 
-    return format("{}</g>\n", output);
+    return fmt.format("{}</g>\n", output);
 }
 
 fn render_series(chart: Chart, series: Series, xmin: real64, xmax: real64, ymin: real64, ymax: real64): text {
@@ -606,34 +607,34 @@ fn render_line(chart: Chart, series: Series, xmin: real64, xmax: real64, ymin: r
     for index = 0; index < series.xs.len(); index = index + 1 {
         px = scale_x(chart, series.xs[index], xmin, xmax);
         py = scale_y(chart, series.ys[index], ymin, ymax);
-        pair = format("{},{}", px, py);
+        pair = fmt.format("{},{}", px, py);
         if index == 0 {
             points = pair;
         } else {
-            points = format("{} {}", points, pair);
+            points = fmt.format("{} {}", points, pair);
         }
     }
 
-    return format("<polyline class=\"series line\" fill=\"none\" stroke=\"{}\" stroke-width=\"2\" points=\"{}\"/>",
+    return fmt.format("<polyline class=\"series line\" fill=\"none\" stroke=\"{}\" stroke-width=\"2\" points=\"{}\"/>",
                   series.color, points);
 }
 
 fn render_scatter(chart: Chart, series: Series, xmin: real64, xmax: real64, ymin: real64, ymax: real64): text {
-    output = format("<g class=\"series scatter\" fill=\"{}\">\n", series.color);
+    output = fmt.format("<g class=\"series scatter\" fill=\"{}\">\n", series.color);
     for index = 0; index < series.xs.len(); index = index + 1 {
         px = scale_x(chart, series.xs[index], xmin, xmax);
         py = scale_y(chart, series.ys[index], ymin, ymax);
-        output = format("{}<circle cx=\"{}\" cy=\"{}\" r=\"3\"/>\n", output, px, py);
+        output = fmt.format("{}<circle cx=\"{}\" cy=\"{}\" r=\"3\"/>\n", output, px, py);
     }
 
-    return format("{}</g>", output);
+    return fmt.format("{}</g>", output);
 }
 
 fn render_bar(chart: Chart, series: Series, xmin: real64, xmax: real64, ymin: real64, ymax: real64): text {
     base = scale_y(chart, 0.0, ymin, ymax);
     slot_width = plot_width(chart) / (series.xs.len() to real64);
     bar_width = math.round(slot_width * 0.7);
-    output = format("<g class=\"series bar\" fill=\"{}\">\n", series.color);
+    output = fmt.format("<g class=\"series bar\" fill=\"{}\">\n", series.color);
 
     for index = 0; index < series.xs.len(); index = index + 1 {
         center = scale_x(chart, series.xs[index], xmin, xmax);
@@ -645,11 +646,11 @@ fn render_bar(chart: Chart, series: Series, xmin: real64, xmax: real64, ymin: re
             height = 0.0 - height;
         }
 
-        output = format("{}<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\"/>\n",
+        output = fmt.format("{}<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\"/>\n",
                         output, center - bar_width / 2.0, y, bar_width, height);
     }
 
-    return format("{}</g>", output);
+    return fmt.format("{}</g>", output);
 }
 
 fn render_legend(chart: Chart): text {
@@ -660,13 +661,13 @@ fn render_legend(chart: Chart): text {
         series = chart.series[index];
         if series.label_text != "" {
             y = 28.0 + (row to real64) * 18.0;
-            output = format("{}<rect x=\"{}\" y=\"{}\" width=\"12\" height=\"12\" fill=\"{}\"/>\n",
+            output = fmt.format("{}<rect x=\"{}\" y=\"{}\" width=\"12\" height=\"12\" fill=\"{}\"/>\n",
                             output, x, y - 10.0, series.color);
-            output = format("{}<text x=\"{}\" y=\"{}\">{}</text>\n",
+            output = fmt.format("{}<text x=\"{}\" y=\"{}\">{}</text>\n",
                             output, x + 18.0, y, escape_xml(series.label_text));
             row = row + 1;
         }
     }
 
-    return format("{}</g>\n", output);
+    return fmt.format("{}</g>\n", output);
 }

@@ -693,11 +693,11 @@ bool compiles_matrix_module_as_dune_code() {
 }
 
 bool compiles_plot_module_as_dune_code() {
-    const dune::Bytecode bytecode = compile_source("import plot; import text; "
+    const dune::Bytecode bytecode = compile_source("import io; import plot; import text; "
                                                    "chart = plot.line([1.0, 2.0], [3.0, 4.0]).title(\"demo\"); "
                                                    "plot.use_backend(\"svg\"); "
-                                                   "print(plot.backend()); "
-                                                   "print(plot.svg(chart).contains(\"<svg\"));");
+                                                   "io.println(plot.backend()); "
+                                                   "io.println(plot.svg(chart).contains(\"<svg\"));");
 
     bool saw_line = false;
     bool saw_render_svg = false;
