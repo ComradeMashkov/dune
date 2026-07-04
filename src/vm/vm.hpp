@@ -34,6 +34,7 @@ private:
     Bytecode bytecode_;
     std::vector<std::string> program_arguments_;
     int log_level_ = 2;
+    std::string plot_backend_ = "none";
     std::vector<Value> stack_;
     std::vector<CallFrame> frames_;
 };

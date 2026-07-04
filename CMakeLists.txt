@@ -142,8 +142,16 @@ target_link_libraries(dune_lsp
         dune_typechecker
 )
 
+if(APPLE)
+    enable_language(OBJCXX)
+    set(DUNE_NATIVE_PLOT_DISPLAY_SOURCE src/vm/native_plot_display_macos.mm)
+else()
+    set(DUNE_NATIVE_PLOT_DISPLAY_SOURCE src/vm/native_plot_display.cpp)
+endif()
+
 add_library(dune_vm
     src/vm/vm.cpp
+    ${DUNE_NATIVE_PLOT_DISPLAY_SOURCE}
 )
 dune_add_lint_dependencies(dune_vm)
 
@@ -151,6 +159,14 @@ target_link_libraries(dune_vm
     PUBLIC
         dune_compiler
 )
+
+if(APPLE)
+    target_link_libraries(dune_vm
+        PUBLIC
+            "-framework Cocoa"
+            "-framework WebKit"
+    )
+endif()
 
 add_library(dune_doc
     src/doc/doc_generator.cpp
@@ -626,6 +642,16 @@ add_test(
         -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/stdlib/dict_set.dn
         -D EXPECTED_OUTPUT="2\n15\n7\n-1\n1\n0\n2\n22\n1\n0\n1\n0\n2\n1\n0\n2\n1\n1\n1"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
+    NAME cli_plot_svg
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/stdlib/plot_svg.dn
+        -D EXPECTED_OUTPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/golden/plot_svg.out
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
 )
 

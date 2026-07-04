@@ -1488,6 +1488,19 @@ Type TypeChecker::check_member_assignment_target(const Expression& target, Sourc
 }
 
 Type TypeChecker::check_expression(const Expression& expression, const TypeAnnotation& expected) {
+    // Memoize resolved call/method-call types. A call node resolves
+    // deterministically from its (fixed) argument nodes, so re-checking it is
+    // pure recomputation. Overload resolution re-checks a call's receiver once
+    // per candidate module, and a fluent builder chain nests those receivers, so
+    // without this guard a length-N method chain is type-checked O(k^N) times.
+    // Literals whose type is inferred from `expected` are deliberately excluded.
+    if (expression.kind == ExpressionKind::method_call || expression.kind == ExpressionKind::call) {
+        const auto cached = expression_types_.find(&expression);
+        if (cached != expression_types_.end()) {
+            return cached->second;
+        }
+    }
+
     TypeAnnotation wanted = expected;
     if (wanted.has_type) {
         wanted.type = normalize_type(wanted.type);
@@ -1882,21 +1895,23 @@ Type TypeChecker::check_format_call_expression(const Expression& expression) {
     return make_type(ValueType::text_type);
 }
 
-// Low-level intrinsics. These are the only compiler-known primitives behind
-// the pure-Dune `fs`/`process`/`log` stdlib modules; they lower to dedicated VM
-// opcodes instead of C/C++ foreign functions.
+// Low-level stdlib intrinsics. These are the compiler-known primitives behind
+// pure-Dune wrappers such as `fs`, `process`, `log`, and `plot`; they lower to
+// dedicated VM opcodes instead of C/C++ foreign functions.
 bool TypeChecker::is_io_builtin(const std::string& name) {
     return name == "__read_file" || name == "__write_file" || name == "__stdout_write" ||
            name == "__stderr_write" || name == "__stdout_flush" || name == "__stderr_flush" ||
            name == "__stdin_read_line" || name == "__env_get" || name == "__process_args" ||
            name == "__process_cwd" || name == "__log_emit" || name == "__log_set_level" ||
-           name == "__log_level";
+           name == "__log_level" || name == "__plot_backend_get" || name == "__plot_backend_set" ||
+           name == "__plot_show_native";
 }
 
 Type TypeChecker::check_io_builtin_call(const Expression& expression) {
     const std::string& name = expression.lexeme;
     std::size_t expected_arguments = 0;
-    if (name == "__read_file" || name == "__env_get" || name == "__stdout_write" || name == "__stderr_write") {
+    if (name == "__read_file" || name == "__env_get" || name == "__stdout_write" || name == "__stderr_write" ||
+        name == "__plot_backend_set" || name == "__plot_show_native") {
         expected_arguments = 1;
     } else if (name == "__write_file") {
         expected_arguments = 2;
@@ -1938,6 +1953,14 @@ Type TypeChecker::check_io_builtin_call(const Expression& expression) {
 
     if (name == "__process_args") {
         return make_array_type(make_type(ValueType::text_type));
+    }
+
+    if (name == "__plot_backend_get") {
+        return make_type(ValueType::text_type);
+    }
+
+    if (name == "__plot_backend_set") {
+        return make_type(ValueType::unit_type);
     }
 
     return make_tuple_type({make_type(ValueType::bool_type), make_type(ValueType::text_type)});

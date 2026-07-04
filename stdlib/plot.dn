@@ -1,0 +1,673 @@
+// Deterministic chart rendering in pure Dune.
+//
+// The module keeps chart specification separate from output backends:
+// Chart -> SVG/HTML renderer -> file or display backend. The first display
+// backend is intentionally headless-friendly: `show` returns an Outcome instead
+// of trying to open a GUI process. Future native/browser/notebook backends can
+// plug in behind the same API.
+import fs;
+import fmt;
+import math;
+import outcome;
+import process;
+import runtime;
+
+const DEFAULT_WIDTH: int = 640;
+const DEFAULT_HEIGHT: int = 400;
+const PLOT_LEFT: real64 = 64.0;
+const PLOT_RIGHT: real64 = 36.0;
+const PLOT_TOP: real64 = 48.0;
+const PLOT_BOTTOM: real64 = 64.0;
+
+record Series {
+    kind: text,
+    xs: [real64],
+    ys: [real64],
+    label_text: text,
+    color: text,
+
+    static fn new(kind: text, xs: [real64], ys: [real64], label_text: text, color: text): Series {
+        require_xy(xs, ys);
+        return Series { kind: kind, xs: xs, ys: ys, label_text: label_text, color: color };
+    }
+
+    fn label(value: text): Series {
+        return Series { kind: this.kind, xs: this.xs, ys: this.ys, label_text: value, color: this.color };
+    }
+}
+
+export record Chart {
+    series: [Series],
+    title_text: text,
+    x_label_text: text,
+    y_label_text: text,
+    legend_enabled: bool,
+    width: int,
+    height: int,
+
+    export static fn empty(): Chart {
+        empty_series: [Series] = [];
+        return Chart {
+            series: empty_series,
+            title_text: "",
+            x_label_text: "",
+            y_label_text: "",
+            legend_enabled: false,
+            width: DEFAULT_WIDTH,
+            height: DEFAULT_HEIGHT,
+        };
+    }
+
+    export fn title(value: text): Chart {
+        return Chart {
+            series: this.series,
+            title_text: value,
+            x_label_text: this.x_label_text,
+            y_label_text: this.y_label_text,
+            legend_enabled: this.legend_enabled,
+            width: this.width,
+            height: this.height,
+        };
+    }
+
+    export fn x_label(value: text): Chart {
+        return Chart {
+            series: this.series,
+            title_text: this.title_text,
+            x_label_text: value,
+            y_label_text: this.y_label_text,
+            legend_enabled: this.legend_enabled,
+            width: this.width,
+            height: this.height,
+        };
+    }
+
+    export fn y_label(value: text): Chart {
+        return Chart {
+            series: this.series,
+            title_text: this.title_text,
+            x_label_text: this.x_label_text,
+            y_label_text: value,
+            legend_enabled: this.legend_enabled,
+            width: this.width,
+            height: this.height,
+        };
+    }
+
+    export fn legend(enabled: bool): Chart {
+        return Chart {
+            series: this.series,
+            title_text: this.title_text,
+            x_label_text: this.x_label_text,
+            y_label_text: this.y_label_text,
+            legend_enabled: enabled,
+            width: this.width,
+            height: this.height,
+        };
+    }
+
+    export fn size(width: int, height: int): Chart {
+        if width <= 0 || height <= 0 {
+            runtime.panic("plot: chart size must be positive");
+        }
+
+        return Chart {
+            series: this.series,
+            title_text: this.title_text,
+            x_label_text: this.x_label_text,
+            y_label_text: this.y_label_text,
+            legend_enabled: this.legend_enabled,
+            width: width,
+            height: height,
+        };
+    }
+
+    export fn label(value: text): Chart {
+        if this.series.len() == 0 {
+            runtime.panic("plot: cannot label an empty chart");
+        }
+
+        return Chart {
+            series: set_last_label(this.series, value),
+            title_text: this.title_text,
+            x_label_text: this.x_label_text,
+            y_label_text: this.y_label_text,
+            legend_enabled: this.legend_enabled,
+            width: this.width,
+            height: this.height,
+        };
+    }
+
+    export fn add_line(xs: [real64], ys: [real64]): Chart {
+        return append_series(this, Series.new("line", xs, ys, "", palette(this.series.len())));
+    }
+
+    export fn add_line(ys: [real64]): Chart {
+        return this.add_line(default_xs(ys), ys);
+    }
+
+    export fn add_scatter(xs: [real64], ys: [real64]): Chart {
+        return append_series(this, Series.new("scatter", xs, ys, "", palette(this.series.len())));
+    }
+
+    export fn add_scatter(ys: [real64]): Chart {
+        return this.add_scatter(default_xs(ys), ys);
+    }
+
+    export fn add_bar(xs: [real64], ys: [real64]): Chart {
+        return append_series(this, Series.new("bar", xs, ys, "", palette(this.series.len())));
+    }
+
+    export fn add_bar(ys: [real64]): Chart {
+        return this.add_bar(default_xs(ys), ys);
+    }
+}
+
+export fn empty(): Chart {
+    return Chart.empty();
+}
+
+export fn line(xs: [real64], ys: [real64]): Chart {
+    return Chart.empty().add_line(xs, ys);
+}
+
+export fn line(ys: [real64]): Chart {
+    return Chart.empty().add_line(ys);
+}
+
+export fn scatter(xs: [real64], ys: [real64]): Chart {
+    return Chart.empty().add_scatter(xs, ys);
+}
+
+export fn scatter(ys: [real64]): Chart {
+    return Chart.empty().add_scatter(ys);
+}
+
+export fn bar(xs: [real64], ys: [real64]): Chart {
+    return Chart.empty().add_bar(xs, ys);
+}
+
+export fn bar(ys: [real64]): Chart {
+    return Chart.empty().add_bar(ys);
+}
+
+export fn histogram(values: [real64], bins: int): Chart {
+    if values.len() == 0 {
+        runtime.panic("plot: histogram requires at least one value");
+    }
+    if bins <= 0 {
+        runtime.panic("plot: histogram bin count must be positive");
+    }
+
+    lo = values[0];
+    hi = values[0];
+    for index = 1; index < values.len(); index = index + 1 {
+        if values[index] < lo {
+            lo = values[index];
+        }
+        if values[index] > hi {
+            hi = values[index];
+        }
+    }
+
+    span = hi - lo;
+    if span == 0.0 {
+        span = 1.0;
+    }
+
+    counts: [real64] = [];
+    for index = 0; index < bins; index = index + 1 {
+        counts.push(0.0);
+    }
+
+    width = span / (bins to real64);
+    for index = 0; index < values.len(); index = index + 1 {
+        slot = math.floor((values[index] - lo) / width) to int;
+        if slot < 0 {
+            slot = 0;
+        }
+        if slot >= bins {
+            slot = bins - 1;
+        }
+        counts[slot] = counts[slot] + 1.0;
+    }
+
+    xs: [real64] = [];
+    for index = 0; index < bins; index = index + 1 {
+        xs.push(lo + ((index to real64) + 0.5) * width);
+    }
+
+    return bar(xs, counts);
+}
+
+// Select the display backend for `show`. Supported MVP backends are:
+// - "none": return a clear unsupported/headless error;
+// - "svg": return the deterministic SVG text;
+// - "html": return a deterministic HTML wrapper containing the SVG.
+// - "native": open a platform-native plot window when the VM supports it.
+export fn use_backend(name: text): unit {
+    __plot_backend_set(name);
+}
+
+export fn backend(): text {
+    return process.env_or("DUNE_PLOT_BACKEND", __plot_backend_get());
+}
+
+export fn available_backends(): [text] {
+    return ["none", "svg", "html", "native"];
+}
+
+export fn svg(chart: Chart): text {
+    return render_svg(chart);
+}
+
+export fn html(chart: Chart): text {
+    title = chart.title_text;
+    if title == "" {
+        title = "Dune plot";
+    }
+
+    return fmt.format("<!doctype html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<title>{}</title>\n</head>\n<body>\n{}\n</body>\n</html>\n",
+                  escape_xml(title), svg(chart));
+}
+
+export fn save_svg(chart: Chart, path: text): outcome.Outcome<text, text> {
+    return fs.write_text(path, svg(chart));
+}
+
+export fn save_html(chart: Chart, path: text): outcome.Outcome<text, text> {
+    return fs.write_text(path, html(chart));
+}
+
+export fn show_native(chart: Chart): outcome.Outcome<text, text> {
+    (ok, message) = __plot_show_native(svg(chart));
+    if ok {
+        return outcome.done_text(message);
+    }
+
+    return outcome.failed_text(message);
+}
+
+export fn show(chart: Chart): outcome.Outcome<text, text> {
+    selected = backend();
+    if selected == "svg" {
+        return outcome.done_text(svg(chart));
+    }
+    if selected == "html" {
+        return outcome.done_text(html(chart));
+    }
+    if selected == "none" {
+        return outcome.failed_text("plot.show has no display backend; use plot.save_svg/save_html or plot.use_backend(\"svg\") in headless runs");
+    }
+    if selected == "native" {
+        return show_native(chart);
+    }
+    if selected == "macosx" {
+        return show_native(chart);
+    }
+
+    return outcome.failed_text(fmt.format("plot.show backend '{}' is not available", selected));
+}
+
+fn append_series(chart: Chart, series: Series): Chart {
+    next: [Series] = [];
+    for index = 0; index < chart.series.len(); index = index + 1 {
+        next.push(chart.series[index]);
+    }
+    next.push(series);
+
+    return Chart {
+        series: next,
+        title_text: chart.title_text,
+        x_label_text: chart.x_label_text,
+        y_label_text: chart.y_label_text,
+        legend_enabled: chart.legend_enabled,
+        width: chart.width,
+        height: chart.height,
+    };
+}
+
+fn set_last_label(series: [Series], label: text): [Series] {
+    result: [Series] = [];
+    last = series.len() - 1;
+    for index = 0; index < series.len(); index = index + 1 {
+        if index == last {
+            result.push(series[index].label(label));
+        } else {
+            result.push(series[index]);
+        }
+    }
+
+    return result;
+}
+
+fn require_xy(xs: [real64], ys: [real64]): unit {
+    if xs.len() != ys.len() {
+        runtime.panic("plot: xs and ys length mismatch");
+    }
+    if xs.len() == 0 {
+        runtime.panic("plot: data series cannot be empty");
+    }
+}
+
+fn default_xs(ys: [real64]): [real64] {
+    xs: [real64] = [];
+    for index = 0; index < ys.len(); index = index + 1 {
+        xs.push((index + 1) to real64);
+    }
+
+    return xs;
+}
+
+fn palette(index: int): text {
+    slot = index % 8;
+    if slot == 0 {
+        return "#2563eb";
+    }
+    if slot == 1 {
+        return "#dc2626";
+    }
+    if slot == 2 {
+        return "#16a34a";
+    }
+    if slot == 3 {
+        return "#9333ea";
+    }
+    if slot == 4 {
+        return "#ea580c";
+    }
+    if slot == 5 {
+        return "#0891b2";
+    }
+    if slot == 6 {
+        return "#4f46e5";
+    }
+    return "#be123c";
+}
+
+fn escape_xml(value: text): text {
+    escaped = "";
+    for index = 0; index < value.len(); index = index + 1 {
+        ch = value[index];
+        if ch == '&' {
+            escaped = fmt.format("{}&amp;", escaped);
+        } else {
+            if ch == '<' {
+                escaped = fmt.format("{}&lt;", escaped);
+            } else {
+                if ch == '>' {
+                    escaped = fmt.format("{}&gt;", escaped);
+                } else {
+                    if ch == '"' {
+                        escaped = fmt.format("{}&quot;", escaped);
+                    } else {
+                        if ch == '\'' {
+                            escaped = fmt.format("{}&apos;", escaped);
+                        } else {
+                            escaped = fmt.format("{}{}", escaped, ch);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return escaped;
+}
+
+fn x_min(chart: Chart): real64 {
+    require_chart_data(chart);
+    result = chart.series[0].xs[0];
+    for s = 0; s < chart.series.len(); s = s + 1 {
+        series = chart.series[s];
+        for index = 0; index < series.xs.len(); index = index + 1 {
+            if series.xs[index] < result {
+                result = series.xs[index];
+            }
+        }
+    }
+
+    return result;
+}
+
+fn x_max(chart: Chart): real64 {
+    require_chart_data(chart);
+    result = chart.series[0].xs[0];
+    for s = 0; s < chart.series.len(); s = s + 1 {
+        series = chart.series[s];
+        for index = 0; index < series.xs.len(); index = index + 1 {
+            if series.xs[index] > result {
+                result = series.xs[index];
+            }
+        }
+    }
+
+    return result;
+}
+
+fn y_min(chart: Chart): real64 {
+    require_chart_data(chart);
+    result = chart.series[0].ys[0];
+    for s = 0; s < chart.series.len(); s = s + 1 {
+        series = chart.series[s];
+        for index = 0; index < series.ys.len(); index = index + 1 {
+            if series.ys[index] < result {
+                result = series.ys[index];
+            }
+        }
+    }
+    if result > 0.0 {
+        return 0.0;
+    }
+
+    return result;
+}
+
+fn y_max(chart: Chart): real64 {
+    require_chart_data(chart);
+    result = chart.series[0].ys[0];
+    for s = 0; s < chart.series.len(); s = s + 1 {
+        series = chart.series[s];
+        for index = 0; index < series.ys.len(); index = index + 1 {
+            if series.ys[index] > result {
+                result = series.ys[index];
+            }
+        }
+    }
+    if result < 0.0 {
+        return 0.0;
+    }
+
+    return result;
+}
+
+fn require_chart_data(chart: Chart): unit {
+    if chart.series.len() == 0 {
+        runtime.panic("plot: chart has no series");
+    }
+}
+
+fn normalize_span(minimum: real64, maximum: real64): real64 {
+    span = maximum - minimum;
+    if span == 0.0 {
+        return 1.0;
+    }
+
+    return span;
+}
+
+fn plot_width(chart: Chart): real64 {
+    return (chart.width to real64) - PLOT_LEFT - PLOT_RIGHT;
+}
+
+fn plot_height(chart: Chart): real64 {
+    return (chart.height to real64) - PLOT_TOP - PLOT_BOTTOM;
+}
+
+fn scale_x(chart: Chart, value: real64, minimum: real64, maximum: real64): real64 {
+    span = normalize_span(minimum, maximum);
+    if maximum == minimum {
+        return math.round(PLOT_LEFT + plot_width(chart) / 2.0);
+    }
+
+    return math.round(PLOT_LEFT + ((value - minimum) / span) * plot_width(chart));
+}
+
+fn scale_y(chart: Chart, value: real64, minimum: real64, maximum: real64): real64 {
+    span = normalize_span(minimum, maximum);
+    if maximum == minimum {
+        return math.round(PLOT_TOP + plot_height(chart) / 2.0);
+    }
+
+    return math.round(PLOT_TOP + ((maximum - value) / span) * plot_height(chart));
+}
+
+fn render_svg(chart: Chart): text {
+    require_chart_data(chart);
+
+    xmin = x_min(chart);
+    xmax = x_max(chart);
+    ymin = y_min(chart);
+    ymax = y_max(chart);
+
+    output = fmt.format("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{}\" height=\"{}\" viewBox=\"0 0 {} {}\">\n",
+                    chart.width, chart.height, chart.width, chart.height);
+    output = fmt.format("{}<title>{}</title>\n", output, escape_xml(chart.title_text));
+    output = fmt.format("{}<rect width=\"{}\" height=\"{}\" fill=\"#ffffff\"/>\n", output, chart.width, chart.height);
+    output = fmt.format("{}{}\n", output, render_axes(chart, xmin, xmax, ymin, ymax));
+
+    for index = 0; index < chart.series.len(); index = index + 1 {
+        output = fmt.format("{}{}\n", output, render_series(chart, chart.series[index], xmin, xmax, ymin, ymax));
+    }
+
+    output = fmt.format("{}{}", output, render_labels(chart, xmin, xmax, ymin, ymax));
+    if chart.legend_enabled {
+        output = fmt.format("{}{}", output, render_legend(chart));
+    }
+
+    return fmt.format("{}</svg>\n", output);
+}
+
+fn render_axes(chart: Chart, xmin: real64, xmax: real64, ymin: real64, ymax: real64): text {
+    left = PLOT_LEFT;
+    right = (chart.width to real64) - PLOT_RIGHT;
+    top = PLOT_TOP;
+    bottom = (chart.height to real64) - PLOT_BOTTOM;
+
+    output = fmt.format("<g class=\"axes\" fill=\"none\" stroke=\"#334155\" stroke-width=\"1\">\n");
+    output = fmt.format("{}<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\"/>\n", output, left, bottom, right, bottom);
+    output = fmt.format("{}<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\"/>\n", output, left, top, left, bottom);
+    output = fmt.format("{}</g>\n", output);
+
+    output = fmt.format("{}<g class=\"ticks\" fill=\"#475569\" font-family=\"sans-serif\" font-size=\"11\">\n", output);
+    output = fmt.format("{}<text x=\"{}\" y=\"{}\" text-anchor=\"middle\">{}</text>\n",
+                    output, left, bottom + 18.0, escape_xml(fmt.format("{}", xmin)));
+    output = fmt.format("{}<text x=\"{}\" y=\"{}\" text-anchor=\"middle\">{}</text>\n",
+                    output, right, bottom + 18.0, escape_xml(fmt.format("{}", xmax)));
+    output = fmt.format("{}<text x=\"{}\" y=\"{}\" text-anchor=\"end\">{}</text>\n",
+                    output, left - 8.0, bottom + 4.0, escape_xml(fmt.format("{}", ymin)));
+    output = fmt.format("{}<text x=\"{}\" y=\"{}\" text-anchor=\"end\">{}</text>\n",
+                    output, left - 8.0, top + 4.0, escape_xml(fmt.format("{}", ymax)));
+    return fmt.format("{}</g>", output);
+}
+
+fn render_labels(chart: Chart, xmin: real64, xmax: real64, ymin: real64, ymax: real64): text {
+    output = "<g class=\"labels\" fill=\"#0f172a\" font-family=\"sans-serif\">\n";
+    if chart.title_text != "" {
+        output = fmt.format("{}<text x=\"{}\" y=\"28\" text-anchor=\"middle\" font-size=\"18\" font-weight=\"700\">{}</text>\n",
+                        output, (chart.width to real64) / 2.0, escape_xml(chart.title_text));
+    }
+    if chart.x_label_text != "" {
+        output = fmt.format("{}<text x=\"{}\" y=\"{}\" text-anchor=\"middle\" font-size=\"13\">{}</text>\n",
+                        output, (chart.width to real64) / 2.0, (chart.height to real64) - 16.0,
+                        escape_xml(chart.x_label_text));
+    }
+    if chart.y_label_text != "" {
+        output = fmt.format("{}<text x=\"18\" y=\"{}\" text-anchor=\"middle\" font-size=\"13\" transform=\"rotate(-90 18 {})\">{}</text>\n",
+                        output, (chart.height to real64) / 2.0, (chart.height to real64) / 2.0,
+                        escape_xml(chart.y_label_text));
+    }
+
+    return fmt.format("{}</g>\n", output);
+}
+
+fn render_series(chart: Chart, series: Series, xmin: real64, xmax: real64, ymin: real64, ymax: real64): text {
+    if series.kind == "scatter" {
+        return render_scatter(chart, series, xmin, xmax, ymin, ymax);
+    }
+    if series.kind == "bar" {
+        return render_bar(chart, series, xmin, xmax, ymin, ymax);
+    }
+
+    return render_line(chart, series, xmin, xmax, ymin, ymax);
+}
+
+fn render_line(chart: Chart, series: Series, xmin: real64, xmax: real64, ymin: real64, ymax: real64): text {
+    points = "";
+    for index = 0; index < series.xs.len(); index = index + 1 {
+        px = scale_x(chart, series.xs[index], xmin, xmax);
+        py = scale_y(chart, series.ys[index], ymin, ymax);
+        pair = fmt.format("{},{}", px, py);
+        if index == 0 {
+            points = pair;
+        } else {
+            points = fmt.format("{} {}", points, pair);
+        }
+    }
+
+    return fmt.format("<polyline class=\"series line\" fill=\"none\" stroke=\"{}\" stroke-width=\"2\" points=\"{}\"/>",
+                  series.color, points);
+}
+
+fn render_scatter(chart: Chart, series: Series, xmin: real64, xmax: real64, ymin: real64, ymax: real64): text {
+    output = fmt.format("<g class=\"series scatter\" fill=\"{}\">\n", series.color);
+    for index = 0; index < series.xs.len(); index = index + 1 {
+        px = scale_x(chart, series.xs[index], xmin, xmax);
+        py = scale_y(chart, series.ys[index], ymin, ymax);
+        output = fmt.format("{}<circle cx=\"{}\" cy=\"{}\" r=\"3\"/>\n", output, px, py);
+    }
+
+    return fmt.format("{}</g>", output);
+}
+
+fn render_bar(chart: Chart, series: Series, xmin: real64, xmax: real64, ymin: real64, ymax: real64): text {
+    base = scale_y(chart, 0.0, ymin, ymax);
+    slot_width = plot_width(chart) / (series.xs.len() to real64);
+    bar_width = math.round(slot_width * 0.7);
+    output = fmt.format("<g class=\"series bar\" fill=\"{}\">\n", series.color);
+
+    for index = 0; index < series.xs.len(); index = index + 1 {
+        center = scale_x(chart, series.xs[index], xmin, xmax);
+        top = scale_y(chart, series.ys[index], ymin, ymax);
+        y = top;
+        height = base - top;
+        if height < 0.0 {
+            y = base;
+            height = 0.0 - height;
+        }
+
+        output = fmt.format("{}<rect x=\"{}\" y=\"{}\" width=\"{}\" height=\"{}\"/>\n",
+                        output, center - bar_width / 2.0, y, bar_width, height);
+    }
+
+    return fmt.format("{}</g>", output);
+}
+
+fn render_legend(chart: Chart): text {
+    output = "<g class=\"legend\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#0f172a\">\n";
+    row = 0;
+    x = (chart.width to real64) - 168.0;
+    for index = 0; index < chart.series.len(); index = index + 1 {
+        series = chart.series[index];
+        if series.label_text != "" {
+            y = 28.0 + (row to real64) * 18.0;
+            output = fmt.format("{}<rect x=\"{}\" y=\"{}\" width=\"12\" height=\"12\" fill=\"{}\"/>\n",
+                            output, x, y - 10.0, series.color);
+            output = fmt.format("{}<text x=\"{}\" y=\"{}\">{}</text>\n",
+                            output, x + 18.0, y, escape_xml(series.label_text));
+            row = row + 1;
+        }
+    }
+
+    return fmt.format("{}</g>\n", output);
+}

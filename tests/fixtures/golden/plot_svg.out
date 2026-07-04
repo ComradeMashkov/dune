@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400" viewBox="0 0 640 400">
+<title>growth &lt;&amp;&gt;</title>
+<rect width="640" height="400" fill="#ffffff"/>
+<g class="axes" fill="none" stroke="#334155" stroke-width="1">
+<line x1="64" y1="336" x2="604" y2="336"/>
+<line x1="64" y1="48" x2="64" y2="336"/>
+</g>
+<g class="ticks" fill="#475569" font-family="sans-serif" font-size="11">
+<text x="64" y="354" text-anchor="middle">1</text>
+<text x="604" y="354" text-anchor="middle">3</text>
+<text x="56" y="340" text-anchor="end">0</text>
+<text x="56" y="52" text-anchor="end">8</text>
+</g>
+<polyline class="series line" fill="none" stroke="#2563eb" stroke-width="2" points="64,264 334,192 604,48"/>
+<g class="series scatter" fill="#dc2626">
+<circle cx="64" cy="282" r="3"/>
+<circle cx="334" cy="228" r="3"/>
+<circle cx="604" cy="84" r="3"/>
+</g>
+<g class="series bar" fill="#16a34a">
+<rect x="1" y="300" width="126" height="36"/>
+<rect x="271" y="264" width="126" height="72"/>
+<rect x="541" y="228" width="126" height="108"/>
+</g>
+<g class="labels" fill="#0f172a" font-family="sans-serif">
+<text x="320" y="28" text-anchor="middle" font-size="18" font-weight="700">growth &lt;&amp;&gt;</text>
+<text x="320" y="384" text-anchor="middle" font-size="13">x axis</text>
+<text x="18" y="200" text-anchor="middle" font-size="13" transform="rotate(-90 18 200)">value &quot;y&quot;</text>
+</g>
+<g class="legend" font-family="sans-serif" font-size="12" fill="#0f172a">
+<rect x="472" y="18" width="12" height="12" fill="#2563eb"/>
+<text x="490" y="28">series &amp; one</text>
+<rect x="472" y="36" width="12" height="12" fill="#dc2626"/>
+<text x="490" y="46">points &lt;two&gt;</text>
+<rect x="472" y="54" width="12" height="12" fill="#16a34a"/>
+<text x="490" y="64">bars &quot;three&quot;</text>
+</g>
+</svg>
+1
+1
+1
+1
+1
+1
+4
+1
+1

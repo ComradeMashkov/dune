@@ -1,5 +1,7 @@
 #include "vm.hpp"
 
+#include "native_plot_display.hpp"
+
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -1363,6 +1365,35 @@ void VirtualMachine::execute(std::ostream& output, std::ostream& error, std::ist
             stack_.push_back(make_signed(log_level_));
             ++frame.ip;
             break;
+        case OpCode::plot_backend_get:
+            stack_.push_back(make_text(plot_backend_));
+            ++frame.ip;
+            break;
+        case OpCode::plot_backend_set: {
+            const Value name = pop();
+            if (name.kind != ValueKind::text) {
+                throw std::runtime_error("plot_backend_set expects a text name");
+            }
+
+            plot_backend_ = name.text_value;
+            stack_.push_back(make_unit());
+            ++frame.ip;
+            break;
+        }
+        case OpCode::plot_show_native: {
+            const Value svg = pop();
+            if (svg.kind != ValueKind::text) {
+                throw std::runtime_error("plot_show_native expects SVG text");
+            }
+
+            const NativePlotDisplayResult display = show_native_plot_svg(svg.text_value);
+            std::vector<Value> result(2);
+            result[0] = make_bool(display.ok);
+            result[1] = make_text(display.message);
+            stack_.push_back(make_tuple(std::move(result)));
+            ++frame.ip;
+            break;
+        }
         case OpCode::format_text: {
             std::vector<Value> arguments(instruction.operand);
             for (std::size_t index = instruction.operand; index > 0; --index) {
