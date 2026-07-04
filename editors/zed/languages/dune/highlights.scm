@@ -60,6 +60,10 @@
 ] @type.builtin
 
 (comment) @comment
+
+; Documentation comments (`///` and `/** */`) get a richer scope.
+((comment) @comment.doc
+  (#match? @comment.doc "^(///|/\\*\\*)"))
 (number) @number
 (float) @number.float
 (string) @string

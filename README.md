@@ -232,6 +232,33 @@ The plain, aliased, and selective forms interoperate freely, and every existing
 `import module;` continues to work unchanged. See `examples/geometry.dn` and
 `examples/geometry_demo.dn` for a complete two-file program.
 
+Comments and doc-comments:
+
+Dune has single-line `//` comments and multi-line `/* ... */` block comments.
+A comment block written directly above a declaration is treated as its
+documentation and shown in the editor's hover for that symbol — this works for
+symbols in other modules too (hovering `math.square` pulls the comment from
+`math.dn`). A blank line between the comment and the declaration detaches it, and
+a comment trailing code on the same line never attaches.
+
+Doc-comments may also use the `///` line form or the `/** ... */` block form and
+carry structured tags — `brief`, `param`, `returns`, and `example` — which hover
+renders as sections. Plain `//` comments are shown as prose, so existing comments
+document their symbols with no extra syntax.
+
+```dn
+/// brief: Squares a value.
+/// param value: the number to square
+/// returns: value * value
+fn square(value: int): int {
+  return value * value;
+}
+
+/* A point in two-dimensional space.
+   Block comments may span several lines. */
+record Point { x: int, y: int }
+```
+
 Operators and explicit casts:
 
 ```dn

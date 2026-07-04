@@ -49,6 +49,25 @@ bool expect_lex_error_contains(const std::string& source, const std::string& exp
     return false;
 }
 
+bool expect_leading_comment(const std::string& source, const std::string& token_lexeme, const std::string& expected) {
+    dune::Lexer lexer(source);
+    const std::vector<dune::Token> tokens = lexer.tokenize();
+    for (const dune::Token& token : tokens) {
+        if (token.lexeme == token_lexeme) {
+            if (token.leading_comment != expected) {
+                std::cerr << "leading comment for '" << token_lexeme << "' was '" << token.leading_comment
+                          << "', expected '" << expected << "'\n";
+                return false;
+            }
+
+            return true;
+        }
+    }
+
+    std::cerr << "token '" << token_lexeme << "' not found\n";
+    return false;
+}
+
 } // namespace
 
 int main() {
@@ -561,6 +580,35 @@ int main() {
                                {eof, ""},
                            }) &&
              passed;
+
+    // Block comments, including multi-line, are skipped like whitespace.
+    passed = expect_tokens("/* a block\n   comment */\nx = 1; /* inline */ y = 2;",
+                           {
+                               {identifier, "x"},
+                               {equal, "="},
+                               {number, "1"},
+                               {semicolon, ";"},
+                               {identifier, "y"},
+                               {equal, "="},
+                               {number, "2"},
+                               {semicolon, ";"},
+                               {eof, ""},
+                           }) &&
+             passed;
+
+    // Doc-comment blocks attach to the following token with markers stripped.
+    passed = expect_leading_comment("// brief: squares a value\nfn square(v: int): int { return v * v; }", "fn",
+                                    "brief: squares a value") &&
+             passed;
+    passed = expect_leading_comment("/// a doc line\nx = 1;", "x", "a doc line") && passed;
+    passed =
+        expect_leading_comment("/** brief: a point */\nrecord Point { x: int }", "record", "brief: a point") && passed;
+    // Two adjacent lines join; a blank line ends the block.
+    passed = expect_leading_comment("// first line\n// second line\ntotal = 1;", "total", "first line\nsecond line") &&
+             passed;
+    passed = expect_leading_comment("// far away\n\n// near\ntotal = 1;", "total", "near") && passed;
+    // A comment trailing code does not attach to the next declaration.
+    passed = expect_leading_comment("x = 1; // trailing\ny = 2;", "y", "") && passed;
 
     passed = expect_tokens("export record Point { x: real64, y: real64 } "
                            "p: Point = Point { x: 1.0, y: 2.0 }; print(p.x);",

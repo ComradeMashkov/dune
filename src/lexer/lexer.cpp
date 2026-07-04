@@ -71,8 +71,34 @@ bool is_integer_suffix(std::string_view suffix) {
 Lexer::Lexer(std::string source) : source_(std::move(source)) {}
 
 Token Lexer::next_token() {
-    skip_whitespace();
+    pending_comment_lines_.clear();
+    pending_comment_last_line_ = 0;
+    skip_trivia();
 
+    Token token = scan_token();
+
+    // Drop the block if a blank line separates the last comment from the token,
+    // so only comments written directly above a declaration attach to it.
+    if (!pending_comment_lines_.empty() && pending_comment_last_line_ != 0 &&
+        token.line > pending_comment_last_line_ + 1) {
+        pending_comment_lines_.clear();
+    }
+
+    if (!pending_comment_lines_.empty()) {
+        std::string joined;
+        for (const std::string& comment_line : pending_comment_lines_) {
+            if (!joined.empty()) {
+                joined += '\n';
+            }
+            joined += comment_line;
+        }
+        token.leading_comment = std::move(joined);
+    }
+
+    return token;
+}
+
+Token Lexer::scan_token() {
     if (is_at_end()) {
         return Token{TokenType::eof, "", line_, column_};
     }
@@ -235,16 +261,123 @@ char Lexer::peek() const {
     return source_[current_];
 }
 
-void Lexer::skip_whitespace() {
+// True when only whitespace precedes `position` on its line, i.e. the comment
+// starting there stands on its own line rather than trailing code.
+bool Lexer::is_line_leading(std::size_t position) const {
+    while (position > 0) {
+        const char previous = source_[position - 1];
+        if (previous == '\n') {
+            return true;
+        }
+        if (previous != ' ' && previous != '\t' && previous != '\r') {
+            return false;
+        }
+        --position;
+    }
+
+    return true;
+}
+
+// Trims a single leading space and trailing whitespace from a comment line so a
+// `// text` comment stores just `text`.
+std::string trim_comment_line(std::string text) {
+    if (!text.empty() && text.front() == ' ') {
+        text.erase(text.begin());
+    }
+    while (!text.empty() && (text.back() == ' ' || text.back() == '\t' || text.back() == '\r')) {
+        text.pop_back();
+    }
+
+    return text;
+}
+
+// Records a comment block (one line for `//`, possibly several for `/* */`)
+// against the token being scanned. A blank line since the previous comment
+// resets the accumulation, so unrelated earlier comments do not leak in.
+void Lexer::record_comment_block(const std::string& text, std::size_t first_line, std::size_t last_line) {
+    if (!pending_comment_lines_.empty() && first_line > pending_comment_last_line_ + 1) {
+        pending_comment_lines_.clear();
+    }
+
+    std::size_t line_start = 0;
+    while (line_start <= text.size()) {
+        const std::size_t newline = text.find('\n', line_start);
+        const std::size_t end = newline == std::string::npos ? text.size() : newline;
+        std::string line = text.substr(line_start, end - line_start);
+
+        // Strip a leading `*` decoration used by javadoc-style block comments.
+        std::size_t begin = line.find_first_not_of(" \t\r");
+        if (begin != std::string::npos && line[begin] == '*') {
+            line.erase(0, begin + 1);
+        }
+        pending_comment_lines_.push_back(trim_comment_line(std::move(line)));
+
+        if (newline == std::string::npos) {
+            break;
+        }
+        line_start = newline + 1;
+    }
+
+    // Trim blank lines that bracket a block comment's body.
+    while (!pending_comment_lines_.empty() && pending_comment_lines_.back().empty()) {
+        pending_comment_lines_.pop_back();
+    }
+
+    pending_comment_last_line_ = last_line;
+}
+
+void Lexer::skip_trivia() {
     while (!is_at_end()) {
         if (std::isspace(static_cast<unsigned char>(peek()))) {
             advance();
             continue;
         }
 
+        // Line comment: `//` or the `///` doc form.
         if (peek() == '/' && current_ + 1 < source_.size() && source_[current_ + 1] == '/') {
+            const std::size_t comment_line = line_;
+            const bool leading = is_line_leading(current_);
+            advance(); // first '/'
+            advance(); // second '/'
+            if (peek() == '/') {
+                advance(); // third '/' of a `///` doc comment
+            }
+
+            const std::size_t text_start = current_;
             while (!is_at_end() && peek() != '\n') {
                 advance();
+            }
+
+            if (leading) {
+                record_comment_block(source_.substr(text_start, current_ - text_start), comment_line, comment_line);
+            }
+            continue;
+        }
+
+        // Block comment: `/* ... */` or the `/** ... */` doc form. Not nested.
+        if (peek() == '/' && current_ + 1 < source_.size() && source_[current_ + 1] == '*') {
+            const std::size_t comment_line = line_;
+            const bool leading = is_line_leading(current_);
+            advance(); // '/'
+            advance(); // '*'
+
+            const std::size_t text_start = current_;
+            while (!is_at_end() && !(peek() == '*' && current_ + 1 < source_.size() && source_[current_ + 1] == '/')) {
+                advance();
+            }
+            const std::size_t text_end = current_;
+            if (!is_at_end()) {
+                advance(); // '*'
+                advance(); // '/'
+            }
+
+            if (leading) {
+                std::string body = source_.substr(text_start, text_end - text_start);
+                // A `/** ... */` doc comment opens with an extra '*'; drop it.
+                if (!body.empty() && body.front() == '*') {
+                    body.erase(body.begin());
+                }
+                record_comment_block(body, comment_line, line_);
             }
             continue;
         }

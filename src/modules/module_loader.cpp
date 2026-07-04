@@ -194,6 +194,7 @@ Statement clone_statement(const Statement& statement) {
     }
     result.module_alias = statement.module_alias;
     result.import_symbols = statement.import_symbols;
+    result.doc_comment = statement.doc_comment;
     return result;
 }
 

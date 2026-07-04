@@ -1123,22 +1123,184 @@ std::string code_hover(std::string declaration) {
     return "```dune\n" + std::move(declaration) + "\n```";
 }
 
+std::string trim_ascii(const std::string& text) {
+    const std::size_t begin = text.find_first_not_of(" \t\r");
+    if (begin == std::string::npos) {
+        return {};
+    }
+    const std::size_t end = text.find_last_not_of(" \t\r");
+    return text.substr(begin, end - begin + 1);
+}
+
+// Matches a leading `tag:` / `tag ` prefix on a doc line and returns the rest.
+bool match_doc_tag(const std::string& line, std::string_view tag, std::string& rest) {
+    if (line.size() < tag.size() || line.compare(0, tag.size(), tag) != 0) {
+        return false;
+    }
+    std::size_t index = tag.size();
+    if (index < line.size() && line[index] == ':') {
+        ++index;
+    } else if (index != line.size() && line[index] != ' ') {
+        return false;
+    }
+    rest = trim_ascii(line.substr(index));
+    return true;
+}
+
+// Renders a stored doc-comment into hover markdown. Recognises the structured
+// tags brief/param/returns/example (Doxygen/JSDoc style); anything untagged is
+// treated as plain description, so ordinary `//` comments render as prose.
+std::string render_doc_comment(const std::string& doc) {
+    std::vector<std::string> description;
+    std::vector<std::pair<std::string, std::string>> params;
+    std::string returns;
+    std::vector<std::string> example;
+    bool saw_tag = false;
+
+    std::size_t line_start = 0;
+    while (line_start <= doc.size()) {
+        const std::size_t newline = doc.find('\n', line_start);
+        const std::size_t end = newline == std::string::npos ? doc.size() : newline;
+        const std::string line = trim_ascii(doc.substr(line_start, end - line_start));
+        line_start = newline == std::string::npos ? doc.size() + 1 : newline + 1;
+
+        std::string rest;
+        if (match_doc_tag(line, "brief", rest)) {
+            saw_tag = true;
+            if (!rest.empty()) {
+                description.push_back(rest);
+            }
+        } else if (match_doc_tag(line, "param", rest)) {
+            saw_tag = true;
+            const std::size_t colon = rest.find(':');
+            std::string name = colon == std::string::npos ? rest : trim_ascii(rest.substr(0, colon));
+            std::string detail = colon == std::string::npos ? std::string{} : trim_ascii(rest.substr(colon + 1));
+            if (name.empty()) {
+                continue;
+            }
+            const std::size_t space = name.find(' ');
+            if (colon == std::string::npos && space != std::string::npos) {
+                detail = trim_ascii(name.substr(space + 1));
+                name = name.substr(0, space);
+            }
+            params.emplace_back(std::move(name), std::move(detail));
+        } else if (match_doc_tag(line, "returns", rest) || match_doc_tag(line, "return", rest)) {
+            saw_tag = true;
+            returns = rest;
+        } else if (match_doc_tag(line, "example", rest)) {
+            saw_tag = true;
+            if (!rest.empty()) {
+                example.push_back(rest);
+            }
+        } else if (saw_tag && !example.empty()) {
+            // Continuation lines after an `example:` tag extend the code block.
+            example.push_back(line);
+        } else {
+            description.push_back(line);
+        }
+    }
+
+    std::string markdown;
+    auto append_block = [&markdown](const std::string& block) {
+        if (block.empty()) {
+            return;
+        }
+        if (!markdown.empty()) {
+            markdown += "\n\n";
+        }
+        markdown += block;
+    };
+
+    // Untagged/description lines: blank lines separate paragraphs, otherwise
+    // adjacent lines flow together.
+    std::string paragraph;
+    std::string description_block;
+    auto flush_paragraph = [&]() {
+        if (paragraph.empty()) {
+            return;
+        }
+        if (!description_block.empty()) {
+            description_block += "\n\n";
+        }
+        description_block += paragraph;
+        paragraph.clear();
+    };
+    for (const std::string& text : description) {
+        if (text.empty()) {
+            flush_paragraph();
+            continue;
+        }
+        if (!paragraph.empty()) {
+            paragraph += ' ';
+        }
+        paragraph += text;
+    }
+    flush_paragraph();
+    append_block(description_block);
+
+    if (!params.empty()) {
+        std::string block = "**Parameters:**";
+        for (const auto& [name, detail] : params) {
+            block += "\n- `" + name + "`";
+            if (!detail.empty()) {
+                block += " — " + detail;
+            }
+        }
+        append_block(block);
+    }
+
+    if (!returns.empty()) {
+        append_block("**Returns:** " + returns);
+    }
+
+    if (!example.empty()) {
+        std::string block = "**Example:**\n```dune";
+        for (const std::string& text : example) {
+            block += "\n" + text;
+        }
+        block += "\n```";
+        append_block(block);
+    }
+
+    return markdown;
+}
+
+// Appends a rendered doc-comment beneath a signature code block.
+std::string with_doc(std::string code, const std::string& doc) {
+    if (doc.empty()) {
+        return code;
+    }
+    const std::string rendered = render_doc_comment(doc);
+    if (rendered.empty()) {
+        return code;
+    }
+    return code + "\n\n---\n\n" + rendered;
+}
+
 std::string declaration_hover(const Statement& statement) {
+    std::string signature;
     switch (statement.kind) {
     case StatementKind::binding:
-        return code_hover(statement.name + ": " + variable_type_text(statement));
+        signature = statement.name + ": " + variable_type_text(statement);
+        break;
     case StatementKind::const_statement:
-        return code_hover("const " + statement.name + ": " + variable_type_text(statement));
+        signature = "const " + statement.name + ": " + variable_type_text(statement);
+        break;
     case StatementKind::function:
-        return code_hover(function_signature(statement));
+        signature = function_signature(statement);
+        break;
     case StatementKind::struct_statement:
-        return code_hover("record " + statement.name + generic_parameters_text(statement.generic_parameters));
+        signature = "record " + statement.name + generic_parameters_text(statement.generic_parameters);
+        break;
     case StatementKind::enum_statement:
-        return code_hover("choice " + statement.name + generic_parameters_text(statement.generic_parameters));
+        signature = "choice " + statement.name + generic_parameters_text(statement.generic_parameters);
+        break;
     case StatementKind::contract_statement:
-        return code_hover("contract " + statement.name);
+        signature = "contract " + statement.name;
+        break;
     case StatementKind::type_alias_statement:
-        return code_hover("type " + statement.name + " = " + type_annotation_name(statement.type));
+        signature = "type " + statement.name + " = " + type_annotation_name(statement.type);
+        break;
     case StatementKind::method_block:
     case StatementKind::assign:
     case StatementKind::print:
@@ -1156,7 +1318,11 @@ std::string declaration_hover(const Statement& statement) {
         return {};
     }
 
-    return {};
+    if (signature.empty()) {
+        return {};
+    }
+
+    return with_doc(code_hover(std::move(signature)), statement.doc_comment);
 }
 
 std::optional<std::string> parameter_hover(const std::vector<Parameter>& parameters, const std::string& name) {
@@ -1249,7 +1415,7 @@ std::string typed_variable_hover(const Statement& statement,
             item_type = *item_type.element;
         }
 
-        return code_hover(statement.name + ": " + type_name(item_type));
+        return with_doc(code_hover(statement.name + ": " + type_name(item_type)), statement.doc_comment);
     }
 
     if (statement.kind != StatementKind::binding && statement.kind != StatementKind::const_statement &&
@@ -1266,13 +1432,13 @@ std::string typed_variable_hover(const Statement& statement,
     }
 
     if (statement.kind == StatementKind::const_statement) {
-        return code_hover("const " + statement.name + ": " + type_name(type->second));
+        return with_doc(code_hover("const " + statement.name + ": " + type_name(type->second)), statement.doc_comment);
     }
 
     const std::string name = statement.target != nullptr && statement.target->kind == ExpressionKind::identifier
                                  ? statement.target->lexeme
                                  : statement.name;
-    return code_hover(name + ": " + type_name(type->second));
+    return with_doc(code_hover(name + ": " + type_name(type->second)), statement.doc_comment);
 }
 
 std::optional<std::string> typed_statement_hover(const std::vector<Statement>& statements, const std::string& name,
@@ -1414,7 +1580,7 @@ std::optional<std::string> module_member_hover(const Program& program, const std
         for (const Statement& method : statement.body) {
             const bool method_visible = !module_has_explicit_exports(program) || statement.exported || method.exported;
             if (method_visible && method.kind == StatementKind::function && method.name == member) {
-                return code_hover(function_signature(method));
+                return with_doc(code_hover(function_signature(method)), method.doc_comment);
             }
         }
     }

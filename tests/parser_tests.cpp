@@ -1182,6 +1182,29 @@ bool parses_array_literals_without_comprehension() {
     return passed;
 }
 
+bool parses_doc_comments_on_declarations() {
+    const dune::Program program = parse_source("// brief: squares a value\n"
+                                               "// param value: the number\n"
+                                               "fn square(value: int): int { return value * value; }\n"
+                                               "\n"
+                                               "x = 1;\n");
+
+    bool passed = expect(program.statements.size() == 2, "expected two statements");
+    if (program.statements.size() != 2) {
+        return false;
+    }
+
+    const dune::Statement& function = program.statements[0];
+    passed = expect(function.kind == dune::StatementKind::function, "expected function statement") && passed;
+    passed = expect(function.doc_comment == "brief: squares a value\nparam value: the number",
+                    "expected doc-comment attached to function") &&
+             passed;
+
+    // The blank line before `x = 1;` means it carries no doc-comment.
+    passed = expect(program.statements[1].doc_comment.empty(), "expected no doc-comment after a blank line") && passed;
+    return passed;
+}
+
 } // namespace
 
 int main() {
@@ -1198,6 +1221,7 @@ int main() {
     passed = parses_function_type_parameters() && passed;
     passed = parses_multiline_method_chain() && passed;
     passed = parses_module_declaration_and_import_forms() && passed;
+    passed = parses_doc_comments_on_declarations() && passed;
     passed = parses_extended_types() && passed;
     passed = parses_type_aliases() && passed;
     passed = rejects_generic_type_aliases() && passed;

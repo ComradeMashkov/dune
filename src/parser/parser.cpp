@@ -567,6 +567,18 @@ bool Parser::match_identifier_like() {
 }
 
 Statement Parser::statement() {
+    // A declaration's doc-comment rides on the leading comment of its first
+    // token; capture it before dispatch consumes the token.
+    std::string doc = peek().leading_comment;
+    Statement result = statement_dispatch();
+    if (result.doc_comment.empty() && !doc.empty()) {
+        result.doc_comment = std::move(doc);
+    }
+
+    return result;
+}
+
+Statement Parser::statement_dispatch() {
     if (match(TokenType::export_keyword)) {
         return export_statement();
     }

@@ -31,7 +31,12 @@ module.exports = grammar({
   rules: {
     source_file: $ => repeat($._statement),
 
-    comment: _ => token(seq("//", /.*/)),
+    // Line comments (`//`, `///`) and block comments (`/* */`, `/** */`). The
+    // block pattern is the classic C comment regex so it spans multiple lines.
+    comment: _ => token(choice(
+      seq("//", /.*/),
+      seq("/*", /[^*]*\*+([^/*][^*]*\*+)*/, "/"),
+    )),
 
     _statement: $ => choice(
       $.export_statement,
