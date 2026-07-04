@@ -584,5 +584,13 @@ print('\0' to int);)dune"),
                        "20\n40\n", "expected user-defined higher-order method output") &&
              passed;
 
+    // Modules v2: aliased and selective / grouped stdlib imports resolve to the
+    // same canonical symbols at run time.
+    passed = expect_eq(run_source("import math as m; from array import range, sum; "
+                                  "print(sum(range(1, 5))); print(m.square(4)); "
+                                  "print(m.max(3, 7));"),
+                       "10\n16\n7\n", "expected Modules v2 alias/selective runtime output") &&
+             passed;
+
     return passed ? 0 : 1;
 }

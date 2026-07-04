@@ -202,6 +202,36 @@ export fn public(): int {
 }
 ```
 
+A module file may open with a `module name;` declaration that names the unit for
+documentation and diagnostics. The declaration is optional and, in this first
+version, does not bind the file to a directory layout — modules are still located
+by file name on the search path.
+
+Imports come in three forms. A plain `import matrix;` brings the module in under
+its own name. An aliased `import matrix as m;` lets callers write `m.Vector`
+instead of `matrix.Vector`, which is handy for long names or to avoid clashes.
+A selective `from matrix import Vector, Matrix;` pulls named symbols into the
+current file so they can be used unqualified; the symbols are comma-separated and
+may be listed one per line. Selective imports still respect `export` visibility —
+importing a private symbol, an unknown symbol, or reusing an alias that collides
+with another module is a compile-time error with the offending name and location.
+
+```dn
+module geometry_demo;
+
+import geometry as geo;
+from geometry import Point, manhattan;
+
+home: Point = Point { x: 0, y: 0 };          // unqualified, from the selective import
+store: Point = geo.Point { x: 3, y: 4 };     // same record via the alias
+print(manhattan(home, store));               // 7 — selective import, unqualified
+print(geo.chebyshev(home, store));           // 4 — alias-qualified
+```
+
+The plain, aliased, and selective forms interoperate freely, and every existing
+`import module;` continues to work unchanged. See `examples/geometry.dn` and
+`examples/geometry_demo.dn` for a complete two-file program.
+
 Operators and explicit casts:
 
 ```dn

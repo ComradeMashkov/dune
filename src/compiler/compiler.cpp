@@ -553,6 +553,7 @@ void Compiler::compile_statement(const Statement& statement) {
         emit(OpCode::pop);
         return;
     case StatementKind::import_statement:
+    case StatementKind::module_declaration:
         return;
     }
 }

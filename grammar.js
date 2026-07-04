@@ -36,6 +36,8 @@ module.exports = grammar({
     _statement: $ => choice(
       $.export_statement,
       $.import_statement,
+      $.from_import_statement,
+      $.module_declaration,
       $.function_declaration,
       $.foreign_function_declaration,
       $.record_declaration,
@@ -72,7 +74,23 @@ module.exports = grammar({
       ),
     ),
 
-    import_statement: $ => seq("import", field("module", $.identifier), optional(";")),
+    import_statement: $ => seq(
+      "import",
+      field("module", $.identifier),
+      optional(seq("as", field("alias", $.identifier))),
+      optional(";"),
+    ),
+
+    from_import_statement: $ => prec.right(seq(
+      "from",
+      field("module", $.identifier),
+      "import",
+      commaSep1(field("symbol", $.identifier)),
+      optional(","),
+      optional(";"),
+    )),
+
+    module_declaration: $ => seq("module", field("name", $.identifier), optional(";")),
 
     type_alias_declaration: $ => seq(
       "type",

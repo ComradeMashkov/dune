@@ -632,6 +632,7 @@ bool LlvmIrGenerator::emit_statement(const Statement& statement, std::ostream& o
         emit_expression(*statement.expression, output);
         return false;
     case StatementKind::import_statement:
+    case StatementKind::module_declaration:
         return false;
     }
 

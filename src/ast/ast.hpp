@@ -126,6 +126,7 @@ enum class StatementKind {
     return_statement,
     expression_statement,
     import_statement,
+    module_declaration,
 };
 
 struct Statement {
@@ -150,6 +151,11 @@ struct Statement {
     std::string owner_record;
     std::unique_ptr<Expression> target;
     std::vector<std::unique_ptr<Expression>> arguments;
+    // Modules v2 import metadata (consumed by the module loader, then cleared):
+    // `import math as m;` sets module_alias="m"; `from matrix import A, B;` fills
+    // import_symbols with the selectively imported names.
+    std::string module_alias;
+    std::vector<std::string> import_symbols;
 };
 
 struct Program {

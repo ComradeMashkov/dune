@@ -1,0 +1,31 @@
+// A small local module used by modules_v2.dn to exercise Modules v2: an explicit
+// `module` declaration, exported records/functions/constants, and a private item
+// that must stay invisible to importers.
+module shapes;
+
+// Exported record with public fields so importers can construct it.
+export record Point {
+    export x: int,
+    export y: int,
+}
+
+// Exported constant.
+export const ORIGIN_SUM: int = 0;
+
+// Exported free functions used via selective (`from`) and alias imports.
+export fn manhattan(a: Point, b: Point): int {
+    dx = a.x - b.x;
+    dy = a.y - b.y;
+    if dx < 0 { dx = 0 - dx; }
+    if dy < 0 { dy = 0 - dy; }
+    return dx + dy;
+}
+
+export fn quadrant_sum(p: Point): int {
+    return p.x + p.y;
+}
+
+// Private helper: not exported, so `from shapes import secret;` must fail.
+fn secret(): int {
+    return 99;
+}

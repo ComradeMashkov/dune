@@ -274,6 +274,51 @@ bool parses_function_type_parameters() {
     return passed;
 }
 
+bool parses_module_declaration_and_import_forms() {
+    const dune::Program program = parse_source("module geometry;\n"
+                                               "import math as m;\n"
+                                               "from matrix import Vector, Matrix;\n"
+                                               "import array;\n");
+
+    bool passed = true;
+    if (!expect(program.statements.size() == 4, "expected module decl plus three imports")) {
+        return false;
+    }
+
+    const dune::Statement& module = program.statements[0];
+    passed = expect(module.kind == dune::StatementKind::module_declaration, "expected module declaration") && passed;
+    passed = expect(module.name == "geometry", "expected module name 'geometry'") && passed;
+
+    const dune::Statement& aliased = program.statements[1];
+    passed =
+        expect(aliased.kind == dune::StatementKind::import_statement, "expected aliased import statement") && passed;
+    passed = expect(aliased.name == "math", "expected aliased module 'math'") && passed;
+    passed = expect(aliased.module_alias == "m", "expected alias 'm'") && passed;
+    passed = expect(aliased.import_symbols.empty(), "expected no selective symbols on aliased import") && passed;
+
+    const dune::Statement& selective = program.statements[2];
+    passed = expect(selective.kind == dune::StatementKind::import_statement, "expected selective import statement") &&
+             passed;
+    passed = expect(selective.name == "matrix", "expected selective module 'matrix'") && passed;
+    passed = expect(selective.module_alias.empty(), "expected no alias on selective import") && passed;
+    passed = expect(selective.import_symbols.size() == 2, "expected two grouped symbols") && passed;
+    passed = expect(selective.import_symbols[0] == "Vector" && selective.import_symbols[1] == "Matrix",
+                    "expected grouped symbols Vector, Matrix") &&
+             passed;
+
+    const dune::Statement& plain = program.statements[3];
+    passed = expect(plain.kind == dune::StatementKind::import_statement, "expected plain import statement") && passed;
+    passed = expect(plain.name == "array" && plain.module_alias.empty() && plain.import_symbols.empty(),
+                    "expected plain 'import array;'") &&
+             passed;
+
+    // `from`/`module`/`as` stay usable as ordinary identifiers.
+    const dune::Program identifiers = parse_source("from = 1; module = from + 1; print(module);");
+    passed = expect(identifiers.statements.size() == 3, "expected soft keywords to remain valid identifiers") && passed;
+
+    return passed;
+}
+
 bool parses_multiline_method_chain() {
     const dune::Program program = parse_source("total = values\n"
                                                "    .filter(is_positive)\n"
@@ -1152,6 +1197,7 @@ int main() {
     passed = rejects_legacy_function_syntax() && passed;
     passed = parses_function_type_parameters() && passed;
     passed = parses_multiline_method_chain() && passed;
+    passed = parses_module_declaration_and_import_forms() && passed;
     passed = parses_extended_types() && passed;
     passed = parses_type_aliases() && passed;
     passed = rejects_generic_type_aliases() && passed;

@@ -4,6 +4,7 @@
 
 #include <filesystem>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -17,7 +18,25 @@ public:
     Program resolve(Program program, const std::filesystem::path& source_directory = {});
 
 private:
+    // Rewrite maps for one file's `import ... as` / `from ... import` directives:
+    // `aliases` maps a local alias to its canonical module; `selective` maps an
+    // imported symbol to its fully qualified `module.symbol` name.
+    struct ImportContext {
+        std::unordered_map<std::string, std::string> aliases;
+        std::unordered_map<std::string, std::string> selective;
+    };
+
     std::vector<Statement> load_module(const std::string& module_name, const std::filesystem::path& importer_directory);
+    // Loads every module imported by `statements`, returns their resolved statements
+    // to prepend, and fills `context` with this file's alias/selective rewrites.
+    std::vector<Statement> collect_imports(const std::vector<Statement>& statements,
+                                           const std::filesystem::path& importer_directory, ImportContext& context);
+    std::vector<Statement> rewrite_file(std::vector<Statement>& statements, const ImportContext& context) const;
+    void apply_import_context(Statement& statement, const ImportContext& context) const;
+    void apply_import_context_expression(Expression& expression, const ImportContext& context) const;
+    void apply_import_context_type_annotation(TypeAnnotation& annotation, const ImportContext& context) const;
+    void apply_import_context_type(Type& type, const ImportContext& context) const;
+    void record_module_exports(const std::string& module_name, const std::vector<Statement>& statements);
     std::filesystem::path find_module(const std::string& module_name,
                                       const std::filesystem::path& importer_directory) const;
     Program parse_file(const std::filesystem::path& path) const;
@@ -45,6 +64,9 @@ private:
 
     std::vector<std::filesystem::path> search_paths_;
     std::unordered_set<std::string> loaded_modules_;
+    // Exported top-level member names per loaded module, used to validate
+    // `from <module> import <symbol>` directives.
+    std::unordered_map<std::string, std::unordered_set<std::string>> module_exports_;
 };
 
 } // namespace dune

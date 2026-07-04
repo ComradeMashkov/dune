@@ -26,6 +26,8 @@ private:
     bool looks_like_assignment_statement() const;
     bool looks_like_tuple_assignment_statement() const;
     bool looks_like_binding_declaration() const;
+    bool looks_like_module_declaration() const;
+    bool looks_like_from_import() const;
 
     const Token& advance();
     const Token& peek() const;
@@ -50,6 +52,8 @@ private:
     Statement finish_function_statement(const Token& name, std::vector<GenericParameter> leading_generics = {},
                                         bool is_extern = false);
     Statement import_statement();
+    Statement from_import_statement();
+    Statement module_declaration_statement();
     Statement enum_statement();
     Statement if_statement();
     Statement binding_statement();
