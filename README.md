@@ -1,1173 +1,130 @@
 # Dune
 
-Dune is a programming language which aims to keep systems-style code small,
-readable, and predictable while still compiling through a real compiler
-pipeline. It has a lexer, parser, AST, static type checker, and a bytecode VM.
+> A small, statically-typed language that compiles through a real pipeline —
+> **lexer → parser → AST → type checker → bytecode VM** — with a standard
+> library increasingly written in Dune itself.
 
-The language is intentionally compact: explicit types when they matter,
-overloads, generics, choices with `when` expressions, modules loaded from `.dn`
-files, and a standard library that is increasingly written in Dune itself.
-Runtime checks catch common mistakes such as invalid indexes and slices, while
-the type checker rejects mismatched assignments, calls, returns, and binary
-operations before execution.
+[![CI](https://github.com/ComradeMashkov/dune/actions/workflows/ci.yml/badge.svg)](https://github.com/ComradeMashkov/dune/actions/workflows/ci.yml)
+[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-2563eb)](https://comrademashkov.github.io/dune/)
+[![Language](https://img.shields.io/badge/C%2B%2B-23-00599c)](CMakeLists.txt)
 
-📖 **Documentation site:** <https://comrademashkov.github.io/dune/> — language
-reference, standard-library reference (generated from source doc-comments), and
-guides. Built with mdBook from [`docs/`](docs/).
+Dune keeps systems-style code small, readable, and predictable: explicit types
+where they matter, overloads and generics, records with methods, choices matched
+by `when`, operator overloading, and modules loaded from `.dn` files. The type
+checker rejects mismatched assignments, calls, returns, and operators before
+execution; the VM adds runtime checks for things like invalid indexes and slices.
 
-Good fits for Dune today:
-
-- experimenting with compiled language implementation
-- writing small typed programs with straightforward syntax
-- building standard library code in the language itself
+📖 **[Documentation site](https://comrademashkov.github.io/dune/)** — the language
+reference, the standard-library reference (generated from source doc-comments),
+guides, and a [plot gallery](https://comrademashkov.github.io/dune/guides/plot_gallery.html).
+This README is only a quick tour; the site is the full story.
 
 ## Example
 
-Example `hello.dn` source:
-
 ```dn
-// Dune supports single-line comments.
-x = 40 + 2;
-print(x);
-```
+import io;
+import fmt;
 
-Expected output:
-
-```txt
-42
-```
-
-Control flow example:
-
-```dn
-x = 3;
-
-while x > 0 {
-  x = x - 1;
-}
-
-if x == 0 {
-  print(42);
-} else {
-  print(0);
-}
-```
-
-Boolean values are represented as `1` for `true` and `0` for `false` when printed.
-
-Typed functions use the `fn` keyword. Scalar values can be annotated with an
-explicit type:
-
-```dn
-fn log(message: text): unit {
-  print(message);
-}
-
-count: usize = 5;
-precise: real64 = 2.25;
-mask: u64 = 0xffu64;
-bits: u8 = 0b1010_0101u8;
-
-log("ready");
-print(count);
-print(precise);
-print(mask);
-print(bits);
-```
-
-Integer literals support `_` separators, `0x` hex, `0b` binary, and explicit
-integer suffixes such as `i32`, `i64`, `u8`, `u64`, and `usize`.
-
-Type aliases provide shorter names for existing types. They are transparent
-compile-time aliases, not new runtime types:
-
-```dn
-import matrix;
-
-type Count = int;
-type Counts = [Count];
-type Vec = matrix.Vector<real64>;
-
-fn inc(value: Count): Count {
-  return value + 1;
-}
-
-values: Counts = [inc(1), 3];
-```
-
-Aliases can target primitive, array, tuple, record, choice, generic, and
-module-qualified types. The first version supports non-generic aliases only;
-`type Vec<T> = ...` is reserved for a later feature.
-
-Formatted output keeps `print(expression)` working and also supports a string
-literal with positional `{}` placeholders. The same formatting is available as
-the `format(...)` expression, which returns `text`:
-
-```dn
-name: text = "Dune";
-version: int = 1;
-
-print("{} v{}", name, version);
-print("ready={}, value={}", true, 42);
-message: text = format("{} v{}", name, version);
-```
-
-For now the format string must be a literal, placeholders are plain `{}` only,
-and the number of placeholders must match the number of following arguments.
-Printable values are the scalar types: integer and unsigned integer types,
-`real32`/`real64`, `bool`, `glyph`, and `text`.
-
-A record is printable too when it provides a `to_text(): text` method (the
-Display contract). `print(record)` and `format("{}", record)` call `to_text()`
-to render it, so records format just like scalars:
-
-```dn
-record Point {
+// Records bundle data with methods. `+` dispatches to a record's `add` method,
+// and a `to_text` method makes a value printable.
+record Vec2 {
     x: int,
     y: int,
+    fn add(other: Vec2): Vec2 { return Vec2 { x: this.x + other.x, y: this.y + other.y }; }
+    fn to_text(): text { return fmt.format("({}, {})", this.x, this.y); }
+}
 
-    fn to_text(): text {
-        return format("({}, {})", this.x, this.y);
+// Choices are tagged unions matched with `when`.
+choice Shape { Dot, Line(Vec2) }
+
+fn describe(s: Shape): text {
+    return when s {
+        Dot => "a dot",
+        Line(v) => fmt.format("line to {}", v),
+    };
+}
+
+// A generic function constrained to ordered types.
+fn largest<T is ordered>(values: [T]): T {
+    best = values[0];
+    for v in values {
+        if v > best { best = v; }
     }
+    return best;
 }
 
-p: Point = Point { x: 1, y: 2 };
-print(p);              // (1, 2)
-print("at {}", p);     // at (1, 2)
+a: Vec2 = Vec2 { x: 1, y: 2 };
+b: Vec2 = Vec2 { x: 3, y: 4 };
+edge: Shape = Line(a + b);
+
+io.println(a + b);                 // (4, 6)
+io.println(largest([3, 9, 2, 7])); // 9
+io.println(describe(edge));        // line to (4, 6)
 ```
 
-Printing a record without a `to_text(): text` method is a type error that
-suggests adding one. `import display;` provides the matching `Display` contract
-(so a record can declare `with display.Display`) and a `show(value)` helper that
-renders any Display value to text.
-
-Text and glyph literals support explicit escapes. Normal `text` literals decode
-`\n`, `\t`, `\r`, `\\`, `\"`, and `\0`; `glyph` literals decode `\n`, `\t`,
-`\r`, `\\`, `\'`, and `\0`. Unknown escapes are compile-time errors. Raw
-single-line text literals use `r"..."` and keep backslashes literally:
-
-```dn
-path: text = r"C:\Users\name\data.csv";
-line: text = "hello\n";
-tab: glyph = '\t';
-quote: glyph = '\'';
-```
-
-Arrays and modules:
-
-```dn
-import math;
-import array;
-
-values: [int] = [1, math.square(2), 5];
-values.push(math.square(values[2]));
-
-print(values.len());
-print(values[0]);
-print(values[3]);
-print(values.first());
-```
-
-Modules are loaded from `.dn` files. The standard library currently includes
-`stdlib/math.dn`, `stdlib/array.dn`, `stdlib/text.dn`, `stdlib/maybe.dn`,
-`stdlib/outcome.dn`, `stdlib/assert.dn`, `stdlib/collections.dn`,
-`stdlib/dict.dn`, `stdlib/set.dn`, `stdlib/random.dn`, `stdlib/runtime.dn`,
-`stdlib/autograd.dn`, `stdlib/matrix.dn`, `stdlib/process.dn`, `stdlib/fs.dn`,
-`stdlib/csv.dn`, `stdlib/regex.dn`, `stdlib/display.dn`, `stdlib/plot.dn`, and
-`stdlib/canvas.dn`. Low-level
-array and text operations such as `len`, `push`, indexing, and slicing remain
-runtime primitives; higher-level helpers are ordinary Dune functions in the
-standard library. Operating-system access (reading and writing files,
-command-line arguments, environment variables) is provided the same way: the
-`fs` and `process` modules are plain Dune that wrap dedicated VM opcodes rather
-than C/C++ foreign functions.
-
-The standard library can expose receiver methods with `method` declarations. For
-example, importing `array` makes both `array.first(values)` and `values.first()`
-available. Importing `text` similarly enables helpers such as
-`message.trim().ends_with("x")`.
-
-Module files can mark their public API with `export`. If a module contains any
-explicit exports, only exported functions, constants, records, choices, and
-contracts can be accessed through `module.name`; private helpers remain callable
-inside the module. Record fields and record methods are private across module
-boundaries unless that member is marked `export`.
-
-```dn
-export const ANSWER: int = 42;
-
-fn hidden(): int {
-  return 7;
-}
-
-export fn public(): int {
-  return hidden();
-}
-```
-
-A module file may open with a `module name;` declaration that names the unit for
-documentation and diagnostics. The declaration is optional and, in this first
-version, does not bind the file to a directory layout — modules are still located
-by file name on the search path.
-
-Imports come in three forms. A plain `import matrix;` brings the module in under
-its own name. An aliased `import matrix as m;` lets callers write `m.Vector`
-instead of `matrix.Vector`, which is handy for long names or to avoid clashes.
-A selective `from matrix import Vector, Matrix;` pulls named symbols into the
-current file so they can be used unqualified; the symbols are comma-separated and
-may be listed one per line. Selective imports still respect `export` visibility —
-importing a private symbol, an unknown symbol, or reusing an alias that collides
-with another module is a compile-time error with the offending name and location.
-
-```dn
-module geometry_demo;
-
-import geometry as geo;
-from geometry import Point, manhattan;
-
-home: Point = Point { x: 0, y: 0 };          // unqualified, from the selective import
-store: Point = geo.Point { x: 3, y: 4 };     // same record via the alias
-print(manhattan(home, store));               // 7 — selective import, unqualified
-print(geo.chebyshev(home, store));           // 4 — alias-qualified
-```
-
-The plain, aliased, and selective forms interoperate freely, and every existing
-`import module;` continues to work unchanged. See `examples/geometry.dn` and
-`examples/geometry_demo.dn` for a complete two-file program.
-
-Comments and doc-comments:
-
-Dune has single-line `//` comments and multi-line `/* ... */` block comments.
-A comment block written directly above a declaration is treated as its
-documentation and shown in the editor's hover for that symbol — this works for
-symbols in other modules too (hovering `math.square` pulls the comment from
-`math.dn`). A blank line between the comment and the declaration detaches it, and
-a comment trailing code on the same line never attaches.
-
-Doc-comments may also use the `///` line form or the `/** ... */` block form and
-carry structured tags — `brief`, `param`, `returns`, and `example` — which hover
-renders as sections. Plain `//` comments are shown as prose, so existing comments
-document their symbols with no extra syntax.
-
-```dn
-/// brief: Squares a value.
-/// param value: the number to square
-/// returns: value * value
-fn square(value: int): int {
-  return value * value;
-}
-
-/* A point in two-dimensional space.
-   Block comments may span several lines. */
-record Point { x: int, y: int }
-```
-
-Operators and explicit casts:
-
-```dn
-value = 17;
-exact: real64 = value to real64;
-
-print(-value);
-print(value % 5);
-print(!false && true);
-```
-
-Array and text methods:
-
-```dn
-values: [int] = [1, 2];
-values.push(3);
-print(values.pop());
-print(values.is_empty());
-
-message: text = "dune language";
-print(message.len());
-print(message.contains("lang"));
-print(message.starts_with("dune"));
-```
-
-Indexing, slices, loops, and foreign functions:
-
-```dn
-foreign fn c_sqrt(value: real64): real64 = "sqrt";
-
-message: text = "dune language";
-print(message[0]);
-print(message[5:13]);
-
-values: [int] = [1, 2, 3, 4];
-middle: [int] = values[1:3];
-
-for value in middle {
-  print(value);
-}
-
-for i in 0..middle.len() {
-  if i == 1 {
-    continue;
-  }
-
-  print(middle[i]);
-}
-
-print(c_sqrt(81.0));
-```
-
-The `math` module currently provides constants and generic numeric functions:
-
-- `PI`, `TAU`, `E`, `INVERSE_E`
-- `PI32`, `TAU32`, `E32`, `INVERSE_E32`
-
-- `square(value)`
-- `cube(value)`
-- `abs(value)`
-- `min(left, right)`
-- `max(left, right)`
-- `clamp(value, lower, upper)`
-- `sqrt(value)`
-- `sin(value)`
-- `cos(value)`
-- `tan(value)`
-- `exp(value)`
-- `ln(value)`
-- `pow(base, exponent)`
-- `floor(value)`
-- `ceil(value)`
-- `round(value)`
-
-The `matrix` module provides a small NumPy-style foundation for homogeneous
-numeric vectors and matrices. Values are generic over Dune numeric types:
-`Vector<T is numeric>` and `Matrix<T is numeric>`. Operations currently keep the
-same element type; mixed-type promotion and broadcasting are not implemented
-yet, so elementwise and matrix operations expect compatible shapes. Generic
-builders whose element type does not appear in the argument list, such as
-`zeros`, `ones`, `identity`, and `eye`, need an assignment or parameter type
-annotation to select the element type.
-
-Shape-sensitive operations fail at runtime with explicit diagnostics such as
-`vector shape mismatch`, `matrix shape mismatch`,
-`matrix multiplication shape mismatch`, `matrix-vector shape mismatch`,
-`matrix data length mismatch`, or `matrix reshape size mismatch`.
-
-```dn
-import matrix;
-
-v = matrix.vector([1, 2, 3]);
-w = matrix.vector([4, 5, 6]);
-
-print(matrix.dot(v, w));
-
-m = matrix.from_flat(2, 3, [1, 2, 3, 4, 5, 6]);
-n = matrix.from_flat(3, 2, [7, 8, 9, 10, 11, 12]);
-product = matrix.dot(m, n);
-
-print(product.get(0, 0));
-print(product.get(1, 1));
-```
-
-Core helpers:
-
-- `vector(data)`
-- `from_flat(rows, cols, data)`
-- `from_rows(rows)`
-- `zeros(size)`, `zeros(rows, cols)`
-- `ones(size)`, `ones(rows, cols)`
-- `full(size, value)`, `full(rows, cols, value)`
-- `arange(end)`, `arange(start, end)`, `arange(start, end, step)`
-- `identity(size)`, `eye(size)`
-- `diagonal(vector)`, `diag(vector)`
-- `dot(left, right)`, `matmul(left, right)`
-- `outer(left, right)`
-
-Vector methods:
-
-- `len()`, `shape()`, `is_empty()`, `get(index)`, `set(index, value)`
-- `to_array()`, `copy()`, `equals(other)`, `same_shape(other)`
-- `slice(start, end)`, `concat(other)`, `fill(value)`
-- `add(other)`, `add(value)`, `sub(other)`, `sub(value)`, `rsub(value)`
-- `mul(other)`, `mul(value)`, `div(other)`, `div(value)`, `rdiv(value)`
-- `scale(factor)`, `neg()`, `abs()`, `clip(lower, upper)`
-- `dot(other)`, `norm_squared()`, `norm()`, `distance_squared(other)`, `distance(other)`
-- `sum()`, `product()`, `mean()`, `min()`, `max()`, `argmin()`, `argmax()`
-- `to_row_matrix()`, `to_column_matrix()`, `reshape(rows, cols)`
-- `dot(matrix)`, `matmul(matrix)`, `outer(other)`
-
-Matrix methods:
-
-- `rows()`, `cols()`, `shape()`, `is_empty()`, `is_square()`, `len()`
-- `get(row, col)`, `set(row, col, value)`, `to_array()`, `copy()`
-- `equals(other)`, `same_shape(other)`, `can_matmul(other)`, `fill(value)`
-- `row(index)`, `column(index)`, `flatten()`, `reshape(rows, cols)`
-- `diagonal()`, `diag()`, `trace()`
-- `add(other)`, `add(value)`, `sub(other)`, `sub(value)`, `rsub(value)`
-- `mul(other)`, `mul(value)`, `div(other)`, `div(value)`, `rdiv(value)`
-- `hadamard(other)`
-- `scale(factor)`, `neg()`, `abs()`, `clip(lower, upper)`
-- `transpose()`, `dot(other)`, `matmul(other)`, `mul_vector(vector)`
-- `sum_rows()`, `sum_columns()`, `mean_rows()`, `mean_columns()`
-- `sum()`, `product()`, `mean()`, `norm_squared()`, `norm()`
-- `min()`, `max()`, `argmin()`, `argmax()`
-- `det2()`, `det3()`
-
-Runnable examples live in `examples/`:
-
-- `matrix_basics.dn`
-- `vector_stats.dn`
-- `linear_regression.dn`
-- `documented.dn` — every comment form plus `brief`/`param`/`returns` doc-comments
-  on a function and on record fields and methods
-
-Those examples are also covered by VM and native CLI golden tests.
-
-The `runtime` module exposes `panic(message)`, which aborts execution with a
-message. It is mainly intended for standard library checks and tests.
-
-The `autograd` module provides scalar reverse-mode automatic differentiation.
-It is implemented in Dune itself with records, arrays, methods, and mutation;
-the VM does not contain autograd-specific primitives.
-
-```dn
-import autograd;
-
-x = autograd.variable(2.0);
-y = autograd.variable(3.0);
-loss = x.mul(y).add(x.pow(2.0)).add(1.0);
-loss.backward();
-
-print(loss.data);
-print(x.grad);
-print(y.grad);
-```
-
-Expected output:
-
-```txt
-11
-7
-2
-```
-
-Core helpers:
-
-- `variable(data)`, `value(data)`, `constant(data)`
-- `data(value)` and `grad(value)`, with exported `value.data`, `value.grad`,
-  and `value.requires_grad` fields
-- `add(left, right)` or `left.add(right)`
-- `sub(left, right)` or `left.sub(right)`
-- `mul(left, right)` or `left.mul(right)`
-- `div(left, right)` or `left.div(right)`
-- `neg(value)`, `pow(value, exponent)`, `relu(value)`
-- `tanh(value)`, `exp(value)`, `ln(value)`, `sqrt(value)`
-- `backward(value)` or `value.backward()`
-- `zero_grad(value)` or `value.zero_grad()`
-
-The `array` module provides generic helpers for common element types:
-
-- `copy(values)` or `values.copy()`
-- `reverse(values)` or `values.reverse()`
-- `contains(values, needle)` or `values.contains(needle)`
-- `index_of(values, needle)` or `values.index_of(needle)`
-- `first(values)` or `values.first()`
-- `last(values)` or `values.last()`
-- `append(values, value)` or `values.append(value)`
-- `prepend(values, value)` or `values.prepend(value)`
-- `concat(values, other)` or `values.concat(other)`
-- `slice(values, start, end)` or `values.slice(start, end)`
-- `take(values, count)` or `values.take(count)`
-- `drop(values, count)` or `values.drop(count)`
-- `count_value(values, needle)` or `values.count_value(needle)`
-- `equals(values, other)` or `values.equals(other)`
-- `fill(values, value)` or `values.fill(value)`
-- `range(end)`, `range(start, end)`, `range(start, end, step)`
-- `repeat(value, count)`, `zeros(count)`, `ones(count)`, `full(count, value)`
-- numeric methods: `values.sum()`, `values.product()`, `values.min()`,
-  `values.max()`, `values.argmin()`, `values.argmax()`
-- boolean methods: `values.all()`, `values.any()`
-- legacy overloads: `sum(values)` for `[int]` and `[real64]`
-
-The `text` module provides text and glyph helpers:
-
-- `len(value)` or `value.len()`, `is_empty(value)` or `value.is_empty()`
-- `contains(value, needle)` or `value.contains(needle)`
-- `starts_with(value, prefix)` or `value.starts_with(prefix)`
-- `ends_with(value, suffix)` or `value.ends_with(suffix)`
-- `char_at(value, index)` or `value.char_at(index)`
-- `slice(value, start, end)` or `value.slice(start, end)`
-- `prefix(value, end)` or `value.prefix(end)`, `suffix(value, start)` or `value.suffix(start)`
-- `index_of(value, glyph)` or `value.index_of(glyph)`, `count(value, glyph)` or `value.count(glyph)`
-- `is_space(glyph)`, `is_digit(glyph)`, `is_alpha(glyph)`
-- `trim_start(value)` or `value.trim_start()`
-- `trim_end(value)` or `value.trim_end()`
-- `trim(value)` or `value.trim()`
-
-Records group named fields and can have receiver methods:
-
-```dn
-record Point {
-  x: real64,
-  y: real64,
-
-  fn sum(): real64 {
-    return this.x + this.y;
-  }
-}
-
-point: Point = Point { x: 1.5, y: 2.5 };
-print(point.sum());
-```
-
-A record can `derive` common boilerplate methods instead of writing them by
-hand. The `derive` clause lists one or more of `eq`, `copy`, and `debug` after
-the record name (and after any `with` contracts):
-
-```dn
-record Point derive eq, copy, debug {
-  x: int,
-  y: int,
-}
-
-a: Point = Point { x: 1, y: 2 };
-b: Point = Point { x: 1, y: 2 };
-print(a);              // Point(x: 1, y: 2)   (debug -> to_text)
-print(a.equals(b));    // 1                   (eq -> equals)
-c: Point = a.copy();   // copy -> a fresh shallow copy
-```
-
-- `eq` generates `equals(other: Name): bool` comparing every field with `==`.
-- `copy` generates `copy(): Name` returning a shallow copy of the record.
-- `debug` generates `to_text(): text` (the Display contract), so the record is
-  printable as `Name(field: value, ...)`.
-
-`derive` is pure sugar: each entry expands to an ordinary record method. If the
-record already defines a method with the same name (`equals`, `copy`, or
-`to_text`), the hand-written version wins and nothing is generated for it.
-
-Functions can be overloaded by parameter types:
-
-```dn
-fn show(value: int): int {
-  return value + 1;
-}
-
-fn show(value: bool): int {
-  if value {
-    return 10;
-  } else {
-    return 20;
-  }
-}
-```
-
-Functions can also be generic. Generic functions are instantiated from actual
-call sites instead of eagerly expanding every supported type. A generic
-parameter can be unbounded, or it can use one of the current built-in bounds:
-`integer`, `numeric`, `real`, `comparable`, or `ordered`.
-
-```dn
-fn identity<T>(value: T): T {
-  return value;
-}
-
-fn square<T is numeric>(value: T): T {
-  return value * value;
-}
-```
-
-Records can be generic too. A record literal uses the expected type from the
-left-hand side or function return type when filling in type arguments.
-
-```dn
-record Box<T> {
-  value: T,
-}
-
-fn boxed<T>(value: T): Box<T> {
-  return Box { value: value };
-}
-
-answer: Box<int> = boxed(42);
-```
-
-Tuples group a small fixed number of values without declaring a record. Tuple
-types and literals currently require at least two elements. Tuples are returned,
-passed, and destructured as values; direct element access such as `.0` is a
-future extension.
-
-```dn
-fn minmax(values: [int]): (int, int) {
-  return (values[0], values[1]);
-}
-
-(lo, hi) = minmax([3, 8]);
-print(lo);
-print(hi);
-```
-
-Record fields can declare default values. A record literal may omit fields that
-have defaults; missing fields without defaults are still rejected. Defaults are
-evaluated each time a record value is created.
-
-```dn
-record Optimizer {
-  lr: real64 = 0.01,
-  momentum: real64 = 0.0,
-}
-
-base: Optimizer = Optimizer {};
-fast: Optimizer = Optimizer { lr: 0.1 };
-```
-
-Records can declare lightweight constructors and explicitly implement contracts.
-Constructors are statically checked functions associated with the record type;
-they must return the enclosing record type and are called with `Record.new(...)`.
-Records can also declare `static` associated functions for type-level helpers
-that do not receive `this`; they are called as `Record.function(...)` and can use
-the record's generic parameters.
-Contracts declare method requirements only. A record satisfies a contract bound
-only when its declaration lists that contract in a `with` clause.
-
-```dn
-record Optimizer {
-  lr: real64,
-  momentum: real64,
-
-  static fn default(): Optimizer {
-    return Optimizer { lr: 0.01, momentum: 0.0 };
-  }
-}
-
-opt: Optimizer = Optimizer.default();
-```
-
-```dn
-contract Shape {
-  area(): real64;
-}
-
-record Circle with Shape {
-  radius: real64,
-
-  fn new(radius: real64): Circle {
-    return Circle { radius: radius };
-  }
-
-  fn area(): real64 {
-    return 3.0 * this.radius * this.radius;
-  }
-}
-
-fn area_of<T is Shape>(shape: T): real64 {
-  return shape.area();
-}
-
-circle: Circle = Circle.new(2.0);
-print(area_of(circle));
-```
-
-When records come from modules, member visibility is explicit:
-
-```dn
-export record Counter {
-  value: int,
-
-  export fn new(): Counter {
-    return Counter { value: 0 };
-  }
-
-  export fn inc(): unit {
-    this.value = this.value + 1;
-  }
-
-  export fn current(): int {
-    return this.value;
-  }
-}
-```
-
-After `import counters;`, callers can use `counters.Counter.new()`,
-`counter.inc()`, and `counter.current()`, but `counter.value` is rejected unless
-the field is exported. Contracts can also be exported and used as qualified
-generic bounds, for example `T is geometry.Shape`. Contract-bound calls are still
-statically dispatched through generic instantiation; there is no `dyn`, vtable,
-inheritance, or heterogeneous contract-object array support yet.
-
-Blocks, loop initializers, and `when` payloads have lexical scopes. A typed
-binding such as `x: int = 2` creates a new binding in the current scope and can
-shadow a mutable outer binding. Plain `x = 2` updates the nearest visible `x`, or
-creates one in the current scope if none exists. Constants cannot be reassigned
-or accidentally shadowed. Assignments to scalar values copy the value.
-
-`for name in values { ... }` iterates arrays. `for i in start..end { ... }`
-iterates integer ranges with `start` included and `end` excluded; descending or
-otherwise empty ranges run zero iterations. The loop variable is scoped to the
-loop body and is read-only, like a constant binding.
-
-The `in` operator checks membership and returns `bool`. It supports `value in
-array` for comparable array elements and `text in text` for substring checks.
-Use `!(value in container)` for negated membership; there is no separate `not
-in` operator yet.
-
-```dn
-x = 1;
-
-{
-  x: int = 2;
-  print(x);
-}
-
-print(x);
-```
-
-Arrays and records are reference values. Assigning or passing one copies a handle
-to the same storage, so mutation through one mutable alias is visible through
-another alias. `const` is a binding-level promise: it prevents rebinding a name
-and prevents mutation through that constant name, such as `values[0] = 2`, but it
-does not make the underlying array or record deeply immutable through other
-aliases. Use `array.copy(values)` when you need a separate array.
-
-```dn
-import array;
-
-values: [int] = [1];
-alias = values;
-alias[0] = 2;
-print(values[0]);
-
-separate = array.copy(values);
-separate[0] = 9;
-print(values[0]);
-```
-
-Choices model values that can be one of several variants. Variants can either be
-empty or carry one payload value, and generic choice payloads are substituted from
-the expected choice type.
-
-```dn
-choice Maybe<T> {
-  Present(T),
-  Absent,
-}
-
-value: Maybe<int> = Present(42);
-
-answer = when value {
-  Present(x) => x;
-  Absent => 0;
-};
-```
-
-Receiver methods can be written with `method`. The receiver is available inside
-the method body as `this`; exported methods can also be called as module
-functions after import.
-
-```dn
-export method<T> [T].first(): T {
-  return this[0];
-}
-```
-
-`when` expressions compare a subject against literal patterns or choice variant
-patterns. They can also destructure records and tuples with irrefutable patterns.
-Arms can use the compact `pattern => expression;` form, or the older
-`is pattern { expression }` form. Literal matches require a `_` fallback arm.
-Choice matches must cover every variant, or include `_` as a fallback. A payload
-variant pattern binds the payload only inside that arm; record and tuple patterns
-bind their selected fields or elements inside the arm.
-
-```dn
-label = when answer.value {
-  42 => "answer";
-  _ => "other";
-};
-
-unwrapped = when value {
-  Present(x) => x;
-  Absent => 0;
-};
-
-point_sum = when point {
-  Point { x, y } => x + y;
-};
-
-pair_sum = when (lo, hi) {
-  (left, right) => left + right;
-};
-```
-
-Inside a function that returns `outcome.Outcome<T, E>`, the postfix `?` operator
-unwraps a successful `Outcome`, or returns early with the error. It is shorthand
-for matching `Done`/`Failed`:
-
-```dune
-import outcome;
-
-fn add_checked(a: int, b: int): outcome.Outcome<int, text> {
-  first: int = checked(a)?;   // unwraps Done(int), or returns Failed(text)
-  second: int = checked(b)?;
-  return outcome.done_int(first + second);
-}
-```
-
-The operand of `?` must be an `outcome.Outcome<T, E>` and the enclosing function
-must return an `outcome.Outcome<R, E>` with the same error type `E`. `?` may be
-used anywhere an expression is allowed, including inside a larger expression. The
-`?` operator runs on the bytecode VM.
-
-Supported scalar types:
-
-- `int`, `bool`
-- `i8`, `i16`, `i32`, `i64`, `isize`
-- `u8`, `u16`, `u32`, `u64`, `usize`
-- `uint8`, `uint16`, `uint32`, `uint64`
-- `real`, `real32`, `real64`
-- `glyph`, `text`, `unit`
-
-Supported compound types:
-
-- `[T]` dynamic arrays, for example `[int]` or `[text]`
-- `(T, U)` tuples with two or more elements, for example `(int, text)`
-- `record` records with named fields, for example `Point { x: 1, y: 2 }`
-- generic records, for example `Box<int>`
-- contracts, for example `Shape` as a generic bound
-- generic choices, for example `Maybe<int>` or `Outcome<int, text>`
-- choice variants, for example `Present(42)` or `Absent`
-- transparent type aliases, for example `type Vec = matrix.Vector<real64>;`
-
-Indexing and slicing:
-
-- arrays are zero-based: `values[0]` is the first element
-- arrays: `values[index]`, `values[start:end]`, `values[:end]`, `values[start:]`
-- array iteration: `for value in values { ... }`
-- integer ranges: `for i in 0..values.len() { ... }`
-- array comprehensions build a new array from an iterable: `[value * value for value in values]`
-- comprehensions accept an optional filter and also work over ranges: `[i for i in 0..10 if i % 2 == 0]`
-- membership: `value in values`, `"lang" in message`
-- text is zero-based: `message[0]` returns the first `glyph`
-- text slices return `text`
-- array slots and record fields can be assigned directly: `values[0] = 9`, `point.x = 7`, `points[0].x = 5`
-- nested assignment targets are supported for arrays of arrays and arrays of records
-- the VM checks array/text indexes, slices, and empty `pop()` calls at runtime
-- arrays and records alias on assignment; scalars copy on assignment
-
-Comments:
-
-- `//` starts a single-line comment
-
-Built-in receiver methods:
-
-- arrays: `len()`, `push(value)`, `pop()`, `clear()`, `is_empty()`
-- text: `len()`, `is_empty()`, `contains(needle)`, `starts_with(prefix)`
-- raw text literals: `r"..."` keeps backslashes without escape decoding
-- format expression: `format("{} {}", left, right)` returns `text`
-
-Function values and method chaining:
-
-A named function can be passed by name as a first-class value wherever a function
-type `fn(P1, P2): R` is expected (the return clause is optional and defaults to
-`unit`). This powers the higher-order array methods, which chain fluently across
-lines:
-
-```dn
-import array;
-
-fn square(x: int): int { return x * x; }
-fn is_positive(x: int): bool { return x > 0; }
-
-result = values
-    .filter(is_positive)   // fn(int): bool
-    .map(square)           // fn(int): int
-    .sum();
-```
-
-`import array;` supplies `map(fn(T): U)`, `filter(fn(T): bool)`,
-`fold(initial, fn(Acc, T): Acc)`, `reduce(fn(T, T): T)`, `any(fn(T): bool)`,
-`all(fn(T): bool)`, and `count_where(fn(T): bool)`. Each returns a fresh array or
-a scalar and never mutates the receiver. A callback whose signature does not match
-the element type is a compile-time error that names the offending function type.
-Function values run on the bytecode VM.
-
-Standard library receiver methods are enabled by importing their module:
-
-- `import array;` enables helpers such as `values.first()` and `values.reverse()`, plus the higher-order pipeline `map`, `filter`, `fold`, `reduce`, `any`, `all`, and `count_where` (see below)
-- `import text;` enables helpers such as `message.trim()` and `message.ends_with("x")`
-- `import maybe;` exposes choice `Maybe<T>`, `present(value)`, `absent(default)`, and `value_or()`
-- `import outcome;` exposes choice `Outcome<T, E>`, `done(value, error_default)`, `failed(value_default, error)`, and `failure_or()`
-- `import collections;` exposes small array builders such as `pair_int()` and `repeat_int()`
-- `import dict;` exposes `Dict<V>` mapping `text` keys to values, with `set()`, `get()`, `contains()`, `remove()`, `keys()`, and `values()`
-- `import set;` exposes `Set` of unique `text` values, with `add()`, `contains()`, `remove()`, and `values()`
-- `import random;` exposes the seedable `Random` generator, with `next_int()`, `next_real()`, `between(lo, hi)`, `normal(mean, stddev)`, plus `uniform()` and `normal()` array helpers
-- `import process;` exposes `args()`, `arg_count()`, `arg(index)`, `env(name)`, `env_or(name, default)`, and `cwd()`
-- `import fs;` exposes `read_text(path)` and `write_text(path, content)`, each returning an `Outcome`
-- `import csv;` reads and writes comma-separated data: `parse_rows(content)` and `read_rows(path)` yield text grids, `read_matrix_real64(path)`/`read_matrix_int(path)` parse a rectangular file straight into a `matrix.Matrix<T>` (trimming cells and failing on ragged rows or non-numeric data), and `write_rows(path, rows)`/`write_matrix_real64(path, data)` serialize back out — every path-based call returns an `Outcome`
-- `import regex;` exposes safe ASCII regex validation and cleanup with `compile(pattern)`, `is_match`, `find`, `find_all`, `split`, `replace`, and `replace_all`
-- `import display;` exposes the `Display` contract and `show(value)` for rendering records to `text`
-- `import plot;` builds deterministic SVG/HTML line, scatter, bar, and histogram charts with `svg()`, `html()`, `save_svg()`, `save_html()`, and headless-safe `show()`
-- `import canvas;` builds deterministic SVG canvases with drawing primitives, GUI widgets, `save_svg()`, and `show_native()`
-
-Associative collections and deterministic randomness:
-
-```dn
-import dict;
-import set;
-import random;
-
-scores: dict.Dict<int> = dict.Dict.new();
-scores.set("alice", 10);
-scores.set("bob", 7);
-print(scores.get("alice").value_or(0 - 1)); // 10
-print(scores.contains("bob"));              // 1
-
-seen: set.Set = set.Set.new();
-seen.add("x");
-seen.add("x");
-print(seen.len());                          // 1
-
-rng: random.Random = random.seed(42);
-print(rng.between(0, 100));                 // same value for the same seed
-weights = random.normal(random.seed(1), 100, 0.0, 1.0);
-print(weights.len());                       // 100
-```
-
-`Dict` and `Set` keep entries in insertion order and look them up linearly, so
-behaviour is deterministic. `Random` uses the Park-Miller minimal standard
-generator, so a given seed always produces the same sequence.
-
-Files, arguments, and environment variables let Dune scripts do real work.
-Errors are explicit through `Outcome`, so they compose with the `?` operator:
-
-```dn
-import process;
-import fs;
-import outcome;
-
-fn save_greeting(): outcome.Outcome<text, text> {
-    name = process.env_or("USER", "world");
-    return fs.write_text("greeting.txt", format("hello, {}", name));
-}
-
-print(process.arg_count());          // arguments after `dune script.dn`
-save_greeting();
-print(fs.read_text("greeting.txt").value_or("<missing>"));
-```
-
-File and OS access runs on the bytecode VM (`dune <file>`).
-
-Plotting starts with pure Dune chart specs, deterministic renderers, and
-Matplotlib-style display backends. The default display backend is `none`, so
-`plot.show(chart)` returns a clear `Outcome` failure instead of trying to open a
-GUI in headless runs. Set `plot.use_backend("native")` to open a platform-native
-plot window where the VM supports it (currently macOS via system Cocoa/WebKit),
-or set `plot.use_backend("svg")` / `plot.use_backend("html")` for deterministic
-capture behavior. `DUNE_PLOT_BACKEND=native|svg|html|none` overrides the backend
-from the environment.
-
-```dn
-import plot;
-
-chart = plot.line([1.0, 2.0, 3.0], [2.0, 4.0, 8.0])
-    .title("growth")
-    .x_label("x")
-    .y_label("value");
-
-plot.save_svg(chart, "growth.svg");
-plot.use_backend("native");
-print(plot.show(chart).is_done());
-```
-
-Canvas is the lower-level drawing and GUI toolkit behind native display work. It
-records pure Dune drawing commands and renders deterministic SVG, so the same
-scene can be saved, golden-tested, or opened in the VM native canvas window:
-
-```dn
-import canvas;
-
-scene: canvas.Canvas = canvas.new("controls", 420, 260);
-scene = scene.background("#f8fafc")
-    .grid(40.0, "#94a3b8")
-    .panel(24.0, 24.0, 180.0, 92.0, "Tools")
-    .button(40.0, 68.0, 72.0, 28.0, "Run", true)
-    .checkbox(128.0, 74.0, "snap", true)
-    .slider(240.0, 72.0, 140.0, 0.0, 100.0, 42.0, "zoom")
-    .tabs(24.0, 150.0, 180.0, ["Draw", "Data", "View"], 0);
-
-scene.save_svg("controls.svg");
-print(scene.show_native().is_done());
-```
-
-## Run
+## Quick start
 
 ```bash
 cmake -S . -B build
 cmake --build build -j
-./build/dune hello.dn
+./build/dune examples/hello.dn        # run a program
+ctest --test-dir build                # run the test suite
 ```
 
-Arguments after the script are exposed to the program through `process.args()`:
+The build runs `clang-format` and `clang-tidy` before compiling. If those tools
+are not installed, configure with `-D DUNE_ENABLE_LINT=OFF`.
 
-```bash
-./build/dune script.dn alpha beta
-```
+Arguments after the script are exposed through `process.args()`. The standard
+library is resolved from `./stdlib` by default; set `DUNE_STDLIB_PATH` to point
+elsewhere.
 
-`check` prints a short status trace to stderr for the pipeline stages it runs.
-Color is enabled automatically on terminals. Set `DUNE_COLOR=always` to force
-color, or set `DUNE_COLOR=never` / `NO_COLOR=1` to disable it.
+## The `dune` command
 
-Check a file without running it:
+| Command | Purpose |
+| --- | --- |
+| `dune <file.dn>` | Type-check and run a program on the VM. |
+| `dune check <file.dn>` | Type-check only, printing a short pipeline trace. |
+| `dune test <file.dn>` | Run every `test "..." { ... }` block and report results. |
+| `dune doc <path> [-o dir]` | Generate Markdown API docs from source doc-comments. |
+| `dune lsp` | Start the editor language server (diagnostics, hover, completion). |
 
-```bash
-./build/dune check hello.dn
-```
+Color is automatic on terminals; force it with `DUNE_COLOR=always` or disable it
+with `DUNE_COLOR=never` / `NO_COLOR=1`.
 
-Start the editor language server:
+## Standard library
 
-```bash
-./build/dune lsp
-```
+The standard library lives in [`stdlib/`](stdlib/) as plain `.dn` files: `io`,
+`fmt`, `math`, `matrix`, `text`, `array`, `dict`, `set`, `random`, `fs`,
+`process`, `csv`, `regex`, `cli`, `log`, `plot`, `canvas`, `maybe`, `outcome`,
+and more. Each module's reference page on the
+[documentation site](https://comrademashkov.github.io/dune/) is generated from
+its doc-comments, with runnable examples.
 
-Generate Markdown API docs for a module (or a directory of modules) from the
-real AST and its doc-comments:
+## Editor support
 
-```bash
-./build/dune doc stdlib/maybe.dn            # print to stdout
-./build/dune doc stdlib -o docs/api         # a page per module, plus index.md
-```
+A Zed extension in [`editors/zed/`](editors/zed/) provides Tree-sitter
+highlighting plus completion, hover, symbol outline, go-to-definition, and
+diagnostics through `dune lsp`. Build Dune, then in Zed run
+`Extensions: Install Dev Extension` and select the `editors/zed` directory (not
+the repository root). See the [editor guide](https://comrademashkov.github.io/dune/guides/editor.html).
 
-Run every `test "..." { ... }` block in a file and report the results. Each
-block runs in isolation (top-level code does not run), and a failed assertion
-marks only that test as failed. The command exits non-zero if any test fails:
+## Project layout
 
-```bash
-./build/dune test tests/fixtures/test/passing.dn
-```
+| Path | Contents |
+| --- | --- |
+| `src/` | Compiler and VM: `lexer`, `parser`, `ast`, `typechecker`, `compiler`, `vm`, `lsp`, `doc`, `diagnostics`. |
+| `stdlib/` | Standard-library modules written in Dune. |
+| `examples/` | Runnable example programs. |
+| `tests/` | Unit tests and `.dn` fixtures driven by CTest. |
+| `docs/` | mdBook sources for the documentation site. |
+| `editors/zed/` | Zed language extension and Tree-sitter grammar. |
 
-## Build And Test
+## Status
 
-```bash
-cmake -S . -B build
-cmake --build build -j
-ctest --test-dir build --output-on-failure
-```
-
-The default build runs `clang-format` and `clang-tidy` checks through CMake before
-compiling targets. If those tools are not installed locally yet, configure with:
-
-```bash
-cmake -S . -B build -D DUNE_ENABLE_LINT=OFF
-```
-
-## Zed
-
-Dune has a Zed extension in `editors/zed`. It provides Tree-sitter syntax
-highlighting for `.dn` files plus completions, hover, symbol outline,
-go-to-definition (`Cmd`/`Ctrl`+click), and compiler diagnostics through
-`dune lsp`.
-Running or installing `dune lsp` by itself is not enough for Zed to recognize
-`.dn` files; the editor also needs this language extension so the file suffix,
-Tree-sitter grammar, queries, and LSP wiring are registered.
-
-To try it locally:
-
-1. Build Dune:
-
-```bash
-cmake -S . -B build
-cmake --build build -j
-```
-
-2. In Zed, use `Extensions: Install Dev Extension` and select the
-   `editors/zed` directory, not the repository root.
-
-The dev extension runs `build/dune` inside the opened worktree and sets
-`DUNE_STDLIB_PATH` to the worktree `stdlib` directory, so diagnostics can
-resolve standard modules. After pulling LSP fixes, rebuild Dune and reload Zed
-so the extension starts the updated `build/dune` binary.
-
-If a `.dn` file still appears as `Unknown`, reload Zed and confirm the Dune
-extension is installed from `editors/zed`. That status means Zed has not loaded
-the language metadata yet; autocomplete and hover will not start until the file
-is recognized as `Dune`.
-
-## Current Features
-
-The current release implements a small compiled language with:
-
-- lexer
-- parser
-- AST
-- arithmetic
-- inferred bindings through first assignment with `=`
-- lexical block, loop, and `when` payload scopes
-- constants
-- single-line comments
-- unary operators
-- logical operators
-- modulo
-- explicit casts with `to`
-- typed `fn` functions
-- overloaded functions
-- generic functions with basic bounds
-- generic functions with explicit contract bounds
-- call-site generic instantiation
-- transparent type aliases
-- generic records
-- tuple types, tuple literals, and local tuple destructuring
-- record field defaults
-- record constructors
-- static associated record functions
-- record member visibility
-- contracts and explicit record `with` declarations
-- choices
-- receiver methods
-- static scalar types
-- booleans
-- signed and unsigned integer widths
-- floating point values
-- `_` separators, `0x`/`0b` integer literals, and integer literal suffixes
-- glyph and text values
-- unit-returning functions
-- dynamic arrays
-- array comprehensions with optional filters
-- records with fields and methods
-- mutable array indexes and record fields
-- `when` expressions with literal, choice variant, record, and tuple patterns, including `pattern => expression` arms
-- postfix `?` operator for early-return error handling with `outcome.Outcome`
-- first-class function values (`fn(...)` types) and higher-order methods
-- array methods
-- text methods
-- raw text literals and explicit text/glyph escapes
-- `format()` expressions
-- standard library receiver methods
-- associative `dict`/`set` collections
-- seedable, deterministic `random` module
-- file, argument, and environment access via `fs`/`process`
-- `csv` parsing plus matrix read/write round-trips
-- printable records via a `to_text(): text` method
-- text indexing
-- slices
-- imports
-- export visibility
-- foreign functions
-- standard library modules
-- `dune check`
-- `dune lsp`
-- `dune doc`
-- `dune test`
-- Zed syntax highlighting
-- native heap cleanup on normal program exit and runtime panic paths
-- comparison operators
-- print
-- assignment
-- if/else
-- while
-- for
-- for-in loops
-- integer range expressions for loops
-- break/continue
-- `test` blocks with `assert_eq`/`assert_true`/`assert_false`
-- bytecode
-- VM
-- runtime bounds checks
-- CLI
-- tests
-- CI
+Dune implements a compact but real language: a static type checker with
+overloads, generics and bounds, contracts, records, choices, tuples, and type
+aliases; first-class function values; array comprehensions; operator
+overloading; a bytecode compiler and VM with runtime bounds checks; and the CLI,
+LSP, doc generator, and test runner above. The
+[language reference](https://comrademashkov.github.io/dune/) covers each feature
+in detail.

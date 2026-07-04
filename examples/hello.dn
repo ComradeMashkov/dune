@@ -1,0 +1,39 @@
+// A quick tour of Dune. Run it with:  ./build/dune examples/hello.dn
+import io;
+import fmt;
+
+// Records bundle data with methods. `+` dispatches to a record's `add` method,
+// and a `to_text` method makes a value printable.
+record Vec2 {
+    x: int,
+    y: int,
+    fn add(other: Vec2): Vec2 { return Vec2 { x: this.x + other.x, y: this.y + other.y }; }
+    fn to_text(): text { return fmt.format("({}, {})", this.x, this.y); }
+}
+
+// Choices are tagged unions matched with `when`.
+choice Shape { Dot, Line(Vec2) }
+
+fn describe(s: Shape): text {
+    return when s {
+        Dot => "a dot",
+        Line(v) => fmt.format("line to {}", v),
+    };
+}
+
+// A generic function constrained to ordered types.
+fn largest<T is ordered>(values: [T]): T {
+    best = values[0];
+    for v in values {
+        if v > best { best = v; }
+    }
+    return best;
+}
+
+a: Vec2 = Vec2 { x: 1, y: 2 };
+b: Vec2 = Vec2 { x: 3, y: 4 };
+edge: Shape = Line(a + b);
+
+io.println(a + b);                 // (4, 6)
+io.println(largest([3, 9, 2, 7])); // 9
+io.println(describe(edge));        // line to (4, 6)
