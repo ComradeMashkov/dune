@@ -1075,8 +1075,12 @@ fn render_pie_body(chart: Chart): text {
 
     output = fmt.format("<title>{}</title>\n", escape_xml(chart.title_text));
     output = fmt.format("{}<rect width=\"{}\" height=\"{}\" fill=\"#ffffff\"/>\n", output, chart.width, chart.height);
-    output = fmt.format("{}<g class=\"series pie\" stroke=\"#ffffff\" stroke-width=\"2\">\n", output);
 
+    // Build the wedges and their labels separately: wedges need the white
+    // separator stroke, but the labels must not inherit it (a white stroke on
+    // white text is what made them look bloated and blurry).
+    wedges = "";
+    labels = "";
     angle = 0.0 - (math.PI / 2.0);   // start at 12 o'clock
     for index = 0; index < chart.series.len(); index = index + 1 {
         value = chart.series[index].ys[0];
@@ -1097,19 +1101,25 @@ fn render_pie_body(chart: Chart): text {
         path = fmt.format("M {} {} L {} {} A {} {} 0 {} 1 {} {} Z",
                       math.round(cx), math.round(cy), math.round(x1), math.round(y1),
                       math.round(radius), math.round(radius), large, math.round(x2), math.round(y2));
-        output = fmt.format("{}<path fill=\"{}\" d=\"{}\"/>\n", output, chart.series[index].color, path);
+        wedges = fmt.format("{}<path fill=\"{}\" d=\"{}\"/>\n", wedges, chart.series[index].color, path);
 
         // Percentage label at the wedge's mid-angle, part-way out from centre.
         mid = angle + sweep / 2.0;
-        lx = cx + radius * 0.6 * math.cos(mid);
-        ly = cy + radius * 0.6 * math.sin(mid);
+        lx = cx + radius * 0.62 * math.cos(mid);
+        ly = cy + radius * 0.62 * math.sin(mid);
         percent = math.round((value / total) * 100.0);
-        output = fmt.format("{}<text x=\"{}\" y=\"{}\" text-anchor=\"middle\" fill=\"#ffffff\" font-family=\"sans-serif\" font-size=\"12\" font-weight=\"700\">{}%</text>\n",
-                        output, math.round(lx), math.round(ly), percent);
+        labels = fmt.format("{}<text x=\"{}\" y=\"{}\" text-anchor=\"middle\">{}%</text>\n",
+                        labels, math.round(lx), math.round(ly) + 4, percent);
 
         angle = next_angle;
     }
-    output = fmt.format("{}</g>\n", output);
+
+    output = fmt.format("{}<g class=\"series pie\" stroke=\"#ffffff\" stroke-width=\"2\" stroke-linejoin=\"round\">\n{}</g>\n",
+                    output, wedges);
+    // Dark labels with a white halo (paint-order draws the stroke first) so they
+    // stay crisp and readable on any wedge colour.
+    output = fmt.format("{}<g class=\"pie-labels\" fill=\"#1f2937\" stroke=\"#ffffff\" stroke-width=\"3\" stroke-linejoin=\"round\" paint-order=\"stroke\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"700\">\n{}</g>\n",
+                    output, labels);
 
     output = fmt.format("{}{}", output, render_labels(chart, 0.0, 0.0, 0.0, 0.0));
     if chart.legend_enabled {
