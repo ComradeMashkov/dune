@@ -1,0 +1,36 @@
+import io;
+// Import the matrix module for the Matrix/Vector types and their constructors.
+import matrix;
+
+// Const generics let a Matrix or Vector carry its shape in the type, so shape
+// mistakes are caught by the type checker instead of panicking at runtime.
+// `Matrix<T, Rows, Cols>` fixes the two dimensions; `Vector<T, Len>` fixes the
+// length. Shapes are checked at type-check time; the runtime is unchanged.
+
+// A 2x3 matrix times a 3x2 matrix. The inner dimensions (3) match, so the product
+// is a well-formed 2x2 matrix — and the type checker knows its shape up front.
+a: matrix.Matrix<real64, 2, 3> = matrix.from_rows([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]);
+b: matrix.Matrix<real64, 3, 2> = matrix.from_rows([[7.0, 8.0], [9.0, 10.0], [11.0, 12.0]]);
+product: matrix.Matrix<real64, 2, 2> = a.matmul(b);
+io.println("2x2 product");
+// Rows and cols of the product: 2 and 2.
+io.println(product.rows());
+io.println(product.cols());
+// Entry (0,0) = 1*7 + 2*9 + 3*11 = 58.
+io.println(product.get(0, 0));
+
+// A statically-shaped matrix-vector product: a 3x3 identity times a length-3
+// vector yields a length-3 vector. A mismatched length would not compile.
+m: matrix.Matrix<real64, 3, 3> = matrix.identity(3);
+v: matrix.Vector<real64, 3> = matrix.vector([2.0, 3.0, 4.0]);
+same: matrix.Vector<real64, 3> = m.mul_vector(v);
+io.println("identity times vector");
+// The identity leaves the vector unchanged: 2 and 4.
+io.println(same.get(0));
+io.println(same.get(2));
+
+// Element-wise addition of two same-shape matrices keeps that shape.
+doubled: matrix.Matrix<real64, 2, 3> = a.add(a);
+io.println("element-wise sum");
+// Entry (1,2) = 6 + 6 = 12.
+io.println(doubled.get(1, 2));

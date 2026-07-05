@@ -203,6 +203,12 @@ private:
     Type normalize_type(const Type& type, const std::unordered_set<std::string>& generic_parameters,
                         std::unordered_set<std::string>& resolving_aliases) const;
     void validate_known_type(const Type& type, SourceLocation location) const;
+    // Phase-1 shape checking: when a Matrix/Vector method (`add`, `matmul`, `dot`,
+    // `mul_vector`, …) is called on statically-shaped operands, verifies the shapes
+    // line up and refines the result to carry its computed static shape. Falls back
+    // to `fallback` (the dynamic signature result) when either operand is dynamic.
+    Type refine_matrix_vector_result(const Expression& expression, const std::string& method,
+                                     const std::vector<Type>& operands, const Type& fallback) const;
     bool same_type(const Type& left, const Type& right) const;
     bool is_signed_type(ValueType type) const;
     bool is_integer_type(ValueType type) const;

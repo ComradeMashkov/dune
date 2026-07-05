@@ -74,6 +74,7 @@ private:
     std::vector<std::unique_ptr<Expression>> arguments();
     TypeAnnotation optional_type_annotation();
     TypeAnnotation type_annotation();
+    Type parse_const_generic_argument();
 
     std::unique_ptr<Expression> assignment_target();
     std::unique_ptr<Expression> expression();

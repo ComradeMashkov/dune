@@ -1039,5 +1039,105 @@ int main() {
                                    "expected a nested test block to be rejected") &&
              passed;
 
+    // --- Const generics and static shapes for Matrix/Vector (issue #43) --------
+    // Statically-shaped annotations parse and type-check, and a shape-compatible
+    // matrix-vector product flows its result shape into a matching binding.
+    passed = expect_valid("import matrix; "
+                          "a: matrix.Matrix<real64, 3, 3> = matrix.identity(3); "
+                          "v: matrix.Vector<real64, 3> = matrix.vector([1.0, 2.0, 3.0]); "
+                          "r: matrix.Vector<real64, 3> = a.mul_vector(v); io.println(r.len());",
+                          "expected compatible static matrix-vector product to validate") &&
+             passed;
+    // A shape-compatible matrix product (2x3 · 3x2 → 2x2) type-checks.
+    passed = expect_valid("import matrix; "
+                          "a: matrix.Matrix<real64, 2, 3> = matrix.from_rows([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]); "
+                          "b: matrix.Matrix<real64, 3, 2> = matrix.from_rows([[7.0, 8.0], [9.0, 10.0], [11.0, 12.0]]); "
+                          "p: matrix.Matrix<real64, 2, 2> = a.matmul(b); io.println(p.rows());",
+                          "expected compatible static matrix product to validate") &&
+             passed;
+    // Same-shape element-wise addition keeps the shape.
+    passed = expect_valid("import matrix; "
+                          "a: matrix.Matrix<int, 2, 2> = matrix.from_rows([[1, 2], [3, 4]]); "
+                          "b: matrix.Matrix<int, 2, 2> = matrix.from_rows([[5, 6], [7, 8]]); "
+                          "c: matrix.Matrix<int, 2, 2> = a.add(b); io.println(c.rows());",
+                          "expected same-shape matrix addition to validate") &&
+             passed;
+    // The dynamic API is untouched: unannotated matrix code keeps working.
+    passed = expect_valid("import matrix; "
+                          "a = matrix.from_rows([[1, 2, 3], [4, 5, 6]]); "
+                          "b = matrix.from_rows([[7, 8], [9, 10], [11, 12]]); "
+                          "p = matrix.dot(a, b); io.println(p.rows());",
+                          "expected dynamic matrix API to keep validating") &&
+             passed;
+    // Static and dynamic shapes coexist: a static value is assignable to a dynamic
+    // binding and vice versa.
+    passed = expect_valid("import matrix; "
+                          "a: matrix.Matrix<real64, 2, 2> = matrix.identity(2); "
+                          "dyn: matrix.Matrix<real64> = a; "
+                          "back: matrix.Matrix<real64, 2, 2> = dyn; io.println(back.rows());",
+                          "expected static and dynamic matrix shapes to coexist") &&
+             passed;
+    // A statically-shaped vector still iterates over its element type.
+    passed = expect_valid("import matrix; "
+                          "v: matrix.Vector<int, 3> = matrix.vector([1, 2, 3]); "
+                          "last: int = 0; for x in v { last = x; } io.println(last);",
+                          "expected a static vector to remain iterable") &&
+             passed;
+    // A matrix-vector product whose inner dimensions disagree is a compile error.
+    passed = expect_error_contains("import matrix; "
+                                   "a: matrix.Matrix<real64, 3, 3> = matrix.identity(3); "
+                                   "v: matrix.Vector<real64, 4> = matrix.vector([1.0, 2.0, 3.0, 4.0]); "
+                                   "bad = a.mul_vector(v);",
+                                   "matrix-vector shape mismatch",
+                                   "expected incompatible matrix-vector product to be rejected") &&
+             passed;
+    // Binding a shaped result to the wrong static shape is rejected with expected/actual.
+    passed = expect_error_contains("import matrix; "
+                                   "a: matrix.Matrix<real64, 3, 3> = matrix.identity(3); "
+                                   "v: matrix.Vector<real64, 3> = matrix.vector([1.0, 2.0, 3.0]); "
+                                   "bad: matrix.Vector<real64, 4> = a.mul_vector(v);",
+                                   "matrix.Vector<real, 4>",
+                                   "expected a wrong-shape binding to be rejected") &&
+             passed;
+    // Multiplying matrices whose inner dimensions disagree is a compile error.
+    passed = expect_error_contains("import matrix; "
+                                   "a: matrix.Matrix<real64, 2, 3> = matrix.from_rows([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]); "
+                                   "b: matrix.Matrix<real64, 2, 2> = matrix.from_rows([[7.0, 8.0], [9.0, 10.0]]); "
+                                   "bad = a.matmul(b);",
+                                   "matrix shape mismatch",
+                                   "expected incompatible matrix product to be rejected") &&
+             passed;
+    // A dot product between vectors of different lengths is a compile error.
+    passed = expect_error_contains("import matrix; "
+                                   "u: matrix.Vector<real64, 3> = matrix.vector([1.0, 2.0, 3.0]); "
+                                   "w: matrix.Vector<real64, 4> = matrix.vector([1.0, 2.0, 3.0, 4.0]); "
+                                   "bad = u.dot(w);",
+                                   "vector length mismatch",
+                                   "expected a mismatched-length dot product to be rejected") &&
+             passed;
+    // Element-wise addition of different-shape matrices is a compile error.
+    passed = expect_error_contains("import matrix; "
+                                   "a: matrix.Matrix<int, 2, 2> = matrix.from_rows([[1, 2], [3, 4]]); "
+                                   "b: matrix.Matrix<int, 3, 3> = matrix.identity(3); "
+                                   "bad = a.add(b);",
+                                   "matrix shape mismatch",
+                                   "expected different-shape matrix addition to be rejected") &&
+             passed;
+    // A Matrix with the wrong number of static dimensions is rejected.
+    passed = expect_error_contains("import matrix; a: matrix.Matrix<real64, 3> = matrix.identity(3);",
+                                   "Matrix takes either no static shape or exactly 2 dimensions",
+                                   "expected a mis-shaped Matrix annotation to be rejected") &&
+             passed;
+    // A Vector with more than one static dimension is rejected.
+    passed = expect_error_contains("import matrix; v: matrix.Vector<int, 3, 3> = matrix.vector([1, 2, 3]);",
+                                   "Vector takes either no static shape or exactly 1 dimension",
+                                   "expected a mis-shaped Vector annotation to be rejected") &&
+             passed;
+    // Phase 1 accepts positive integer literals only: a negative dimension is rejected.
+    passed = expect_error_contains("import matrix; v: matrix.Vector<int, -3> = matrix.vector([1, 2, 3]);",
+                                   "const generic argument must be a positive integer literal",
+                                   "expected a negative const generic argument to be rejected") &&
+             passed;
+
     return passed ? 0 : 1;
 }

@@ -359,7 +359,9 @@ module.exports = grammar({
     generic_type: $ => prec(1, seq(
       field("name", choice($.qualified_type_identifier, $.identifier)),
       "<",
-      commaSep1(field("argument", $._type)),
+      // An argument is a type or a const generic argument (an integer literal),
+      // e.g. the `3`s in `Matrix<real64, 3, 3>`.
+      commaSep1(field("argument", choice($._type, $.number))),
       ">",
     )),
 

@@ -2952,6 +2952,10 @@
             "named": true
           },
           {
+            "type": "number",
+            "named": true
+          },
+          {
             "type": "qualified_type_identifier",
             "named": true
           },

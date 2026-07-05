@@ -945,6 +945,17 @@ bool compiles_test_blocks_into_separate_chunks() {
     return passed;
 }
 
+// Const generics / static shapes (issue #43) are compile-time only: a statically
+// shaped program compiles to ordinary bytecode with no shape residue.
+bool compiles_static_shape_matrix_program() {
+    const dune::Bytecode bytecode =
+        compile_source("import matrix; "
+                       "a: matrix.Matrix<int, 2, 2> = matrix.from_rows([[1, 2], [3, 4]]); "
+                       "b: matrix.Matrix<int, 2, 2> = matrix.from_rows([[5, 6], [7, 8]]); "
+                       "c: matrix.Matrix<int, 2, 2> = a.add(b); io.println(c.get(0, 0));");
+    return expect(!bytecode.instructions.empty(), "expected a static-shape program to compile to instructions");
+}
+
 } // namespace
 
 int main() {
@@ -975,6 +986,7 @@ int main() {
     passed = compiles_tuples_and_destructuring() && passed;
     passed = compiles_autograd_module_as_dune_code() && passed;
     passed = compiles_matrix_module_as_dune_code() && passed;
+    passed = compiles_static_shape_matrix_program() && passed;
     passed = compiles_plot_module_as_dune_code() && passed;
     passed = compiles_canvas_module_as_dune_code() && passed;
     passed = stdlib_stays_pure_dune_except_panic() && passed;

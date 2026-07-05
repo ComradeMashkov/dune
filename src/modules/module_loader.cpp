@@ -70,6 +70,7 @@ bool is_relative_to_parent(const std::filesystem::path& path) {
 Type clone_type(const Type& type) {
     Type result{type.kind, nullptr};
     result.name = type.name;
+    result.const_value = type.const_value;
     if (type.element != nullptr) {
         result.element = std::make_shared<Type>(clone_type(*type.element));
     }

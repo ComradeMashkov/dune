@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 #include <utility>
 
@@ -74,6 +75,7 @@ std::pair<std::size_t, bool> count_format_placeholders(const std::string& lexeme
 Type clone_type(const Type& type) {
     Type result{type.kind, nullptr};
     result.name = type.name;
+    result.const_value = type.const_value;
     if (type.element != nullptr) {
         result.element = std::make_shared<Type>(clone_type(*type.element));
     }
@@ -379,12 +381,18 @@ std::string type_name(ValueType type) {
         return "choice";
     case ValueType::function_type:
         return "function";
+    case ValueType::const_int_type:
+        return "const";
     }
 
     return "unknown";
 }
 
 std::string type_name(const Type& type) {
+    if (type.kind == ValueType::const_int_type) {
+        return std::to_string(type.const_value);
+    }
+
     if (type.kind == ValueType::function_type) {
         std::string name = "fn(";
         for (std::size_t index = 0; index < type.arguments.size(); ++index) {
@@ -441,6 +449,10 @@ std::string type_name(const Type& type) {
 }
 
 std::string type_key(const Type& type) {
+    if (type.kind == ValueType::const_int_type) {
+        return "const_" + std::to_string(type.const_value);
+    }
+
     if (type.kind == ValueType::array_type) {
         if (type.element == nullptr) {
             return "array_unknown";
@@ -495,6 +507,80 @@ std::string type_key(const Type& type) {
     }
 
     return type_name(type.kind);
+}
+
+// Const generics split a generic type's `arguments` into two groups. A *type
+// argument* is an ordinary type (the `real64` in `Matrix<real64, 3, 3>`); a *const
+// argument* is a `const_int_type` carrying a static dimension (each `3`). Matrix and
+// Vector always list their type arguments first and their shape arguments last, so
+// these helpers recover each group without needing to track positions.
+std::size_t type_argument_count(const Type& type) {
+    std::size_t count = 0;
+    for (const Type& argument : type.arguments) {
+        if (argument.kind != ValueType::const_int_type) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+std::vector<long long> const_shape(const Type& type) {
+    std::vector<long long> shape;
+    for (const Type& argument : type.arguments) {
+        if (argument.kind == ValueType::const_int_type) {
+            shape.push_back(argument.const_value);
+        }
+    }
+    return shape;
+}
+
+Type make_const_int(long long value) {
+    Type type{ValueType::const_int_type, nullptr};
+    type.const_value = value;
+    return type;
+}
+
+// Rebuilds `base` (a Matrix/Vector type) carrying exactly the given static shape:
+// its type arguments are kept and any existing const arguments are replaced by `dims`.
+Type with_static_shape(const Type& base, const std::vector<long long>& dims) {
+    Type result{base.kind, base.element};
+    result.name = base.name;
+    for (const Type& argument : base.arguments) {
+        if (argument.kind != ValueType::const_int_type) {
+            result.arguments.push_back(argument);
+        }
+    }
+    for (const long long dimension : dims) {
+        result.arguments.push_back(make_const_int(dimension));
+    }
+    return result;
+}
+
+// The two stdlib records that carry static shapes in phase 1. Matched by their
+// fully-qualified name so a user-defined record called `Matrix` is left alone.
+bool is_matrix_record(const Type& type) {
+    return type.kind == ValueType::struct_type && type.name == "matrix.Matrix";
+}
+
+bool is_vector_record(const Type& type) {
+    return type.kind == ValueType::struct_type && type.name == "matrix.Vector";
+}
+
+// Rejects a statically-shaped Matrix/Vector whose const generic arity is wrong: a
+// Matrix carries either no static shape or exactly 2 dimensions (rows, cols), and a
+// Vector either none or exactly 1 (length). Returns the diagnostic message, or
+// nullopt when the shape is fine (including every non-Matrix/Vector type).
+std::optional<std::string> static_shape_error(const Type& type) {
+    const std::size_t dimensions = const_shape(type).size();
+    if (is_matrix_record(type) && dimensions != 0 && dimensions != 2) {
+        return "Matrix takes either no static shape or exactly 2 dimensions (rows and cols), but got " +
+               std::to_string(dimensions);
+    }
+    if (is_vector_record(type) && dimensions != 0 && dimensions != 1) {
+        return "Vector takes either no static shape or exactly 1 dimension (length), but got " +
+               std::to_string(dimensions);
+    }
+    return std::nullopt;
 }
 
 std::string function_key(const std::string& name, const std::vector<Type>& parameters) {
@@ -932,6 +1018,10 @@ void TypeChecker::validate_constructor(const Statement& record, const Statement&
 }
 
 std::string contract_type_name(const Type& type) {
+    if (type.kind == ValueType::const_int_type) {
+        return std::to_string(type.const_value);
+    }
+
     if (type.kind == ValueType::real_type) {
         return "real64";
     }
@@ -1594,9 +1684,15 @@ bool TypeChecker::known_iterable_record_element_type(const Type& iterable, Type&
         return true;
     }
 
-    if (iterable.name == "matrix.Vector" && iterable.arguments.size() == 1) {
-        element = iterable.arguments.front();
-        return true;
+    // A `matrix.Vector<T>` iterates over its element type `T`, whether or not it also
+    // carries a static length (`Vector<T, 4>`); the const shape argument is ignored here.
+    if (is_vector_record(iterable) && type_argument_count(iterable) == 1) {
+        for (const Type& argument : iterable.arguments) {
+            if (argument.kind != ValueType::const_int_type) {
+                element = argument;
+                return true;
+            }
+        }
     }
 
     return false;
@@ -1703,11 +1799,11 @@ Type TypeChecker::check_member_assignment_target(const Expression& target, Sourc
         throw DiagnosticError(target.location, "record '" + receiver.name + "' has no field '" + target.lexeme + "'");
     }
 
-    if (definition->second.generic_parameters.size() != receiver.arguments.size()) {
+    if (definition->second.generic_parameters.size() != type_argument_count(receiver)) {
         throw DiagnosticError(target.location, "record '" + receiver.name + "' expects " +
                                                    std::to_string(definition->second.generic_parameters.size()) +
                                                    " type arguments but got " +
-                                                   std::to_string(receiver.arguments.size()));
+                                                   std::to_string(type_argument_count(receiver)));
     }
 
     std::unordered_map<std::string, Type> substitutions;
@@ -2493,6 +2589,75 @@ Type TypeChecker::check_static_method_call_expression(const Expression& expressi
                                expression.location, expected);
 }
 
+Type TypeChecker::refine_matrix_vector_result(const Expression& expression, const std::string& method,
+                                              const std::vector<Type>& operands, const Type& fallback) const {
+    // operands[0] is the receiver; operands[1..] are the method arguments. Shape
+    // checking only kicks in for a single-argument call between two statically-shaped
+    // operands — anything dynamic keeps the signature's (dynamic) result untouched, so
+    // the existing dynamic Matrix/Vector API is entirely unaffected.
+    if (operands.size() != 2) {
+        return fallback;
+    }
+    const Type& receiver = operands.front();
+    const Type& argument = operands[1];
+    const std::vector<long long> receiver_shape = const_shape(receiver);
+    const std::vector<long long> argument_shape = const_shape(argument);
+
+    if (is_matrix_record(receiver) && receiver_shape.size() == 2) {
+        const long long rows = receiver_shape[0];
+        const long long cols = receiver_shape[1];
+
+        if ((method == "add" || method == "sub" || method == "mul" || method == "div" || method == "hadamard") &&
+            is_matrix_record(argument) && argument_shape.size() == 2) {
+            if (argument_shape[0] != rows || argument_shape[1] != cols) {
+                throw DiagnosticError(expression.location, "matrix shape mismatch: cannot combine " +
+                                                               type_name(receiver) + " and " + type_name(argument) +
+                                                               " element-wise");
+            }
+            return with_static_shape(fallback, {rows, cols});
+        }
+
+        if ((method == "matmul" || method == "dot") && is_matrix_record(argument) && argument_shape.size() == 2) {
+            if (cols != argument_shape[0]) {
+                throw DiagnosticError(expression.location, "matrix shape mismatch: cannot multiply " +
+                                                               type_name(receiver) + " by " + type_name(argument) +
+                                                               " (columns of the left must equal rows of the right)");
+            }
+            return with_static_shape(fallback, {rows, argument_shape[1]});
+        }
+
+        if ((method == "mul_vector" || method == "dot") && is_vector_record(argument) && argument_shape.size() == 1) {
+            if (cols != argument_shape[0]) {
+                throw DiagnosticError(expression.location, "matrix-vector shape mismatch: " + type_name(receiver) +
+                                                               " has " + std::to_string(cols) +
+                                                               " column(s) but " + type_name(argument) +
+                                                               " has length " + std::to_string(argument_shape[0]));
+            }
+            return with_static_shape(fallback, {rows});
+        }
+    }
+
+    if (is_vector_record(receiver) && receiver_shape.size() == 1) {
+        const long long length = receiver_shape[0];
+
+        if (is_vector_record(argument) && argument_shape.size() == 1 &&
+            (method == "dot" || method == "add" || method == "sub" || method == "mul" || method == "div")) {
+            if (length != argument_shape[0]) {
+                throw DiagnosticError(expression.location, "vector length mismatch: " + type_name(receiver) + " and " +
+                                                               type_name(argument) + " must have the same length");
+            }
+            // `dot` reduces to a scalar (fallback already holds `T`); the element-wise
+            // operations preserve the shared length.
+            if (method == "dot") {
+                return fallback;
+            }
+            return with_static_shape(fallback, {length});
+        }
+    }
+
+    return fallback;
+}
+
 Type TypeChecker::check_receiver_method_call(const Expression& expression, const TypeAnnotation& expected) {
     std::vector<const Expression*> arguments;
     arguments.reserve(expression.arguments.size() + 1);
@@ -2535,14 +2700,16 @@ Type TypeChecker::check_receiver_method_call(const Expression& expression, const
     }
 
     if (best_match != nullptr) {
+        std::vector<Type> operand_types;
+        operand_types.reserve(arguments.size());
         for (std::size_t index = 0; index < arguments.size(); ++index) {
-            expect_type(best_match->parameters[index],
-                        check_expression(*arguments[index], expected_type(best_match->parameters[index])),
-                        arguments[index]->location);
+            Type argument_type = check_expression(*arguments[index], expected_type(best_match->parameters[index]));
+            expect_type(best_match->parameters[index], argument_type, arguments[index]->location);
+            operand_types.push_back(std::move(argument_type));
         }
 
         resolved_calls_[&expression] = best_match->key;
-        return best_match->return_type;
+        return refine_matrix_vector_result(expression, expression.lexeme, operand_types, best_match->return_type);
     }
 
     if (receiver.kind == ValueType::struct_type) {
@@ -2722,11 +2889,11 @@ Type TypeChecker::check_member_expression(const Expression& expression, const Ty
                                   "record '" + receiver.name + "' has no field '" + expression.lexeme + "'");
         }
 
-        if (definition->second.generic_parameters.size() != receiver.arguments.size()) {
+        if (definition->second.generic_parameters.size() != type_argument_count(receiver)) {
             throw DiagnosticError(expression.location,
                                   "record '" + receiver.name + "' expects " +
                                       std::to_string(definition->second.generic_parameters.size()) +
-                                      " type arguments but got " + std::to_string(receiver.arguments.size()));
+                                      " type arguments but got " + std::to_string(type_argument_count(receiver)));
         }
 
         std::unordered_map<std::string, Type> substitutions;
@@ -3518,15 +3685,27 @@ bool TypeChecker::collect_generic_constraints(
 
     if (pattern.kind == ValueType::struct_type || pattern.kind == ValueType::enum_type) {
         if (actual.kind != pattern.kind || pattern.name != actual.name ||
-            pattern.arguments.size() != actual.arguments.size()) {
+            type_argument_count(pattern) != type_argument_count(actual)) {
             return false;
         }
 
-        for (std::size_t index = 0; index < pattern.arguments.size(); ++index) {
-            if (!collect_generic_constraints(pattern.arguments[index], actual.arguments[index], constraints,
-                                             preferred)) {
+        // Unify only the ordinary type arguments; const (shape) arguments never bind a
+        // generic parameter. Both lists keep their type arguments ahead of any consts,
+        // so walking the non-const entries in order lines them up (mirrors same_type).
+        std::size_t actual_index = 0;
+        for (const Type& pattern_argument : pattern.arguments) {
+            if (pattern_argument.kind == ValueType::const_int_type) {
+                continue;
+            }
+            while (actual_index < actual.arguments.size() &&
+                   actual.arguments[actual_index].kind == ValueType::const_int_type) {
+                ++actual_index;
+            }
+            if (actual_index >= actual.arguments.size() ||
+                !collect_generic_constraints(pattern_argument, actual.arguments[actual_index], constraints, preferred)) {
                 return false;
             }
+            ++actual_index;
         }
 
         return true;
@@ -3902,7 +4081,13 @@ Type TypeChecker::normalize_type(const Type& type, const std::unordered_set<std:
 
     if (type.kind == ValueType::generic_type && !generic_parameters.contains(type.name) &&
         structs_.contains(type.name)) {
-        return make_struct_type(type.name, std::move(arguments));
+        Type built = make_struct_type(type.name, std::move(arguments));
+        // Every annotation flows through here, so this is the one chokepoint that
+        // rejects a mis-shaped static Matrix/Vector regardless of where it is written.
+        if (const std::optional<std::string> shape_error = static_shape_error(built)) {
+            throw DiagnosticError(*shape_error);
+        }
+        return built;
     }
 
     if (type.kind == ValueType::generic_type && !generic_parameters.contains(type.name) && enums_.contains(type.name)) {
@@ -3911,6 +4096,9 @@ Type TypeChecker::normalize_type(const Type& type, const std::unordered_set<std:
 
     Type result = type;
     result.arguments = std::move(arguments);
+    if (const std::optional<std::string> shape_error = static_shape_error(result)) {
+        throw DiagnosticError(*shape_error);
+    }
     return result;
 }
 
@@ -3940,12 +4128,14 @@ void TypeChecker::validate_known_type(const Type& type, SourceLocation location)
         if (record == structs_.end()) {
             throw DiagnosticError(location, "unknown type '" + normalized.name + "'");
         }
-        if (record->second.generic_parameters.size() != normalized.arguments.size()) {
+        if (record->second.generic_parameters.size() != type_argument_count(normalized)) {
             throw DiagnosticError(location, "record '" + base_name(normalized.name) + "' expects " +
                                                 std::to_string(record->second.generic_parameters.size()) +
                                                 " type argument(s) but got " +
-                                                std::to_string(normalized.arguments.size()));
+                                                std::to_string(type_argument_count(normalized)));
         }
+        // Note: a mis-shaped static Matrix/Vector is already rejected by normalize_type
+        // above, so no separate static-shape check is needed here.
         for (const Type& argument : normalized.arguments) {
             validate_known_type(argument, location);
         }
@@ -3956,11 +4146,11 @@ void TypeChecker::validate_known_type(const Type& type, SourceLocation location)
         if (choice == enums_.end()) {
             throw DiagnosticError(location, "unknown type '" + normalized.name + "'");
         }
-        if (choice->second.generic_parameters.size() != normalized.arguments.size()) {
+        if (choice->second.generic_parameters.size() != type_argument_count(normalized)) {
             throw DiagnosticError(location, "choice '" + base_name(normalized.name) + "' expects " +
                                                 std::to_string(choice->second.generic_parameters.size()) +
                                                 " type argument(s) but got " +
-                                                std::to_string(normalized.arguments.size()));
+                                                std::to_string(type_argument_count(normalized)));
         }
         for (const Type& argument : normalized.arguments) {
             validate_known_type(argument, location);
@@ -3969,6 +4159,10 @@ void TypeChecker::validate_known_type(const Type& type, SourceLocation location)
     }
     case ValueType::generic_type:
         throw DiagnosticError(location, "unknown type '" + normalized.name + "'");
+    case ValueType::const_int_type:
+        // A const generic argument is validated by its containing type's shape rules,
+        // not on its own.
+        return;
     case ValueType::int_type:
     case ValueType::bool_type:
     case ValueType::i8_type:
@@ -3995,6 +4189,10 @@ bool TypeChecker::same_type(const Type& left, const Type& right) const {
         return false;
     }
 
+    if (left.kind == ValueType::const_int_type) {
+        return left.const_value == right.const_value;
+    }
+
     if (left.kind == ValueType::tuple_type) {
         if (left.arguments.size() != right.arguments.size()) {
             return false;
@@ -4011,14 +4209,35 @@ bool TypeChecker::same_type(const Type& left, const Type& right) const {
 
     if (left.kind == ValueType::generic_type || left.kind == ValueType::struct_type ||
         left.kind == ValueType::enum_type) {
-        if (left.name != right.name || left.arguments.size() != right.arguments.size()) {
+        if (left.name != right.name || type_argument_count(left) != type_argument_count(right)) {
             return false;
         }
 
-        for (std::size_t index = 0; index < left.arguments.size(); ++index) {
-            if (!same_type(left.arguments[index], right.arguments[index])) {
+        // Compare the ordinary type arguments positionally, skipping the const (shape)
+        // arguments, which only ever sit at the tail.
+        std::size_t right_index = 0;
+        for (const Type& left_argument : left.arguments) {
+            if (left_argument.kind == ValueType::const_int_type) {
+                continue;
+            }
+            while (right_index < right.arguments.size() &&
+                   right.arguments[right_index].kind == ValueType::const_int_type) {
+                ++right_index;
+            }
+            if (right_index >= right.arguments.size() || !same_type(left_argument, right.arguments[right_index])) {
                 return false;
             }
+            ++right_index;
+        }
+
+        // Static shapes coexist with dynamic ones: when both sides carry a const shape
+        // it must match exactly, but a side that omits its shape (the dynamic API) is
+        // compatible with any shape. So `Matrix<T>` stays assignable to and from
+        // `Matrix<T, R, C>`, while `Vector<_, 3>` vs `Vector<_, 4>` is still rejected.
+        const std::vector<long long> left_shape = const_shape(left);
+        const std::vector<long long> right_shape = const_shape(right);
+        if (!left_shape.empty() && !right_shape.empty() && left_shape != right_shape) {
+            return false;
         }
 
         return true;
@@ -4169,6 +4388,7 @@ unsigned long long TypeChecker::max_integer_literal(ValueType target) const {
     case ValueType::struct_type:
     case ValueType::enum_type:
     case ValueType::function_type:
+    case ValueType::const_int_type:
         break;
     }
 

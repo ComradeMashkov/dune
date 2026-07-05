@@ -180,6 +180,14 @@ Type with_type_arguments(Type type, std::vector<Type> arguments) {
     return type;
 }
 
+// A compile-time integer used as a const generic argument, e.g. the `3`s in
+// `Matrix<real64, 3, 3>`. Only ever nested inside another type's `arguments`.
+Type make_const_int_type(long long value) {
+    Type type{ValueType::const_int_type, nullptr};
+    type.const_value = value;
+    return type;
+}
+
 Type make_named_type(std::string name, const std::vector<GenericParameter>& generic_parameters) {
     std::vector<Type> arguments;
     arguments.reserve(generic_parameters.size());
@@ -1538,8 +1546,18 @@ TypeAnnotation Parser::type_annotation() {
         std::vector<Type> arguments;
         if (match(TokenType::less)) {
             while (true) {
-                TypeAnnotation argument = type_annotation();
-                arguments.push_back(std::move(argument.type));
+                // A const generic argument: a plain positive integer literal, e.g. the
+                // `3`s in `Matrix<real64, 3, 3>`. Phase 1 accepts literals only — named
+                // constants and const expressions are deliberately left as follow-ups.
+                if (check(TokenType::number)) {
+                    arguments.push_back(parse_const_generic_argument());
+                } else if (check(TokenType::minus)) {
+                    throw DiagnosticError(location_from_token(peek()),
+                                          "const generic argument must be a positive integer literal");
+                } else {
+                    TypeAnnotation argument = type_annotation();
+                    arguments.push_back(std::move(argument.type));
+                }
 
                 if (!match(TokenType::comma)) {
                     break;
@@ -1552,6 +1570,39 @@ TypeAnnotation Parser::type_annotation() {
     }
 
     throw DiagnosticError(location_from_token(peek()), "expected type annotation");
+}
+
+// Reads a single const generic argument such as the `3` in `Matrix<real64, 3, 3>`.
+// Phase 1 accepts only a plain positive decimal integer literal: digit separators
+// are allowed but hex/binary prefixes, typed suffixes (`3i32`), and floats are not.
+Type Parser::parse_const_generic_argument() {
+    const Token literal = advance();
+    std::string digits;
+    for (const char character : literal.lexeme) {
+        if (character == '_') {
+            continue;
+        }
+        if (character < '0' || character > '9') {
+            throw DiagnosticError(location_from_token(literal),
+                                  "const generic argument must be a plain integer literal, got '" + literal.lexeme +
+                                      "'");
+        }
+        digits.push_back(character);
+    }
+
+    long long value = 0;
+    try {
+        value = std::stoll(digits);
+    } catch (const std::exception&) {
+        throw DiagnosticError(location_from_token(literal),
+                              "const generic argument '" + literal.lexeme + "' is out of range");
+    }
+
+    if (value <= 0) {
+        throw DiagnosticError(location_from_token(literal), "const generic argument must be a positive integer literal");
+    }
+
+    return make_const_int_type(value);
 }
 
 std::unique_ptr<Expression> Parser::assignment_target() {
