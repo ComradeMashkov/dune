@@ -597,17 +597,19 @@ chart = plot.pie([35.0, 25.0, 20.0, 15.0, 5.0],
 <svg xmlns="http://www.w3.org/2000/svg" width="520" height="340" viewBox="0 0 520 340">
 <title>Monthly budget</title>
 <rect width="520" height="340" fill="#ffffff"/>
-<g class="series pie" stroke="#ffffff" stroke-width="2">
+<g class="series pie" stroke="#ffffff" stroke-width="2" stroke-linejoin="round">
 <path fill="#2563eb" d="M 260 178 L 260 64 A 114 114 0 0 1 352 245 Z"/>
-<text x="321" y="147" text-anchor="middle" fill="#ffffff" font-family="sans-serif" font-size="12" font-weight="700">35%</text>
 <path fill="#dc2626" d="M 260 178 L 352 245 A 114 114 0 0 1 193 270 Z"/>
-<text x="271" y="246" text-anchor="middle" fill="#ffffff" font-family="sans-serif" font-size="12" font-weight="700">25%</text>
 <path fill="#16a34a" d="M 260 178 L 193 270 A 114 114 0 0 1 152 143 Z"/>
-<text x="195" y="199" text-anchor="middle" fill="#ffffff" font-family="sans-serif" font-size="12" font-weight="700">20%</text>
 <path fill="#9333ea" d="M 260 178 L 152 143 A 114 114 0 0 1 225 70 Z"/>
-<text x="212" y="130" text-anchor="middle" fill="#ffffff" font-family="sans-serif" font-size="12" font-weight="700">15%</text>
 <path fill="#ea580c" d="M 260 178 L 225 70 A 114 114 0 0 1 260 64 Z"/>
-<text x="249" y="110" text-anchor="middle" fill="#ffffff" font-family="sans-serif" font-size="12" font-weight="700">5%</text>
+</g>
+<g class="pie-labels" fill="#1f2937" stroke="#ffffff" stroke-width="3" stroke-linejoin="round" paint-order="stroke" font-family="sans-serif" font-size="13" font-weight="700">
+<text x="323" y="150" text-anchor="middle">35%</text>
+<text x="271" y="252" text-anchor="middle">25%</text>
+<text x="193" y="204" text-anchor="middle">20%</text>
+<text x="210" y="132" text-anchor="middle">15%</text>
+<text x="249" y="112" text-anchor="middle">5%</text>
 </g>
 <g class="labels" fill="#0f172a" font-family="sans-serif">
 <text x="260" y="28" text-anchor="middle" font-size="18" font-weight="700">Monthly budget</text>
@@ -825,17 +827,19 @@ figure = plot.subplots([
 <svg x="600" y="200" width="300" height="200" viewBox="0 0 300 200">
 <title>pie</title>
 <rect width="300" height="200" fill="#ffffff"/>
-<g class="series pie" stroke="#ffffff" stroke-width="2">
+<g class="series pie" stroke="#ffffff" stroke-width="2" stroke-linejoin="round">
 <path fill="#2563eb" d="M 150 108 L 150 64 A 44 44 0 0 1 186 134 Z"/>
-<text x="174" y="96" text-anchor="middle" fill="#ffffff" font-family="sans-serif" font-size="12" font-weight="700">35%</text>
 <path fill="#dc2626" d="M 150 108 L 186 134 A 44 44 0 0 1 124 144 Z"/>
-<text x="154" y="134" text-anchor="middle" fill="#ffffff" font-family="sans-serif" font-size="12" font-weight="700">25%</text>
 <path fill="#16a34a" d="M 150 108 L 124 144 A 44 44 0 0 1 108 94 Z"/>
-<text x="125" y="116" text-anchor="middle" fill="#ffffff" font-family="sans-serif" font-size="12" font-weight="700">20%</text>
 <path fill="#9333ea" d="M 150 108 L 108 94 A 44 44 0 0 1 136 66 Z"/>
-<text x="131" y="89" text-anchor="middle" fill="#ffffff" font-family="sans-serif" font-size="12" font-weight="700">15%</text>
 <path fill="#ea580c" d="M 150 108 L 136 66 A 44 44 0 0 1 150 64 Z"/>
-<text x="146" y="82" text-anchor="middle" fill="#ffffff" font-family="sans-serif" font-size="12" font-weight="700">5%</text>
+</g>
+<g class="pie-labels" fill="#1f2937" stroke="#ffffff" stroke-width="3" stroke-linejoin="round" paint-order="stroke" font-family="sans-serif" font-size="13" font-weight="700">
+<text x="174" y="100" text-anchor="middle">35%</text>
+<text x="154" y="139" text-anchor="middle">25%</text>
+<text x="124" y="120" text-anchor="middle">20%</text>
+<text x="131" y="93" text-anchor="middle">15%</text>
+<text x="146" y="85" text-anchor="middle">5%</text>
 </g>
 <g class="labels" fill="#0f172a" font-family="sans-serif">
 <text x="150" y="28" text-anchor="middle" font-size="18" font-weight="700">pie</text>
