@@ -1300,6 +1300,37 @@ bool parses_doc_comments_on_declarations() {
     return passed;
 }
 
+// Const generics (issue #43): integer literals in a type argument list parse into
+// `const_int_type` arguments carrying their value, interleaved after the type args.
+bool parses_const_generic_arguments() {
+    const dune::Program program = parse_source("a: matrix.Matrix<real64, 3, 4> = zero;");
+    if (!expect(program.statements.size() == 1, "expected a single binding")) {
+        return false;
+    }
+
+    const dune::TypeAnnotation& annotation = program.statements[0].type;
+    bool passed = expect(annotation.has_type, "expected a type annotation");
+    const dune::Type& type = annotation.type;
+    passed = expect(type.arguments.size() == 3, "expected one type argument plus two const dimensions") && passed;
+    if (type.arguments.size() == 3) {
+        passed = expect(type.arguments[0].kind == dune::ValueType::real_type, "expected the element type argument") &&
+                 passed;
+        passed = expect(type.arguments[1].kind == dune::ValueType::const_int_type, "expected the first const argument") &&
+                 passed;
+        passed = expect(type.arguments[1].const_value == 3, "expected the first dimension to be 3") && passed;
+        passed =
+            expect(type.arguments[2].kind == dune::ValueType::const_int_type, "expected the second const argument") &&
+            passed;
+        passed = expect(type.arguments[2].const_value == 4, "expected the second dimension to be 4") && passed;
+    }
+
+    // A negative dimension is rejected during parsing (phase 1 is literals-only).
+    passed = expect_parse_error("a: matrix.Vector<int, -3> = zero;",
+                                "expected a negative const generic argument to be a parse error") &&
+             passed;
+    return passed;
+}
+
 } // namespace
 
 int main() {
@@ -1347,6 +1378,7 @@ int main() {
     passed = parses_array_literals_without_comprehension() && passed;
     passed = parses_try_operator() && passed;
     passed = parses_try_operator_binds_tighter_than_binary() && passed;
+    passed = parses_const_generic_arguments() && passed;
 
     return passed ? 0 : 1;
 }

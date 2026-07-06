@@ -35,16 +35,23 @@ enum class ValueType {
     struct_type,
     enum_type,
     function_type,
+    // A compile-time integer that appears as a generic argument, e.g. the `3`s in
+    // `Matrix<real64, 3, 3>`. It is not a value type in its own right; it only ever
+    // lives inside another type's `arguments` list to carry a static shape.
+    const_int_type,
 };
 
 // For a `function_type`, `arguments` holds the parameter types and `element`
-// holds the return type (unit when the function returns nothing). All other
-// kinds leave those fields to their usual meaning.
+// holds the return type (unit when the function returns nothing). For a
+// `const_int_type`, `const_value` holds the literal. All other kinds leave those
+// fields to their usual meaning.
 struct Type {
     ValueType kind = ValueType::int_type;
     std::shared_ptr<Type> element;
     std::string name;
     std::vector<Type> arguments;
+    // Only meaningful when `kind == const_int_type`: the const generic argument's value.
+    long long const_value = 0;
 };
 
 struct TypeAnnotation {

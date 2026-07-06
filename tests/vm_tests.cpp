@@ -821,6 +821,16 @@ io.println('\0' to int);)dune"),
                        "10\n16\n7\n", "expected Modules v2 alias/selective runtime output") &&
              passed;
 
+    // Const generics / static shapes (issue #43) are a compile-time-only concern:
+    // a statically shaped matrix-vector product runs identically to its dynamic form.
+    passed = expect_eq(run_source("import matrix; "
+                                  "a: matrix.Matrix<int, 2, 3> = matrix.from_rows([[1, 2, 3], [4, 5, 6]]); "
+                                  "v: matrix.Vector<int, 3> = matrix.vector([1, 1, 1]); "
+                                  "r: matrix.Vector<int, 2> = a.mul_vector(v); "
+                                  "io.println(r.get(0)); io.println(r.get(1));"),
+                       "6\n15\n", "expected static-shape matrix-vector product to run") &&
+             passed;
+
     passed = runs_only_test_blocks() && passed;
     passed = test_failure_unwinds() && passed;
 
