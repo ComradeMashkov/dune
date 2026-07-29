@@ -1328,7 +1328,8 @@ std::string declaration_hover(const Statement& statement) {
         signature = "contract " + statement.name;
         break;
     case StatementKind::type_alias_statement:
-        signature = "type " + statement.name + " = " + type_annotation_name(statement.type);
+        signature = "type " + statement.name + generic_parameters_text(statement.generic_parameters) + " = " +
+                    type_annotation_name(statement.type);
         break;
     case StatementKind::method_block:
     case StatementKind::assign:

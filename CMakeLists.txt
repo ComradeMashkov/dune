@@ -504,7 +504,7 @@ add_test(
         ${CMAKE_COMMAND}
         -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/types/type_aliases_run.dn
-        -D EXPECTED_OUTPUT="3\n5"
+        -D EXPECTED_OUTPUT="3\n5\n9\n12"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
 )
 

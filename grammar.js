@@ -102,6 +102,7 @@ module.exports = grammar({
     type_alias_declaration: $ => seq(
       "type",
       field("name", $.identifier),
+      optional($.generic_parameters),
       "=",
       field("type", $._type),
       ";",

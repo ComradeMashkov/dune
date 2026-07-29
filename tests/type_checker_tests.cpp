@@ -341,8 +341,20 @@ int main() {
     passed = expect_fixture_valid("import type_aliases; "
                                   "point: type_aliases.PointAlias = type_aliases.Point.new(7); "
                                   "points: type_aliases.PointList = [point]; "
-                                  "again: type_aliases.PointAlias = points[0];",
+                                  "again: type_aliases.PointAlias = points[0]; "
+                                  "box: type_aliases.BoxAlias<int> = type_aliases.Box.wrap(42); "
+                                  "pair: type_aliases.Pair<int, text> = (box.value, \"answer\");",
                                   "expected exported module type aliases to validate") &&
+             passed;
+    passed = expect_valid("import matrix; import outcome; "
+                          "record Box<T> { value: T, static fn wrap(value: T): Box<T> { return Box { value: value }; } } "
+                          "type BoxOf<T> = Box<T>; type BoxAgain<T> = BoxOf<T>; "
+                          "type Pair<T, U> = (T, U); type TextResult<T> = outcome.Outcome<T, text>; "
+                          "type Matrix2<T> = matrix.Matrix<T, 2, 2>; "
+                          "box: BoxAgain<int> = Box.wrap(42); pair: Pair<int, text> = (box.value, \"answer\"); "
+                          "(answer, label) = pair; result: TextResult<int> = outcome.done_int(answer); "
+                          "matrix_value: Matrix2<int> = matrix.identity(2);",
+                          "expected generic aliases for records, tuples, modules, alias chains, and static shapes") &&
              passed;
     passed = expect_valid("choice Maybe<T> { Present(T), Absent, } "
                           "value: Maybe<int> = Present(42); missing: Maybe<int> = Absent; "
@@ -576,6 +588,29 @@ int main() {
     passed = expect_error_contains("type Count = int; value: Count<text> = 1;",
                                    "type alias 'Count' does not take type arguments",
                                    "expected non-generic type alias argument error") &&
+             passed;
+    passed = expect_error_contains("type Box<T> = [T]; value: Box = [1];",
+                                   "type alias 'Box' expects 1 type argument(s) but got 0",
+                                   "expected missing generic type alias argument error") &&
+             passed;
+    passed = expect_error_contains("type Pair<T, U> = (T, U); value: Pair<int> = (1, 2);",
+                                   "type alias 'Pair' expects 2 type argument(s) but got 1",
+                                   "expected generic type alias arity error") &&
+             passed;
+    passed = expect_error_contains("type Box<T> = [T]; value: Box<3> = [1, 2, 3];",
+                                   "type alias 'Box' expects a type argument for 'T'",
+                                   "expected const argument rejection for a type alias parameter") &&
+             passed;
+    passed = expect_error_contains("type Broken<T> = [U];", "unknown type 'U'",
+                                   "expected unknown generic alias target parameter error") &&
+             passed;
+    passed = expect_error_contains("type A<T> = B<T>; type B<U> = A<U>;",
+                                   "cyclic type alias involving 'B'",
+                                   "expected generic type alias cycle error") &&
+             passed;
+    passed = expect_error_contains("type Numbers<T is numeric> = [T];",
+                                   "generic type alias parameter 'T' cannot have bounds yet",
+                                   "expected bounded generic alias parameter error") &&
              passed;
     passed = expect_error_contains("fn bad(): int { return; }", "expected type 'int' but got 'unit'",
                                    "expected missing return value mismatch") &&
