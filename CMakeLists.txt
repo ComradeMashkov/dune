@@ -168,8 +168,30 @@ target_link_libraries(dune_repl
         dune_vm
 )
 
+add_library(dune_notebook
+    src/notebook/cli.cpp
+    src/notebook/notebook.cpp
+    src/notebook/server.cpp
+    src/notebook/web_assets.cpp
+)
+dune_add_lint_dependencies(dune_notebook)
+
+target_include_directories(dune_notebook
+    PUBLIC
+        src
+)
+
+target_link_libraries(dune_notebook
+    PRIVATE
+        dune_repl
+)
+
+if(WIN32)
+    target_link_libraries(dune_notebook PRIVATE ws2_32)
+endif()
+
 add_executable(dune src/main.cpp)
-target_link_libraries(dune PRIVATE dune_doc dune_lsp dune_modules dune_repl dune_vm Threads::Threads)
+target_link_libraries(dune PRIVATE dune_doc dune_lsp dune_modules dune_notebook dune_repl dune_vm Threads::Threads)
 dune_add_lint_dependencies(dune)
 
 add_executable(diagnostics_tests tests/diagnostics_tests.cpp)
@@ -210,6 +232,13 @@ add_executable(repl_tests tests/repl_tests.cpp)
 target_link_libraries(repl_tests PRIVATE dune_repl)
 dune_add_lint_dependencies(repl_tests)
 
+add_executable(notebook_tests tests/notebook_tests.cpp)
+target_link_libraries(notebook_tests PRIVATE dune_notebook Threads::Threads)
+if(WIN32)
+    target_link_libraries(notebook_tests PRIVATE ws2_32)
+endif()
+dune_add_lint_dependencies(notebook_tests)
+
 enable_testing()
 
 add_test(NAME smoke COMMAND dune --version)
@@ -223,6 +252,7 @@ add_test(NAME type_checker_tests COMMAND type_checker_tests)
 add_test(NAME vm_tests COMMAND vm_tests)
 add_test(NAME lsp_tests COMMAND lsp_tests)
 add_test(NAME repl_tests COMMAND repl_tests)
+add_test(NAME notebook_tests COMMAND notebook_tests)
 add_test(NAME cli_check_static_types COMMAND dune check ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/types/static_types.dn)
 add_test(NAME cli_check_type_error COMMAND dune check ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/errors/type_error.dn)
 set_tests_properties(cli_check_type_error PROPERTIES WILL_FAIL TRUE)
@@ -237,6 +267,19 @@ add_test(
         -D INPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/repl/session.in
         -D EXPECTED_OUTPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/golden/repl_session.out
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_repl_case.cmake
+)
+
+add_test(
+    NAME cli_notebook
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D NOTEBOOK_FILE=${CMAKE_CURRENT_SOURCE_DIR}/examples/notebooks/scientific_workflow.dnb
+        -D EXPECTED_OUTPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/golden/notebook_scientific_workflow.out
+        -D HTML_OUTPUT_FILE=${CMAKE_CURRENT_BINARY_DIR}/notebook_scientific_workflow.html
+        -D NEW_NOTEBOOK_FILE=${CMAKE_CURRENT_BINARY_DIR}/notebook_new.dnb
+        -D UPDATE_NOTEBOOK_FILE=${CMAKE_CURRENT_BINARY_DIR}/notebook_update.dnb
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_notebook_case.cmake
 )
 
 # `dune doc` renders a module's public API to Markdown from the real AST.

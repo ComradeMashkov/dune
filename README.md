@@ -85,6 +85,7 @@ elsewhere.
 | `dune <file.dn>` | Type-check and run a program on the VM. |
 | `dune check <file.dn>` | Type-check only, printing a short pipeline trace. |
 | `dune repl` | Start an interactive VM session with persistent definitions. |
+| `dune notebook <command>` | Create, run, check, export, or serve `.dnb` notebooks. |
 | `dune test <file.dn>` | Run every `test "..." { ... }` block and report results. |
 | `dune doc <path> [-o dir]` | Generate Markdown API docs from source doc-comments. |
 | `dune lsp` | Start the editor language server (diagnostics, hover, completion). |
@@ -113,6 +114,30 @@ recompiles and re-executes accumulated successful input, so file writes and
 other external side effects may repeat. Interactive program stdin is reserved
 for REPL commands in this first version.
 
+Create a versioned Dune notebook and launch the local browser workspace:
+
+```sh
+dune notebook new notebooks/demo.dnb --title "Dune demo"
+dune notebook serve notebooks/demo.dnb
+```
+
+The `.dnb` format is a JSON document similar to `.ipynb`: it stores Markdown
+and Dune code cells, stable cell IDs, execution counts, and structured
+stdout/stderr outputs. The built-in server provides a file browser, cell
+editing, Run Cell/Run All, kernel restart, saving, and standalone HTML export.
+It listens on `127.0.0.1` by default and protects its API with a random token.
+
+Notebook files are also first-class in scripts and CI:
+
+```sh
+dune notebook run notebooks/demo.dnb --update
+dune notebook check notebooks/demo.dnb
+dune notebook export notebooks/demo.dnb --html
+```
+
+See the runnable [`scientific_workflow.dnb`](examples/notebooks/scientific_workflow.dnb)
+example and the [notebook guide](https://comrademashkov.github.io/dune/guides/notebooks.html).
+
 ## Standard library
 
 The standard library lives in [`stdlib/`](stdlib/) as plain `.dn` files: `io`,
@@ -134,7 +159,7 @@ the repository root). See the [editor guide](https://comrademashkov.github.io/du
 
 | Path | Contents |
 | --- | --- |
-| `src/` | Compiler and VM: `lexer`, `parser`, `ast`, `typechecker`, `compiler`, `vm`, `repl`, `lsp`, `doc`, `diagnostics`. |
+| `src/` | Compiler and VM: `lexer`, `parser`, `ast`, `typechecker`, `compiler`, `vm`, `repl`, `notebook`, `lsp`, `doc`, `diagnostics`. |
 | `stdlib/` | Standard-library modules written in Dune. |
 | `examples/` | Runnable example programs. |
 | `tests/` | Unit tests and `.dn` fixtures driven by CTest. |

@@ -56,6 +56,28 @@ not available because stdin belongs to the REPL command loop. True incremental
 compiler and VM state can replace this model later without changing the command
 surface.
 
+## Notebooks
+
+```sh
+dune notebook new tutorial.dnb --title "Tutorial"
+dune notebook serve tutorial.dnb
+```
+
+Notebooks are versioned `.dnb` JSON documents with Markdown cells, Dune code
+cells, execution counts, and structured outputs. The local server opens a
+token-protected browser workspace for editing and executing cells. The same
+files can be run, checked, and exported without starting the server:
+
+```sh
+dune notebook run tutorial.dnb
+dune notebook run tutorial.dnb --update
+dune notebook check tutorial.dnb
+dune notebook export tutorial.dnb --html -o tutorial.html
+```
+
+See the [notebook guide](notebooks.md) for the file format, server options,
+kernel behavior, and CI workflow.
+
 ## Run tests
 
 ```sh

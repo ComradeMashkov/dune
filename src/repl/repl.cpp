@@ -89,9 +89,7 @@ bool has_open_delimiter(std::string_view source) {
         }
 
         if (mode == Mode::raw_string) {
-            if (current == '\n') {
-                mode = Mode::source;
-            } else if (current == '"') {
+            if (current == '\n' || current == '"') {
                 mode = Mode::source;
             }
             continue;
@@ -215,8 +213,8 @@ std::size_t stable_output_prefix(std::string_view previous, std::string_view cur
     return common;
 }
 
-void write_new_output(std::ostream& destination, std::string_view previous, std::string_view current) {
-    destination << current.substr(stable_output_prefix(previous, current));
+std::string new_output(std::string_view previous, std::string_view current) {
+    return std::string(current.substr(stable_output_prefix(previous, current)));
 }
 
 void print_help(std::ostream& output) {
@@ -226,25 +224,76 @@ void print_help(std::ostream& output) {
     output << "  :quit   exit the REPL\n";
 }
 
-void report_diagnostic(std::ostream& error, const DiagnosticError& diagnostic, std::string_view source) {
-    const std::string snippet = render_snippet(diagnostic.diagnostic(), source, "<repl>");
-    if (!snippet.empty()) {
-        error << snippet;
-    } else {
-        error << "error: " << diagnostic.what() << '\n';
+std::string report_diagnostic(const DiagnosticError& diagnostic, std::string_view source, std::string_view source_name,
+                              std::size_t previous_lines) {
+    Diagnostic localized = diagnostic.diagnostic();
+    if (localized.has_location && localized.location.line > previous_lines) {
+        localized.location.line -= previous_lines;
     }
+
+    std::string snippet = render_snippet(localized, source, source_name);
+    if (!snippet.empty()) {
+        return snippet;
+    }
+
+    return "error: " + std::string(diagnostic.what()) + '\n';
 }
 
 } // namespace
+
+Session::Session(std::filesystem::path source_directory) : source_directory_(std::move(source_directory)) {}
+
+EvaluationResult Session::evaluate(const std::string& source, const std::string& source_name) {
+    std::string entry_source = source;
+    try {
+        entry_source = terminate_entry(std::move(entry_source));
+    } catch (const std::exception&) {
+        // Evaluation below owns diagnostics. Keep the original entry so the
+        // reported source and location match what the user entered.
+        entry_source = source;
+    }
+
+    const std::size_t previous_lines = static_cast<std::size_t>(std::count(source_.begin(), source_.end(), '\n'));
+    const std::string candidate_source = source_ + entry_source;
+    std::ostringstream runtime_output;
+    std::ostringstream runtime_error;
+    std::istringstream runtime_input;
+    try {
+        Compiler compiler;
+        VirtualMachine vm(compiler.compile_repl(parse_source(candidate_source, source_directory_)));
+        vm.run(runtime_output, runtime_error, runtime_input);
+
+        const std::string current_output = runtime_output.str();
+        const std::string current_error = runtime_error.str();
+        EvaluationResult result{true, new_output(previous_output_, current_output),
+                                new_output(previous_error_, current_error)};
+
+        source_ = candidate_source;
+        previous_output_ = current_output;
+        previous_error_ = current_error;
+        return result;
+    } catch (const DiagnosticError& diagnostic) {
+        return EvaluationResult{false, {}, report_diagnostic(diagnostic, entry_source, source_name, previous_lines)};
+    } catch (const std::exception& runtime_failure) {
+        const std::string context = source_name == "<repl>" ? "" : "  --> " + source_name + '\n';
+        return EvaluationResult{false, new_output(previous_output_, runtime_output.str()),
+                                new_output(previous_error_, runtime_error.str()) + "error: " + runtime_failure.what() +
+                                    '\n' + context};
+    }
+}
+
+void Session::reset() {
+    source_.clear();
+    previous_output_.clear();
+    previous_error_.clear();
+}
 
 int run(std::istream& input, std::ostream& output, std::ostream& error, const Options& options) {
     output << "Dune " << options.version << '\n';
     output << "Type :help for help.\n";
 
-    std::string session_source;
+    Session session(options.source_directory);
     std::string pending_source;
-    std::string previous_output;
-    std::string previous_error;
 
     while (true) {
         if (options.show_prompts) {
@@ -273,10 +322,8 @@ int run(std::istream& input, std::ostream& output, std::ostream& error, const Op
             continue;
         }
         if (command == ":reset") {
-            session_source.clear();
+            session.reset();
             pending_source.clear();
-            previous_output.clear();
-            previous_error.clear();
             output << "session reset\n";
             continue;
         }
@@ -295,38 +342,9 @@ int run(std::istream& input, std::ostream& output, std::ostream& error, const Op
             continue;
         }
 
-        std::string entry_source = pending_source;
-        try {
-            entry_source = terminate_entry(std::move(entry_source));
-        } catch (const std::exception&) {
-            // Evaluation below owns diagnostics. Keep the original entry so the
-            // reported source and location match what the user entered.
-            entry_source = pending_source;
-        }
-        const std::string candidate_source = session_source + entry_source;
-        std::ostringstream runtime_output;
-        std::ostringstream runtime_error;
-        std::istringstream runtime_input;
-        try {
-            Compiler compiler;
-            VirtualMachine vm(compiler.compile_repl(parse_source(candidate_source, options.source_directory)));
-            vm.run(runtime_output, runtime_error, runtime_input);
-
-            const std::string current_output = runtime_output.str();
-            const std::string current_error = runtime_error.str();
-            write_new_output(output, previous_output, current_output);
-            write_new_output(error, previous_error, current_error);
-
-            session_source = candidate_source;
-            previous_output = current_output;
-            previous_error = current_error;
-        } catch (const DiagnosticError& diagnostic) {
-            report_diagnostic(error, diagnostic, candidate_source);
-        } catch (const std::exception& runtime_failure) {
-            write_new_output(output, previous_output, runtime_output.str());
-            write_new_output(error, previous_error, runtime_error.str());
-            error << "error: " << runtime_failure.what() << '\n';
-        }
+        const EvaluationResult result = session.evaluate(pending_source);
+        output << result.output;
+        error << result.error;
 
         pending_source.clear();
     }
