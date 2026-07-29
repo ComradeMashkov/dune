@@ -1,0 +1,38 @@
+{
+  "dune_notebook": 1,
+  "metadata": {
+    "title": "Scientific workflow"
+  },
+  "cells": [
+    {
+      "id": "overview",
+      "cell_type": "markdown",
+      "source": "# Scientific workflow\n\nThis notebook keeps Dune state between cells while exploring vectors and automatic differentiation."
+    },
+    {
+      "id": "imports",
+      "cell_type": "code",
+      "source": "import matrix;\nimport autograd;\nimport fmt;",
+      "execution_count": 1,
+      "outputs": []
+    },
+    {
+      "id": "vector-mean",
+      "cell_type": "code",
+      "source": "samples = matrix.vector([1.0, 2.0, 3.0, 4.0, 5.0]);\nsamples.mean()",
+      "execution_count": 2,
+      "outputs": [
+        {"output_type": "stream", "name": "stdout", "text": "3\n"}
+      ]
+    },
+    {
+      "id": "gradient",
+      "cell_type": "code",
+      "source": "x = autograd.variable(2.0);\ny = autograd.variable(3.0);\nloss = x.mul(y).add(x.pow(2.0)).add(1.0);\nloss.backward();\nfmt.format(\"loss={}, dx={}, dy={}\", loss.data, x.grad, y.grad)",
+      "execution_count": 3,
+      "outputs": [
+        {"output_type": "stream", "name": "stdout", "text": "loss=11, dx=7, dy=2\n"}
+      ]
+    }
+  ]
+}

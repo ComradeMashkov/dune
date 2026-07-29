@@ -46,6 +46,7 @@
 
 - [Installation and building](guides/installation.md)
 - [The `dune` command-line tool](guides/cli.md)
+- [Dune notebooks](guides/notebooks.md)
 - [Writing tests](guides/testing.md)
 - [Editor integration](guides/editor.md)
 - [Examples](guides/examples.md)

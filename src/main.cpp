@@ -5,6 +5,7 @@
 #include "lexer/lexer.hpp"
 #include "lsp/lsp_server.hpp"
 #include "modules/module_loader.hpp"
+#include "notebook/cli.hpp"
 #include "parser/parser.hpp"
 #include "repl/repl.hpp"
 #include "typechecker/type_checker.hpp"
@@ -382,6 +383,7 @@ void print_usage() {
     std::cerr << "  dune <file.dn>\n";
     std::cerr << "  dune check <file.dn>\n";
     std::cerr << "  dune repl\n";
+    std::cerr << "  dune notebook <new|run|check|export|serve> ...\n";
     std::cerr << "  dune lsp\n";
     std::cerr << "  dune doc <file.dn|dir> [-o <out>] [--check]\n";
     std::cerr << "  dune test <file.dn>\n";
@@ -409,6 +411,10 @@ int main(int argc, char* argv[]) {
                     dune::repl::Options{version, std::filesystem::current_path(), stdin_is_terminal()});
             }
 
+            if (command == "notebook") {
+                return dune::notebook::run_cli(std::vector<std::string>(argv + 2, argv + argc), std::cout, std::cerr);
+            }
+
             if (command == "check" && argc == 3) {
                 return check_source_file(argv[2]);
             }
@@ -422,8 +428,8 @@ int main(int argc, char* argv[]) {
             }
 
             // `dune <file.dn> [args...]` runs a script; args are exposed via process.args().
-            const bool is_subcommand =
-                command == "lsp" || command == "repl" || command == "check" || command == "doc" || command == "test";
+            const bool is_subcommand = command == "lsp" || command == "repl" || command == "notebook" ||
+                                       command == "check" || command == "doc" || command == "test";
             if (!is_subcommand) {
                 return run_source_file(command, std::vector<std::string>(argv + 2, argv + argc));
             }
