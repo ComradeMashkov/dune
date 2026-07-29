@@ -15,8 +15,10 @@ namespace dune {
 class Compiler {
 public:
     Bytecode compile(const Program& program);
+    Bytecode compile_repl(const Program& program);
 
 private:
+    Bytecode compile_program(const Program& program, bool print_tail_expression);
     void collect_function(const Statement& statement);
     void collect_functions(const std::vector<Statement>& statements);
     void collect_structs(const std::unordered_map<std::string, TypeChecker::StructDefinition>& structs);
@@ -110,6 +112,7 @@ private:
     std::unordered_map<const Expression*, TypeChecker::TryResolution> resolved_tries_;
     std::vector<LoopJumps> loop_stack_;
     std::vector<Instruction>* instructions_ = nullptr;
+    const Statement* repl_expression_statement_ = nullptr;
     std::size_t temporary_count_ = 0;
     std::size_t local_count_ = 0;
 };

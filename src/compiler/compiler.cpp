@@ -988,6 +988,14 @@ private:
 } // namespace
 
 Bytecode Compiler::compile(const Program& program) {
+    return compile_program(program, false);
+}
+
+Bytecode Compiler::compile_repl(const Program& program) {
+    return compile_program(program, true);
+}
+
+Bytecode Compiler::compile_program(const Program& program, bool print_tail_expression) {
     TypeChecker type_checker;
     type_checker.check(program);
 
@@ -1014,6 +1022,11 @@ Bytecode Compiler::compile(const Program& program) {
     collect_type_aliases(program.statements);
     const auto& instantiated_functions = type_checker.instantiated_functions();
     instructions_ = &bytecode_.instructions;
+    repl_expression_statement_ = nullptr;
+    if (print_tail_expression && !program.statements.empty() &&
+        program.statements.back().kind == StatementKind::expression_statement) {
+        repl_expression_statement_ = &program.statements.back();
+    }
     local_count_ = 0;
     reset_scopes();
 
@@ -1043,6 +1056,7 @@ Bytecode Compiler::compile(const Program& program) {
     }
 
     instructions_ = nullptr;
+    repl_expression_statement_ = nullptr;
     return bytecode_;
 }
 
@@ -1369,8 +1383,14 @@ void Compiler::compile_statement(const Statement& statement) {
         emit(OpCode::return_value);
         return;
     case StatementKind::expression_statement:
-        compile_expression(*statement.expression);
-        emit(OpCode::pop);
+        if (&statement == repl_expression_statement_ &&
+            expression_type(*statement.expression).kind != ValueType::unit_type) {
+            compile_printable_argument(*statement.expression);
+            emit(OpCode::repl_print);
+        } else {
+            compile_expression(*statement.expression);
+            emit(OpCode::pop);
+        }
         return;
     case StatementKind::import_statement:
     case StatementKind::module_declaration:

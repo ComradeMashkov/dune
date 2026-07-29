@@ -114,6 +114,7 @@ enum class OpCode {
     plot_show_native,
     canvas_show_native,
     format_text,
+    repl_print,
     halt,
 };
 
