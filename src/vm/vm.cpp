@@ -1448,6 +1448,10 @@ void VirtualMachine::execute(std::ostream& output, std::ostream& error, std::ist
             ++frame.ip;
             break;
         }
+        case OpCode::repl_print:
+            output << value_to_text(pop()) << '\n';
+            ++frame.ip;
+            break;
         case OpCode::halt:
             return;
         }

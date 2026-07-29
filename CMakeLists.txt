@@ -152,8 +152,24 @@ target_link_libraries(dune_doc
         dune_typechecker
 )
 
+add_library(dune_repl
+    src/repl/repl.cpp
+)
+dune_add_lint_dependencies(dune_repl)
+
+target_include_directories(dune_repl
+    PUBLIC
+        src
+)
+
+target_link_libraries(dune_repl
+    PRIVATE
+        dune_modules
+        dune_vm
+)
+
 add_executable(dune src/main.cpp)
-target_link_libraries(dune PRIVATE dune_doc dune_lsp dune_modules dune_vm Threads::Threads)
+target_link_libraries(dune PRIVATE dune_doc dune_lsp dune_modules dune_repl dune_vm Threads::Threads)
 dune_add_lint_dependencies(dune)
 
 add_executable(diagnostics_tests tests/diagnostics_tests.cpp)
@@ -190,6 +206,10 @@ add_executable(lsp_tests tests/lsp_tests.cpp)
 target_link_libraries(lsp_tests PRIVATE dune_lsp)
 dune_add_lint_dependencies(lsp_tests)
 
+add_executable(repl_tests tests/repl_tests.cpp)
+target_link_libraries(repl_tests PRIVATE dune_repl)
+dune_add_lint_dependencies(repl_tests)
+
 enable_testing()
 
 add_test(NAME smoke COMMAND dune --version)
@@ -202,9 +222,22 @@ add_test(NAME compiler_tests COMMAND compiler_tests)
 add_test(NAME type_checker_tests COMMAND type_checker_tests)
 add_test(NAME vm_tests COMMAND vm_tests)
 add_test(NAME lsp_tests COMMAND lsp_tests)
+add_test(NAME repl_tests COMMAND repl_tests)
 add_test(NAME cli_check_static_types COMMAND dune check ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/types/static_types.dn)
 add_test(NAME cli_check_type_error COMMAND dune check ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/errors/type_error.dn)
 set_tests_properties(cli_check_type_error PROPERTIES WILL_FAIL TRUE)
+
+# `dune repl` accepts scripted stdin while preserving bindings, imports, and
+# multi-line definitions between entries.
+add_test(
+    NAME cli_repl
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D INPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/repl/session.in
+        -D EXPECTED_OUTPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/golden/repl_session.out
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_repl_case.cmake
+)
 
 # `dune doc` renders a module's public API to Markdown from the real AST.
 add_test(

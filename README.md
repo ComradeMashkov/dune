@@ -84,12 +84,34 @@ elsewhere.
 | --- | --- |
 | `dune <file.dn>` | Type-check and run a program on the VM. |
 | `dune check <file.dn>` | Type-check only, printing a short pipeline trace. |
+| `dune repl` | Start an interactive VM session with persistent definitions. |
 | `dune test <file.dn>` | Run every `test "..." { ... }` block and report results. |
 | `dune doc <path> [-o dir]` | Generate Markdown API docs from source doc-comments. |
 | `dune lsp` | Start the editor language server (diagnostics, hover, completion). |
 
 Color is automatic on terminals; force it with `DUNE_COLOR=always` or disable it
 with `DUNE_COLOR=never` / `NO_COLOR=1`.
+
+Start an interactive session with `dune repl`. Bindings, imports, functions,
+records, choices, and aliases remain available between entries; a bare
+expression prints its value:
+
+```text
+$ dune repl
+Dune 0.13.1
+Type :help for help.
+> x = 40 + 2;
+> x
+42
+> import math;
+> math.square(9)
+81
+```
+
+Use `:help`, `:reset`, and `:quit` for session control. The initial REPL
+recompiles and re-executes accumulated successful input, so file writes and
+other external side effects may repeat. Interactive program stdin is reserved
+for REPL commands in this first version.
 
 ## Standard library
 
@@ -112,7 +134,7 @@ the repository root). See the [editor guide](https://comrademashkov.github.io/du
 
 | Path | Contents |
 | --- | --- |
-| `src/` | Compiler and VM: `lexer`, `parser`, `ast`, `typechecker`, `compiler`, `vm`, `lsp`, `doc`, `diagnostics`. |
+| `src/` | Compiler and VM: `lexer`, `parser`, `ast`, `typechecker`, `compiler`, `vm`, `repl`, `lsp`, `doc`, `diagnostics`. |
 | `stdlib/` | Standard-library modules written in Dune. |
 | `examples/` | Runnable example programs. |
 | `tests/` | Unit tests and `.dn` fixtures driven by CTest. |

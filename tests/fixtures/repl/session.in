@@ -1,0 +1,12 @@
+x = 40 + 2;
+x
+import math;
+math.square(9)
+fn add(
+    a: int,
+    b: int
+): int {
+    return a + b;
+}
+add(x, 1)
+:quit

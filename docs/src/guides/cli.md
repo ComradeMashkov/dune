@@ -20,6 +20,42 @@ dune check path/to/program.dn
 Type-checks the program and reports diagnostics without executing it. Exits
 non-zero if there are errors.
 
+## Interactive REPL
+
+```sh
+dune repl
+```
+
+Starts an interactive session on the bytecode VM. Successful input remains in
+scope for later entries, including bindings, imports, functions, records,
+choices, and type aliases. Bare expressions print their result automatically:
+
+```text
+> value = 40 + 2;
+> value
+42
+> import math;
+> math.square(9)
+81
+```
+
+Blocks and declarations may span multiple lines; the prompt changes to `...`
+until the entry is complete. Parser, type-checker, and runtime errors are
+reported without ending the session.
+
+The built-in commands are:
+
+- `:help` — show the command list.
+- `:reset` — clear all accumulated source and values.
+- `:quit` — exit successfully.
+
+The first implementation recompiles and re-executes accumulated successful
+source for every entry. Stable repeated console output is hidden, but external
+side effects such as file writes can run again. Program reads from stdin are
+not available because stdin belongs to the REPL command loop. True incremental
+compiler and VM state can replace this model later without changing the command
+surface.
+
 ## Run tests
 
 ```sh

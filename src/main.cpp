@@ -6,6 +6,7 @@
 #include "lsp/lsp_server.hpp"
 #include "modules/module_loader.hpp"
 #include "parser/parser.hpp"
+#include "repl/repl.hpp"
 #include "typechecker/type_checker.hpp"
 #include "vm/vm.hpp"
 
@@ -39,6 +40,14 @@ bool stderr_is_terminal() {
     return _isatty(_fileno(stderr)) != 0;
 #else
     return isatty(fileno(stderr)) != 0;
+#endif
+}
+
+bool stdin_is_terminal() {
+#if defined(_WIN32)
+    return _isatty(_fileno(stdin)) != 0;
+#else
+    return isatty(fileno(stdin)) != 0;
 #endif
 }
 
@@ -372,6 +381,7 @@ void print_usage() {
     std::cerr << "usage:\n";
     std::cerr << "  dune <file.dn>\n";
     std::cerr << "  dune check <file.dn>\n";
+    std::cerr << "  dune repl\n";
     std::cerr << "  dune lsp\n";
     std::cerr << "  dune doc <file.dn|dir> [-o <out>] [--check]\n";
     std::cerr << "  dune test <file.dn>\n";
@@ -393,6 +403,12 @@ int main(int argc, char* argv[]) {
                 return dune::lsp::run(std::cin, std::cout);
             }
 
+            if (command == "repl" && argc == 2) {
+                return dune::repl::run(
+                    std::cin, std::cout, std::cerr,
+                    dune::repl::Options{version, std::filesystem::current_path(), stdin_is_terminal()});
+            }
+
             if (command == "check" && argc == 3) {
                 return check_source_file(argv[2]);
             }
@@ -407,7 +423,7 @@ int main(int argc, char* argv[]) {
 
             // `dune <file.dn> [args...]` runs a script; args are exposed via process.args().
             const bool is_subcommand =
-                command == "lsp" || command == "check" || command == "doc" || command == "test";
+                command == "lsp" || command == "repl" || command == "check" || command == "doc" || command == "test";
             if (!is_subcommand) {
                 return run_source_file(command, std::vector<std::string>(argv + 2, argv + argc));
             }
