@@ -5169,6 +5169,16 @@
           }
         ]
       }
+    },
+    "children": {
+      "multiple": false,
+      "required": false,
+      "types": [
+        {
+          "type": "generic_parameters",
+          "named": true
+        }
+      ]
     }
   },
   {

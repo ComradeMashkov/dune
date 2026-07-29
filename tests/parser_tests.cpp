@@ -446,8 +446,40 @@ bool parses_type_aliases() {
     return passed;
 }
 
-bool rejects_generic_type_aliases() {
-    return expect_parse_error("type Vec<T> = [T];", "expected generic type aliases to be rejected");
+bool parses_generic_type_aliases() {
+    const dune::Program program = parse_source("type Vec<T> = [T]; type Pair<T, U> = (T, U); "
+                                               "type TextResult<T> = outcome.Outcome<T, text>;");
+    if (!expect(program.statements.size() == 3, "expected three generic type aliases")) {
+        return false;
+    }
+
+    bool passed = true;
+    const dune::Statement& vector = program.statements[0];
+    passed = expect(vector.generic_parameters.size() == 1, "expected Vec<T> parameter") && passed;
+    passed = expect(vector.generic_parameters[0].name == "T", "expected Vec parameter T") && passed;
+    passed = expect(vector.type.type.kind == dune::ValueType::array_type, "expected Vec array target") && passed;
+    passed =
+        expect(vector.type.type.element != nullptr && vector.type.type.element->kind == dune::ValueType::generic_type &&
+                   vector.type.type.element->name == "T",
+               "expected Vec target to use T") &&
+        passed;
+
+    const dune::Statement& pair = program.statements[1];
+    passed = expect(pair.generic_parameters.size() == 2, "expected Pair<T, U> parameters") && passed;
+    passed = expect(pair.generic_parameters[0].name == "T" && pair.generic_parameters[1].name == "U",
+                    "expected Pair parameters T and U") &&
+             passed;
+    passed = expect(pair.type.type.kind == dune::ValueType::tuple_type && pair.type.type.arguments.size() == 2,
+                    "expected Pair tuple target") &&
+             passed;
+
+    const dune::Statement& result = program.statements[2];
+    passed = expect(result.generic_parameters.size() == 1, "expected TextResult<T> parameter") && passed;
+    passed = expect(result.type.type.kind == dune::ValueType::generic_type &&
+                        result.type.type.name == "outcome.Outcome" && result.type.type.arguments.size() == 2,
+                    "expected module-qualified generic alias target") &&
+             passed;
+    return passed;
 }
 
 bool parses_format_expression_and_numeric_literals() {
@@ -1352,7 +1384,7 @@ int main() {
     passed = parses_doc_comments_on_declarations() && passed;
     passed = parses_extended_types() && passed;
     passed = parses_type_aliases() && passed;
-    passed = rejects_generic_type_aliases() && passed;
+    passed = parses_generic_type_aliases() && passed;
     passed = parses_raw_and_escaped_literals() && passed;
     passed = parses_standard_types_and_unit_calls() && passed;
     passed = parses_arrays_imports_and_module_calls() && passed;

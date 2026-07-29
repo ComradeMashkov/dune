@@ -268,7 +268,8 @@ std::string const_signature(const Statement& statement) {
 }
 
 std::string type_alias_signature(const Statement& statement) {
-    return "type " + statement.name + " = " + type_annotation_name(statement.type, "unknown");
+    return "type " + statement.name + generic_parameters_text(statement.generic_parameters) + " = " +
+           type_annotation_name(statement.type, "unknown");
 }
 
 std::string record_signature(const Statement& statement) {

@@ -943,9 +943,17 @@ void TypeChecker::declare_type_alias(const Statement& statement) {
         throw DiagnosticError(statement.location, "duplicate type alias '" + statement.name + "'");
     }
 
+    for (const GenericParameter& parameter : statement.generic_parameters) {
+        if (!parameter.bounds.empty()) {
+            throw DiagnosticError(parameter.location, "generic type alias parameter '" + parameter.name +
+                                                          "' cannot have bounds yet");
+        }
+    }
+
     collect_known_module(statement.name);
-    type_aliases_.emplace(statement.name,
-                          TypeAliasDefinition{statement.name, clone_type(statement.type.type), statement.location});
+    type_aliases_.emplace(
+        statement.name, TypeAliasDefinition{statement.name, statement.generic_parameters,
+                                            clone_type(statement.type.type), statement.location});
 }
 
 void TypeChecker::validate_type_alias(const Statement& statement) const {
@@ -954,7 +962,11 @@ void TypeChecker::validate_type_alias(const Statement& statement) const {
         throw DiagnosticError(statement.location, "undefined type alias '" + statement.name + "'");
     }
 
-    validate_known_type(alias->second.target, alias->second.location);
+    std::unordered_set<std::string> generic_names;
+    for (const GenericParameter& parameter : alias->second.generic_parameters) {
+        generic_names.insert(parameter.name);
+    }
+    validate_known_type(alias->second.target, alias->second.location, generic_names);
 }
 
 void TypeChecker::define_contract(const Statement& statement) {
@@ -4063,9 +4075,23 @@ Type TypeChecker::normalize_type(const Type& type, const std::unordered_set<std:
     if (type.kind == ValueType::generic_type && !generic_parameters.contains(type.name)) {
         const auto alias = type_aliases_.find(type.name);
         if (alias != type_aliases_.end()) {
-            if (!arguments.empty()) {
+            const std::size_t expected_arguments = alias->second.generic_parameters.size();
+            if (expected_arguments == 0 && !arguments.empty()) {
                 throw DiagnosticError(alias->second.location,
                                       "type alias '" + base_name(type.name) + "' does not take type arguments");
+            }
+            if (arguments.size() != expected_arguments) {
+                throw DiagnosticError(alias->second.location,
+                                      "type alias '" + base_name(type.name) + "' expects " +
+                                          std::to_string(expected_arguments) + " type argument(s) but got " +
+                                          std::to_string(arguments.size()));
+            }
+            for (std::size_t index = 0; index < arguments.size(); ++index) {
+                if (arguments[index].kind == ValueType::const_int_type) {
+                    throw DiagnosticError(alias->second.location,
+                                          "type alias '" + base_name(type.name) + "' expects a type argument for '" +
+                                              alias->second.generic_parameters[index].name + "'");
+                }
             }
 
             if (!resolving_aliases.insert(type.name).second) {
@@ -4073,7 +4099,13 @@ Type TypeChecker::normalize_type(const Type& type, const std::unordered_set<std:
                                       "cyclic type alias involving '" + base_name(type.name) + "'");
             }
 
-            Type resolved = normalize_type(alias->second.target, generic_parameters, resolving_aliases);
+            std::unordered_map<std::string, Type> substitutions;
+            for (std::size_t index = 0; index < arguments.size(); ++index) {
+                substitutions.emplace(alias->second.generic_parameters[index].name, arguments[index]);
+            }
+            Type resolved =
+                normalize_type(substitute_type(alias->second.target, substitutions), generic_parameters,
+                               resolving_aliases);
             resolving_aliases.erase(type.name);
             return resolved;
         }
@@ -4102,25 +4134,26 @@ Type TypeChecker::normalize_type(const Type& type, const std::unordered_set<std:
     return result;
 }
 
-void TypeChecker::validate_known_type(const Type& type, SourceLocation location) const {
-    const Type normalized = normalize_type(type);
+void TypeChecker::validate_known_type(const Type& type, SourceLocation location,
+                                      const std::unordered_set<std::string>& generic_parameters) const {
+    const Type normalized = normalize_type(type, generic_parameters);
     switch (normalized.kind) {
     case ValueType::array_type:
         if (normalized.element != nullptr) {
-            validate_known_type(*normalized.element, location);
+            validate_known_type(*normalized.element, location, generic_parameters);
         }
         return;
     case ValueType::tuple_type:
         for (const Type& argument : normalized.arguments) {
-            validate_known_type(argument, location);
+            validate_known_type(argument, location, generic_parameters);
         }
         return;
     case ValueType::function_type:
         for (const Type& argument : normalized.arguments) {
-            validate_known_type(argument, location);
+            validate_known_type(argument, location, generic_parameters);
         }
         if (normalized.element != nullptr) {
-            validate_known_type(*normalized.element, location);
+            validate_known_type(*normalized.element, location, generic_parameters);
         }
         return;
     case ValueType::struct_type: {
@@ -4137,7 +4170,7 @@ void TypeChecker::validate_known_type(const Type& type, SourceLocation location)
         // Note: a mis-shaped static Matrix/Vector is already rejected by normalize_type
         // above, so no separate static-shape check is needed here.
         for (const Type& argument : normalized.arguments) {
-            validate_known_type(argument, location);
+            validate_known_type(argument, location, generic_parameters);
         }
         return;
     }
@@ -4153,11 +4186,14 @@ void TypeChecker::validate_known_type(const Type& type, SourceLocation location)
                                                 std::to_string(type_argument_count(normalized)));
         }
         for (const Type& argument : normalized.arguments) {
-            validate_known_type(argument, location);
+            validate_known_type(argument, location, generic_parameters);
         }
         return;
     }
     case ValueType::generic_type:
+        if (generic_parameters.contains(normalized.name) && normalized.arguments.empty()) {
+            return;
+        }
         throw DiagnosticError(location, "unknown type '" + normalized.name + "'");
     case ValueType::const_int_type:
         // A const generic argument is validated by its containing type's shape rules,

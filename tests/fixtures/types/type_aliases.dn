@@ -13,3 +13,15 @@ export record Point {
 export type PointAlias = Point;
 // Exported type alias for a list of PointAlias (list-of-alias), i.e. [Point].
 export type PointList = [PointAlias];
+
+// Generic record and transparent aliases exported through the module boundary.
+export record Box<T> {
+    export value: T,
+
+    export static fn wrap(value: T): Box<T> {
+        return Box { value: value };
+    }
+}
+
+export type BoxAlias<T> = Box<T>;
+export type Pair<T, U> = (T, U);

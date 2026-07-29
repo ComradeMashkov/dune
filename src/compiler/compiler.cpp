@@ -63,6 +63,38 @@ Value make_unit() {
     return result;
 }
 
+Type clone_type(const Type& type) {
+    Type result{type.kind, nullptr};
+    result.name = type.name;
+    result.const_value = type.const_value;
+    if (type.element != nullptr) {
+        result.element = std::make_shared<Type>(clone_type(*type.element));
+    }
+    result.arguments.reserve(type.arguments.size());
+    for (const Type& argument : type.arguments) {
+        result.arguments.push_back(clone_type(argument));
+    }
+    return result;
+}
+
+Type substitute_type(const Type& type, const std::unordered_map<std::string, Type>& substitutions) {
+    if (type.kind == ValueType::generic_type) {
+        const auto replacement = substitutions.find(type.name);
+        if (replacement != substitutions.end()) {
+            return clone_type(replacement->second);
+        }
+    }
+
+    Type result = clone_type(type);
+    if (result.element != nullptr) {
+        result.element = std::make_shared<Type>(substitute_type(*result.element, substitutions));
+    }
+    for (Type& argument : result.arguments) {
+        argument = substitute_type(argument, substitutions);
+    }
+    return result;
+}
+
 Value make_record(std::vector<Value> values) {
     Value result;
     result.kind = ValueKind::record;
@@ -1088,7 +1120,7 @@ void Compiler::collect_enums(const std::unordered_map<std::string, TypeChecker::
 void Compiler::collect_type_aliases(const std::vector<Statement>& statements) {
     for (const Statement& statement : statements) {
         if (statement.kind == StatementKind::type_alias_statement && statement.type.has_type) {
-            type_aliases_[statement.name] = statement.type.type;
+            type_aliases_[statement.name] = TypeAlias{statement.generic_parameters, statement.type.type};
         }
     }
 }
@@ -2477,8 +2509,14 @@ Type Compiler::normalize_type(const Type& type, std::unordered_set<std::string>&
 
     if (type.kind == ValueType::generic_type) {
         const auto alias = type_aliases_.find(type.name);
-        if (alias != type_aliases_.end() && arguments.empty() && resolving_aliases.insert(type.name).second) {
-            Type resolved = normalize_type(alias->second, resolving_aliases);
+        if (alias != type_aliases_.end() && arguments.size() == alias->second.generic_parameters.size() &&
+            resolving_aliases.insert(type.name).second) {
+            std::unordered_map<std::string, Type> substitutions;
+            for (std::size_t index = 0; index < arguments.size(); ++index) {
+                substitutions.emplace(alias->second.generic_parameters[index].name, arguments[index]);
+            }
+            Type resolved =
+                normalize_type(substitute_type(alias->second.target, substitutions), resolving_aliases);
             resolving_aliases.erase(type.name);
             return resolved;
         }

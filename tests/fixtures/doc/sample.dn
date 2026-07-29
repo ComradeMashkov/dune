@@ -11,6 +11,9 @@ export const MAX_ITEMS: int = 128;
 /// A plain integer score, named for readability.
 export type Score = int;
 
+/// A reusable pair of values.
+export type Pair<T, U> = (T, U);
+
 /// Adds two integers together.
 ///
 /// param a: the first addend

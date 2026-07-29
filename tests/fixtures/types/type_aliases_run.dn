@@ -1,8 +1,13 @@
 import io;
+import outcome;
+import type_aliases;
 // Transparent type alias: Count is just another name for int.
 type Count = int;
 // Alias for a list of Count, i.e. [int].
 type Counts = [Count];
+// Generic aliases substitute their arguments transparently.
+type Pair<T, U> = (T, U);
+type TextResult<T> = outcome.Outcome<T, text>;
 
 // Function using the Count alias in its signature; since Count = int, this is int arithmetic.
 fn inc(value: Count): Count {
@@ -22,13 +27,23 @@ record Point {
 
 // Alias naming the record type Point.
 type PointAlias = Point;
+type PointBox<T> = PointAlias;
 
 // Build a Counts list ([int]) using inc() plus integer literals.
 values: Counts = [inc(1), 3, 5];
 // Construct a Point (via its alias) from the sum of the first two list elements.
 point: PointAlias = Point.new(values[0] + values[1]);
+boxed: PointBox<int> = Point.new(9);
+pair: Pair<int, text> = (boxed.x, "boxed");
+(boxed_value, boxed_label) = pair;
+result: TextResult<int> = outcome.done_int(boxed_value);
+external_box: type_aliases.BoxAlias<int> = type_aliases.Box.wrap(12);
 
 // Print the list length.
 io.println(values.len());
 // Print the point's x field.
 io.println(point.x);
+// Generic alias to a record, tuple, and module-qualified choice all execute on the VM.
+io.println(result.value_or(0));
+// Exported generic aliases remain usable through a module-qualified name.
+io.println(external_box.value);

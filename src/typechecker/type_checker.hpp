@@ -59,6 +59,7 @@ public:
 
     struct TypeAliasDefinition {
         std::string name;
+        std::vector<GenericParameter> generic_parameters;
         Type target;
         SourceLocation location;
     };
@@ -202,7 +203,8 @@ private:
     Type normalize_type(const Type& type, const std::unordered_set<std::string>& generic_parameters = {}) const;
     Type normalize_type(const Type& type, const std::unordered_set<std::string>& generic_parameters,
                         std::unordered_set<std::string>& resolving_aliases) const;
-    void validate_known_type(const Type& type, SourceLocation location) const;
+    void validate_known_type(const Type& type, SourceLocation location,
+                             const std::unordered_set<std::string>& generic_parameters = {}) const;
     // Phase-1 shape checking: when a Matrix/Vector method (`add`, `matmul`, `dot`,
     // `mul_vector`, …) is called on statically-shaped operands, verifies the shapes
     // line up and refines the result to carry its computed static shape. Falls back

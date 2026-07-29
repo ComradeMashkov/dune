@@ -14,6 +14,10 @@ The largest number of items a counter is expected to hold.
 
 A plain integer score, named for readability.
 
+### `type Pair<T, U> = (T, U)`
+
+A reusable pair of values.
+
 ### `fn add(a: int, b: int): int`
 
 Adds two integers together.

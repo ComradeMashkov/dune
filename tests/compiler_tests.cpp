@@ -94,19 +94,33 @@ bool compiles_unit_call_statement() {
 
 bool compiles_type_aliases() {
     const dune::Bytecode bytecode =
-        compile_source("type Count = int; fn inc(value: Count): Count { return value + 1; } "
+        compile_source("type Count = int; type Pair<T, U> = (T, U); "
+                       "fn inc(value: Count): Count { return value + 1; } "
                        "record Point { x: Count, fn new(x: Count): Point { return Point { x: x }; } } "
-                       "type PointAlias = Point; point: PointAlias = Point.new(inc(4)); io.println(point.x);");
+                       "type PointAlias = Point; type BoxOf<T> = PointAlias; "
+                       "fn read(value: BoxOf<int>): int { return value.x; } "
+                       "pair: Pair<int, text> = (inc(1), \"two\"); "
+                       "(first, label) = pair; "
+                       "point: BoxOf<int> = Point.new(first); io.println(read(point));");
 
     bool saw_inc = false;
+    bool saw_read = false;
     bool saw_constructor = false;
     bool saw_field_load = false;
     for (const dune::Bytecode::Function& function : bytecode.functions) {
         if (function.name == "inc") {
             saw_inc = true;
         }
+        if (function.name == "read") {
+            saw_read = true;
+        }
         if (function.name == "Point.new") {
             saw_constructor = true;
+        }
+        for (const dune::Instruction& instruction : function.instructions) {
+            if (instruction.op == dune::OpCode::load_field) {
+                saw_field_load = true;
+            }
         }
     }
 
@@ -118,6 +132,7 @@ bool compiles_type_aliases() {
 
     bool passed = true;
     passed = expect(saw_inc, "expected alias-typed function") && passed;
+    passed = expect(saw_read, "expected generic-alias-typed function") && passed;
     passed = expect(saw_constructor, "expected alias-typed constructor") && passed;
     passed = expect(saw_field_load, "expected alias-typed record field load") && passed;
     return passed;

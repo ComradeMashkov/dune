@@ -68,13 +68,22 @@ tuple, record, choice, generic, and module-qualified types.
 
 ```dn
 import matrix;
+import outcome;
 
 type Count = int;
 type Counts = [Count];
 type Vec = matrix.Vector<real64>;
+
+type VecOf<T> = matrix.Vector<T>;
+type Pair<T, U> = (T, U);
+type TextOutcome<T> = outcome.Outcome<T, text>;
 ```
 
-Generic aliases (`type Vec<T> = ...`) are reserved for a later release.
+Generic aliases take one or more type arguments and substitute them transparently
+into their target. They may target other aliases and module-qualified types, and
+the number of arguments must match the declared parameters exactly. Alias
+parameters are unbounded in the current release; bounds and named const
+parameters are future extensions.
 
 ## Explicit casts
 

@@ -108,6 +108,20 @@ bool hovers_local_symbols() {
     return passed;
 }
 
+bool hovers_generic_type_aliases() {
+    const std::optional<dune::lsp::Hover> hover =
+        dune::lsp::hover_source("type Pair<T, U> = (T, U);\nvalue: Pair<int, text> = (1, \"one\");", {}, {}, 1, 8);
+
+    bool passed = true;
+    passed = expect(hover.has_value(), "expected generic type alias hover") && passed;
+    if (hover.has_value()) {
+        passed = expect(hover->contents.find("type Pair<T, U> = (T, U)") != std::string::npos,
+                        "expected generic parameters in type alias hover") &&
+                 passed;
+    }
+    return passed;
+}
+
 bool hovers_for_in_loop_variable() {
     const std::optional<dune::lsp::Hover> hover =
         dune::lsp::hover_source(with_test_print("values: [int] = [1, 2, 3];\n"
@@ -586,6 +600,7 @@ int main() {
     passed = completes_imported_module_members() && passed;
     passed = completes_typed_record_methods() && passed;
     passed = hovers_local_symbols() && passed;
+    passed = hovers_generic_type_aliases() && passed;
     passed = hovers_for_in_loop_variable() && passed;
     passed = hovers_known_record_for_in_loop_variable() && passed;
     passed = hovers_typed_record_methods() && passed;

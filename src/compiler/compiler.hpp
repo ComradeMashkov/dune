@@ -80,6 +80,11 @@ private:
         std::unordered_map<std::string, std::size_t> field_indices;
     };
 
+    struct TypeAlias {
+        std::vector<GenericParameter> generic_parameters;
+        Type target;
+    };
+
     struct ScopedLocal {
         std::string name;
         bool had_previous = false;
@@ -96,7 +101,7 @@ private:
     std::unordered_map<std::string, Value> foreknown_values_;
     std::unordered_map<std::string, StructLayout> structs_;
     std::unordered_set<std::string> enums_;
-    std::unordered_map<std::string, Type> type_aliases_;
+    std::unordered_map<std::string, TypeAlias> type_aliases_;
     std::vector<const Statement*> global_constants_;
     std::unordered_map<const Expression*, Type> expression_types_;
     std::unordered_map<const Expression*, Type> iterable_element_types_;

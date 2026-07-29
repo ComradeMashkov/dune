@@ -1231,8 +1231,10 @@ Statement Parser::struct_statement() {
 Statement Parser::type_alias_statement() {
     const Token& keyword = previous();
     const Token& name = consume(TokenType::identifier, "expected type alias name after type");
-    if (check(TokenType::less)) {
-        throw DiagnosticError(location_from_token(peek()), "generic type aliases are not supported yet");
+    std::vector<GenericParameter> parsed_generics;
+    if (match(TokenType::less)) {
+        parsed_generics = generic_parameters();
+        consume(TokenType::greater, "expected '>' after type alias generic parameters");
     }
 
     consume(TokenType::equal, "expected '=' after type alias name");
@@ -1241,6 +1243,7 @@ Statement Parser::type_alias_statement() {
 
     Statement statement{StatementKind::type_alias_statement, name.lexeme, nullptr, {}, {}};
     statement.type = std::move(target_type);
+    statement.generic_parameters = std::move(parsed_generics);
     statement.location = location_from_token(keyword);
     return statement;
 }

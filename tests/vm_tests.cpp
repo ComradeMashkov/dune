@@ -821,6 +821,24 @@ io.println('\0' to int);)dune"),
                        "10\n16\n7\n", "expected Modules v2 alias/selective runtime output") &&
              passed;
 
+    // Generic type aliases are erased before bytecode execution: primitive,
+    // array, record, tuple, alias-chain, and module-qualified choice targets keep
+    // their ordinary VM layout.
+    passed = expect_eq(run_source("import outcome; "
+                                  "record Box<T> { value: T } "
+                                  "type Identity<T> = T; type Values<T> = [Identity<T>]; "
+                                  "type BoxOf<T> = Box<T>; type BoxAgain<T> = BoxOf<T>; "
+                                  "type Pair<T, U> = (T, U); "
+                                  "type TextResult<T> = outcome.Outcome<T, text>; "
+                                  "values: Values<int> = [3, 4]; scalar: Identity<int> = values[1]; "
+                                  "box: BoxAgain<int> = Box { value: 42 }; "
+                                  "pair: Pair<int, text> = (box.value, \"ok\"); "
+                                  "(answer, label) = pair; "
+                                  "result: TextResult<int> = outcome.done_int(answer); "
+                                  "io.println(scalar); io.println(result.value_or(0)); io.println(label);"),
+                       "4\n42\nok\n", "expected generic type aliases to run transparently on the VM") &&
+             passed;
+
     // Const generics / static shapes (issue #43) are a compile-time-only concern:
     // a statically shaped matrix-vector product runs identically to its dynamic form.
     passed = expect_eq(run_source("import matrix; "
