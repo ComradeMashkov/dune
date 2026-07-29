@@ -198,7 +198,7 @@ std::size_t parse_decimal_size(std::string_view value, std::string_view field) {
             throw std::runtime_error("invalid " + std::string(field));
         }
         const std::size_t digit = character - '0';
-        if (parsed > (std::numeric_limits<std::size_t>::max() - digit) / 10) {
+        if (parsed > ((std::numeric_limits<std::size_t>::max)() - digit) / 10) {
             throw std::runtime_error(std::string(field) + " is too large");
         }
         parsed = parsed * 10 + digit;
