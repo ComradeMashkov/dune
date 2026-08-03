@@ -688,28 +688,41 @@ std::string render_html(const Document& document) {
     html << "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">";
     html << "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">";
     html << "<title>" << html_escape(title) << "</title><style>";
-    html << "body{margin:0;background:#f5f3ee;color:#25231f;font:16px/1.55 system-ui,sans-serif}"
-            "main{max-width:960px;margin:0 auto;padding:56px 24px 96px}"
-            ".brand{color:#765b32;font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}"
-            ".cell{margin:24px 0}.code{background:#25231f;color:#f7f1e5;border-radius:10px;padding:18px;"
-            "overflow:auto;font:14px/1.55 ui-monospace,monospace}.count{color:#987f57;font-size:12px;"
-            "margin-bottom:6px}.output{background:#fff;border-left:3px solid #a97b3d;padding:12px 16px;"
-            "white-space:pre-wrap;font:14px/1.5 ui-monospace,monospace}.error{border-color:#b4483f;color:#8b2923}"
-            "h1,h2,h3{line-height:1.2}code{background:#e9e3d8;padding:.1em .3em;border-radius:4px}</style></head>";
-    html << "<body><main><div class=\"brand\">Dune Notebook</div>";
-    if (!title.empty()) {
-        html << "<h1>" << html_escape(title) << "</h1>";
-    }
+    html << R"css(:root{color-scheme:light;--page:#fff;--surface:#fff;--muted:#66707a;--border:#d5d8dc;
+--text:#24292f;--accent:#2f7dbd;--orange:#f37726;--code:#f7f7f7;--danger:#c43c35;--danger-soft:#fff1f0}
+@media(prefers-color-scheme:dark){:root{color-scheme:dark;--page:#1e1f22;--surface:#282a2e;--muted:#a6abb3;
+--border:#41444a;--text:#e6e8eb;--accent:#67a9df;--orange:#ff8b42;--code:#202226;--danger:#ef7770;
+--danger-soft:#442a2a}}*{box-sizing:border-box}body{margin:0;background:var(--page);color:var(--text);
+font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.export-header{display:flex;align-items:center;
+gap:14px;border-bottom:1px solid var(--border);background:var(--surface);padding:11px max(18px,calc((100vw - 1080px)/2))}
+.brand{display:flex;align-items:center;gap:7px;font-weight:650}.mark{display:grid;width:24px;height:24px;place-items:center;
+border:2px solid var(--orange);border-radius:50%;color:var(--orange);font-size:11px}.export-title{overflow:hidden;
+text-overflow:ellipsis;white-space:nowrap}.export-label{margin-left:auto;color:var(--muted);font-size:12px}main{max-width:1080px;
+margin:0 auto;padding:28px 18px 90px}.cell{display:grid;grid-template-columns:88px minmax(0,1fr);margin:8px 0}
+.prompt{padding:8px 10px 0 0;color:var(--accent);text-align:right;white-space:nowrap;font:12px/1.5 ui-monospace,
+monospace}.content{min-width:0}.code{margin:0;overflow:auto;border:1px solid var(--border);border-radius:2px;
+background:var(--code);padding:9px 11px;font:13px/1.55 ui-monospace,monospace}.output{margin:5px 0 2px;
+background:var(--surface);padding:7px 10px;white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.5 ui-monospace,
+monospace}.error{border-left:3px solid var(--danger);background:var(--danger-soft);color:var(--danger)}.markdown{
+padding:4px 12px 8px}.markdown h1,.markdown h2{border-bottom:1px solid var(--border);padding-bottom:.18em;
+line-height:1.22}.markdown h1{font-size:1.85em}.markdown h2{font-size:1.45em}.markdown code{border-radius:2px;
+background:var(--code);padding:.1em .3em}.markdown pre{overflow:auto;border:1px solid var(--border);border-radius:2px;
+background:var(--code);padding:10px}@media(max-width:700px){main{padding-inline:6px}.cell{grid-template-columns:58px minmax(0,1fr)}
+.prompt{padding-right:5px;font-size:10px}.export-label{display:none}})css";
+    html << "</style></head><body><header class=\"export-header\"><div class=\"brand\"><span class=\"mark\">D</span>"
+            "Dune Notebook</div><strong class=\"export-title\">"
+         << html_escape(title) << "</strong><span class=\"export-label\">Static export</span></header><main>";
     for (const Cell& cell : document.cells) {
         if (cell.kind == CellKind::markdown) {
-            html << "<section class=\"cell markdown\">" << render_markdown(cell.source) << "</section>";
+            html << "<section class=\"cell\"><div class=\"prompt\"></div><div class=\"content markdown\">"
+                 << render_markdown(cell.source) << "</div></section>";
             continue;
         }
-        html << "<section class=\"cell\"><div class=\"count\">In [";
+        html << "<section class=\"cell\"><div class=\"prompt\">In [";
         if (cell.execution_count != 0) {
             html << cell.execution_count;
         }
-        html << "]</div>";
+        html << "]:</div><div class=\"content\">";
         html << "<pre class=\"code\"><code>" << html_escape(cell.source) << "</code></pre>";
         if (!cell.output.empty()) {
             html << "<pre class=\"output\">" << html_escape(cell.output) << "</pre>";
@@ -717,7 +730,7 @@ std::string render_html(const Document& document) {
         if (!cell.error.empty()) {
             html << "<pre class=\"output error\">" << html_escape(cell.error) << "</pre>";
         }
-        html << "</section>";
+        html << "</div></section>";
     }
     html << "</main></body></html>\n";
     return html.str();

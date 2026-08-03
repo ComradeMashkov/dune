@@ -16,8 +16,11 @@ dune notebook serve notebooks/tutorial.dnb
 browser workspace. The workspace includes:
 
 - a `.dnb` file browser rooted at the selected directory;
+- a classic Jupyter-style menu, toolbar, prompt gutter, and cell selection;
+- persistent light and dark themes that follow the system on first launch;
 - Markdown and Dune code cell editing;
 - adding, moving, and deleting cells;
+- toolbar and keyboard cell-type switching (`Y` for code, `M` for Markdown);
 - Run Cell and Run All actions;
 - persistent kernel sessions with Restart Kernel;
 - structured stdout and stderr output;
@@ -137,7 +140,8 @@ dune notebook export notebooks/tutorial.dnb --html
 dune notebook export notebooks/tutorial.dnb --html -o reports/tutorial.html
 ```
 
-The export embeds its styling, escapes notebook content, and needs no running
+The export embeds its responsive Jupyter-style layout, follows the reader's
+light/dark system preference, escapes notebook content, and needs no running
 server or external assets.
 
 See [`examples/notebooks/scientific_workflow.dnb`](../../../examples/notebooks/scientific_workflow.dnb)

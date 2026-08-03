@@ -215,6 +215,11 @@ bool serves_secure_workspace_routes() {
                         exported.body.find("&amp;") != std::string::npos,
                     "expected standalone escaped HTML export") &&
              passed;
+    passed = expect(exported.body.find("prefers-color-scheme:dark") != std::string::npos &&
+                        exported.body.find("Static export") != std::string::npos &&
+                        exported.body.find("class=\"prompt\">In [") != std::string::npos,
+                    "expected Jupyter-style light/dark HTML export layout") &&
+             passed;
     passed = expect(service.handle({"DELETE", "/api/sessions/session-1", authorization, {}}).status == 204,
                     "expected session deletion") &&
              passed;
@@ -337,8 +342,11 @@ bool accepts_real_http_connections() {
                         "expected a real HTTP health response") &&
                  passed;
         passed = expect(app.find("Dune Notebook") != std::string::npos &&
-                            app.find("Content-Security-Policy:") != std::string::npos,
-                        "expected the embedded browser application and security headers") &&
+                            app.find("Content-Security-Policy:") != std::string::npos &&
+                            app.find("Notebook toolbar") != std::string::npos &&
+                            app.find("dune-notebook-theme") != std::string::npos &&
+                            app.find("Selected cell type") != std::string::npos,
+                        "expected the themed Jupyter-style browser application and security headers") &&
                  passed;
     } catch (const std::exception& error) {
         passed = expect(false, std::string("HTTP integration failed: ") + error.what()) && passed;
