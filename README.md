@@ -153,8 +153,8 @@ its doc-comments, with runnable examples.
 ## Editor support
 
 A Zed extension in [`editors/zed/`](editors/zed/) provides Tree-sitter
-highlighting plus completion, hover, symbol outline, go-to-definition, and
-diagnostics through `dune lsp`. Build Dune, then in Zed run
+highlighting plus semantic highlighting, completion, hover, symbol outline,
+go-to-definition, and diagnostics through `dune lsp`. Build Dune, then in Zed run
 `Extensions: Install Dev Extension` and select the `editors/zed` directory (not
 the repository root). See the [editor guide](https://comrademashkov.github.io/dune/guides/editor.html).
 

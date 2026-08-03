@@ -33,6 +33,20 @@ struct DefinitionLocation {
     std::size_t length = 1;
 };
 
+struct SemanticToken {
+    std::size_t line = 0; // 0-based UTF-16 LSP position
+    std::size_t start_character = 0;
+    std::size_t length = 0;
+    std::size_t token_type = 0;
+    std::size_t token_modifiers = 0;
+};
+
+const std::vector<std::string>& semantic_token_types();
+const std::vector<std::string>& semantic_token_modifiers();
+
+std::vector<SemanticToken> semantic_tokens_source(const std::string& source, const std::string& uri = {},
+                                                  const std::filesystem::path& source_directory = {});
+
 std::vector<Diagnostic> diagnose_source(const std::string& source, const std::string& uri = {},
                                         const std::filesystem::path& source_directory = {});
 
