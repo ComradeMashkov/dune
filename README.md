@@ -125,8 +125,9 @@ The `.dnb` format is a JSON document similar to `.ipynb`: it stores Markdown
 and Dune code cells, stable cell IDs, execution counts, and structured
 stdout/stderr outputs. The built-in server provides a file browser, cell
 editing, a Jupyter-style menu and toolbar, persistent light/dark themes, Run
-Cell/Run All, kernel restart, saving, and standalone HTML export. It listens on
-`127.0.0.1` by default and protects its API with a random token.
+Cell/Run All, live Dune syntax highlighting, inline SVG plots, kernel restart,
+saving, and standalone HTML export. It listens on `127.0.0.1` by default and
+protects its API with a random token.
 
 Notebook files are also first-class in scripts and CI:
 
@@ -137,7 +138,8 @@ dune notebook export notebooks/demo.dnb --html
 ```
 
 See the runnable [`scientific_workflow.dnb`](examples/notebooks/scientific_workflow.dnb)
-example and the [notebook guide](https://comrademashkov.github.io/dune/guides/notebooks.html).
+and [`plot_gallery.dnb`](examples/notebooks/plot_gallery.dnb) examples, plus the
+[notebook guide](https://comrademashkov.github.io/dune/guides/notebooks.html).
 
 ## Standard library
 

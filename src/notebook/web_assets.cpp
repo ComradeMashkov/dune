@@ -30,6 +30,19 @@ std::string_view notebook_app_html() {
       --orange: #f37726;
       --code: #f7f7f7;
       --code-text: #1f2328;
+      --syntax-keyword: #8250df;
+      --syntax-type: #953800;
+      --syntax-literal: #0550ae;
+      --syntax-number: #0550ae;
+      --syntax-string: #0a7f3f;
+      --syntax-comment: #6e7781;
+      --syntax-function: #6639ba;
+      --syntax-declaration: #8250df;
+      --syntax-namespace: #0969da;
+      --syntax-constant: #0550ae;
+      --syntax-operator: #cf222e;
+      --syntax-invalid: #cf222e;
+      --code-selection: rgba(47, 125, 189, .28);
       --output: #ffffff;
       --shadow: 0 4px 18px rgba(31, 35, 40, .12);
       --header-height: 132px;
@@ -54,15 +67,23 @@ std::string_view notebook_app_html() {
       --orange: #ff8b42;
       --code: #202226;
       --code-text: #e6e8eb;
+      --syntax-keyword: #c792ea;
+      --syntax-type: #ffcb6b;
+      --syntax-literal: #f78c6c;
+      --syntax-number: #f78c6c;
+      --syntax-string: #c3e88d;
+      --syntax-comment: #7f848e;
+      --syntax-function: #82aaff;
+      --syntax-declaration: #c792ea;
+      --syntax-namespace: #89ddff;
+      --syntax-constant: #f78c6c;
+      --syntax-operator: #89ddff;
+      --syntax-invalid: #ff5370;
+      --code-selection: rgba(103, 169, 223, .32);
       --output: #25272b;
       --shadow: 0 7px 24px rgba(0, 0, 0, .34);
     }
-    @property --cell-ring-angle {
-      syntax: "<angle>";
-      inherits: false;
-      initial-value: 0deg;
-    }
-    @keyframes cell-ring-spin { to { --cell-ring-angle: 360deg; } }
+    @keyframes cell-ring-travel { to { stroke-dashoffset: -100; } }
     * { box-sizing: border-box; }
     [hidden] { display: none !important; }
     html { min-height: 100%; background: var(--page); }
@@ -269,23 +290,35 @@ std::string_view notebook_app_html() {
     }
     .cell.selected {
       --cell-ring-color: var(--accent);
-      box-shadow: inset 0 0 0 1px var(--border-strong);
     }
     .cell.selected.edit-mode { --cell-ring-color: var(--edit); }
-    .cell.selected::before {
-      content: "";
+    .cell-selection-ring {
       position: absolute;
       z-index: 1;
       inset: 0;
-      border-radius: inherit;
-      background: conic-gradient(from var(--cell-ring-angle), transparent 0deg 265deg,
-        var(--cell-ring-color) 310deg 348deg, transparent 360deg);
-      padding: 2px;
+      display: none;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
       pointer-events: none;
-      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-      -webkit-mask-composite: xor;
-      mask-composite: exclude;
-      animation: cell-ring-spin 2.4s linear infinite;
+    }
+    .cell.selected > .cell-selection-ring { display: block; }
+    .cell-selection-ring rect {
+      x: 1px;
+      y: 1px;
+      width: calc(100% - 2px);
+      height: calc(100% - 2px);
+      rx: 3px;
+      fill: none;
+      vector-effect: non-scaling-stroke;
+    }
+    .cell-selection-track { stroke: var(--border-strong); stroke-width: 1; }
+    .cell-selection-progress {
+      stroke: var(--cell-ring-color);
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-dasharray: 18 82;
+      animation: cell-ring-travel 6s linear infinite;
     }
     .prompt {
       padding: 7px 10px 0 5px;
@@ -303,21 +336,63 @@ std::string_view notebook_app_html() {
       resize: vertical;
       outline: none;
     }
-    .code-source {
+    .code-editor {
+      position: relative;
       min-height: 56px;
-      overflow: hidden;
       border: 1px solid var(--border);
       border-radius: 2px;
       background: var(--code);
-      color: var(--code-text);
+    }
+    .code-editor:focus-within { border-color: var(--border-strong); }
+    .code-source, .code-highlight {
+      margin: 0;
+      border: 0;
       padding: 8px 10px;
       tab-size: 4;
+      white-space: pre-wrap;
+      overflow-wrap: break-word;
       font: 13px/1.55 "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      letter-spacing: normal;
+    }
+    .code-highlight {
+      position: absolute;
+      z-index: 0;
+      inset: 0;
+      overflow: hidden;
+      color: var(--code-text);
+      pointer-events: none;
+    }
+    .code-source {
+      position: relative;
+      z-index: 1;
+      min-height: 56px;
+      overflow: hidden;
+      resize: vertical;
+      background: transparent;
+      color: transparent;
+      caret-color: var(--code-text);
+      -webkit-text-fill-color: transparent;
     }
     .code-source:focus, .code-source:focus-visible {
-      border-color: var(--border-strong);
       outline: 0;
       box-shadow: none;
+    }
+    .code-source::selection { background: var(--code-selection); }
+    .syntax-keyword { color: var(--syntax-keyword); font-weight: 600; }
+    .syntax-type { color: var(--syntax-type); }
+    .syntax-literal { color: var(--syntax-literal); }
+    .syntax-number { color: var(--syntax-number); }
+    .syntax-string { color: var(--syntax-string); }
+    .syntax-comment { color: var(--syntax-comment); font-style: italic; }
+    .syntax-function { color: var(--syntax-function); }
+    .syntax-declaration { color: var(--syntax-declaration); font-weight: 600; }
+    .syntax-namespace { color: var(--syntax-namespace); }
+    .syntax-constant { color: var(--syntax-constant); }
+    .syntax-operator { color: var(--syntax-operator); }
+    .syntax-invalid {
+      color: var(--syntax-invalid);
+      text-decoration: underline wavy var(--syntax-invalid);
+      text-underline-offset: 2px;
     }
     .markdown-source {
       min-height: 90px;
@@ -369,6 +444,13 @@ std::string_view notebook_app_html() {
       background: var(--danger-soft);
       color: var(--danger);
     }
+    .rich-output {
+      margin: 8px 0 2px;
+      overflow: auto;
+      background: var(--surface);
+      padding: 8px;
+    }
+    .rich-output img { display: block; max-width: 100%; height: auto; margin: 0 auto; }
     .cell-insert {
       position: absolute;
       z-index: 2;
@@ -410,7 +492,7 @@ std::string_view notebook_app_html() {
       .prompt { padding-right: 5px; font-size: 10px; }
     }
     @media (prefers-reduced-motion: reduce) {
-      .cell.selected::before { background: var(--cell-ring-color); animation: none; }
+      .cell-selection-progress { stroke-dasharray: 100 0; animation: none; }
     }
   </style>
 </head>
@@ -589,6 +671,242 @@ std::string_view notebook_app_html() {
         .replaceAll('"', "&quot;");
     }
 
+    const duneKeywords = new Set([
+      "as", "break", "choice", "const", "continue", "contract", "derive", "else", "export", "fn",
+      "for", "foreknown", "foreign", "from", "if", "import", "in", "is", "method", "module", "record",
+      "return", "static", "test", "to", "type", "when", "while", "with"
+    ]);
+    const duneTypes = new Set([
+      "bool", "glyph", "i8", "i16", "i32", "i64", "int", "isize", "real", "real32", "real64", "text",
+      "u8", "u16", "u32", "u64", "uint8", "uint16", "uint32", "uint64", "unit", "usize"
+    ]);
+    const duneLiterals = new Set(["false", "true"]);
+    const duneDeclarationKeywords = new Set(["choice", "contract", "fn", "method", "module", "record", "type"]);
+    const duneNamespaceKeywords = new Set(["as", "from", "import"]);
+    const duneIntegerSuffixes = new Set(["i8", "i16", "i32", "i64", "isize", "u8", "u16", "u32", "u64", "usize"]);
+
+    function isAsciiAlpha(value) {
+      return typeof value === "string" && value.length > 0 && /[A-Za-z]/.test(value[0]);
+    }
+
+    function isAsciiDigit(value) {
+      return typeof value === "string" && value.length > 0 && value[0] >= "0" && value[0] <= "9";
+    }
+
+    function isIdentifierPart(value) {
+      return isAsciiAlpha(value) || isAsciiDigit(value) || value === "_";
+    }
+
+    function lexDune(source) {
+      const tokens = [];
+      let position = 0;
+      let previousSignificant = "";
+      const append = (kind, start, end) => {
+        const text = source.slice(start, end);
+        tokens.push({kind, text});
+        if (kind && kind !== "comment" && kind !== "invalid") previousSignificant = text;
+      };
+      const consumeQuoted = (start, quote, raw = false) => {
+        let cursor = start + (raw ? 2 : 1);
+        let invalid = false;
+        const validEscapes = quote === "\"" ? "nrt0\"\\" : "nrt0'\\";
+        while (cursor < source.length) {
+          if (source[cursor] === quote) return {end: cursor + 1, invalid};
+          if (source[cursor] === "\n" || source[cursor] === "\r") return {end: cursor, invalid: true};
+          if (!raw && source[cursor] === "\\") {
+            if (cursor + 1 >= source.length || !validEscapes.includes(source[cursor + 1])) invalid = true;
+            cursor += Math.min(2, source.length - cursor);
+          } else {
+            const codePoint = source.codePointAt(cursor);
+            cursor += codePoint > 0xffff ? 2 : 1;
+          }
+        }
+        return {end: cursor, invalid: true};
+      };
+      const consumeGlyph = start => {
+        let cursor = start + 1;
+        let invalid = false;
+        if (cursor >= source.length || source[cursor] === "\n" || source[cursor] === "\r") {
+          return {end: cursor, invalid: true};
+        }
+        if (source[cursor] === "\\") {
+          cursor += 1;
+          if (cursor >= source.length || !"nrt0'\\".includes(source[cursor])) invalid = true;
+          if (cursor < source.length) cursor += 1;
+        } else if (source[cursor] === "'") {
+          cursor += 1;
+          return {end: cursor, invalid: true};
+        } else {
+          const codePoint = source.codePointAt(cursor);
+          cursor += codePoint > 0xffff ? 2 : 1;
+        }
+        if (source[cursor] === "'") return {end: cursor + 1, invalid};
+        invalid = true;
+        while (cursor < source.length && source[cursor] !== "'" && source[cursor] !== "\n" &&
+               source[cursor] !== "\r") cursor += 1;
+        if (source[cursor] === "'") cursor += 1;
+        return {end: cursor, invalid};
+      };
+      const consumeNumber = start => {
+        let cursor = start;
+        let invalid = false;
+        const consumeDigits = (predicate, alreadySawDigit = false) => {
+          let sawDigit = alreadySawDigit;
+          let previousSeparator = false;
+          while (cursor < source.length && (predicate(source[cursor]) || source[cursor] === "_")) {
+            if (source[cursor] === "_") {
+              if (!sawDigit || previousSeparator) invalid = true;
+              previousSeparator = true;
+            } else {
+              sawDigit = true;
+              previousSeparator = false;
+            }
+            cursor += 1;
+          }
+          if (!sawDigit || previousSeparator) invalid = true;
+        };
+        const consumeSuffix = () => {
+          if (!isAsciiAlpha(source[cursor])) return;
+          const suffixStart = cursor;
+          while (isAsciiAlpha(source[cursor]) || isAsciiDigit(source[cursor])) cursor += 1;
+          if (!duneIntegerSuffixes.has(source.slice(suffixStart, cursor))) invalid = true;
+        };
+
+        cursor += 1;
+        if (source[start] === "0" && (source[cursor] === "x" || source[cursor] === "X")) {
+          cursor += 1;
+          consumeDigits(value => isAsciiDigit(value) || (value.toLowerCase() >= "a" && value.toLowerCase() <= "f"));
+          consumeSuffix();
+          return {end: cursor, invalid};
+        }
+        if (source[start] === "0" && (source[cursor] === "b" || source[cursor] === "B")) {
+          cursor += 1;
+          consumeDigits(value => value === "0" || value === "1");
+          if (isAsciiDigit(source[cursor])) {
+            invalid = true;
+            while (isIdentifierPart(source[cursor])) cursor += 1;
+          } else {
+            consumeSuffix();
+          }
+          return {end: cursor, invalid};
+        }
+
+        consumeDigits(isAsciiDigit, true);
+        if (source[cursor] === "." && isAsciiDigit(source[cursor + 1])) {
+          cursor += 1;
+          consumeDigits(isAsciiDigit, true);
+          if (isAsciiAlpha(source[cursor])) {
+            invalid = true;
+            while (isAsciiAlpha(source[cursor]) || isAsciiDigit(source[cursor])) cursor += 1;
+          }
+          return {end: cursor, invalid};
+        }
+        consumeSuffix();
+        return {end: cursor, invalid};
+      };
+      const identifierKind = (identifier, end) => {
+        if (duneKeywords.has(identifier)) return "keyword";
+        if (duneTypes.has(identifier)) return "type";
+        if (duneLiterals.has(identifier)) return "literal";
+        if (duneDeclarationKeywords.has(previousSignificant)) return "declaration";
+        if (duneNamespaceKeywords.has(previousSignificant)) return "namespace";
+        if (/^[A-Z][A-Z0-9_]*$/.test(identifier)) return "constant";
+        if (/^[A-Z][A-Za-z0-9_]*$/.test(identifier)) return "type";
+        let next = end;
+        while (source[next] === " " || source[next] === "\t" || source[next] === "\r" || source[next] === "\n") next += 1;
+        return source[next] === "(" ? "function" : "identifier";
+      };
+
+      while (position < source.length) {
+        const start = position;
+        const current = source[position];
+        if (/\s/.test(current)) {
+          while (position < source.length && /\s/.test(source[position])) position += 1;
+          append("", start, position);
+          continue;
+        }
+        if (current === "/" && source[position + 1] === "/") {
+          position += 2;
+          while (position < source.length && source[position] !== "\n") position += 1;
+          append("comment", start, position);
+          continue;
+        }
+        if (current === "/" && source[position + 1] === "*") {
+          const closing = source.indexOf("*/", position + 2);
+          position = closing < 0 ? source.length : closing + 2;
+          append(closing < 0 ? "invalid" : "comment", start, position);
+          continue;
+        }
+        if (current === "r" && source[position + 1] === "\"") {
+          const quoted = consumeQuoted(start, "\"", true);
+          position = quoted.end;
+          append(quoted.invalid ? "invalid" : "string", start, position);
+          continue;
+        }
+        if (current === "\"") {
+          const quoted = consumeQuoted(start, current);
+          position = quoted.end;
+          append(quoted.invalid ? "invalid" : "string", start, position);
+          continue;
+        }
+        if (current === "'") {
+          const glyph = consumeGlyph(start);
+          position = glyph.end;
+          append(glyph.invalid ? "invalid" : "string", start, position);
+          continue;
+        }
+        if (isAsciiDigit(current)) {
+          const number = consumeNumber(start);
+          position = number.end;
+          append(number.invalid ? "invalid" : "number", start, position);
+          continue;
+        }
+        if (isAsciiAlpha(current) || current === "_") {
+          position += 1;
+          while (isIdentifierPart(source[position])) position += 1;
+          const identifier = source.slice(start, position);
+          append(identifierKind(identifier, position), start, position);
+          continue;
+        }
+        const pair = source.slice(position, position + 2);
+        if (["->", "=>", "==", "!=", "&&", "||", ">=", "<=", ".."].includes(pair)) {
+          position += 2;
+          append("operator", start, position);
+          continue;
+        }
+        if ("+-*/%=!><".includes(current)) {
+          position += 1;
+          append("operator", start, position);
+          continue;
+        }
+        if (":,.?;(){}[]".includes(current)) {
+          position += 1;
+          append("punctuation", start, position);
+          continue;
+        }
+        position += 1;
+        append("invalid", start, position);
+      }
+      return tokens;
+    }
+
+    function highlightDune(source) {
+      let html = lexDune(source).map(token => {
+        const escaped = escapeHtml(token.text);
+        return token.kind && token.kind !== "identifier" && token.kind !== "punctuation"
+          ? `<span class="syntax-${token.kind}">${escaped}</span>`
+          : escaped;
+      }).join("");
+      if (!html || source.endsWith("\n")) html += " ";
+      return html;
+    }
+
+    function syncCodeHighlight(source, highlight) {
+      highlight.innerHTML = highlightDune(source.value);
+      highlight.scrollTop = source.scrollTop;
+      highlight.scrollLeft = source.scrollLeft;
+    }
+
     function renderMarkdown(source) {
       const lines = source.split("\n");
       let html = "";
@@ -639,6 +957,20 @@ std::string_view notebook_app_html() {
 
     function newMarkdownCell() {
       return {id: nextId(), cell_type: "markdown", source: "Write **Markdown** here."};
+    }
+
+    function makeSelectionRing() {
+      const namespace = "http://www.w3.org/2000/svg";
+      const ring = document.createElementNS(namespace, "svg");
+      ring.classList.add("cell-selection-ring");
+      ring.setAttribute("aria-hidden", "true");
+      for (const className of ["cell-selection-track", "cell-selection-progress"]) {
+        const border = document.createElementNS(namespace, "rect");
+        border.classList.add(className);
+        border.setAttribute("pathLength", "100");
+        ring.append(border);
+      }
+      return ring;
     }
 
     function markDirty() {
@@ -761,6 +1093,18 @@ std::string_view notebook_app_html() {
     }
 
     function makeOutput(text, error = false) {
+      const trimmed = text.trim();
+      const isSvg = trimmed.startsWith("<svg") && (trimmed[4] === ">" || /\s/.test(trimmed[4])) &&
+        trimmed.endsWith("</svg>");
+      if (!error && isSvg) {
+        const figure = document.createElement("figure");
+        figure.className = "rich-output";
+        const image = document.createElement("img");
+        image.alt = "Chart output";
+        image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(trimmed)}`;
+        figure.append(image);
+        return figure;
+      }
       const output = document.createElement("pre");
       output.className = `output ${error ? "error" : ""}`;
       output.textContent = text;
@@ -840,12 +1184,27 @@ std::string_view notebook_app_html() {
           };
           content.append(preview, editor);
         } else {
+          const editor = document.createElement("div");
+          editor.className = "code-editor";
+          const highlight = document.createElement("pre");
+          highlight.className = "code-highlight";
+          highlight.setAttribute("aria-hidden", "true");
           const source = document.createElement("textarea");
           source.className = "code-source";
+          source.setAttribute("aria-label", "Dune code");
+          source.setAttribute("autocomplete", "off");
+          source.setAttribute("autocapitalize", "off");
+          source.setAttribute("spellcheck", "false");
           source.value = cell.source || "";
           source.onfocus = () => { focusedCell = index; container.classList.add("edit-mode"); updateSelection(); };
           source.onblur = () => container.classList.remove("edit-mode");
-          source.oninput = () => { cell.source = source.value; autoSize(source); markDirty(); };
+          source.oninput = () => {
+            cell.source = source.value;
+            autoSize(source);
+            syncCodeHighlight(source, highlight);
+            markDirty();
+          };
+          source.onscroll = () => syncCodeHighlight(source, highlight);
           source.onkeydown = event => {
             if (event.key === "Tab") {
               event.preventDefault();
@@ -853,6 +1212,7 @@ std::string_view notebook_app_html() {
               cell.source = source.value;
               markDirty();
               autoSize(source);
+              syncCodeHighlight(source, highlight);
             } else if (event.key === "Enter" && event.shiftKey) {
               event.preventDefault();
               runCell(index, true);
@@ -861,8 +1221,12 @@ std::string_view notebook_app_html() {
               runCell(index);
             }
           };
-          setTimeout(() => autoSize(source), 0);
-          content.append(source);
+          setTimeout(() => {
+            autoSize(source);
+            syncCodeHighlight(source, highlight);
+          }, 0);
+          editor.append(highlight, source);
+          content.append(editor);
           const stdout = outputText(cell, "stdout");
           const stderr = outputText(cell, "stderr");
           if (stdout) content.append(makeOutput(stdout));
@@ -874,7 +1238,7 @@ std::string_view notebook_app_html() {
         insert.textContent = "+ Code";
         insert.title = "Insert code cell below";
         insert.onclick = event => { event.stopPropagation(); focusedCell = index; insertCell("code", "below"); };
-        container.append(prompt, content, insert);
+        container.append(prompt, content, insert, makeSelectionRing());
         workspace.append(container);
       });
       updateSelection();

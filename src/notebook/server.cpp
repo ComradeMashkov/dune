@@ -339,7 +339,7 @@ std::string encode_response(const HttpResponse& response) {
     encoded << "X-Frame-Options: DENY\r\n";
     encoded << "Referrer-Policy: no-referrer\r\n";
     encoded << "Content-Security-Policy: default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
-               "connect-src 'self'; object-src 'none'; frame-ancestors 'none'\r\n";
+               "connect-src 'self'; img-src 'self' data:; object-src 'none'; frame-ancestors 'none'\r\n";
     for (const auto& [name, value] : response.headers) {
         encoded << name << ": " << value << "\r\n";
     }

@@ -282,6 +282,16 @@ add_test(
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_notebook_case.cmake
 )
 
+add_test(
+    NAME cli_notebook_plot_gallery
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D NOTEBOOK_FILE=${CMAKE_CURRENT_SOURCE_DIR}/examples/notebooks/plot_gallery.dnb
+        -D HTML_OUTPUT_FILE=${CMAKE_CURRENT_BINARY_DIR}/notebook_plot_gallery.html
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_notebook_plot_case.cmake
+)
+
 # `dune doc` renders a module's public API to Markdown from the real AST.
 add_test(
     NAME cli_doc_sample

@@ -444,6 +444,40 @@ std::string html_escape(std::string_view text) {
     return escaped;
 }
 
+std::string_view trim_whitespace(std::string_view text) {
+    while (!text.empty() && std::isspace(static_cast<unsigned char>(text.front())) != 0) {
+        text.remove_prefix(1);
+    }
+    while (!text.empty() && std::isspace(static_cast<unsigned char>(text.back())) != 0) {
+        text.remove_suffix(1);
+    }
+    return text;
+}
+
+bool is_svg_output(std::string_view text) {
+    text = trim_whitespace(text);
+    return text.size() > 10 && text.starts_with("<svg") &&
+           (text[4] == '>' || std::isspace(static_cast<unsigned char>(text[4])) != 0) && text.ends_with("</svg>");
+}
+
+std::string svg_data_uri(std::string_view svg) {
+    constexpr std::string_view digits = "0123456789ABCDEF";
+    std::string encoded = "data:image/svg+xml;charset=utf-8,";
+    svg = trim_whitespace(svg);
+    encoded.reserve(encoded.size() + svg.size() * 3);
+    for (const unsigned char character : svg) {
+        if (std::isalnum(character) != 0 || character == '-' || character == '.' || character == '_' ||
+            character == '~') {
+            encoded += static_cast<char>(character);
+        } else {
+            encoded += '%';
+            encoded += digits[character >> 4];
+            encoded += digits[character & 0x0f];
+        }
+    }
+    return encoded;
+}
+
 std::string inline_markdown(std::string_view text) {
     std::string rendered;
     std::size_t position = 0;
@@ -703,7 +737,8 @@ margin:0 auto;padding:28px 18px 90px}.cell{display:grid;grid-template-columns:88
 monospace}.content{min-width:0}.code{margin:0;overflow:auto;border:1px solid var(--border);border-radius:2px;
 background:var(--code);padding:9px 11px;font:13px/1.55 ui-monospace,monospace}.output{margin:5px 0 2px;
 background:var(--surface);padding:7px 10px;white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.5 ui-monospace,
-monospace}.error{border-left:3px solid var(--danger);background:var(--danger-soft);color:var(--danger)}.markdown{
+monospace}.rich-output{margin:8px 0 2px;overflow:auto;background:var(--surface);padding:8px}.rich-output img{display:block;
+max-width:100%;height:auto;margin:0 auto}.error{border-left:3px solid var(--danger);background:var(--danger-soft);color:var(--danger)}.markdown{
 padding:4px 12px 8px}.markdown h1,.markdown h2{border-bottom:1px solid var(--border);padding-bottom:.18em;
 line-height:1.22}.markdown h1{font-size:1.85em}.markdown h2{font-size:1.45em}.markdown code{border-radius:2px;
 background:var(--code);padding:.1em .3em}.markdown pre{overflow:auto;border:1px solid var(--border);border-radius:2px;
@@ -725,7 +760,12 @@ background:var(--code);padding:10px}@media(max-width:700px){main{padding-inline:
         html << "]:</div><div class=\"content\">";
         html << "<pre class=\"code\"><code>" << html_escape(cell.source) << "</code></pre>";
         if (!cell.output.empty()) {
-            html << "<pre class=\"output\">" << html_escape(cell.output) << "</pre>";
+            if (is_svg_output(cell.output)) {
+                html << "<figure class=\"rich-output\"><img alt=\"Chart output\" src=\"" << svg_data_uri(cell.output)
+                     << "\"></figure>";
+            } else {
+                html << "<pre class=\"output\">" << html_escape(cell.output) << "</pre>";
+            }
         }
         if (!cell.error.empty()) {
             html << "<pre class=\"output error\">" << html_escape(cell.error) << "</pre>";
