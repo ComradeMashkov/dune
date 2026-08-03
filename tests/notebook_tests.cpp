@@ -215,6 +215,21 @@ bool serves_secure_workspace_routes() {
                         exported.body.find("&amp;") != std::string::npos,
                     "expected standalone escaped HTML export") &&
              passed;
+    passed = expect(exported.body.find("prefers-color-scheme:dark") != std::string::npos &&
+                        exported.body.find("Static export") != std::string::npos &&
+                        exported.body.find("class=\"prompt\">In [") != std::string::npos,
+                    "expected Jupyter-style light/dark HTML export layout") &&
+             passed;
+    dune::notebook::Document chart_document = sample_document(path);
+    chart_document.cells[2].output =
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"40\" height=\"20\"><script>alert(1)</script>"
+        "<rect width=\"40\" height=\"20\"/></svg>\n";
+    const std::string chart_export = dune::notebook::render_html(chart_document);
+    passed = expect(chart_export.find("class=\"rich-output\"") != std::string::npos &&
+                        chart_export.find("data:image/svg+xml;charset=utf-8,") != std::string::npos &&
+                        chart_export.find("<script>") == std::string::npos,
+                    "expected SVG output to use a non-executable image data URI") &&
+             passed;
     passed = expect(service.handle({"DELETE", "/api/sessions/session-1", authorization, {}}).status == 204,
                     "expected session deletion") &&
              passed;
@@ -337,8 +352,19 @@ bool accepts_real_http_connections() {
                         "expected a real HTTP health response") &&
                  passed;
         passed = expect(app.find("Dune Notebook") != std::string::npos &&
-                            app.find("Content-Security-Policy:") != std::string::npos,
-                        "expected the embedded browser application and security headers") &&
+                            app.find("Content-Security-Policy:") != std::string::npos &&
+                            app.find("Notebook toolbar") != std::string::npos &&
+                            app.find("dune-notebook-theme") != std::string::npos &&
+                            app.find("Selected cell type") != std::string::npos &&
+                            app.find("cell-ring-travel") != std::string::npos &&
+                            app.find("animation: cell-ring-travel 6s linear infinite") != std::string::npos &&
+                            app.find("function lexDune(source)") != std::string::npos &&
+                            app.find("syntax-keyword") != std::string::npos &&
+                            app.find("syncCodeHighlight(source, highlight)") != std::string::npos &&
+                            app.find("data:image/svg+xml") != std::string::npos &&
+                            app.find("img-src 'self' data:") != std::string::npos &&
+                            app.find("creates one at the end") != std::string::npos,
+                        "expected the themed Jupyter-style browser application and security headers") &&
                  passed;
     } catch (const std::exception& error) {
         passed = expect(false, std::string("HTTP integration failed: ") + error.what()) && passed;
