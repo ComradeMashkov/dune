@@ -1,9 +1,12 @@
 #include "lsp/lsp_server.hpp"
 
+#include <algorithm>
 #include <iostream>
+#include <limits>
 #include <optional>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -33,6 +36,75 @@ bool has_completion(const std::vector<dune::lsp::CompletionItem>& completions, c
 
 std::string with_test_print(const std::string& source) {
     return source + "\nfn print<T>(__printed_value: T): unit { return; }";
+}
+
+std::size_t utf16_length(std::string_view value) {
+    std::size_t length = 0;
+    for (std::size_t index = 0; index < value.size();) {
+        const unsigned char lead = static_cast<unsigned char>(value[index]);
+        std::size_t width = 1;
+        std::size_t units = 1;
+        if ((lead & 0xe0U) == 0xc0U && index + 1 < value.size()) {
+            width = 2;
+        } else if ((lead & 0xf0U) == 0xe0U && index + 2 < value.size()) {
+            width = 3;
+        } else if ((lead & 0xf8U) == 0xf0U && index + 3 < value.size()) {
+            width = 4;
+            units = 2;
+        }
+        index += width;
+        length += units;
+    }
+    return length;
+}
+
+std::size_t semantic_name_index(const std::vector<std::string>& names, std::string_view name) {
+    for (std::size_t index = 0; index < names.size(); ++index) {
+        if (names[index] == name) {
+            return index;
+        }
+    }
+    return std::numeric_limits<std::size_t>::max();
+}
+
+std::size_t semantic_modifier_mask(std::string_view name) {
+    const std::size_t index = semantic_name_index(dune::lsp::semantic_token_modifiers(), name);
+    return index == std::numeric_limits<std::size_t>::max() ? 0 : std::size_t{1} << index;
+}
+
+std::optional<dune::lsp::SemanticToken>
+semantic_token_at_byte_offset(const std::string& source, const std::vector<dune::lsp::SemanticToken>& tokens,
+                              std::size_t byte_offset, std::size_t byte_length) {
+    const std::size_t line = static_cast<std::size_t>(
+        std::count(source.begin(), source.begin() + static_cast<std::ptrdiff_t>(byte_offset), '\n'));
+    const std::size_t line_start = byte_offset == 0 ? 0 : source.rfind('\n', byte_offset - 1) + 1;
+    const std::size_t character = utf16_length(std::string_view(source).substr(line_start, byte_offset - line_start));
+    const std::size_t length = utf16_length(std::string_view(source).substr(byte_offset, byte_length));
+    for (const dune::lsp::SemanticToken& token : tokens) {
+        if (token.line == line && token.start_character == character && token.length == length) {
+            return token;
+        }
+    }
+    return std::nullopt;
+}
+
+bool expect_semantic_token(const std::string& source, const std::vector<dune::lsp::SemanticToken>& tokens,
+                           std::string_view unique_context, std::size_t offset_in_context, std::size_t byte_length,
+                           std::string_view expected_type, std::size_t required_modifiers, const char* message) {
+    const std::size_t context = source.find(unique_context);
+    if (!expect(context != std::string::npos, message)) {
+        return false;
+    }
+    const std::optional<dune::lsp::SemanticToken> token =
+        semantic_token_at_byte_offset(source, tokens, context + offset_in_context, byte_length);
+    if (!expect(token.has_value(), message)) {
+        return false;
+    }
+    const dune::lsp::SemanticToken actual = token.value_or(dune::lsp::SemanticToken{});
+    const std::size_t expected_index = semantic_name_index(dune::lsp::semantic_token_types(), expected_type);
+    return expect(actual.token_type == expected_index &&
+                      (actual.token_modifiers & required_modifiers) == required_modifiers,
+                  message);
 }
 
 bool diagnoses_valid_source() {
@@ -505,6 +577,226 @@ bool hovers_aliased_module_member() {
     return passed;
 }
 
+bool exposes_complete_semantic_token_legend() {
+    const std::vector<std::string>& types = dune::lsp::semantic_token_types();
+    const std::vector<std::string>& modifiers = dune::lsp::semantic_token_modifiers();
+    bool passed = true;
+    for (const std::string_view type :
+         {"namespace", "type", "struct", "enum", "interface", "typeParameter", "parameter", "variable", "property",
+          "enumMember", "function", "method", "keyword", "comment", "string", "number", "operator", "decorator"}) {
+        passed = expect(semantic_name_index(types, type) != std::numeric_limits<std::size_t>::max(),
+                        "expected semantic token type in legend") &&
+                 passed;
+    }
+    for (const std::string_view modifier :
+         {"declaration", "definition", "readonly", "static", "defaultLibrary", "documentation", "modification"}) {
+        passed = expect(semantic_name_index(modifiers, modifier) != std::numeric_limits<std::size_t>::max(),
+                        "expected semantic token modifier in legend") &&
+                 passed;
+    }
+    return passed;
+}
+
+bool highlights_semantic_symbols_and_literals() {
+    const std::string source = "/** Computes a boxed value. */\n"
+                               "module sample;\n"
+                               "import math as m;\n"
+                               "record Box<T> {\n"
+                               "    value: T,\n"
+                               "    static fn make(value: T): Box<T> { return Box { value: value }; },\n"
+                               "    fn get(): T { return this.value; }\n"
+                               "}\n"
+                               "contract Show { show(value: text): text; }\n"
+                               "choice Maybe<T> { Some(T), None }\n"
+                               "type IntBox = Box<int>;\n"
+                               "foreknown const LIMIT: int = 3;\n"
+                               "foreign fn native(value: int): int = \"native\";\n"
+                               "fn compute(input: IntBox): int {\n"
+                               "    made: Box<int> = Box.make(2);\n"
+                               "    local: int = m.square(made.get()) + input.value + LIMIT;\n"
+                               "    return native(local);\n"
+                               "}\n";
+    const std::vector<dune::lsp::SemanticToken> tokens = dune::lsp::semantic_tokens_source(source);
+    const std::size_t declaration = semantic_modifier_mask("declaration");
+    const std::size_t definition = semantic_modifier_mask("definition");
+    const std::size_t readonly = semantic_modifier_mask("readonly");
+    const std::size_t static_modifier = semantic_modifier_mask("static");
+    const std::size_t default_library = semantic_modifier_mask("defaultLibrary");
+    const std::size_t documentation = semantic_modifier_mask("documentation");
+
+    bool passed = true;
+    passed = expect_semantic_token(source, tokens, "/** Computes a boxed value. */", 0, 30, "comment", documentation,
+                                   "expected documentation comment token") &&
+             passed;
+    passed = expect_semantic_token(source, tokens, "module sample", 7, 6, "namespace", declaration | definition,
+                                   "expected module declaration token") &&
+             passed;
+    passed = expect_semantic_token(source, tokens, "import math", 7, 4, "namespace", default_library,
+                                   "expected standard-library namespace token") &&
+             passed;
+    passed = expect_semantic_token(source, tokens, "record Box", 7, 3, "struct", declaration | definition,
+                                   "expected record declaration token") &&
+             passed;
+    passed = expect_semantic_token(source, tokens, "Box<T>", 4, 1, "typeParameter", declaration | definition,
+                                   "expected generic declaration token") &&
+             passed;
+    passed = expect_semantic_token(source, tokens, "    value: T", 4, 5, "property", declaration | definition,
+                                   "expected field declaration token") &&
+             passed;
+    passed =
+        expect_semantic_token(source, tokens, "fn make", 3, 4, "method", declaration | definition | static_modifier,
+                              "expected static method declaration token") &&
+        passed;
+    passed = expect_semantic_token(source, tokens, "make(value", 5, 5, "parameter", declaration,
+                                   "expected parameter declaration token") &&
+             passed;
+    passed = expect_semantic_token(source, tokens, "return this.value", 7, 4, "parameter", readonly,
+                                   "expected receiver parameter reference") &&
+             passed;
+    passed = expect_semantic_token(source, tokens, "contract Show", 9, 4, "interface", declaration | definition,
+                                   "expected contract declaration token") &&
+             passed;
+    passed = expect_semantic_token(source, tokens, "Some(T)", 0, 4, "enumMember", declaration | definition,
+                                   "expected choice variant token") &&
+             passed;
+    passed = expect_semantic_token(source, tokens, "type IntBox", 5, 6, "type", declaration | definition,
+                                   "expected type alias declaration token") &&
+             passed;
+    passed = expect_semantic_token(source, tokens, "foreknown const LIMIT", 0, 9, "keyword", 0,
+                                   "expected foreknown keyword token") &&
+             passed;
+    passed = expect_semantic_token(source, tokens, "const LIMIT", 6, 5, "variable", declaration | readonly,
+                                   "expected readonly constant declaration token") &&
+             passed;
+    passed = expect_semantic_token(source, tokens, "fn native", 3, 6, "function", declaration | definition,
+                                   "expected foreign function token") &&
+             passed;
+    passed = expect_semantic_token(source, tokens, "\"native\"", 0, 8, "string", 0, "expected string literal token") &&
+             passed;
+    passed = expect_semantic_token(source, tokens, "local: int", 0, 5, "variable", declaration,
+                                   "expected local declaration token") &&
+             passed;
+    passed = expect_semantic_token(source, tokens, "Box.make", 4, 4, "method", static_modifier,
+                                   "expected static method reference token") &&
+             passed;
+    passed = expect_semantic_token(source, tokens, "m.square", 0, 1, "namespace", default_library,
+                                   "expected module reference token") &&
+             passed;
+    passed = expect_semantic_token(source, tokens, "m.square", 2, 6, "function", default_library,
+                                   "expected module function token") &&
+             passed;
+    passed = expect_semantic_token(source, tokens, "made.get", 5, 3, "method", 0, "expected receiver method token") &&
+             passed;
+    passed = expect_semantic_token(source, tokens, "input.value", 0, 5, "parameter", 0,
+                                   "expected parameter reference token") &&
+             passed;
+    passed =
+        expect_semantic_token(source, tokens, "input.value", 6, 5, "property", 0, "expected member property token") &&
+        passed;
+    passed = expect_semantic_token(source, tokens, "value + LIMIT", 6, 1, "operator", 0, "expected operator token") &&
+             passed;
+    passed =
+        expect_semantic_token(source, tokens, "= 3;", 2, 1, "number", 0, "expected numeric literal token") && passed;
+    passed = expect_semantic_token(source, tokens, "native(local)", 0, 6, "function", 0,
+                                   "expected direct function reference token") &&
+             passed;
+    return passed;
+}
+
+bool highlights_utf8_with_utf16_ranges() {
+    const std::string source = "// 🙂 docs\nvalue: text = \"é\" + \"🙂\";\n";
+    const std::vector<dune::lsp::SemanticToken> tokens = dune::lsp::semantic_tokens_source(source);
+    bool passed = true;
+    passed = expect_semantic_token(source, tokens, "// 🙂 docs", 0, 12, "comment", 0,
+                                   "expected UTF-8 comment semantic token") &&
+             passed;
+    passed = expect_semantic_token(source, tokens, "\"é\"", 0, 4, "string", 0,
+                                   "expected UTF-8 text literal semantic token") &&
+             passed;
+    passed = expect_semantic_token(source, tokens, "\"🙂\"", 0, 6, "string", 0,
+                                   "expected astral text literal semantic token") &&
+             passed;
+
+    const std::size_t second_string = source.find("\"🙂\"");
+    const std::optional<dune::lsp::SemanticToken> token =
+        semantic_token_at_byte_offset(source, tokens, second_string, std::string("\"🙂\"").size());
+    passed = expect(token.has_value() && token->length == 4, "expected astral literal length in UTF-16 code units") &&
+             passed;
+    return passed;
+}
+
+bool highlights_valid_prefix_of_incomplete_source() {
+    const std::string source = "foreknown fn unfinished(value: text";
+    const std::vector<dune::lsp::SemanticToken> tokens = dune::lsp::semantic_tokens_source(source);
+    const std::size_t declaration = semantic_modifier_mask("declaration");
+    const std::size_t default_library = semantic_modifier_mask("defaultLibrary");
+    bool passed = true;
+    passed = expect_semantic_token(source, tokens, "foreknown", 0, 9, "keyword", 0,
+                                   "expected keyword in incomplete source") &&
+             passed;
+    passed = expect_semantic_token(source, tokens, "fn unfinished", 3, 10, "function", declaration,
+                                   "expected function in incomplete source") &&
+             passed;
+    passed = expect_semantic_token(source, tokens, "text", 0, 4, "type", default_library,
+                                   "expected builtin type in incomplete source") &&
+             passed;
+    return passed;
+}
+
+bool foreknown_keyword_has_no_definition() {
+    const std::string source = "foreknown const LIMIT: int = 3;\nvalue: int = LIMIT;";
+    bool passed = true;
+    passed = expect(!dune::lsp::definition_source(source, {}, {}, 0, 2).has_value(),
+                    "expected no definition for foreknown keyword") &&
+             passed;
+    passed = expect(!dune::lsp::definition_source(source, {}, {}, 0, 11).has_value(),
+                    "expected no definition for const keyword") &&
+             passed;
+    return passed;
+}
+
+bool serves_lsp_semantic_tokens_and_keyword_definition_regression() {
+    const std::string uri = "file:///tmp/semantic.dn";
+    const std::string source = "foreknown const LIMIT: int = 3;\\nvalue: int = LIMIT;";
+    const std::string initialize = R"({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}})";
+    const std::string opened = R"({"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":")" +
+                               uri + R"(","languageId":"dune","version":1,"text":")" + source + R"("}}})";
+    const std::string semantic =
+        R"({"jsonrpc":"2.0","id":2,"method":"textDocument/semanticTokens/full","params":{"textDocument":{"uri":")" +
+        uri + R"("}}})";
+    const std::string definition =
+        R"({"jsonrpc":"2.0","id":3,"method":"textDocument/definition","params":{"textDocument":{"uri":")" + uri +
+        R"("},"position":{"line":0,"character":2}}})";
+    const std::string shutdown = R"({"jsonrpc":"2.0","id":4,"method":"shutdown","params":null})";
+    const std::string exit = R"({"jsonrpc":"2.0","method":"exit","params":null})";
+
+    std::istringstream input(lsp_message(initialize) + lsp_message(opened) + lsp_message(semantic) +
+                             lsp_message(definition) + lsp_message(shutdown) + lsp_message(exit));
+    std::ostringstream output;
+    dune::lsp::run(input, output);
+    const std::string text = output.str();
+
+    bool passed = true;
+    passed =
+        expect(text.find("\"semanticTokensProvider\"") != std::string::npos, "expected semantic tokens capability") &&
+        passed;
+    passed =
+        expect(text.find("\"tokenTypes\":[\"namespace\"") != std::string::npos, "expected semantic token legend") &&
+        passed;
+    passed = expect(text.find("\"id\":2,\"result\":{\"data\":[") != std::string::npos,
+                    "expected full semantic token response") &&
+             passed;
+    const std::string keyword_data =
+        "\"data\":[0,0,9," + std::to_string(semantic_name_index(dune::lsp::semantic_token_types(), "keyword")) + ",0";
+    passed = expect(text.find(keyword_data) != std::string::npos,
+                    "expected delta-encoded foreknown keyword semantic token") &&
+             passed;
+    passed = expect(text.find("\"id\":3,\"result\":null") != std::string::npos,
+                    "expected null definition response for foreknown") &&
+             passed;
+    return passed;
+}
+
 bool serves_lsp_definition() {
     const std::string uri = "file:///tmp/main.dn";
     const std::string source = "fn value(): int { return 7; }\\nprint(value());\\n"
@@ -626,6 +918,12 @@ int main() {
     passed = hovers_selective_import_symbol() && passed;
     passed = defines_aliased_module_name() && passed;
     passed = hovers_aliased_module_member() && passed;
+    passed = exposes_complete_semantic_token_legend() && passed;
+    passed = highlights_semantic_symbols_and_literals() && passed;
+    passed = highlights_utf8_with_utf16_ranges() && passed;
+    passed = highlights_valid_prefix_of_incomplete_source() && passed;
+    passed = foreknown_keyword_has_no_definition() && passed;
+    passed = serves_lsp_semantic_tokens_and_keyword_definition_regression() && passed;
     passed = serves_lsp_definition() && passed;
     passed = publishes_lsp_diagnostics() && passed;
     passed = serves_lsp_completions_and_hover() && passed;

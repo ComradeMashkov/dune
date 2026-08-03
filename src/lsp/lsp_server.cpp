@@ -21,7 +21,9 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <tuple>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 namespace dune::lsp {
@@ -43,6 +45,62 @@ constexpr std::size_t completion_kind_enum_member = 20;
 constexpr std::size_t completion_kind_constant = 21;
 constexpr std::size_t completion_kind_struct = 22;
 constexpr std::size_t completion_kind_type_parameter = 25;
+
+enum class SemanticTokenType : std::size_t {
+    namespace_type,
+    type,
+    struct_type,
+    enum_type,
+    interface_type,
+    type_parameter,
+    parameter,
+    variable,
+    property,
+    enum_member,
+    function,
+    method,
+    keyword,
+    comment,
+    string,
+    number,
+    operator_type,
+    decorator,
+};
+
+enum class SemanticTokenModifier : std::size_t {
+    declaration,
+    definition,
+    readonly,
+    static_modifier,
+    default_library,
+    documentation,
+    modification,
+};
+
+constexpr std::size_t semantic_modifier(SemanticTokenModifier modifier) {
+    return std::size_t{1} << static_cast<std::size_t>(modifier);
+}
+
+struct SemanticClassification {
+    SemanticTokenType type = SemanticTokenType::variable;
+    std::size_t modifiers = 0;
+};
+
+struct SourceLocationKey {
+    std::size_t line = 1;
+    std::size_t column = 1;
+
+    bool operator==(const SourceLocationKey&) const = default;
+};
+
+struct SourceLocationKeyHash {
+    std::size_t operator()(const SourceLocationKey& location) const {
+        return location.line * 1315423911U + location.column;
+    }
+};
+
+using SemanticLocationMap = std::unordered_map<SourceLocationKey, SemanticClassification, SourceLocationKeyHash>;
+using SemanticSymbolTable = std::unordered_map<std::string, SemanticClassification>;
 
 struct SourcePosition {
     std::size_t line = 0;
@@ -1867,6 +1925,947 @@ std::optional<std::string> builtin_hover(const Token& token) {
     return code_hover("keyword " + token.lexeme);
 }
 
+bool is_builtin_type_token(TokenType type) {
+    switch (type) {
+    case TokenType::int_keyword:
+    case TokenType::bool_keyword:
+    case TokenType::i8_keyword:
+    case TokenType::i16_keyword:
+    case TokenType::i32_keyword:
+    case TokenType::i64_keyword:
+    case TokenType::isize_keyword:
+    case TokenType::u8_keyword:
+    case TokenType::u16_keyword:
+    case TokenType::u32_keyword:
+    case TokenType::u64_keyword:
+    case TokenType::usize_keyword:
+    case TokenType::uint8_keyword:
+    case TokenType::uint16_keyword:
+    case TokenType::uint32_keyword:
+    case TokenType::uint64_keyword:
+    case TokenType::real32_keyword:
+    case TokenType::real64_keyword:
+    case TokenType::real_keyword:
+    case TokenType::glyph_keyword:
+    case TokenType::text_keyword:
+    case TokenType::unit_keyword:
+        return true;
+    default:
+        return false;
+    }
+}
+
+bool is_semantic_keyword_token(TokenType type) {
+    return type >= TokenType::const_keyword && type <= TokenType::false_keyword && !is_builtin_type_token(type);
+}
+
+bool is_semantic_operator_token(TokenType type) {
+    switch (type) {
+    case TokenType::plus:
+    case TokenType::minus:
+    case TokenType::arrow:
+    case TokenType::star:
+    case TokenType::slash:
+    case TokenType::percent:
+    case TokenType::bang:
+    case TokenType::equal:
+    case TokenType::equal_equal:
+    case TokenType::fat_arrow:
+    case TokenType::bang_equal:
+    case TokenType::amp_amp:
+    case TokenType::pipe_pipe:
+    case TokenType::greater:
+    case TokenType::greater_equal:
+    case TokenType::less:
+    case TokenType::less_equal:
+    case TokenType::dot_dot:
+    case TokenType::question:
+        return true;
+    default:
+        return false;
+    }
+}
+
+std::vector<Token> tokenize_semantic_best_effort(const std::string& source) {
+    Lexer lexer(source);
+    std::vector<Token> tokens;
+    while (true) {
+        try {
+            Token token = lexer.next_token();
+            tokens.push_back(token);
+            if (token.type == TokenType::eof) {
+                break;
+            }
+        } catch (const std::exception&) {
+            break;
+        }
+    }
+    return tokens;
+}
+
+std::size_t utf16_length(std::string_view value) {
+    std::size_t length = 0;
+    for (std::size_t index = 0; index < value.size();) {
+        const unsigned char lead = static_cast<unsigned char>(value[index]);
+        std::size_t width = 1;
+        std::size_t units = 1;
+        if ((lead & 0xe0U) == 0xc0U && index + 1 < value.size()) {
+            width = 2;
+        } else if ((lead & 0xf0U) == 0xe0U && index + 2 < value.size()) {
+            width = 3;
+        } else if ((lead & 0xf8U) == 0xf0U && index + 3 < value.size()) {
+            width = 4;
+            units = 2;
+        }
+        index += width;
+        length += units;
+    }
+    return length;
+}
+
+std::vector<std::size_t> source_line_starts(const std::string& source) {
+    std::vector<std::size_t> starts{0};
+    for (std::size_t index = 0; index < source.size(); ++index) {
+        if (source[index] == '\n') {
+            starts.push_back(index + 1);
+        }
+    }
+    return starts;
+}
+
+void add_semantic_span(std::vector<SemanticToken>& result, const std::string& source,
+                       const std::vector<std::size_t>& line_starts, std::size_t line, std::size_t byte_start,
+                       std::size_t byte_length, SemanticClassification classification) {
+    if (line >= line_starts.size() || byte_length == 0) {
+        return;
+    }
+
+    const std::size_t line_start = line_starts[line];
+    const std::size_t line_end = line + 1 < line_starts.size() ? line_starts[line + 1] - 1 : source.size();
+    if (line_start + byte_start >= line_end || line_start + byte_start + byte_length > line_end) {
+        return;
+    }
+
+    const std::string_view prefix(source.data() + line_start, byte_start);
+    const std::string_view token(source.data() + line_start + byte_start, byte_length);
+    result.push_back(SemanticToken{line, utf16_length(prefix), utf16_length(token),
+                                   static_cast<std::size_t>(classification.type), classification.modifiers});
+}
+
+void add_comment_span(std::vector<SemanticToken>& result, const std::string& source,
+                      const std::vector<std::size_t>& line_starts, std::size_t begin, std::size_t end,
+                      bool documentation) {
+    const SemanticClassification classification{
+        SemanticTokenType::comment,
+        documentation ? semantic_modifier(SemanticTokenModifier::documentation) : 0,
+    };
+    std::size_t cursor = begin;
+    while (cursor < end) {
+        const auto upper = std::upper_bound(line_starts.begin(), line_starts.end(), cursor);
+        const std::size_t line = static_cast<std::size_t>(std::distance(line_starts.begin(), upper) - 1);
+        const std::size_t segment_end = std::min(end, source.find('\n', cursor));
+        const std::size_t actual_end = segment_end == std::string::npos ? end : segment_end;
+        const std::size_t token_end =
+            actual_end > cursor && source[actual_end - 1] == '\r' ? actual_end - 1 : actual_end;
+        if (token_end > cursor) {
+            add_semantic_span(result, source, line_starts, line, cursor - line_starts[line], token_end - cursor,
+                              classification);
+        }
+        if (actual_end >= end) {
+            break;
+        }
+        cursor = actual_end + 1;
+    }
+}
+
+void add_comment_tokens(std::vector<SemanticToken>& result, const std::string& source,
+                        const std::vector<std::size_t>& line_starts) {
+    for (std::size_t index = 0; index < source.size();) {
+        if (source[index] == '"' || source[index] == '\'') {
+            const char quote = source[index++];
+            while (index < source.size()) {
+                if (source[index] == '\\' && index + 1 < source.size()) {
+                    index += 2;
+                } else if (source[index++] == quote) {
+                    break;
+                }
+            }
+            continue;
+        }
+
+        if (source[index] != '/' || index + 1 >= source.size()) {
+            ++index;
+            continue;
+        }
+
+        if (source[index + 1] == '/') {
+            const std::size_t begin = index;
+            const bool documentation = index + 2 < source.size() && source[index + 2] == '/';
+            index = source.find('\n', index + 2);
+            if (index == std::string::npos) {
+                index = source.size();
+            }
+            add_comment_span(result, source, line_starts, begin, index, documentation);
+            continue;
+        }
+
+        if (source[index + 1] == '*') {
+            const std::size_t begin = index;
+            const bool documentation = index + 2 < source.size() && source[index + 2] == '*';
+            const std::size_t close = source.find("*/", index + 2);
+            index = close == std::string::npos ? source.size() : close + 2;
+            add_comment_span(result, source, line_starts, begin, index, documentation);
+            continue;
+        }
+
+        ++index;
+    }
+}
+
+SemanticClassification declared_symbol(SemanticTokenType type, std::size_t modifiers = 0, bool is_definition = true) {
+    modifiers |= semantic_modifier(SemanticTokenModifier::declaration);
+    if (is_definition) {
+        modifiers |= semantic_modifier(SemanticTokenModifier::definition);
+    }
+    return SemanticClassification{type, modifiers};
+}
+
+void mark_semantic_location(SemanticLocationMap& locations, SourceLocation location,
+                            SemanticClassification classification) {
+    if (location.line != 0 && location.column != 0) {
+        locations[SourceLocationKey{location.line, location.column}] = classification;
+    }
+}
+
+SemanticClassification declaration_classification(const Statement& statement) {
+    switch (statement.kind) {
+    case StatementKind::function:
+        return declared_symbol(SemanticTokenType::function);
+    case StatementKind::const_statement:
+        return declared_symbol(SemanticTokenType::variable, semantic_modifier(SemanticTokenModifier::readonly));
+    case StatementKind::struct_statement:
+        return declared_symbol(SemanticTokenType::struct_type);
+    case StatementKind::enum_statement:
+        return declared_symbol(SemanticTokenType::enum_type);
+    case StatementKind::contract_statement:
+        return declared_symbol(SemanticTokenType::interface_type);
+    case StatementKind::type_alias_statement:
+        return declared_symbol(SemanticTokenType::type);
+    default:
+        return declared_symbol(SemanticTokenType::variable);
+    }
+}
+
+bool is_semantic_declaration_kind(StatementKind kind) {
+    switch (kind) {
+    case StatementKind::binding:
+    case StatementKind::const_statement:
+    case StatementKind::function:
+    case StatementKind::struct_statement:
+    case StatementKind::enum_statement:
+    case StatementKind::contract_statement:
+    case StatementKind::type_alias_statement:
+        return true;
+    default:
+        return false;
+    }
+}
+
+void collect_global_semantic_symbols(const Program& program, SemanticSymbolTable& symbols) {
+    for (const Statement& statement : program.statements) {
+        if (is_semantic_declaration_kind(statement.kind)) {
+            symbols[statement.name] = declaration_classification(statement);
+        }
+        if (statement.kind == StatementKind::enum_statement) {
+            for (const Parameter& variant : statement.parameters) {
+                symbols[variant.name] = declared_symbol(SemanticTokenType::enum_member);
+            }
+        }
+        if (statement.kind == StatementKind::method_block) {
+            for (const Statement& method : statement.body) {
+                symbols[method.name] = declared_symbol(
+                    SemanticTokenType::method,
+                    method.is_static_record_member ? semantic_modifier(SemanticTokenModifier::static_modifier) : 0);
+            }
+        }
+    }
+}
+
+void collect_semantic_metadata(const std::vector<Statement>& statements,
+                               std::unordered_set<std::string>& type_parameters,
+                               std::unordered_set<std::string>& static_methods) {
+    for (const Statement& statement : statements) {
+        for (const GenericParameter& parameter : statement.generic_parameters) {
+            type_parameters.insert(parameter.name);
+        }
+        if (statement.kind == StatementKind::function && statement.is_static_record_member) {
+            static_methods.insert(statement.name);
+        }
+        collect_semantic_metadata(statement.body, type_parameters, static_methods);
+        collect_semantic_metadata(statement.else_body, type_parameters, static_methods);
+    }
+}
+
+using SemanticScopes = std::vector<SemanticSymbolTable>;
+
+std::optional<SemanticClassification>
+lookup_semantic_symbol(const SemanticScopes& scopes, const SemanticSymbolTable& globals, const std::string& name) {
+    for (auto scope = scopes.rbegin(); scope != scopes.rend(); ++scope) {
+        if (const auto found = scope->find(name); found != scope->end()) {
+            SemanticClassification reference = found->second;
+            reference.modifiers &= ~(semantic_modifier(SemanticTokenModifier::declaration) |
+                                     semantic_modifier(SemanticTokenModifier::definition));
+            return reference;
+        }
+    }
+    if (const auto found = globals.find(name); found != globals.end()) {
+        SemanticClassification reference = found->second;
+        reference.modifiers &= ~(semantic_modifier(SemanticTokenModifier::declaration) |
+                                 semantic_modifier(SemanticTokenModifier::definition));
+        return reference;
+    }
+    return std::nullopt;
+}
+
+bool is_builtin_function_name(std::string_view name) {
+    return name == "print" || name == "format" || name.starts_with("__");
+}
+
+void classify_expression_semantics(const Expression& expression, SemanticLocationMap& locations,
+                                   const SemanticScopes& scopes, const SemanticSymbolTable& globals,
+                                   bool modification = false) {
+    if (expression.kind == ExpressionKind::identifier) {
+        SemanticClassification classification = lookup_semantic_symbol(scopes, globals, expression.lexeme)
+                                                    .value_or(SemanticClassification{SemanticTokenType::variable, 0});
+        if (expression.lexeme == "this" || expression.lexeme == "self") {
+            classification = SemanticClassification{SemanticTokenType::parameter,
+                                                    semantic_modifier(SemanticTokenModifier::readonly)};
+        }
+        if (modification) {
+            classification.modifiers |= semantic_modifier(SemanticTokenModifier::modification);
+        }
+        mark_semantic_location(locations, expression.location, classification);
+        return;
+    }
+
+    if (expression.kind == ExpressionKind::call) {
+        SemanticClassification classification = lookup_semantic_symbol(scopes, globals, expression.lexeme)
+                                                    .value_or(SemanticClassification{SemanticTokenType::function, 0});
+        if (is_builtin_function_name(expression.lexeme)) {
+            classification = SemanticClassification{SemanticTokenType::function,
+                                                    semantic_modifier(SemanticTokenModifier::default_library)};
+        }
+        mark_semantic_location(locations, expression.location, classification);
+        for (const std::unique_ptr<Expression>& argument : expression.arguments) {
+            classify_expression_semantics(*argument, locations, scopes, globals);
+        }
+        return;
+    }
+
+    if (expression.kind == ExpressionKind::struct_literal) {
+        SemanticClassification classification{SemanticTokenType::struct_type, 0};
+        if (const auto found = globals.find(expression.lexeme); found != globals.end()) {
+            classification = found->second;
+            classification.modifiers &= ~(semantic_modifier(SemanticTokenModifier::declaration) |
+                                          semantic_modifier(SemanticTokenModifier::definition));
+        }
+        // Qualified literals keep the location of their module qualifier; the
+        // token pass classifies `module.Record` without overwriting `module`.
+        if (expression.lexeme.find('.') == std::string::npos) {
+            mark_semantic_location(locations, expression.location, classification);
+        }
+        for (const std::unique_ptr<Expression>& argument : expression.arguments) {
+            classify_expression_semantics(*argument, locations, scopes, globals);
+        }
+        return;
+    }
+
+    if (expression.kind == ExpressionKind::array_comprehension) {
+        if (expression.right != nullptr) {
+            classify_expression_semantics(*expression.right, locations, scopes, globals);
+        }
+        SemanticScopes comprehension_scopes = scopes;
+        comprehension_scopes.push_back({{expression.lexeme, SemanticClassification{SemanticTokenType::variable, 0}}});
+        if (expression.left != nullptr) {
+            classify_expression_semantics(*expression.left, locations, comprehension_scopes, globals);
+        }
+        for (const std::unique_ptr<Expression>& argument : expression.arguments) {
+            classify_expression_semantics(*argument, locations, comprehension_scopes, globals);
+        }
+        return;
+    }
+
+    if (expression.left != nullptr) {
+        classify_expression_semantics(*expression.left, locations, scopes, globals, modification);
+    }
+    if (expression.right != nullptr) {
+        classify_expression_semantics(*expression.right, locations, scopes, globals);
+    }
+    for (const std::unique_ptr<Expression>& argument : expression.arguments) {
+        classify_expression_semantics(*argument, locations, scopes, globals);
+    }
+}
+
+void classify_statement_semantics(const std::vector<Statement>& statements, SemanticLocationMap& locations,
+                                  SemanticScopes& scopes, const SemanticSymbolTable& globals,
+                                  std::optional<SemanticClassification> callable_classification = std::nullopt);
+
+void classify_callable_semantics(const Statement& statement, SemanticClassification classification,
+                                 SemanticLocationMap& locations, SemanticScopes& scopes,
+                                 const SemanticSymbolTable& globals) {
+    mark_semantic_location(locations, statement.location, classification);
+    SemanticSymbolTable callable_scope;
+    for (const GenericParameter& parameter : statement.generic_parameters) {
+        const SemanticClassification generic = declared_symbol(SemanticTokenType::type_parameter);
+        mark_semantic_location(locations, parameter.location, generic);
+        callable_scope[parameter.name] = generic;
+    }
+    for (const Parameter& parameter : statement.parameters) {
+        const SemanticClassification value = declared_symbol(SemanticTokenType::parameter, 0, false);
+        mark_semantic_location(locations, parameter.location, value);
+        callable_scope[parameter.name] = value;
+    }
+    scopes.push_back(std::move(callable_scope));
+    classify_statement_semantics(statement.body, locations, scopes, globals);
+    scopes.pop_back();
+}
+
+void classify_statement_semantics(const std::vector<Statement>& statements, SemanticLocationMap& locations,
+                                  SemanticScopes& scopes, const SemanticSymbolTable& globals,
+                                  std::optional<SemanticClassification> callable_classification) {
+    for (const Statement& statement : statements) {
+        switch (statement.kind) {
+        case StatementKind::function:
+            classify_callable_semantics(statement,
+                                        callable_classification.value_or(declaration_classification(statement)),
+                                        locations, scopes, globals);
+            break;
+        case StatementKind::method_block:
+            for (const Statement& method : statement.body) {
+                classify_callable_semantics(
+                    method,
+                    declared_symbol(
+                        SemanticTokenType::method,
+                        method.is_static_record_member ? semantic_modifier(SemanticTokenModifier::static_modifier) : 0),
+                    locations, scopes, globals);
+            }
+            break;
+        case StatementKind::struct_statement:
+            for (const GenericParameter& generic : statement.generic_parameters) {
+                mark_semantic_location(locations, generic.location, declared_symbol(SemanticTokenType::type_parameter));
+            }
+            for (const Parameter& field : statement.parameters) {
+                mark_semantic_location(locations, field.location, declared_symbol(SemanticTokenType::property));
+                if (field.default_value != nullptr) {
+                    classify_expression_semantics(*field.default_value, locations, scopes, globals);
+                }
+            }
+            for (const Statement& method : statement.body) {
+                classify_callable_semantics(
+                    method,
+                    declared_symbol(
+                        SemanticTokenType::method,
+                        method.is_static_record_member ? semantic_modifier(SemanticTokenModifier::static_modifier) : 0),
+                    locations, scopes, globals);
+            }
+            break;
+        case StatementKind::enum_statement:
+            for (const GenericParameter& generic : statement.generic_parameters) {
+                mark_semantic_location(locations, generic.location, declared_symbol(SemanticTokenType::type_parameter));
+            }
+            for (const Parameter& variant : statement.parameters) {
+                mark_semantic_location(locations, variant.location, declared_symbol(SemanticTokenType::enum_member));
+            }
+            break;
+        case StatementKind::contract_statement:
+            for (const Statement& method : statement.body) {
+                classify_callable_semantics(method, declared_symbol(SemanticTokenType::method, 0, false), locations,
+                                            scopes, globals);
+            }
+            break;
+        case StatementKind::type_alias_statement:
+            for (const GenericParameter& generic : statement.generic_parameters) {
+                mark_semantic_location(locations, generic.location, declared_symbol(SemanticTokenType::type_parameter));
+            }
+            break;
+        case StatementKind::const_statement:
+            if (statement.expression != nullptr) {
+                classify_expression_semantics(*statement.expression, locations, scopes, globals);
+            }
+            if (!scopes.empty()) {
+                scopes.back()[statement.name] = SemanticClassification{
+                    SemanticTokenType::variable, semantic_modifier(SemanticTokenModifier::readonly)};
+            }
+            break;
+        case StatementKind::binding:
+            if (statement.expression != nullptr) {
+                classify_expression_semantics(*statement.expression, locations, scopes, globals);
+            }
+            mark_semantic_location(locations, statement.location,
+                                   declared_symbol(SemanticTokenType::variable, 0, false));
+            if (!scopes.empty()) {
+                scopes.back()[statement.name] = SemanticClassification{SemanticTokenType::variable, 0};
+            }
+            break;
+        case StatementKind::assign:
+            if (statement.target != nullptr) {
+                classify_expression_semantics(*statement.target, locations, scopes, globals, true);
+            }
+            if (statement.expression != nullptr) {
+                classify_expression_semantics(*statement.expression, locations, scopes, globals);
+            }
+            break;
+        case StatementKind::for_in_statement: {
+            if (statement.expression != nullptr) {
+                classify_expression_semantics(*statement.expression, locations, scopes, globals);
+            }
+            scopes.push_back({{statement.name, SemanticClassification{SemanticTokenType::variable, 0}}});
+            classify_statement_semantics(statement.body, locations, scopes, globals);
+            scopes.pop_back();
+            break;
+        }
+        case StatementKind::for_statement: {
+            scopes.emplace_back();
+            if (statement.initializer != nullptr) {
+                const Statement& initializer = *statement.initializer;
+                if (initializer.expression != nullptr) {
+                    classify_expression_semantics(*initializer.expression, locations, scopes, globals);
+                }
+                if (initializer.target != nullptr) {
+                    classify_expression_semantics(*initializer.target, locations, scopes, globals, true);
+                }
+                if (initializer.kind == StatementKind::binding) {
+                    mark_semantic_location(locations, initializer.location,
+                                           declared_symbol(SemanticTokenType::variable, 0, false));
+                    scopes.back()[initializer.name] = SemanticClassification{SemanticTokenType::variable, 0};
+                }
+            }
+            if (statement.expression != nullptr) {
+                classify_expression_semantics(*statement.expression, locations, scopes, globals);
+            }
+            classify_statement_semantics(statement.body, locations, scopes, globals);
+            if (statement.increment != nullptr) {
+                if (statement.increment->target != nullptr) {
+                    classify_expression_semantics(*statement.increment->target, locations, scopes, globals, true);
+                }
+                if (statement.increment->expression != nullptr) {
+                    classify_expression_semantics(*statement.increment->expression, locations, scopes, globals);
+                }
+            }
+            scopes.pop_back();
+            break;
+        }
+        default:
+            if (statement.expression != nullptr) {
+                classify_expression_semantics(*statement.expression, locations, scopes, globals);
+            }
+            if (statement.target != nullptr) {
+                classify_expression_semantics(*statement.target, locations, scopes, globals, true);
+            }
+            if (statement.initializer != nullptr) {
+                if (statement.initializer->expression != nullptr) {
+                    classify_expression_semantics(*statement.initializer->expression, locations, scopes, globals);
+                }
+            }
+            if (statement.increment != nullptr && statement.increment->expression != nullptr) {
+                classify_expression_semantics(*statement.increment->expression, locations, scopes, globals);
+            }
+            if (!statement.body.empty()) {
+                scopes.emplace_back();
+                classify_statement_semantics(statement.body, locations, scopes, globals);
+                scopes.pop_back();
+            }
+            if (!statement.else_body.empty()) {
+                scopes.emplace_back();
+                classify_statement_semantics(statement.else_body, locations, scopes, globals);
+                scopes.pop_back();
+            }
+            break;
+        }
+    }
+}
+
+bool path_is_within(const std::filesystem::path& path, const std::filesystem::path& root) {
+    std::error_code error;
+    const std::filesystem::path canonical_path = std::filesystem::weakly_canonical(path, error);
+    if (error) {
+        return false;
+    }
+    const std::filesystem::path canonical_root = std::filesystem::weakly_canonical(root, error);
+    if (error) {
+        return false;
+    }
+    const auto mismatch =
+        std::mismatch(canonical_root.begin(), canonical_root.end(), canonical_path.begin(), canonical_path.end());
+    return mismatch.first == canonical_root.end();
+}
+
+bool is_standard_library_module(const std::string& module_name, const std::filesystem::path& source_directory) {
+    const std::optional<std::filesystem::path> module = find_module_file(module_name, source_directory);
+    if (!module.has_value()) {
+        return false;
+    }
+    if (path_is_within(*module, DUNE_STDLIB_PATH)) {
+        return true;
+    }
+    const char* configured = std::getenv("DUNE_STDLIB_PATH");
+    if (configured == nullptr) {
+        return false;
+    }
+#if defined(_WIN32)
+    constexpr char delimiter = ';';
+#else
+    constexpr char delimiter = ':';
+#endif
+    std::stringstream roots(configured);
+    std::string root;
+    while (std::getline(roots, root, delimiter)) {
+        if (!root.empty() && path_is_within(*module, root)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+struct SemanticModuleInfo {
+    SemanticSymbolTable members;
+    std::size_t modifiers = 0;
+};
+
+using SemanticModuleTable = std::unordered_map<std::string, SemanticModuleInfo>;
+
+SemanticModuleInfo load_semantic_module(const std::string& module_name, const std::filesystem::path& source_directory) {
+    SemanticModuleInfo result;
+    if (is_standard_library_module(module_name, source_directory)) {
+        result.modifiers = semantic_modifier(SemanticTokenModifier::default_library);
+    }
+    const std::optional<std::filesystem::path> path = find_module_file(module_name, source_directory);
+    if (!path.has_value()) {
+        return result;
+    }
+    const std::optional<Program> program = parse_program_best_effort(read_text_file(*path));
+    if (!program.has_value()) {
+        return result;
+    }
+    for (const Statement& statement : program->statements) {
+        if (is_semantic_declaration_kind(statement.kind)) {
+            SemanticClassification classification = declaration_classification(statement);
+            classification.modifiers = result.modifiers;
+            result.members[statement.name] = classification;
+        }
+        if (statement.kind == StatementKind::enum_statement) {
+            for (const Parameter& variant : statement.parameters) {
+                result.members[variant.name] = SemanticClassification{SemanticTokenType::enum_member, result.modifiers};
+            }
+        }
+        if (statement.kind == StatementKind::method_block) {
+            for (const Statement& method : statement.body) {
+                result.members[method.name] = SemanticClassification{SemanticTokenType::method, result.modifiers};
+            }
+        }
+    }
+    return result;
+}
+
+std::optional<SemanticClassification> module_member_semantic_classification(const SemanticModuleTable& modules,
+                                                                            const std::string& module_name,
+                                                                            const std::string& member) {
+    const auto module = modules.find(module_name);
+    if (module == modules.end()) {
+        return std::nullopt;
+    }
+    const auto symbol = module->second.members.find(member);
+    if (symbol != module->second.members.end()) {
+        return symbol->second;
+    }
+    return std::nullopt;
+}
+
+bool token_is_identifier(const Token& token) {
+    return token.type == TokenType::identifier || token.type == TokenType::text_keyword;
+}
+
+void set_token_classification(std::vector<std::optional<SemanticClassification>>& classifications, std::size_t index,
+                              SemanticClassification classification) {
+    if (index < classifications.size()) {
+        classifications[index] = classification;
+    }
+}
+
+void classify_import_tokens(const std::vector<Token>& tokens,
+                            std::vector<std::optional<SemanticClassification>>& classifications,
+                            const SourceImports& imports, const SemanticModuleTable& modules) {
+    for (std::size_t index = 0; index < tokens.size(); ++index) {
+        if (tokens[index].type == TokenType::import_keyword && index + 1 < tokens.size() &&
+            token_is_identifier(tokens[index + 1])) {
+            const auto module = modules.find(tokens[index + 1].lexeme);
+            const std::size_t modifiers = module == modules.end() ? 0 : module->second.modifiers;
+            set_token_classification(classifications, index + 1,
+                                     SemanticClassification{SemanticTokenType::namespace_type, modifiers});
+            if (index + 3 < tokens.size() && token_is_identifier(tokens[index + 2]) &&
+                tokens[index + 2].lexeme == "as" && token_is_identifier(tokens[index + 3])) {
+                set_token_classification(classifications, index + 2,
+                                         SemanticClassification{SemanticTokenType::keyword, 0});
+                set_token_classification(classifications, index + 3,
+                                         declared_symbol(SemanticTokenType::namespace_type, modifiers, false));
+            }
+        }
+
+        if (token_is_identifier(tokens[index]) && tokens[index].lexeme == "from" && index + 2 < tokens.size() &&
+            token_is_identifier(tokens[index + 1]) && tokens[index + 2].type == TokenType::import_keyword) {
+            set_token_classification(classifications, index, SemanticClassification{SemanticTokenType::keyword, 0});
+            const std::string& module = tokens[index + 1].lexeme;
+            const auto module_info = modules.find(module);
+            const std::size_t modifiers = module_info == modules.end() ? 0 : module_info->second.modifiers;
+            set_token_classification(classifications, index + 1,
+                                     SemanticClassification{SemanticTokenType::namespace_type, modifiers});
+            for (std::size_t cursor = index + 3;
+                 cursor < tokens.size() && tokens[cursor].type != TokenType::semicolon &&
+                 tokens[cursor].type != TokenType::eof;
+                 ++cursor) {
+                if (!token_is_identifier(tokens[cursor])) {
+                    continue;
+                }
+                set_token_classification(classifications, cursor,
+                                         module_member_semantic_classification(modules, module, tokens[cursor].lexeme)
+                                             .value_or(SemanticClassification{SemanticTokenType::variable, modifiers}));
+            }
+        }
+    }
+
+    for (std::size_t index = 2; index < tokens.size(); ++index) {
+        if (tokens[index - 1].type != TokenType::dot || !token_is_identifier(tokens[index]) ||
+            !token_is_identifier(tokens[index - 2])) {
+            continue;
+        }
+        const std::string module = resolve_module_alias(imports, tokens[index - 2].lexeme);
+        if (std::ranges::find(imports.modules, module) == imports.modules.end()) {
+            continue;
+        }
+        set_token_classification(classifications, index,
+                                 module_member_semantic_classification(modules, module, tokens[index].lexeme)
+                                     .value_or(SemanticClassification{
+                                         index + 1 < tokens.size() && tokens[index + 1].type == TokenType::left_paren
+                                             ? SemanticTokenType::function
+                                             : SemanticTokenType::property,
+                                         modules.contains(module) ? modules.at(module).modifiers : 0}));
+    }
+}
+
+std::vector<SemanticToken> build_semantic_tokens(const std::string& source,
+                                                 const std::filesystem::path& source_directory) {
+    const std::vector<Token> tokens = tokenize_semantic_best_effort(source);
+    std::vector<std::optional<SemanticClassification>> classifications(tokens.size());
+    const std::vector<std::size_t> line_starts = source_line_starts(source);
+
+    SemanticLocationMap locations;
+    SemanticSymbolTable globals;
+    std::unordered_set<std::string> type_parameters;
+    std::unordered_set<std::string> static_methods;
+    const SourceImports imports = scan_imports(source);
+    SemanticModuleTable modules;
+    for (const std::string& module : imports.modules) {
+        modules.try_emplace(module, load_semantic_module(module, source_directory));
+        globals[module] =
+            SemanticClassification{SemanticTokenType::namespace_type, modules.find(module)->second.modifiers};
+    }
+    for (const auto& [alias, module] : imports.aliases) {
+        globals[alias] =
+            SemanticClassification{SemanticTokenType::namespace_type, modules.find(module)->second.modifiers};
+    }
+    for (const auto& [symbol, module] : imports.selective) {
+        globals[symbol] = module_member_semantic_classification(modules, module, symbol)
+                              .value_or(SemanticClassification{SemanticTokenType::variable, 0});
+    }
+    if (std::optional<Program> program = parse_program_best_effort(source)) {
+        collect_global_semantic_symbols(*program, globals);
+        collect_semantic_metadata(program->statements, type_parameters, static_methods);
+        SemanticScopes scopes(1);
+        classify_statement_semantics(program->statements, locations, scopes, globals);
+    }
+
+    for (std::size_t index = 0; index < tokens.size(); ++index) {
+        const Token& token = tokens[index];
+        if (is_builtin_type_token(token.type)) {
+            classifications[index] = SemanticClassification{SemanticTokenType::type,
+                                                            semantic_modifier(SemanticTokenModifier::default_library)};
+        } else if (is_semantic_keyword_token(token.type)) {
+            classifications[index] = SemanticClassification{SemanticTokenType::keyword, 0};
+        } else if (token.type == TokenType::number || token.type == TokenType::float_number) {
+            classifications[index] = SemanticClassification{SemanticTokenType::number, 0};
+        } else if (token.type == TokenType::char_literal || token.type == TokenType::string_literal) {
+            classifications[index] = SemanticClassification{SemanticTokenType::string, 0};
+        } else if (is_semantic_operator_token(token.type)) {
+            classifications[index] = SemanticClassification{SemanticTokenType::operator_type, 0};
+        }
+    }
+
+    classify_import_tokens(tokens, classifications, imports, modules);
+
+    for (std::size_t index = 0; index + 1 < tokens.size(); ++index) {
+        const Token& token = tokens[index];
+        if (token.type == TokenType::record_keyword && token_is_identifier(tokens[index + 1])) {
+            set_token_classification(classifications, index + 1, declared_symbol(SemanticTokenType::struct_type));
+        } else if (token.type == TokenType::choice_keyword && token_is_identifier(tokens[index + 1])) {
+            set_token_classification(classifications, index + 1, declared_symbol(SemanticTokenType::enum_type));
+        } else if (token.type == TokenType::contract_keyword && token_is_identifier(tokens[index + 1])) {
+            set_token_classification(classifications, index + 1, declared_symbol(SemanticTokenType::interface_type));
+        } else if (token.type == TokenType::type_keyword && token_is_identifier(tokens[index + 1])) {
+            set_token_classification(classifications, index + 1, declared_symbol(SemanticTokenType::type));
+        } else if (token.type == TokenType::const_keyword && token_is_identifier(tokens[index + 1])) {
+            set_token_classification(classifications, index + 1,
+                                     declared_symbol(SemanticTokenType::variable,
+                                                     semantic_modifier(SemanticTokenModifier::readonly), false));
+        } else if (token.type == TokenType::fn_keyword && token_is_identifier(tokens[index + 1])) {
+            set_token_classification(classifications, index + 1, declared_symbol(SemanticTokenType::function));
+        } else if (token.type == TokenType::for_keyword && index + 2 < tokens.size() &&
+                   token_is_identifier(tokens[index + 1]) && tokens[index + 2].type == TokenType::in_keyword) {
+            set_token_classification(classifications, index + 1,
+                                     declared_symbol(SemanticTokenType::variable, 0, false));
+        }
+        if (token_is_identifier(token) && token.lexeme == "module" && token_is_identifier(tokens[index + 1])) {
+            set_token_classification(classifications, index, SemanticClassification{SemanticTokenType::keyword, 0});
+            set_token_classification(classifications, index + 1, declared_symbol(SemanticTokenType::namespace_type));
+        }
+        if (token.type == TokenType::derive_keyword) {
+            for (std::size_t cursor = index + 1; cursor < tokens.size() && tokens[cursor].type != TokenType::left_brace;
+                 ++cursor) {
+                if (token_is_identifier(tokens[cursor])) {
+                    set_token_classification(classifications, cursor,
+                                             SemanticClassification{SemanticTokenType::decorator, 0});
+                }
+            }
+        }
+    }
+
+    for (std::size_t index = 0; index < tokens.size(); ++index) {
+        if (!token_is_identifier(tokens[index])) {
+            continue;
+        }
+        if (const auto exact = locations.find(SourceLocationKey{tokens[index].line, tokens[index].column});
+            exact != locations.end()) {
+            classifications[index] = exact->second;
+            continue;
+        }
+        if (classifications[index].has_value()) {
+            continue;
+        }
+        if (index > 0 && tokens[index - 1].type == TokenType::dot) {
+            const bool builtin_method = tokens[index].lexeme == "len" || tokens[index].lexeme == "push" ||
+                                        tokens[index].lexeme == "pop" || tokens[index].lexeme == "clear" ||
+                                        tokens[index].lexeme == "is_empty" || tokens[index].lexeme == "contains" ||
+                                        tokens[index].lexeme == "starts_with";
+            classifications[index] = SemanticClassification{
+                index + 1 < tokens.size() && tokens[index + 1].type == TokenType::left_paren
+                    ? SemanticTokenType::method
+                    : SemanticTokenType::property,
+                (static_methods.contains(tokens[index].lexeme)
+                     ? semantic_modifier(SemanticTokenModifier::static_modifier)
+                     : 0) |
+                    (builtin_method ? semantic_modifier(SemanticTokenModifier::default_library) : 0)};
+            continue;
+        }
+        if (type_parameters.contains(tokens[index].lexeme)) {
+            classifications[index] = SemanticClassification{SemanticTokenType::type_parameter, 0};
+            continue;
+        }
+        const bool imported_namespace =
+            imports.aliases.contains(tokens[index].lexeme) ||
+            std::ranges::find(imports.modules, tokens[index].lexeme) != imports.modules.end();
+        if (imported_namespace) {
+            const std::string module = resolve_module_alias(imports, tokens[index].lexeme);
+            classifications[index] = SemanticClassification{
+                SemanticTokenType::namespace_type, modules.contains(module) ? modules.at(module).modifiers : 0};
+            continue;
+        }
+        if (const auto selective = imports.selective.find(tokens[index].lexeme); selective != imports.selective.end()) {
+            classifications[index] =
+                module_member_semantic_classification(modules, selective->second, tokens[index].lexeme)
+                    .value_or(SemanticClassification{SemanticTokenType::variable, 0});
+            continue;
+        }
+        if (const auto global = globals.find(tokens[index].lexeme); global != globals.end()) {
+            SemanticClassification reference = global->second;
+            reference.modifiers &= ~(semantic_modifier(SemanticTokenModifier::declaration) |
+                                     semantic_modifier(SemanticTokenModifier::definition));
+            classifications[index] = reference;
+            continue;
+        }
+        if (index + 1 < tokens.size() && tokens[index + 1].type == TokenType::left_paren) {
+            classifications[index] = SemanticClassification{
+                SemanticTokenType::function, is_builtin_function_name(tokens[index].lexeme)
+                                                 ? semantic_modifier(SemanticTokenModifier::default_library)
+                                                 : 0};
+            continue;
+        }
+        if (index + 1 < tokens.size() && tokens[index + 1].type == TokenType::colon) {
+            classifications[index] = SemanticClassification{SemanticTokenType::property, 0};
+            continue;
+        }
+        if ((index > 0 &&
+             (tokens[index - 1].type == TokenType::colon || tokens[index - 1].type == TokenType::with_keyword ||
+              tokens[index - 1].type == TokenType::is_keyword || tokens[index - 1].type == TokenType::to_keyword)) ||
+            (!tokens[index].lexeme.empty() && std::isupper(static_cast<unsigned char>(tokens[index].lexeme.front())))) {
+            classifications[index] = SemanticClassification{SemanticTokenType::type, 0};
+            continue;
+        }
+        classifications[index] = SemanticClassification{SemanticTokenType::variable, 0};
+    }
+
+    std::vector<SemanticToken> result;
+    result.reserve(tokens.size());
+    for (std::size_t index = 0; index < tokens.size(); ++index) {
+        if (!classifications[index].has_value() || tokens[index].type == TokenType::eof) {
+            continue;
+        }
+        add_semantic_span(result, source, line_starts, tokens[index].line - 1, tokens[index].column - 1,
+                          tokens[index].lexeme.size(), classifications[index].value_or(SemanticClassification{}));
+    }
+    add_comment_tokens(result, source, line_starts);
+    std::ranges::sort(result, [](const SemanticToken& left, const SemanticToken& right) {
+        return std::tie(left.line, left.start_character, left.length) <
+               std::tie(right.line, right.start_character, right.length);
+    });
+    result.erase(std::unique(result.begin(), result.end(),
+                             [](const SemanticToken& left, const SemanticToken& right) {
+                                 return left.line == right.line && left.start_character == right.start_character &&
+                                        left.length == right.length;
+                             }),
+                 result.end());
+    return result;
+}
+
+std::string semantic_token_names_json(const std::vector<std::string>& names) {
+    std::string json = "[";
+    for (std::size_t index = 0; index < names.size(); ++index) {
+        if (index != 0) {
+            json += ',';
+        }
+        json += '"' + json_escape(names[index]) + '"';
+    }
+    return json + ']';
+}
+
+std::string semantic_tokens_json(const std::vector<SemanticToken>& tokens) {
+    std::string json = "{\"data\":[";
+    std::size_t previous_line = 0;
+    std::size_t previous_start = 0;
+    for (std::size_t index = 0; index < tokens.size(); ++index) {
+        const SemanticToken& token = tokens[index];
+        const std::size_t delta_line = token.line - previous_line;
+        const std::size_t delta_start =
+            delta_line == 0 ? token.start_character - previous_start : token.start_character;
+        if (index != 0) {
+            json += ',';
+        }
+        json += std::to_string(delta_line) + ',' + std::to_string(delta_start) + ',' + std::to_string(token.length) +
+                ',' + std::to_string(token.token_type) + ',' + std::to_string(token.token_modifiers);
+        previous_line = token.line;
+        previous_start = token.start_character;
+    }
+    return json + "]}";
+}
+
 std::string document_text_for(const std::unordered_map<std::string, std::string>& documents, const std::string& uri) {
     const auto document = documents.find(uri);
     if (document != documents.end()) {
@@ -1912,6 +2911,27 @@ bool read_message(std::istream& input, std::string& body) {
 }
 
 } // namespace
+
+const std::vector<std::string>& semantic_token_types() {
+    static const std::vector<std::string> names = {
+        "namespace", "type",     "struct",   "enum",       "interface", "typeParameter",
+        "parameter", "variable", "property", "enumMember", "function",  "method",
+        "keyword",   "comment",  "string",   "number",     "operator",  "decorator",
+    };
+    return names;
+}
+
+const std::vector<std::string>& semantic_token_modifiers() {
+    static const std::vector<std::string> names = {
+        "declaration", "definition", "readonly", "static", "defaultLibrary", "documentation", "modification",
+    };
+    return names;
+}
+
+std::vector<SemanticToken> semantic_tokens_source(const std::string& source, const std::string& uri,
+                                                  const std::filesystem::path& source_directory) {
+    return build_semantic_tokens(source, source_directory_for(uri, source_directory));
+}
 
 std::vector<Diagnostic> diagnose_source(const std::string& source, const std::string& uri,
                                         const std::filesystem::path& source_directory) {
@@ -2200,8 +3220,17 @@ std::optional<DefinitionLocation> definition_source(const std::string& source, c
                                                     std::size_t character) {
     const std::filesystem::path directory = source_directory_for(uri, source_directory);
     const std::vector<Token> tokens = tokenize_best_effort(source);
-    const std::optional<std::size_t> token_index =
-        identifier_token_at_position(tokens, SourcePosition{line, character});
+    const SourcePosition position{line, character};
+    // Do not let a keyword click drift to a nearby identifier at a token
+    // boundary. In particular, `foreknown` and `const` must behave identically
+    // and can never be definition targets.
+    if (const std::optional<std::size_t> token = token_index_at_position(tokens, position); token.has_value()) {
+        const TokenType type = tokens[token.value_or(0)].type;
+        if (type == TokenType::foreknown_keyword || type == TokenType::const_keyword) {
+            return std::nullopt;
+        }
+    }
+    const std::optional<std::size_t> token_index = identifier_token_at_position(tokens, position);
     if (!token_index.has_value()) {
         return std::nullopt;
     }
@@ -2302,13 +3331,18 @@ int run(std::istream& input, std::ostream& output) {
 
         if (method == "initialize") {
             const std::string response_id = id.empty() ? "null" : id;
-            write_message(output,
-                          "{\"jsonrpc\":\"2.0\",\"id\":" + response_id +
-                              ",\"result\":{\"capabilities\":{\"textDocumentSync\":1,\"completionProvider\":{"
-                              "\"triggerCharacters\":[\".\",\":\"],\"resolveProvider\":false},\"hoverProvider\":true,"
-                              "\"definitionProvider\":true},"
-                              "\"serverInfo\":{\"name\":\"dune-"
-                              "lsp\",\"version\":\"0.1.0\"}}}");
+            const std::string semantic_legend =
+                "{\"tokenTypes\":" + semantic_token_names_json(semantic_token_types()) +
+                ",\"tokenModifiers\":" + semantic_token_names_json(semantic_token_modifiers()) + "}";
+            std::string response = "{\"jsonrpc\":\"2.0\",\"id\":";
+            response += response_id;
+            response += ",\"result\":{\"capabilities\":{\"textDocumentSync\":1,\"completionProvider\":{"
+                        "\"triggerCharacters\":[\".\",\":\"],\"resolveProvider\":false},\"hoverProvider\":true,"
+                        "\"definitionProvider\":true,\"semanticTokensProvider\":{\"legend\":";
+            response += semantic_legend;
+            response +=
+                ",\"full\":true,\"range\":false}},\"serverInfo\":{\"name\":\"dune-lsp\",\"version\":\"0.1.0\"}}}";
+            write_message(output, response);
             continue;
         }
 
@@ -2353,6 +3387,15 @@ int run(std::istream& input, std::ostream& output) {
                 definition_source(text, uri, {}, cursor.line, cursor.character);
             write_message(output, "{\"jsonrpc\":\"2.0\",\"id\":" + response_id + ",\"result\":" +
                                       (definition.has_value() ? definition_json(*definition) : "null") + "}");
+            continue;
+        }
+
+        if (method == "textDocument/semanticTokens/full") {
+            const std::string response_id = id.empty() ? "null" : id;
+            const std::string uri = find_json_string(message, "uri");
+            const std::string text = document_text_for(documents, uri);
+            write_message(output, "{\"jsonrpc\":\"2.0\",\"id\":" + response_id +
+                                      ",\"result\":" + semantic_tokens_json(semantic_tokens_source(text, uri)) + "}");
             continue;
         }
 
