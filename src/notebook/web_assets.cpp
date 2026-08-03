@@ -57,6 +57,12 @@ std::string_view notebook_app_html() {
       --output: #25272b;
       --shadow: 0 7px 24px rgba(0, 0, 0, .34);
     }
+    @property --cell-ring-angle {
+      syntax: "<angle>";
+      inherits: false;
+      initial-value: 0deg;
+    }
+    @keyframes cell-ring-spin { to { --cell-ring-angle: 360deg; } }
     * { box-sizing: border-box; }
     [hidden] { display: none !important; }
     html { min-height: 100%; background: var(--page); }
@@ -257,14 +263,30 @@ std::string_view notebook_app_html() {
       grid-template-columns: 88px minmax(0, 1fr);
       gap: 0;
       margin: 7px 0;
-      padding: 5px 5px 5px 0;
-      border: 1px solid transparent;
-      border-left: 4px solid transparent;
-      border-radius: 2px;
+      padding: 6px;
+      border: 0;
+      border-radius: 4px;
     }
-    .cell:hover { border-color: var(--border); border-left-color: var(--border); }
-    .cell.selected { border-color: var(--accent); border-left-color: var(--accent); }
-    .cell.selected.edit-mode { border-color: var(--edit); border-left-color: var(--edit); }
+    .cell.selected {
+      --cell-ring-color: var(--accent);
+      box-shadow: inset 0 0 0 1px var(--border-strong);
+    }
+    .cell.selected.edit-mode { --cell-ring-color: var(--edit); }
+    .cell.selected::before {
+      content: "";
+      position: absolute;
+      z-index: 1;
+      inset: 0;
+      border-radius: inherit;
+      background: conic-gradient(from var(--cell-ring-angle), transparent 0deg 265deg,
+        var(--cell-ring-color) 310deg 348deg, transparent 360deg);
+      padding: 2px;
+      pointer-events: none;
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      animation: cell-ring-spin 2.4s linear infinite;
+    }
     .prompt {
       padding: 7px 10px 0 5px;
       color: var(--accent);
@@ -292,16 +314,25 @@ std::string_view notebook_app_html() {
       tab-size: 4;
       font: 13px/1.55 "SFMono-Regular", Consolas, "Liberation Mono", monospace;
     }
-    .code-source:focus { border-color: var(--edit); box-shadow: inset 0 0 0 1px var(--edit); }
+    .code-source:focus, .code-source:focus-visible {
+      border-color: var(--border-strong);
+      outline: 0;
+      box-shadow: none;
+    }
     .markdown-source {
       min-height: 90px;
       overflow: hidden;
-      border: 1px solid var(--edit);
+      border: 1px solid var(--border);
       border-radius: 2px;
       background: var(--surface);
       color: var(--text);
       padding: 10px 12px;
       font: 13px/1.55 "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    }
+    .markdown-source:focus, .markdown-source:focus-visible {
+      border-color: var(--border-strong);
+      outline: 0;
+      box-shadow: none;
     }
     .markdown-preview { min-height: 38px; padding: 4px 12px 8px; font-size: 14px; }
     .markdown-preview h1, .markdown-preview h2, .markdown-preview h3 {
@@ -378,6 +409,9 @@ std::string_view notebook_app_html() {
       .cell { grid-template-columns: 58px minmax(0, 1fr); }
       .prompt { padding-right: 5px; font-size: 10px; }
     }
+    @media (prefers-reduced-motion: reduce) {
+      .cell.selected::before { background: var(--cell-ring-color); animation: none; }
+    }
   </style>
 </head>
 <body>
@@ -451,7 +485,7 @@ std::string_view notebook_app_html() {
       <button id="add-code" title="Insert code cell below">+ Code</button>
       <button id="add-markdown" title="Insert Markdown cell below">+ Markdown</button>
       <div class="toolbar-separator"></div>
-      <button id="run" class="primary" title="Run selected cell (Shift+Enter)">▶ Run</button>
+      <button id="run" class="primary" title="Run selected cell (Shift+Enter runs and selects the next cell)">▶ Run</button>
       <button id="run-all" title="Run every code cell">Run all</button>
       <button id="restart" title="Restart the Dune VM kernel">Restart</button>
       <div class="toolbar-separator"></div>
@@ -479,7 +513,7 @@ std::string_view notebook_app_html() {
   <main class="notebook-main">
     <div class="notebook-context">
       <span>Dune VM</span><span>/</span><span id="current-path" class="context-path">No notebook open</span>
-      <span class="context-spacer"></span><span>Shift+Enter to run</span>
+      <span class="context-spacer"></span><span>Shift+Enter: run and select next</span>
     </div>
     <div id="workspace" class="workspace">
       <div class="welcome">Open a <code>.dnb</code> notebook from <strong>Files</strong>, or create a new one.</div>
@@ -662,6 +696,18 @@ std::string_view notebook_app_html() {
       }
     }
 
+    function selectNextCell(index) {
+      let next = index + 1;
+      if (next >= notebook.cells.length) {
+        notebook.cells.push(newCodeCell());
+        dirty = true;
+        next = notebook.cells.length - 1;
+      }
+      focusedCell = next;
+      renderNotebook();
+      selectCell(next, true);
+    }
+
     function moveCell(index, delta) {
       if (!notebook) return;
       const target = index + delta;
@@ -780,8 +826,10 @@ std::string_view notebook_app_html() {
           editor.onkeydown = event => {
             if (event.key === "Enter" && event.shiftKey) {
               event.preventDefault();
-              editor.blur();
-              selectCell(Math.min(index + 1, notebook.cells.length - 1));
+              runCell(index, true);
+            } else if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+              event.preventDefault();
+              runCell(index);
             }
           };
           editor.onblur = () => {
@@ -808,6 +856,9 @@ std::string_view notebook_app_html() {
             } else if (event.key === "Enter" && event.shiftKey) {
               event.preventDefault();
               runCell(index, true);
+            } else if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+              event.preventDefault();
+              runCell(index);
             }
           };
           setTimeout(() => autoSize(source), 0);
@@ -897,8 +948,11 @@ std::string_view notebook_app_html() {
     async function runCell(index = selectedIndex(), advance = false) {
       if (!notebook || !sessionId || index < 0) return;
       if (notebook.cells[index].cell_type === "markdown") {
-        focusedCell = advance ? Math.min(index + 1, notebook.cells.length - 1) : index;
-        renderNotebook();
+        if (advance) selectNextCell(index);
+        else {
+          focusedCell = index;
+          renderNotebook();
+        }
         setStatus(`Cell ${index + 1} rendered`);
         return;
       }
@@ -913,8 +967,12 @@ std::string_view notebook_app_html() {
         const data = await response.json();
         notebook = data.document;
         dirty = true;
-        focusedCell = advance ? Math.min(index + 1, notebook.cells.length - 1) : index;
-        renderNotebook();
+        if (advance) selectNextCell(index);
+        else {
+          focusedCell = index;
+          renderNotebook();
+          selectCell(index, true);
+        }
         setStatus(data.success ? `Cell ${index + 1} complete` : `Cell ${data.failed_cell + 1} failed`, !data.success);
       } catch (error) {
         setStatus(error.message, true);
@@ -1048,7 +1106,7 @@ std::string_view notebook_app_html() {
     bind("menu-markdown-type", () => setSelectedCellType("markdown"));
     bind("menu-restart", restartKernel);
     bind("menu-theme", toggleTheme);
-    bind("menu-shortcuts", () => alert("Shift+Enter  Run cell\nCmd/Ctrl+S  Save\nA  Insert code above\nB  Insert code below\nY  Change to Code\nM  Change to Markdown"));
+    bind("menu-shortcuts", () => alert("Shift+Enter  Run and select next cell (creates one at the end)\nCmd/Ctrl+Enter  Run and stay in cell\nCmd/Ctrl+S  Save\nA  Insert code above\nB  Insert code below\nY  Change to Code\nM  Change to Markdown"));
     cellTypeSelect.onchange = () => setSelectedCellType(cellTypeSelect.value);
 
     document.addEventListener("click", event => {
@@ -1068,7 +1126,13 @@ std::string_view notebook_app_html() {
       }
       if (["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName)) return;
       const key = event.key.toLowerCase();
-      if (key === "a") insertCell("code", "above");
+      if (event.key === "Enter" && event.shiftKey) {
+        event.preventDefault();
+        runCell(selectedIndex(), true);
+      } else if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        runCell();
+      } else if (key === "a") insertCell("code", "above");
       else if (key === "b") insertCell("code", "below");
       else if (key === "y") setSelectedCellType("code");
       else if (key === "m") setSelectedCellType("markdown");

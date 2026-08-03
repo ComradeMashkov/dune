@@ -345,7 +345,9 @@ bool accepts_real_http_connections() {
                             app.find("Content-Security-Policy:") != std::string::npos &&
                             app.find("Notebook toolbar") != std::string::npos &&
                             app.find("dune-notebook-theme") != std::string::npos &&
-                            app.find("Selected cell type") != std::string::npos,
+                            app.find("Selected cell type") != std::string::npos &&
+                            app.find("cell-ring-spin") != std::string::npos &&
+                            app.find("creates one at the end") != std::string::npos,
                         "expected the themed Jupyter-style browser application and security headers") &&
                  passed;
     } catch (const std::exception& error) {

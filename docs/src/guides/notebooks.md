@@ -21,6 +21,8 @@ browser workspace. The workspace includes:
 - Markdown and Dune code cell editing;
 - adding, moving, and deleting cells;
 - toolbar and keyboard cell-type switching (`Y` for code, `M` for Markdown);
+- `Shift+Enter` runs a cell and selects the next one, creating a Code cell at
+  the end; `Cmd/Ctrl+Enter` runs without moving;
 - Run Cell and Run All actions;
 - persistent kernel sessions with Restart Kernel;
 - structured stdout and stderr output;
