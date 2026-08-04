@@ -1,0 +1,281 @@
+{
+  "dune_notebook": 1,
+  "metadata": {
+    "title": "Complete stats module reference"
+  },
+  "cells": [
+    {
+      "id": "overview",
+      "cell_type": "markdown",
+      "source": "# Complete stats module reference\n\nThis executable notebook covers every feature group in the pure-Dune statistics module: descriptive and robust statistics, estimator conventions, quantiles, frequencies, weighted data, relationships, regression and metrics, histograms, time windows, scaling, probability distributions, explicit errors, matrix.Vector/Matrix, seeded random, and plot integration. Run cells with **Shift+Enter**."
+    },
+    {
+      "id": "mathematical-notation",
+      "cell_type": "markdown",
+      "source": "## Mathematical notation\n\nMarkdown cells render LaTeX inline: the sample mean is $\\bar{x}$, an estimator is $\\hat{\\theta}$, a vector is $\\vec{v}$, and $\\sqrt[n]{x}$ is an indexed root. Display equations use double-dollar or bracket delimiters:\n\n$$\n\\bar{x} = \\frac{1}{n}\\sum_{i=1}^{n}x_i, \\qquad s^2 = \\frac{1}{n-1}\\sum_{i=1}^{n}(x_i-\\bar{x})^2\n$$\n\nCommon structures such as binomial coefficients, matrices, and cases are supported too:\n\n\\[\n\\binom{n}{k} = \\frac{n!}{k!(n-k)!}, \\qquad R = \\begin{pmatrix}1 & \\rho \\\\ \\rho & 1\\end{pmatrix}\n\\]\n\n\\[\nf(x) = \\begin{cases}x^2 & x \\ge 0 \\\\ 0 & x < 0\\end{cases}\n\\]"
+    },
+    {
+      "id": "imports",
+      "cell_type": "code",
+      "source": "import fmt;\nimport matrix;\nimport plot;\nimport random;\nimport stats;",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "conventions",
+      "cell_type": "markdown",
+      "source": "## Conventions\n\nPartial operations return Outcome<T, text>: valid input produces Done, while empty data, bad parameters, and incompatible shapes produce a readable Failed value. variance/stddev are **sample** estimators; pvariance/pstdev are **population** estimators. Their denominators are intentionally different:\n\n\\[\n\\sigma^2 = \\frac{1}{N}\\sum_{i=1}^{N}(x_i-\\mu)^2, \\qquad s^2 = \\frac{1}{n-1}\\sum_{i=1}^{n}(x_i-\\bar{x})^2\n\\]\n\nquantile takes 0..1, while percentile takes 0..100. Sorting-based operations copy their input."
+    },
+    {
+      "id": "core-reductions",
+      "cell_type": "code",
+      "source": "values = [1.0, 2.0, 3.0, 4.0, 5.0];\nfmt.format(\"count={}, sum={}, mean={}, min={}/{}, max={}/{}, range={}/{}, midrange={}\", stats.count(values), stats.sum(values), stats.mean(values).value_or(0.0), stats.minimum(values).value_or(0.0), stats.min(values).value_or(0.0), stats.maximum(values).value_or(0.0), stats.max(values).value_or(0.0), stats.data_range(values).value_or(0.0), stats.range(values).value_or(0.0), stats.midrange(values).value_or(0.0))",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "spread-and-means",
+      "cell_type": "code",
+      "source": "positive = [1.0, 2.0, 4.0, 8.0];\nfmt.format(\"pvar={}/{}, svar={}/{}, pstdev={}/{}, sstddev={}/{}, stderr={}, rms={}, geometric={}, harmonic={}, cv={}\", stats.pvariance(values).value_or(0.0), stats.population_variance(values).value_or(0.0), stats.variance(values).value_or(0.0), stats.sample_variance(values).value_or(0.0), stats.pstdev(values).value_or(0.0), stats.population_stddev(values).value_or(0.0), stats.stddev(values).value_or(0.0), stats.sample_stddev(values).value_or(0.0), stats.standard_error(values).value_or(0.0), stats.root_mean_square(values).value_or(0.0), stats.geometric_mean(positive).value_or(0.0), stats.harmonic_mean(positive).value_or(0.0), stats.coefficient_of_variation(values).value_or(0.0))",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "summary-record",
+      "cell_type": "code",
+      "source": "summary = stats.describe(values).value_or(stats.empty_summary());\nsummary.to_text()",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "quantile-intro",
+      "cell_type": "markdown",
+      "source": "## Quantiles and robust summaries\n\nThe default is Hyndman-Fan Type 7 linear interpolation (the common R/NumPy/Julia default). The explicit variants are linear, lower, higher, nearest, and midpoint.\n\n\\[\nh = (n-1)p, \\qquad Q(p) = x_{\\lfloor h \\rfloor} + (h-\\lfloor h \\rfloor)\\left(x_{\\lceil h \\rceil}-x_{\\lfloor h \\rfloor}\\right)\n\\]\n\nRobust spread summaries use $\\operatorname{IQR}=Q_3-Q_1$ and $\\operatorname{MAD}=\\operatorname{median}(|x_i-\\operatorname{median}(x)|)$."
+    },
+    {
+      "id": "quantiles",
+      "cell_type": "code",
+      "source": "quantile_data = [0.0, 10.0, 20.0, 30.0];\nempty_real: [real64] = [];\nquartile_values = stats.quantiles(quantile_data, [0.25, 0.5, 0.75]).value_or(empty_real);\nfive = stats.five_number_summary(quantile_data).value_or(stats.empty_five_number_summary());\nfmt.format(\"median={}/low={}/high={}; q25={}; p25={}; quartiles={},{},{}; five=[{},{},{},{},{}], iqr={}\", stats.median(quantile_data).value_or(0.0), stats.median_low(quantile_data).value_or(0.0), stats.median_high(quantile_data).value_or(0.0), stats.quantile(quantile_data, 0.25).value_or(0.0), stats.percentile(quantile_data, 25.0).value_or(0.0), quartile_values[0], quartile_values[1], quartile_values[2], five.minimum, five.first_quartile, five.median, five.third_quartile, five.maximum, five.iqr())",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "quantile-methods",
+      "cell_type": "code",
+      "source": "fmt.format(\"linear={}, lower={}, higher={}, nearest={}, midpoint={}\", stats.quantile_with(quantile_data, 0.25, \"linear\").value_or(0.0), stats.quantile_with(quantile_data, 0.25, \"lower\").value_or(0.0), stats.quantile_with(quantile_data, 0.25, \"higher\").value_or(0.0), stats.quantile_with(quantile_data, 0.25, \"nearest\").value_or(0.0), stats.quantile_with(quantile_data, 0.25, \"midpoint\").value_or(0.0))",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "robust-statistics",
+      "cell_type": "code",
+      "source": "outlier_data = [1.0, 2.0, 2.0, 3.0, 100.0];\nfmt.format(\"IQR={}, median AD={}, mean AD={}, trimmed mean={}, winsorized mean={}, percentile rank(3)={}\", stats.interquartile_range(outlier_data).value_or(0.0), stats.median_absolute_deviation(outlier_data).value_or(0.0), stats.mean_absolute_deviation(outlier_data).value_or(0.0), stats.trimmed_mean(outlier_data, 0.2).value_or(0.0), stats.winsorized_mean(outlier_data, 0.2).value_or(0.0), stats.percentile_rank(outlier_data, 3.0).value_or(0.0))",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "frequency-shape",
+      "cell_type": "code",
+      "source": "frequency_data = [1, 1, 2, 2, 3, 3, 3, 4];\nfrequency_table = stats.frequencies(frequency_data).value_or(stats.empty_frequency_table());\nall_modes = stats.modes(frequency_data).value_or(empty_real);\nshape_data = [1.0, 2.0, 3.0, 4.0, 8.0];\nfmt.format(\"distinct={}, mode={}, modes={}, first frequency={}, pop skew={}, sample skew={}, pop excess kurtosis={}, sample excess kurtosis={}\", frequency_table.len(), stats.mode(frequency_data).value_or(0.0), all_modes.len(), frequency_table.relative_frequencies[0], stats.population_skewness(shape_data).value_or(0.0), stats.skewness(shape_data).value_or(0.0), stats.population_excess_kurtosis(shape_data).value_or(0.0), stats.excess_kurtosis(shape_data).value_or(0.0))",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "weighted-title",
+      "cell_type": "markdown",
+      "source": "## Weighted statistics\n\nWeights are non-negative and must have positive total mass $W=\\sum_i w_i$. Population and unbiased reliability-weight sample estimators are separate:\n\n\\[\n\\bar{x}_w = \\frac{\\sum_i w_i x_i}{W}, \\qquad s_w^2 = \\frac{\\sum_i w_i(x_i-\\bar{x}_w)^2}{W-\\frac{\\sum_i w_i^2}{W}}\n\\]"
+    },
+    {
+      "id": "weighted-statistics",
+      "cell_type": "code",
+      "source": "weighted_values = [10.0, 20.0, 30.0];\nweights = [1.0, 3.0, 2.0];\nfmt.format(\"mean={}, pvar={}, svar={}, pstdev={}, sstddev={}, q50={}\", stats.weighted_mean(weighted_values, weights).value_or(0.0), stats.weighted_pvariance(weighted_values, weights).value_or(0.0), stats.weighted_variance(weighted_values, weights).value_or(0.0), stats.weighted_pstdev(weighted_values, weights).value_or(0.0), stats.weighted_stddev(weighted_values, weights).value_or(0.0), stats.weighted_quantile(weighted_values, weights, 0.5).value_or(0.0))",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "relationships-title",
+      "cell_type": "markdown",
+      "source": "## Relationships, ranks, model metrics, and regression\n\nPearson correlation normalizes sample covariance, while simple OLS estimates a line from centered cross-products:\n\n\\[\nr_{xy}=\\frac{\\sum_i(x_i-\\bar{x})(y_i-\\bar{y})}{\\sqrt{\\sum_i(x_i-\\bar{x})^2\\sum_i(y_i-\\bar{y})^2}}\n\\]\n\n\\[\n\\hat{y}=\\beta_0+\\beta_1x, \\qquad \\beta_1=\\frac{\\sum_i(x_i-\\bar{x})(y_i-\\bar{y})}{\\sum_i(x_i-\\bar{x})^2}, \\qquad \\beta_0=\\bar{y}-\\beta_1\\bar{x}\n\\]\n\nThe reported fit score is $R^2=1-\\frac{\\sum_i(y_i-\\hat{y}_i)^2}{\\sum_i(y_i-\\bar{y})^2}$."
+    },
+    {
+      "id": "relationships",
+      "cell_type": "code",
+      "source": "xs = [1.0, 2.0, 3.0, 4.0, 5.0];\nys = [3.2, 4.8, 7.1, 8.9, 11.2];\nfmt.format(\"pcov={}/{}, scov={}/{}, pearson={}/{}, spearman={}, Kendall tau-b={}, autocorrelation={}\", stats.pcovariance(xs, ys).value_or(0.0), stats.population_covariance(xs, ys).value_or(0.0), stats.covariance(xs, ys).value_or(0.0), stats.sample_covariance(xs, ys).value_or(0.0), stats.correlation(xs, ys).value_or(0.0), stats.pearson_correlation(xs, ys).value_or(0.0), stats.spearman_correlation(xs, ys).value_or(0.0), stats.kendall_tau(xs, ys).value_or(0.0), stats.autocorrelation(ys, 1).value_or(0.0))",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "regression",
+      "cell_type": "code",
+      "source": "model = stats.linear_regression(xs, ys).value_or(stats.empty_regression());\nmodel_alias = stats.simple_linear_regression(xs, ys).value_or(stats.empty_regression());\npredictions = model.predict_all(xs);\nfmt.format(\"y={}x+{}; alias slope={}; predict(6)={}; R2={}; correlation={}; RSS={}; MSE={}; RMSE={}; residual SE={}\", model.slope, model.intercept, model_alias.slope, model.predict(6.0), model.r_squared, model.correlation, model.residual_sum_squares, model.mean_squared_error, model.root_mean_squared_error, model.residual_standard_error)",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "model-metrics",
+      "cell_type": "code",
+      "source": "fmt.format(\"MAE={}, MSE={}, RMSE={}, R2={}\", stats.mean_absolute_error(ys, predictions).value_or(0.0), stats.mean_squared_error(ys, predictions).value_or(0.0), stats.root_mean_squared_error(ys, predictions).value_or(0.0), stats.coefficient_of_determination(ys, predictions).value_or(0.0))",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "regression-plot",
+      "cell_type": "code",
+      "source": "regression_chart = plot.scatter(xs, ys).label(\"observed\").add_line(xs, predictions).label(\"OLS fit\").title(\"Regression diagnostics\").x_label(\"x\").y_label(\"y\").legend(true).grid(5).size(720, 360);\nplot.svg(regression_chart)",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "histograms-title",
+      "cell_type": "markdown",
+      "source": "## Histograms, custom edges, digitizing, and plotting\n\nBins are left-closed/right-open except for the inclusive final edge. Explicit ranges retain underflow and overflow counts. For edges $e_0<\\cdots<e_m$, the ordinary bin count is\n\n\\[\nc_j=\\sum_{i=1}^{n}\\mathbf{1}\\left\\{e_j\\le x_i<e_{j+1}\\right\\}, \\qquad j=0,\\ldots,m-1\n\\]\n\nThe final bin additionally includes observations equal to $e_m$."
+    },
+    {
+      "id": "histograms",
+      "cell_type": "code",
+      "source": "hist_data = [0.0 - 1.0, 0.0, 0.5, 1.0, 1.5, 2.0, 3.0];\nauto_hist = stats.histogram(hist_data, 4).value_or(stats.empty_histogram());\nrange_hist = stats.histogram_range(hist_data, 2, 0.0, 2.0).value_or(stats.empty_histogram());\ncustom_hist = stats.histogram_with_edges(hist_data, [0.0, 1.0, 2.0]).value_or(stats.empty_histogram());\ncenters = custom_hist.bin_centers();\nreal_counts = custom_hist.counts_as_real64();\nrelative = custom_hist.relative_frequencies();\nfmt.format(\"{}; auto bins={}; range under/over={}/{}; custom counts={},{}, centers={}/{}, real count={}, relative first={}\", custom_hist.to_text(), auto_hist.len(), range_hist.underflow, range_hist.overflow, custom_hist.counts[0], custom_hist.counts[1], centers[0], centers[1], real_counts[0], relative[0])",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "binning",
+      "cell_type": "code",
+      "source": "empty_int: [int] = [];\nbin_ids = stats.digitize(hist_data, [0.0, 1.0, 2.0]).value_or(empty_int);\ninteger_counts = stats.bincount([0, 1, 1, 3, 3, 3], 5).value_or(empty_int);\nfmt.format(\"digitize first/last={}/{}; bincount len={}, counts(1/3)={}/{}\", bin_ids[0], bin_ids[bin_ids.len() - 1], integer_counts.len(), integer_counts[1], integer_counts[3])",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "histogram-plot",
+      "cell_type": "code",
+      "source": "plot.svg(plot.histogram(custom_hist).title(\"Validated custom-edge histogram\").x_label(\"bin center\").y_label(\"count\").grid(4).size(720, 360))",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "series-title",
+      "cell_type": "markdown",
+      "source": "## Cumulative, rolling, exponentially weighted, and scaling operations\n\n\\[\n\\operatorname{MA}_t^{(k)}=\\frac{1}{k}\\sum_{j=0}^{k-1}x_{t-j}, \\qquad \\operatorname{EMA}_t=\\alpha x_t+(1-\\alpha)\\operatorname{EMA}_{t-1}\n\\]\n\nStandardization and min-max scaling use $z_i=\\frac{x_i-\\bar{x}}{s}$ and $u_i=\\frac{x_i-x_{\\min}}{x_{\\max}-x_{\\min}}$."
+    },
+    {
+      "id": "cumulative-moving",
+      "cell_type": "code",
+      "source": "signal_values = [2.0, 4.0, 8.0, 6.0, 10.0, 12.0];\ncumulative = stats.cumulative_sum(signal_values);\ncumulative_average = stats.cumulative_mean(signal_values);\nrolling_sum = stats.moving_sum(signal_values, 3).value_or(empty_real);\nrolling_mean = stats.moving_mean(signal_values, 3).value_or(empty_real);\nrolling_pvar = stats.moving_pvariance(signal_values, 3).value_or(empty_real);\nrolling_var = stats.moving_variance(signal_values, 3).value_or(empty_real);\nrolling_std = stats.moving_stddev(signal_values, 3).value_or(empty_real);\nfmt.format(\"cumulative last={}/mean={}; first window sum/mean/pvar/svar/std={}/{}/{}/{}/{}\", cumulative[cumulative.len() - 1], cumulative_average[cumulative_average.len() - 1], rolling_sum[0], rolling_mean[0], rolling_pvar[0], rolling_var[0], rolling_std[0])",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "smoothing-scaling",
+      "cell_type": "code",
+      "source": "ema = stats.exponential_moving_average(signal_values, 0.4).value_or(empty_real);\nz_sample = stats.z_scores(signal_values).value_or(empty_real);\nz_population = stats.population_z_scores(signal_values).value_or(empty_real);\nscaled = stats.min_max_scale(signal_values).value_or(empty_real);\nfmt.format(\"EMA last={}; sample/pop first z={}/{}; min-max first/last={}/{}\", ema[ema.len() - 1], z_sample[0], z_population[0], scaled[0], scaled[scaled.len() - 1])",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "probability-title",
+      "cell_type": "markdown",
+      "source": "## Probability distributions and confidence intervals\n\nThese are deterministic pure-Dune approximations. The normal density and a two-sided mean interval are\n\n\\[\nf(x\\mid\\mu,\\sigma)=\\frac{1}{\\sigma\\sqrt{2\\pi}}\\exp\\left(-\\frac{(x-\\mu)^2}{2\\sigma^2}\\right), \\qquad \\bar{x}\\pm z_{1-\\alpha/2}\\frac{s}{\\sqrt{n}}\n\\]\n\nDiscrete helpers follow the usual definitions:\n\n\\[\n\\Pr(X=k)=\\binom{n}{k}p^k(1-p)^{n-k}, \\qquad \\Pr(Y=k)=e^{-\\lambda}\\frac{\\lambda^k}{k!}\n\\]"
+    },
+    {
+      "id": "normal-distribution",
+      "cell_type": "code",
+      "source": "normal_interval = stats.mean_confidence_interval(values, 0.95).value_or(stats.ConfidenceInterval { estimate: 0.0, lower: 0.0, upper: 0.0, margin: 0.0, confidence: 0.0 });\nfmt.format(\"standard PDF/CDF/q975={}/{}/{}; N(10,2) PDF/CDF/q95={}/{}/{}; mean CI={} +/- {} -> [{}, {}]\", stats.standard_normal_pdf(0.0), stats.standard_normal_cdf(0.0), stats.standard_normal_quantile(0.975).value_or(0.0), stats.normal_pdf(10.0, 10.0, 2.0).value_or(0.0), stats.normal_cdf(10.0, 10.0, 2.0).value_or(0.0), stats.normal_quantile(0.95, 10.0, 2.0).value_or(0.0), normal_interval.estimate, normal_interval.margin, normal_interval.lower, normal_interval.upper)",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "other-distributions",
+      "cell_type": "code",
+      "source": "fmt.format(\"uniform PDF/CDF={}/{}; exponential PDF/CDF={}/{}; Bernoulli={}, Binomial={}, Poisson PMF/CDF={}/{}\", stats.uniform_pdf(0.5, 0.0, 1.0).value_or(0.0), stats.uniform_cdf(0.5, 0.0, 1.0).value_or(0.0), stats.exponential_pdf(1.0, 2.0).value_or(0.0), stats.exponential_cdf(1.0, 2.0).value_or(0.0), stats.bernoulli_pmf(1, 0.25).value_or(0.0), stats.binomial_pmf(2, 4, 0.5).value_or(0.0), stats.poisson_pmf(2, 3.0).value_or(0.0), stats.poisson_cdf(2, 3.0).value_or(0.0))",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "errors-title",
+      "cell_type": "markdown",
+      "source": "## Explicit errors\n\nNo partial statistical operation invents a numeric answer. failure_or makes the exact validation message available without a VM panic."
+    },
+    {
+      "id": "errors",
+      "cell_type": "code",
+      "source": "invalid_mean = stats.mean(empty_real);\ninvalid_variance = stats.variance([1.0]);\ninvalid_quantile = stats.quantile(values, 1.5);\ninvalid_weights = stats.weighted_mean([1.0, 2.0], [1.0, 0.0 - 1.0]);\ninvalid_correlation = stats.correlation([1.0, 1.0], [2.0, 3.0]);\ninvalid_histogram = stats.histogram(values, 0);\ninvalid_distribution = stats.normal_pdf(0.0, 0.0, 0.0);\nfmt.format(\"{} | {} | {} | {} | {} | {} | {}\", invalid_mean.failure_or(\"\"), invalid_variance.failure_or(\"\"), invalid_quantile.failure_or(\"\"), invalid_weights.failure_or(\"\"), invalid_correlation.failure_or(\"\"), invalid_histogram.failure_or(\"\"), invalid_distribution.failure_or(\"\"))",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "vector-title",
+      "cell_type": "markdown",
+      "source": "## matrix.Vector<T> integration\n\nCore scalar functions keep the same names. Transforming functions return Vector<real64> so vector workflows remain typed."
+    },
+    {
+      "id": "vector-integration",
+      "cell_type": "code",
+      "source": "signal = matrix.vector(signal_values);\nvector_weights = matrix.vector([1.0, 1.0, 2.0, 2.0, 3.0, 3.0]);\nvector_z = stats.z_scores(signal).value_or(stats.empty_vector());\nvector_pz = stats.population_z_scores(signal).value_or(stats.empty_vector());\nvector_scaled = stats.min_max_scale(signal).value_or(stats.empty_vector());\nvector_moving = stats.moving_mean(signal, 3).value_or(stats.empty_vector());\nvector_moving_std = stats.moving_stddev(signal, 3).value_or(stats.empty_vector());\nvector_ema = stats.exponential_moving_average(signal, 0.4).value_or(stats.empty_vector());\nvector_hist = stats.histogram_range(signal, 4, 0.0, 16.0).value_or(stats.empty_histogram());\nfmt.format(\"count={}, sum={}, mean={}, median={}, q75={}, IQR={}, weighted mean/var/q50={}/{}/{}, z/pz/scaled={}/{}/{}, moving/std/EMA={}/{}/{}, bins={}\", stats.count(signal), stats.sum(signal), stats.mean(signal).value_or(0.0), stats.median(signal).value_or(0.0), stats.quantile_with(signal, 0.75, \"linear\").value_or(0.0), stats.interquartile_range(signal).value_or(0.0), stats.weighted_mean(signal, vector_weights).value_or(0.0), stats.weighted_variance(signal, vector_weights).value_or(0.0), stats.weighted_quantile(signal, vector_weights, 0.5).value_or(0.0), vector_z.get(0), vector_pz.get(0), vector_scaled.get(0), vector_moving.get(0), vector_moving_std.get(0), vector_ema.get(0), vector_hist.len())",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "vector-parity",
+      "cell_type": "code",
+      "source": "vector_five = stats.five_number_summary(signal).value_or(stats.empty_five_number_summary());\nvector_summary = stats.describe(signal).value_or(stats.empty_summary());\nvector_frequencies = stats.frequencies(signal).value_or(stats.empty_frequency_table());\nvector_auto_hist = stats.histogram(signal, 3).value_or(stats.empty_histogram());\nfmt.format(\"min={}/{}, max={}/{}, range={}/{}; pvar={}/{}, svar={}/{}, pstdev={}/{}, sstddev={}/{}; percentile75={}, five median={}, MAD={}, summary count={}, distinct={}, auto bins={}\", stats.minimum(signal).value_or(0.0), stats.min(signal).value_or(0.0), stats.maximum(signal).value_or(0.0), stats.max(signal).value_or(0.0), stats.data_range(signal).value_or(0.0), stats.range(signal).value_or(0.0), stats.pvariance(signal).value_or(0.0), stats.population_variance(signal).value_or(0.0), stats.variance(signal).value_or(0.0), stats.sample_variance(signal).value_or(0.0), stats.pstdev(signal).value_or(0.0), stats.population_stddev(signal).value_or(0.0), stats.stddev(signal).value_or(0.0), stats.sample_stddev(signal).value_or(0.0), stats.percentile(signal, 75.0).value_or(0.0), vector_five.median, stats.median_absolute_deviation(signal).value_or(0.0), vector_summary.count, vector_frequencies.len(), vector_auto_hist.len())",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "vector-relationships",
+      "cell_type": "code",
+      "source": "x_vector = matrix.vector(xs);\ny_vector = matrix.vector(ys);\nvector_model = stats.linear_regression(x_vector, y_vector).value_or(stats.empty_regression());\nvector_model_alias = stats.simple_linear_regression(x_vector, y_vector).value_or(stats.empty_regression());\nfmt.format(\"vector pcov={}/{}, scov={}/{}, Pearson={}/{}, Spearman={}, Kendall={}; model slopes={}/{}\", stats.pcovariance(x_vector, y_vector).value_or(0.0), stats.population_covariance(x_vector, y_vector).value_or(0.0), stats.covariance(x_vector, y_vector).value_or(0.0), stats.sample_covariance(x_vector, y_vector).value_or(0.0), stats.correlation(x_vector, y_vector).value_or(0.0), stats.pearson_correlation(x_vector, y_vector).value_or(0.0), stats.spearman_correlation(x_vector, y_vector).value_or(0.0), stats.kendall_tau(x_vector, y_vector).value_or(0.0), vector_model.slope, vector_model_alias.slope)",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "matrix-title",
+      "cell_type": "markdown",
+      "source": "## Observation-matrix integration\n\nRows are observations and columns are variables. This is the same Matrix<real64> shape returned by csv.read_matrix_real64, so the calls below apply directly after CSV loading.\n\n\\[\n\\mathbf{S}=\\frac{1}{n-1}(\\mathbf{X}-\\mathbf{1}\\bar{\\mathbf{x}}^{\\mathsf{T}})^{\\mathsf{T}}(\\mathbf{X}-\\mathbf{1}\\bar{\\mathbf{x}}^{\\mathsf{T}}), \\qquad R_{jk}=\\frac{S_{jk}}{\\sqrt{S_{jj}S_{kk}}}\n\\]"
+    },
+    {
+      "id": "matrix-setup",
+      "cell_type": "code",
+      "source": "observations = matrix.from_rows([[1.0, 3.2, 10.0], [2.0, 4.8, 8.0], [3.0, 7.1, 13.0], [4.0, 8.9, 11.0], [5.0, 11.2, 16.0], [6.0, 12.8, 14.0]]);\nflat_summary = stats.describe(observations).value_or(stats.empty_summary());\nflat_histogram = stats.histogram(observations, 5).value_or(stats.empty_histogram());\nfmt.format(\"shape={}x{}, flat count/mean={}/{}, flat histogram bins={}\", observations.rows(), observations.cols(), flat_summary.count, flat_summary.mean, flat_histogram.len())",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "matrix-axis",
+      "cell_type": "code",
+      "source": "empty_summaries: [stats.Summary] = [];\nempty_histograms: [stats.Histogram] = [];\ncolumn_summaries = stats.describe_columns(observations).value_or(empty_summaries);\nrow_summaries = stats.describe_rows(observations).value_or(empty_summaries);\ncolumn_means = stats.column_means(observations).value_or(stats.empty_vector());\nrow_means = stats.row_means(observations).value_or(stats.empty_vector());\ncolumn_variances = stats.column_variances(observations).value_or(stats.empty_vector());\ncolumn_stddevs = stats.column_stddevs(observations).value_or(stats.empty_vector());\ncolumn_medians = stats.column_medians(observations).value_or(stats.empty_vector());\ncolumn_histograms = stats.column_histograms(observations, 4).value_or(empty_histograms);\nfmt.format(\"column summaries={}, row summaries={}; first column mean/variance/stddev/median={}/{}/{}/{}; first row mean={}; histograms={}\", column_summaries.len(), row_summaries.len(), column_means.get(0), column_variances.get(0), column_stddevs.get(0), column_medians.get(0), row_means.get(0), column_histograms.len())",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "matrix-relationships",
+      "cell_type": "code",
+      "source": "covariance_matrix = stats.covariance_matrix(observations).value_or(stats.empty_matrix());\ncorrelation_matrix = stats.correlation_matrix(observations).value_or(stats.empty_matrix());\nstandardized = stats.standardize_columns(observations).value_or(stats.empty_matrix());\nstandardized_means = stats.column_means(standardized).value_or(stats.empty_vector());\ncolumn_model = stats.linear_regression_columns(observations, 0, 1).value_or(stats.empty_regression());\nfmt.format(\"cov/cor(0,1)={}/{}; standardized shape={}x{}, first mean={}; column model slope={}\", covariance_matrix.get(0, 1), correlation_matrix.get(0, 1), standardized.rows(), standardized.cols(), standardized_means.get(0), column_model.slope)",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "random-title",
+      "cell_type": "markdown",
+      "source": "## Seeded sampling and a reproducible analysis chart\n\nA fixed seed makes the generated sequence reproducible while preserving the requested model $X_i\\sim\\mathcal{N}(\\mu,\\sigma^2)$. The cells below summarize one deterministic sample and visualize its empirical histogram."
+    },
+    {
+      "id": "seeded-sample",
+      "cell_type": "code",
+      "source": "rng = random.seed(119);\nsamples = random.normal(rng, 80, 10.0, 2.0);\nrandom_report = stats.describe(samples).value_or(stats.empty_summary());\nrandom_interval = stats.mean_confidence_interval(samples, 0.95).value_or(stats.ConfidenceInterval { estimate: 0.0, lower: 0.0, upper: 0.0, margin: 0.0, confidence: 0.0 });\nfmt.format(\"n={}, mean={}, median={}, stddev={}, 95% CI=[{}, {}]\", random_report.count, random_report.mean, random_report.median, random_report.sample_stddev, random_interval.lower, random_interval.upper)",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "sample-histogram",
+      "cell_type": "code",
+      "source": "random_histogram = stats.histogram(samples, 10).value_or(stats.empty_histogram());\nplot.svg(plot.histogram(random_histogram).title(\"Seeded normal sample\").x_label(\"value\").y_label(\"count\").grid(5).size(720, 360))",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "csv-path",
+      "cell_type": "markdown",
+      "source": "## CSV pipeline\n\nA file-backed workflow is the same matrix pipeline:\n\n    import csv;\n    loaded = csv.read_matrix_real64(\"measurements.csv\");\n    data = loaded.value_or(stats.empty_matrix());\n    column_reports = stats.describe_columns(data);\n    correlations = stats.correlation_matrix(data);\n    model = stats.linear_regression_columns(data, 0, 1);\n\nThe notebook does not perform file I/O so its checked output stays portable; the matrix cells above execute the exact downstream API."
+    }
+  ]
+}

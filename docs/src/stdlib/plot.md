@@ -997,6 +997,15 @@ A histogram: bucket `values` into `bins` equal-width bars.
 plot.svg(plot.histogram([1.0, 2.0, 2.0, 3.0], 3)).contains("<svg")  // 1
 ```
 
+### `fn histogram(data: stats.Histogram): Chart`
+
+Build a bar chart from a validated stats.Histogram. This preserves custom bin edges and lets data workflows compute/count once in `stats`, then render the same result in scripts and notebooks.
+
+**Example:**
+```dune
+plot.svg(plot.histogram(stats.histogram([1.0, 2.0, 3.0], 2).value_or(stats.empty_histogram()))).contains("<svg")  // 1
+```
+
 ### `fn use_backend(name: text): unit`
 
 Select the display backend for `show`. Supported MVP backends are:

@@ -18,13 +18,16 @@ browser workspace. The workspace includes:
 - a `.dnb` file browser rooted at the selected directory;
 - a classic Jupyter-style menu, toolbar, prompt gutter, and cell selection;
 - persistent light and dark themes that follow the system on first launch;
-- Markdown editing and live Dune syntax highlighting for code cells;
+- Markdown editing with inline/display LaTeX formulas and live Dune syntax
+  highlighting for code cells;
 - adding, moving, and deleting cells;
 - toolbar and keyboard cell-type switching (`Y` for code, `M` for Markdown);
 - `Shift+Enter` runs a cell and selects the next one, creating a Code cell at
   the end; `Cmd/Ctrl+Enter` runs without moving;
 - Run Cell and Run All actions;
 - persistent kernel sessions with Restart Kernel;
+- clearing the selected cell output or all saved outputs, plus a combined
+  Restart Kernel and Clear All Outputs action;
 - structured stdout and stderr output;
 - inline SVG output from the pure-Dune `plot` module;
 - saving and standalone HTML export.
@@ -91,6 +94,41 @@ Unknown object fields are ignored for forward compatibility. A newer
 `dune_notebook` version is rejected with a clear error instead of being
 silently misread.
 
+## Markdown and LaTeX formulas
+
+Markdown cells render mathematical notation directly in the notebook and in
+standalone HTML exports. Use either Jupyter-style dollar delimiters or the
+equivalent LaTeX delimiters:
+
+```text
+The sample mean is $\bar{x} = \frac{1}{n}\sum_{i=1}^{n}x_i$.
+
+$$
+s^2 = \frac{1}{n-1}\sum_{i=1}^{n}(x_i-\bar{x})^2
+$$
+
+\[
+A = \begin{pmatrix}a & b \\ c & d\end{pmatrix}
+\]
+```
+
+Inline formulas accept `$...$` and `\(...\)`. Display formulas accept
+`$$...$$` and `\[...\]`; multiline display delimiters should begin and end on
+their own lines. Escape a literal dollar sign as `\$`. Formula delimiters
+inside inline code or fenced code blocks are left untouched.
+
+The built-in renderer covers subscripts and superscripts, fractions, roots,
+binomial coefficients, Greek letters, relations, arrows, sets, named
+functions, large operators with limits, accents, common math font variants,
+stretchy delimiters, and `matrix`, `pmatrix`, `bmatrix`, `Bmatrix`, `vmatrix`,
+`Vmatrix`, `array`, `aligned`, and `cases` environments. Unsupported commands
+remain visible as TeX instead of disappearing.
+
+Rendering is offline and dependency-free. Dune converts the supported TeX math
+syntax to native MathML, preserves the original source in an accessible
+`application/x-tex` annotation, follows the notebook's light/dark theme, and
+escapes formula text before inserting it into the page.
+
 ## Kernel and cell execution
 
 Cells execute in document order and share state: bindings, imports, functions,
@@ -136,6 +174,13 @@ dune notebook check notebooks/tutorial.dnb
 `check` exits non-zero when a cell fails or its saved stdout/stderr differs
 from a fresh run, making notebooks reproducible CI artifacts.
 
+To return an interactive notebook to a clean state, use **Cell → Clear selected
+output**, **Cell → Clear all outputs**, or **Kernel → Restart kernel and clear
+all outputs**. The toolbar also exposes **Clear output** for the selected cell.
+The shortcuts are `Alt+O` for the selected output and `Shift+Alt+O` for all
+outputs. Clearing marks the notebook as changed; use **Save** (`Cmd/Ctrl+S`) to
+persist the empty outputs and execution counters.
+
 Export the saved document as standalone HTML:
 
 ```sh
@@ -150,4 +195,7 @@ and needs no running server or external assets.
 See [`examples/notebooks/scientific_workflow.dnb`](../../../examples/notebooks/scientific_workflow.dnb)
 for a stateful matrix and automatic-differentiation notebook, and
 [`examples/notebooks/plot_gallery.dnb`](../../../examples/notebooks/plot_gallery.dnb)
-for inline line, scatter, bar, histogram, and pie charts.
+for inline line, scatter, bar, histogram, and pie charts. The
+[`statistical_analysis.dnb`](../../../examples/notebooks/statistical_analysis.dnb)
+notebook combines seeded sampling, descriptive statistics, confidence
+intervals, matrix regression, rolling windows, and inline diagnostic charts.

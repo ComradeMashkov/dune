@@ -12,6 +12,7 @@ dune examples/matrix_basics.dn
 | `matrix_basics.dn` | Vectors and matrices from the [`matrix`](../stdlib/matrix.md) module. |
 | `vector_stats.dn` | Reductions and statistics over a vector. |
 | `linear_regression.dn` | A small numerical program: least-squares fit. |
+| `statistical_analysis.dn` | Descriptive statistics, regression, histograms, probability helpers, and [`matrix`](../stdlib/matrix.md)/[`plot`](../stdlib/plot.md) integration. |
 | `collection_pipeline.dn` | The higher-order `filter`/`map`/`sum` pipeline with [function values](../language/functions.md#function-values-and-method-chaining). |
 | `geometry.dn` + `geometry_demo.dn` | A two-file program showing [module](../language/modules.md) declarations, aliases, and selective imports. |
 | `documented.dn` | Every comment form plus `brief`/`param`/`returns` [doc-comments](../language/comments.md) on a function, record fields, and a method. |

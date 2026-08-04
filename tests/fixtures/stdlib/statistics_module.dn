@@ -1,0 +1,120 @@
+import fmt;
+import io;
+import math;
+import matrix;
+import plot;
+import stats;
+
+fn close(actual: real64, expected: real64): bool {
+    return math.abs(actual - expected) < 0.00001;
+}
+
+fn check(name: text, condition: bool): unit {
+    io.println(fmt.format("{}: {}", name, condition));
+}
+
+empty_real: [real64] = [];
+empty_int: [int] = [];
+empty_summaries: [stats.Summary] = [];
+
+// Descriptive statistics and explicit error behavior.
+check("count-sum", stats.count([1, 2, 3]) == 3 && close(stats.sum([1.0, 2.0, 3.0]), 6.0));
+check("mean-generic", close(stats.mean([1, 2, 3, 4]).value_or(0.0), 2.5));
+check("empty-error", stats.mean(empty_real).is_failed() && stats.minimum(empty_real).is_failed());
+check("extrema-range", close(stats.minimum([4.0, 0.0 - 2.0, 7.0]).value_or(0.0), 0.0 - 2.0) &&
+    close(stats.maximum([4.0, 0.0 - 2.0, 7.0]).value_or(0.0), 7.0) &&
+    close(stats.data_range([4.0, 0.0 - 2.0, 7.0]).value_or(0.0), 9.0));
+check("variance", close(stats.pvariance([1.0, 2.0, 3.0, 4.0]).value_or(0.0), 1.25) &&
+    close(stats.variance([1.0, 2.0, 3.0, 4.0]).value_or(0.0), 1.6666666667) &&
+    stats.variance([1.0]).is_failed());
+check("means", close(stats.root_mean_square([3.0, 4.0]).value_or(0.0), 3.5355339059) &&
+    close(stats.geometric_mean([1.0, 4.0, 16.0]).value_or(0.0), 4.0) &&
+    close(stats.harmonic_mean([1.0, 2.0, 4.0]).value_or(0.0), 1.7142857143));
+
+// Quantiles follow Type 7; percentiles use the conventional 0..100 scale.
+check("median", close(stats.median([4.0, 1.0, 3.0, 2.0]).value_or(0.0), 2.5));
+check("quantiles", close(stats.quantile([0.0, 10.0, 20.0, 30.0], 0.25).value_or(0.0), 7.5) &&
+    close(stats.quantile_with([0.0, 10.0, 20.0, 30.0], 0.25, "lower").value_or(99.0), 0.0) &&
+    close(stats.percentile([0.0, 10.0, 20.0, 30.0], 25.0).value_or(0.0), 7.5));
+check("quantile-errors", stats.quantile([1.0], 0.0 - 0.1).is_failed() && stats.percentile([1.0], 101.0).is_failed());
+check("robust", close(stats.interquartile_range([0.0, 10.0, 20.0, 30.0]).value_or(0.0), 15.0) &&
+    close(stats.median_absolute_deviation([1.0, 2.0, 2.0, 4.0]).value_or(0.0), 0.5) &&
+    close(stats.trimmed_mean([1.0, 2.0, 3.0, 100.0], 0.25).value_or(0.0), 2.5) &&
+    close(stats.winsorized_mean([1.0, 2.0, 3.0, 100.0], 0.25).value_or(0.0), 2.5));
+modes = stats.modes([1, 1, 2, 2, 3]).value_or(empty_real);
+check("frequencies", close(stats.mode([3, 1, 3, 2, 2, 3]).value_or(0.0), 3.0) &&
+    modes.len() == 2 && modes[0] == 1.0 && modes[1] == 2.0);
+summary = stats.describe([1.0, 2.0, 3.0, 4.0, 5.0]).value_or(stats.empty_summary());
+check("summary", summary.count == 5 && close(summary.mean, 3.0) && close(summary.median, 3.0) && close(summary.skewness, 0.0));
+
+// Weighted estimators and pairwise relationships.
+check("weighted", close(stats.weighted_mean([10.0, 20.0], [1.0, 3.0]).value_or(0.0), 17.5) &&
+    close(stats.weighted_pvariance([10.0, 20.0], [1.0, 3.0]).value_or(0.0), 18.75) &&
+    close(stats.weighted_quantile([10.0, 20.0], [1.0, 3.0], 0.5).value_or(0.0), 20.0));
+check("weighted-error", stats.weighted_mean([1.0], [0.0]).is_failed() && stats.weighted_mean([1.0], [1.0, 2.0]).is_failed());
+xs = [1.0, 2.0, 3.0, 4.0];
+ys = [3.0, 5.0, 7.0, 9.0];
+check("covariance-correlation", close(stats.covariance(xs, ys).value_or(0.0), 3.3333333333) &&
+    close(stats.correlation(xs, ys).value_or(0.0), 1.0));
+check("rank-correlation", close(stats.spearman_correlation([1, 2, 3], [3, 2, 1]).value_or(0.0), 0.0 - 1.0) &&
+    close(stats.kendall_tau([1, 2, 3], [3, 2, 1]).value_or(0.0), 0.0 - 1.0));
+check("autocorrelation", close(stats.autocorrelation([1.0, 2.0, 3.0, 4.0], 1).value_or(0.0), 1.0));
+
+// Regression and model metrics.
+model = stats.linear_regression(xs, ys).value_or(stats.empty_regression());
+check("regression", close(model.slope, 2.0) && close(model.intercept, 1.0) &&
+    close(model.r_squared, 1.0) && close(model.predict(6.0), 13.0));
+check("regression-error", stats.linear_regression([1.0, 1.0], [2.0, 3.0]).is_failed());
+check("metrics", close(stats.mean_absolute_error([1.0, 3.0], [2.0, 2.0]).value_or(0.0), 1.0) &&
+    close(stats.mean_squared_error([1.0, 3.0], [2.0, 2.0]).value_or(0.0), 1.0));
+
+// Histograms and binning, including under/overflow.
+hist = stats.histogram([1.0, 2.0, 3.0, 4.0], 2).value_or(stats.empty_histogram());
+check("histogram", hist.counts.len() == 2 && hist.counts[0] == 2 && hist.counts[1] == 2);
+check("plot-histogram", plot.svg(plot.histogram(hist)).contains("<svg"));
+ranged = stats.histogram_with_edges([0.0 - 1.0, 0.0, 1.0, 2.0, 3.0], [0.0, 1.0, 2.0]).value_or(stats.empty_histogram());
+check("histogram-range", ranged.underflow == 1 && ranged.overflow == 1 && ranged.counts[0] == 1 && ranged.counts[1] == 2);
+digits = stats.digitize([0.0 - 1.0, 0.5, 2.0, 3.0], [0.0, 1.0, 2.0]).value_or(empty_int);
+check("digitize", digits[0] == 0 - 1 && digits[1] == 0 && digits[2] == 1 && digits[3] == 2);
+integer_counts = stats.bincount([0, 2, 2], 4).value_or(empty_int);
+check("bincount", integer_counts.len() == 4 && integer_counts[0] == 1 && integer_counts[2] == 2);
+
+// Window functions and scaling.
+moving = stats.moving_mean([1.0, 2.0, 3.0, 4.0], 2).value_or(empty_real);
+moving_deviation = stats.moving_stddev([1.0, 2.0, 3.0], 2).value_or(empty_real);
+check("moving", moving.len() == 3 && close(moving[0], 1.5) && close(moving[2], 3.5) &&
+    moving_deviation.len() == 2 && close(moving_deviation[0], 0.7071067812));
+ema = stats.exponential_moving_average([1.0, 3.0, 5.0], 0.5).value_or(empty_real);
+scaled = stats.min_max_scale([2.0, 4.0, 6.0]).value_or(empty_real);
+check("smoothing-scaling", close(ema[1], 2.0) && close(ema[2], 3.5) && close(scaled[0], 0.0) && close(scaled[2], 1.0));
+check("window-error", stats.moving_mean([1.0, 2.0], 3).is_failed() && stats.exponential_moving_average([1.0], 0.0).is_failed());
+
+// Distribution helpers and confidence intervals.
+check("normal", close(stats.standard_normal_pdf(0.0), 0.3989422804) &&
+    close(stats.standard_normal_cdf(0.0), 0.5) &&
+    close(stats.standard_normal_quantile(0.975).value_or(0.0), 1.9599639845));
+check("continuous-distributions", close(stats.uniform_cdf(5.0, 0.0, 10.0).value_or(0.0), 0.5) &&
+    close(stats.exponential_cdf(0.0, 2.0).value_or(1.0), 0.0));
+check("discrete-distributions", close(stats.bernoulli_pmf(1, 0.25).value_or(0.0), 0.25) &&
+    close(stats.binomial_pmf(2, 4, 0.5).value_or(0.0), 0.375) &&
+    close(stats.poisson_pmf(0, 2.0).value_or(0.0), 0.1353352832));
+interval_default = stats.ConfidenceInterval { estimate: 0.0, lower: 0.0, upper: 0.0, margin: 0.0, confidence: 0.0 };
+interval = stats.mean_confidence_interval([1.0, 2.0, 3.0, 4.0], 0.95).value_or(interval_default);
+check("confidence", close(interval.estimate, 2.5) && interval.lower < interval.estimate && interval.upper > interval.estimate);
+
+// Dense integration with matrix.Vector and observation matrices.
+vector = matrix.vector([1.0, 2.0, 3.0, 4.0]);
+vector_z = stats.z_scores(vector).value_or(stats.empty_vector());
+check("vector", close(stats.mean(vector).value_or(0.0), 2.5) &&
+    close(stats.quantile(vector, 0.75).value_or(0.0), 3.25) &&
+    vector_z.len() == 4 && close(stats.mean(vector_z).value_or(99.0), 0.0));
+data = matrix.from_rows([[1.0, 2.0], [2.0, 4.0], [3.0, 6.0]]);
+column_summaries = stats.describe_columns(data).value_or(empty_summaries);
+cov_matrix = stats.covariance_matrix(data).value_or(stats.empty_matrix());
+cor_matrix = stats.correlation_matrix(data).value_or(stats.empty_matrix());
+check("matrix-summary", column_summaries.len() == 2 && close(column_summaries[1].mean, 4.0));
+check("matrix-cov-cor", cov_matrix.rows() == 2 && close(cov_matrix.get(0, 1), 2.0) && close(cor_matrix.get(0, 1), 1.0));
+standardized = stats.standardize_columns(data).value_or(stats.empty_matrix());
+standardized_means = stats.column_means(standardized).value_or(stats.empty_vector());
+column_model = stats.linear_regression_columns(data, 0, 1).value_or(stats.empty_regression());
+check("matrix-workflow", standardized.rows() == 3 && close(standardized_means.get(0), 0.0) && close(column_model.slope, 2.0));

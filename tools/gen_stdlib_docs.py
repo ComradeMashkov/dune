@@ -40,6 +40,7 @@ MODULE_BLURBS = {
     "autograd": "Scalar reverse-mode automatic differentiation.",
     "canvas": "Deterministic SVG canvas and immediate-mode GUI widgets.",
     "random": "A small deterministic pseudo-random generator.",
+    "stats": "Descriptive statistics, relationships, models, histograms, and probability helpers.",
     "regex": "Safe ASCII regular expressions for validation and text cleanup.",
     "runtime": "Runtime helpers such as `panic`.",
     "io": "Standard input/output: print, read a line, and flush streams.",

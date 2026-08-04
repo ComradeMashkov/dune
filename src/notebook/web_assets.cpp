@@ -104,6 +104,8 @@ std::string_view notebook_app_html() {
     }
     button { padding: 4px 10px; cursor: pointer; }
     button:hover, select:hover { border-color: var(--border-strong); background: var(--surface-hover); }
+    button:disabled, select:disabled { cursor: default; opacity: .5; }
+    button:disabled:hover, select:disabled:hover { border-color: var(--border); background: var(--surface); }
     button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible {
       outline: 2px solid var(--accent);
       outline-offset: 1px;
@@ -429,6 +431,23 @@ std::string_view notebook_app_html() {
       color: var(--code-text);
       padding: 10px;
     }
+    .latex-math {
+      color: currentColor;
+      font-family: "STIX Two Math", "Cambria Math", "Times New Roman", serif;
+      font-size: 1.08em;
+    }
+    .latex-overbar {
+      border-top: .055em solid currentColor;
+      padding-top: .16em;
+    }
+    .math-display {
+      max-width: 100%;
+      margin: .8em 0;
+      overflow-x: auto;
+      padding: .15em 0;
+      text-align: center;
+    }
+    .math-display > .latex-math { margin: 0 auto; }
     .output {
       margin: 5px 0 2px;
       border: 0;
@@ -539,6 +558,9 @@ std::string_view notebook_app_html() {
           <button id="menu-run"><span>Run selected cell</span><span class="shortcut">⇧↵</span></button>
           <button id="menu-run-all">Run all cells</button>
           <div class="menu-separator"></div>
+          <button id="menu-clear-output"><span>Clear selected output</span><span class="shortcut">⌥O</span></button>
+          <button id="menu-clear-all"><span>Clear all outputs</span><span class="shortcut">⇧⌥O</span></button>
+          <div class="menu-separator"></div>
           <button id="menu-code-type"><span>Cell type: Code</span><span class="shortcut">Y</span></button>
           <button id="menu-markdown-type"><span>Cell type: Markdown</span><span class="shortcut">M</span></button>
         </div>
@@ -547,6 +569,7 @@ std::string_view notebook_app_html() {
         <summary>Kernel</summary>
         <div class="menu-content">
           <button id="menu-restart">Restart kernel</button>
+          <button id="menu-restart-clear">Restart kernel and clear all outputs</button>
         </div>
       </details>
       <details class="menu">
@@ -570,6 +593,7 @@ std::string_view notebook_app_html() {
       <button id="run" class="primary" title="Run selected cell (Shift+Enter runs and selects the next cell)">▶ Run</button>
       <button id="run-all" title="Run every code cell">Run all</button>
       <button id="restart" title="Restart the Dune VM kernel">Restart</button>
+      <button id="clear-output" title="Clear selected cell output (Alt+O)">Clear output</button>
       <div class="toolbar-separator"></div>
       <button id="move-up" title="Move selected cell up">↑</button>
       <button id="move-down" title="Move selected cell down">↓</button>
@@ -620,6 +644,9 @@ std::string_view notebook_app_html() {
     const kernelElement = document.querySelector("#kernel-state");
     const themeButton = document.querySelector("#theme-toggle");
     const cellTypeSelect = document.querySelector("#cell-type");
+    const clearOutputButton = document.querySelector("#clear-output");
+    const menuClearOutputButton = document.querySelector("#menu-clear-output");
+    const menuClearAllButton = document.querySelector("#menu-clear-all");
     const selectionLabel = document.querySelector("#selection-label");
     const currentPathElement = document.querySelector("#current-path");
 
@@ -907,12 +934,397 @@ std::string_view notebook_app_html() {
       highlight.scrollLeft = source.scrollLeft;
     }
 
+    const latexSymbols = new Map(Object.entries({
+      alpha: "α", beta: "β", gamma: "γ", delta: "δ", epsilon: "ϵ", varepsilon: "ε",
+      zeta: "ζ", eta: "η", theta: "θ", vartheta: "ϑ", iota: "ι", kappa: "κ", lambda: "λ",
+      mu: "μ", nu: "ν", xi: "ξ", omicron: "ο", pi: "π", varpi: "ϖ", rho: "ρ", varrho: "ϱ",
+      sigma: "σ", varsigma: "ς", tau: "τ", upsilon: "υ", phi: "ϕ", varphi: "φ", chi: "χ",
+      psi: "ψ", omega: "ω", Gamma: "Γ", Delta: "Δ", Theta: "Θ", Lambda: "Λ", Xi: "Ξ",
+      Pi: "Π", Sigma: "Σ", Upsilon: "Υ", Phi: "Φ", Psi: "Ψ", Omega: "Ω",
+      pm: "±", mp: "∓", times: "×", div: "÷", cdot: "⋅", ast: "∗", star: "⋆", circ: "∘",
+      bullet: "•", oplus: "⊕", otimes: "⊗", le: "≤", leq: "≤", ge: "≥", geq: "≥",
+      ne: "≠", neq: "≠", approx: "≈", sim: "∼", simeq: "≃", equiv: "≡", propto: "∝",
+      ll: "≪", gg: "≫", in: "∈", notin: "∉", ni: "∋", subset: "⊂", supset: "⊃",
+      subseteq: "⊆", supseteq: "⊇", cup: "∪", cap: "∩", setminus: "∖", emptyset: "∅",
+      forall: "∀", exists: "∃", nexists: "∄", neg: "¬", land: "∧", lor: "∨", wedge: "∧", vee: "∨",
+      to: "→", rightarrow: "→", leftarrow: "←", leftrightarrow: "↔", Rightarrow: "⇒",
+      Leftarrow: "⇐", Leftrightarrow: "⇔", mapsto: "↦", uparrow: "↑", downarrow: "↓",
+      partial: "∂", nabla: "∇", infty: "∞", ell: "ℓ", hbar: "ℏ", Re: "ℜ", Im: "ℑ",
+      aleph: "ℵ", prime: "′", angle: "∠", perp: "⊥", parallel: "∥", mid: "|",
+      langle: "⟨", rangle: "⟩", lceil: "⌈", rceil: "⌉", lfloor: "⌊", rfloor: "⌋",
+      ldots: "…", cdots: "⋯",
+      vdots: "⋮", ddots: "⋱", therefore: "∴", because: "∵", sum: "∑", prod: "∏", coprod: "∐",
+      int: "∫", iint: "∬", iiint: "∭", oint: "∮", bigcup: "⋃", bigcap: "⋂", bigvee: "⋁",
+      bigwedge: "⋀"
+    }));
+    const latexNamedOperators = new Set([
+      "sin", "cos", "tan", "cot", "sec", "csc", "arcsin", "arccos", "arctan", "sinh", "cosh",
+      "tanh", "log", "ln", "exp", "det", "dim", "gcd", "ker", "hom", "arg", "deg", "min", "max",
+      "inf", "sup", "lim", "liminf", "limsup", "Pr"
+    ]);
+    const latexLimitOperators = new Set([
+      "sum", "prod", "coprod", "bigcup", "bigcap", "bigvee", "bigwedge", "lim", "liminf",
+      "limsup", "min", "max", "inf", "sup"
+    ]);
+    const latexStyles = new Map(Object.entries({
+      mathrm: "normal", mathbf: "bold", mathit: "italic", mathsf: "sans-serif", mathtt: "monospace",
+      mathbb: "double-struck", mathcal: "script", mathfrak: "fraktur", boldsymbol: "bold-italic"
+    }));
+    const latexAccents = new Map(Object.entries({
+      hat: "^", widehat: "^", vec: "→", tilde: "~", widetilde: "~",
+      dot: "˙", ddot: "¨", breve: "˘", check: "ˇ", acute: "´", grave: "`"
+    }));
+
+    class LatexMathParser {
+      constructor(source) {
+        this.source = source;
+        this.position = 0;
+      }
+
+      parse() { return this.parseExpression(""); }
+
+      parseExpression(closing) {
+        let result = "";
+        while (this.position < this.source.length) {
+          this.skipSpaces();
+          if (this.position >= this.source.length) break;
+          if (closing && this.source[this.position] === closing) {
+            this.position += 1;
+            break;
+          }
+          result += this.parseScriptedAtom().html;
+        }
+        return result;
+      }
+
+      parseScriptedAtom() {
+        const base = this.parseAtom();
+        this.skipSpaces();
+        if (this.source.startsWith("\\limits", this.position)) {
+          this.position += 7;
+          this.skipSpaces();
+          base.movableLimits = true;
+        }
+        let lower = null;
+        let upper = null;
+        while (this.position < this.source.length && "_^".includes(this.source[this.position])) {
+          const marker = this.source[this.position++];
+          const argument = this.parseArgument().html;
+          if (marker === "_") lower = argument;
+          else upper = argument;
+          this.skipSpaces();
+        }
+        if (lower === null && upper === null) return base;
+        if (lower !== null && upper !== null) {
+          const tag = base.movableLimits ? "munderover" : "msubsup";
+          return {html: `<${tag}>${base.html}<mrow>${lower}</mrow><mrow>${upper}</mrow></${tag}>`, movableLimits: false};
+        }
+        const isLower = lower !== null;
+        const tag = base.movableLimits ? (isLower ? "munder" : "mover") : (isLower ? "msub" : "msup");
+        return {html: `<${tag}>${base.html}<mrow>${isLower ? lower : upper}</mrow></${tag}>`, movableLimits: false};
+      }
+
+      parseArgument() {
+        this.skipSpaces();
+        if (this.source[this.position] === "{") {
+          this.position += 1;
+          return {html: `<mrow>${this.parseExpression("}")}</mrow>`, movableLimits: false};
+        }
+        return this.parseScriptedAtom();
+      }
+
+      parseAtom() {
+        if (this.position >= this.source.length) return {html: "", movableLimits: false};
+        const character = this.source[this.position];
+        if (character === "{") {
+          this.position += 1;
+          return {html: `<mrow>${this.parseExpression("}")}</mrow>`, movableLimits: false};
+        }
+        if (character === "\\") return this.parseCommand();
+        if (/\d/.test(character) || (character === "." && /\d/.test(this.source[this.position + 1] || ""))) {
+          const start = this.position++;
+          while (/[\d.]/.test(this.source[this.position] || "")) this.position += 1;
+          return {html: `<mn>${escapeHtml(this.source.slice(start, this.position))}</mn>`, movableLimits: false};
+        }
+        if (/[A-Za-z]/.test(character)) {
+          this.position += 1;
+          return {html: `<mi>${escapeHtml(character)}</mi>`, movableLimits: false};
+        }
+        const glyph = String.fromCodePoint(this.source.codePointAt(this.position));
+        this.position += glyph.length;
+        if ("+-*/=(),[]<>|:;!".includes(character)) {
+          return {html: `<mo>${character === "-" ? "−" : escapeHtml(glyph)}</mo>`, movableLimits: false};
+        }
+        if (character === "'") return {html: "<mo>′</mo>", movableLimits: false};
+        return {html: `<mi>${escapeHtml(glyph)}</mi>`, movableLimits: false};
+      }
+
+      parseCommand() {
+        this.position += 1;
+        if (this.position >= this.source.length) return {html: "<mo>\\</mo>", movableLimits: false};
+        const start = this.position;
+        if (/[A-Za-z]/.test(this.source[this.position])) {
+          while (/[A-Za-z]/.test(this.source[this.position] || "")) this.position += 1;
+        } else {
+          this.position += 1;
+        }
+        const command = this.source.slice(start, this.position);
+
+        if (["frac", "dfrac", "tfrac"].includes(command)) {
+          const numerator = this.parseArgument().html;
+          const denominator = this.parseArgument().html;
+          return {html: `<mfrac><mrow>${numerator}</mrow><mrow>${denominator}</mrow></mfrac>`, movableLimits: false};
+        }
+        if (command === "binom") {
+          const upper = this.parseArgument().html;
+          const lower = this.parseArgument().html;
+          return {html: `<mrow><mo stretchy="true">(</mo><mfrac linethickness="0"><mrow>${upper}</mrow><mrow>${lower}</mrow></mfrac><mo stretchy="true">)</mo></mrow>`, movableLimits: false};
+        }
+        if (command === "sqrt") {
+          this.skipSpaces();
+          let index = null;
+          if (this.source[this.position] === "[") {
+            const startIndex = ++this.position;
+            while (this.position < this.source.length && this.source[this.position] !== "]") this.position += 1;
+            index = new LatexMathParser(this.source.slice(startIndex, this.position)).parse();
+            if (this.source[this.position] === "]") this.position += 1;
+          }
+          const radicand = this.parseArgument().html;
+          return index === null
+            ? {html: `<msqrt><mrow>${radicand}</mrow></msqrt>`, movableLimits: false}
+            : {html: `<mroot><mrow>${radicand}</mrow><mrow>${index}</mrow></mroot>`, movableLimits: false};
+        }
+        if (["text", "textrm", "mbox"].includes(command)) {
+          return {html: `<mtext>${escapeHtml(this.parseRawGroup())}</mtext>`, movableLimits: false};
+        }
+        if (command === "operatorname") {
+          return {html: `<mi mathvariant="normal">${escapeHtml(this.parseRawGroup())}</mi>`, movableLimits: true};
+        }
+        if (command === "begin") return this.parseEnvironment(this.parseRawGroup());
+        if (["left", "right", "middle"].includes(command)) {
+          const delimiter = this.readDelimiter();
+          return delimiter
+            ? {html: `<mo stretchy="true">${escapeHtml(delimiter)}</mo>`, movableLimits: false}
+            : {html: "<mrow></mrow>", movableLimits: false};
+        }
+
+        if (latexStyles.has(command)) {
+          return {html: `<mstyle mathvariant="${latexStyles.get(command)}">${this.parseArgument().html}</mstyle>`, movableLimits: false};
+        }
+        if (["bar", "overline"].includes(command)) {
+          return {html: `<mrow class="latex-overbar"><mrow>${this.parseArgument().html}</mrow></mrow>`, movableLimits: false};
+        }
+        if (latexAccents.has(command)) {
+          return {html: `<mover accent="true"><mrow>${this.parseArgument().html}</mrow><mo>${latexAccents.get(command)}</mo></mover>`, movableLimits: false};
+        }
+        if (command === "underline") {
+          return {html: `<munder accentunder="true"><mrow>${this.parseArgument().html}</mrow><mo>_</mo></munder>`, movableLimits: false};
+        }
+        if ([",", ":", ";", "quad", "qquad", " ", "!"].includes(command)) {
+          const widths = {qquad: "2em", quad: "1em", ";": "0.278em", ":": "0.222em", "!": "-0.167em"};
+          return {html: `<mspace width="${widths[command] || "0.167em"}"/>`, movableLimits: false};
+        }
+        if (latexSymbols.has(command)) {
+          return {html: `<mo>${latexSymbols.get(command)}</mo>`, movableLimits: latexLimitOperators.has(command)};
+        }
+        if (latexNamedOperators.has(command)) {
+          return {html: `<mi mathvariant="normal">${escapeHtml(command)}</mi>`, movableLimits: latexLimitOperators.has(command)};
+        }
+        if (["%", "$", "#", "_", "{", "}", "&"].includes(command)) {
+          return {html: `<mo>${escapeHtml(command)}</mo>`, movableLimits: false};
+        }
+        return {html: `<mtext>\\${escapeHtml(command)}</mtext>`, movableLimits: false};
+      }
+
+      parseEnvironment(environment) {
+        const closing = `\\end{${environment}}`;
+        const end = this.source.indexOf(closing, this.position);
+        if (end < 0) return {html: `<mtext>\\begin{${escapeHtml(environment)}}</mtext>`, movableLimits: false};
+        let content = this.source.slice(this.position, end);
+        this.position = end + closing.length;
+        if (environment === "array") content = content.trim().replace(/^\{[^}]*\}/, "");
+        const rows = this.splitEnvironment(content);
+        let table = '<mtable columnspacing="1em" rowspacing="0.35em">';
+        for (const row of rows) {
+          table += "<mtr>";
+          for (const cell of row) table += `<mtd><mrow>${new LatexMathParser(cell).parse()}</mrow></mtd>`;
+          table += "</mtr>";
+        }
+        table += "</mtable>";
+        const delimiters = {
+          pmatrix: ["(", ")"], bmatrix: ["[", "]"], Bmatrix: ["{", "}"],
+          vmatrix: ["|", "|"], Vmatrix: ["‖", "‖"], cases: ["{", ""]
+        };
+        const pair = delimiters[environment];
+        if (pair) {
+          table = `<mrow><mo stretchy="true">${escapeHtml(pair[0])}</mo>${table}` +
+            (pair[1] ? `<mo stretchy="true">${escapeHtml(pair[1])}</mo>` : "") + "</mrow>";
+        }
+        return {html: table, movableLimits: false};
+      }
+
+      splitEnvironment(content) {
+        const rows = [[""]];
+        let depth = 0;
+        for (let index = 0; index < content.length; index += 1) {
+          const character = content[index];
+          if (character === "{") depth += 1;
+          else if (character === "}" && depth > 0) depth -= 1;
+          if (depth === 0 && character === "&") {
+            rows[rows.length - 1].push("");
+            continue;
+          }
+          if (depth === 0 && character === "\\" && content[index + 1] === "\\") {
+            rows.push([""]);
+            index += 1;
+            continue;
+          }
+          const row = rows[rows.length - 1];
+          row[row.length - 1] += character;
+        }
+        return rows;
+      }
+
+      parseRawGroup() {
+        this.skipSpaces();
+        if (this.source[this.position] !== "{") return "";
+        const start = ++this.position;
+        let depth = 1;
+        while (this.position < this.source.length && depth > 0) {
+          if (this.source[this.position] === "{") depth += 1;
+          else if (this.source[this.position] === "}") depth -= 1;
+          this.position += 1;
+        }
+        return this.source.slice(start, depth === 0 ? this.position - 1 : this.position);
+      }
+
+      readDelimiter() {
+        this.skipSpaces();
+        if (this.position >= this.source.length) return "";
+        if (this.source[this.position] !== "\\") {
+          const delimiter = this.source[this.position++];
+          return delimiter === "." ? "" : delimiter;
+        }
+        const start = ++this.position;
+        if (/[A-Za-z]/.test(this.source[this.position] || "")) {
+          while (/[A-Za-z]/.test(this.source[this.position] || "")) this.position += 1;
+        } else {
+          this.position += 1;
+        }
+        const name = this.source.slice(start, this.position);
+        return ({langle: "⟨", rangle: "⟩", lceil: "⌈", rceil: "⌉", lfloor: "⌊", rfloor: "⌋",
+          vert: "|", Vert: "‖", "|": "‖", "{": "{", "}": "}", ".": ""})[name] ?? name;
+      }
+
+      skipSpaces() {
+        while (/\s/.test(this.source[this.position] || "")) this.position += 1;
+      }
+    }
+
+    function renderLatexMath(source, display = false) {
+      const math = new LatexMathParser(source).parse();
+      const mode = display ? "block" : "inline";
+      return `<math class="latex-math" xmlns="http://www.w3.org/1998/Math/MathML" display="${mode}" aria-label="${escapeHtml(source)}"><semantics><mrow>${math}</mrow><annotation encoding="application/x-tex">${escapeHtml(source)}</annotation></semantics></math>`;
+    }
+
+    function findUnescaped(value, delimiter, start = 0) {
+      let position = start;
+      while ((position = value.indexOf(delimiter, position)) >= 0) {
+        let slashes = 0;
+        for (let index = position; index > 0 && value[index - 1] === "\\"; index -= 1) slashes += 1;
+        if (slashes % 2 === 0) return position;
+        position += delimiter.length;
+      }
+      return -1;
+    }
+
+    function displayMathBlock(lines, firstLine) {
+      const openingLine = lines[firstLine].trim();
+      const opening = openingLine.startsWith("$$") ? "$$" : openingLine.startsWith("\\[") ? "\\[" : "";
+      if (!opening) return null;
+      const closing = opening === "$$" ? "$$" : "\\]";
+      let source = openingLine.slice(opening.length);
+      let close = findUnescaped(source, closing);
+      if (close >= 0) {
+        if (source.slice(close + closing.length).trim()) return null;
+        return {source: source.slice(0, close), lastLine: firstLine};
+      }
+      for (let line = firstLine + 1; line < lines.length; line += 1) {
+        close = findUnescaped(lines[line], closing);
+        if (close < 0) {
+          source += `${source ? "\n" : ""}${lines[line]}`;
+          continue;
+        }
+        if (lines[line].slice(close + closing.length).trim()) return null;
+        source += `${source ? "\n" : ""}${lines[line].slice(0, close)}`;
+        return {source, lastLine: line};
+      }
+      return null;
+    }
+
+    function inlineMarkdown(value) {
+      let html = "";
+      let position = 0;
+      while (position < value.length) {
+        if (value[position] === "\\" && value[position + 1] === "$") {
+          html += "$";
+          position += 2;
+          continue;
+        }
+        if (value[position] === "`") {
+          const end = value.indexOf("`", position + 1);
+          if (end >= 0) {
+            html += `<code>${escapeHtml(value.slice(position + 1, end))}</code>`;
+            position = end + 1;
+            continue;
+          }
+        }
+        if (value.startsWith("\\(", position)) {
+          const end = findUnescaped(value, "\\)", position + 2);
+          if (end >= 0) {
+            html += renderLatexMath(value.slice(position + 2, end));
+            position = end + 2;
+            continue;
+          }
+        }
+        if (value[position] === "$" && value[position + 1] !== "$") {
+          const end = findUnescaped(value, "$", position + 1);
+          if (end > position + 1) {
+            html += renderLatexMath(value.slice(position + 1, end));
+            position = end + 1;
+            continue;
+          }
+        }
+        if (value.startsWith("**", position)) {
+          const end = value.indexOf("**", position + 2);
+          if (end >= 0) {
+            html += `<strong>${inlineMarkdown(value.slice(position + 2, end))}</strong>`;
+            position = end + 2;
+            continue;
+          }
+        }
+        if (value[position] === "*") {
+          const end = value.indexOf("*", position + 1);
+          if (end >= 0) {
+            html += `<em>${inlineMarkdown(value.slice(position + 1, end))}</em>`;
+            position = end + 1;
+            continue;
+          }
+        }
+        const glyph = String.fromCodePoint(value.codePointAt(position));
+        html += escapeHtml(glyph);
+        position += glyph.length;
+      }
+      return html;
+    }
+
     function renderMarkdown(source) {
       const lines = source.split("\n");
       let html = "";
       let list = false;
       let code = false;
-      for (const raw of lines) {
+      for (let line = 0; line < lines.length; line += 1) {
+        const raw = lines[line];
         if (raw.startsWith("```")) {
           if (list) { html += "</ul>"; list = false; }
           html += code ? "</code></pre>" : "<pre><code>";
@@ -920,6 +1332,13 @@ std::string_view notebook_app_html() {
           continue;
         }
         if (code) { html += `${escapeHtml(raw)}\n`; continue; }
+        const displayMath = displayMathBlock(lines, line);
+        if (displayMath) {
+          if (list) { html += "</ul>"; list = false; }
+          html += `<div class="math-display">${renderLatexMath(displayMath.source, true)}</div>`;
+          line = displayMath.lastLine;
+          continue;
+        }
         if (raw.startsWith("- ")) {
           if (!list) { html += "<ul>"; list = true; }
           html += `<li>${inlineMarkdown(raw.slice(2))}</li>`;
@@ -937,13 +1356,6 @@ std::string_view notebook_app_html() {
       if (list) html += "</ul>";
       if (code) html += "</code></pre>";
       return html;
-    }
-
-    function inlineMarkdown(value) {
-      return escapeHtml(value)
-        .replace(/`([^`]+)`/g, "<code>$1</code>")
-        .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-        .replace(/\*([^*]+)\*/g, "<em>$1</em>");
     }
 
     function nextId() {
@@ -1002,6 +1414,10 @@ std::string_view notebook_app_html() {
       const index = selectedIndex();
       const hasSelection = index >= 0;
       cellTypeSelect.disabled = !hasSelection;
+      const canClearSelected = hasSelection && hasSavedOutput(notebook.cells[index]);
+      clearOutputButton.disabled = !canClearSelected;
+      menuClearOutputButton.disabled = !canClearSelected;
+      menuClearAllButton.disabled = !notebook || !notebook.cells.some(hasSavedOutput);
       if (hasSelection) {
         cellTypeSelect.value = notebook.cells[index].cell_type;
         selectionLabel.textContent = `Cell ${index + 1} of ${notebook.cells.length}`;
@@ -1090,6 +1506,48 @@ std::string_view notebook_app_html() {
       markDirty();
       renderNotebook();
       selectCell(index, kind === "markdown");
+    }
+
+    function hasSavedOutput(cell) {
+      return cell?.cell_type === "code" &&
+        (cell.execution_count != null || (cell.outputs || []).length > 0);
+    }
+
+    function clearSelectedOutput() {
+      const index = selectedIndex();
+      if (index < 0 || notebook.cells[index].cell_type !== "code") {
+        setStatus("Select a code cell to clear its output");
+        return;
+      }
+      const cell = notebook.cells[index];
+      if (!hasSavedOutput(cell)) {
+        setStatus(`Cell ${index + 1} has no saved output`);
+        return;
+      }
+      cell.execution_count = null;
+      cell.outputs = [];
+      markDirty();
+      renderNotebook();
+      selectCell(index);
+      setStatus(`Cell ${index + 1} output cleared — save to persist`);
+    }
+
+    function clearAllOutputs(message = "") {
+      if (!notebook) return;
+      let cleared = 0;
+      for (const cell of notebook.cells) {
+        if (!hasSavedOutput(cell)) continue;
+        cell.execution_count = null;
+        cell.outputs = [];
+        cleared += 1;
+      }
+      if (cleared === 0) {
+        setStatus(message || "Notebook has no saved outputs");
+        return;
+      }
+      markDirty();
+      renderNotebook();
+      setStatus(message || `Cleared outputs from ${cleared} cells — save to persist`);
     }
 
     function makeOutput(text, error = false) {
@@ -1378,6 +1836,11 @@ std::string_view notebook_app_html() {
       }
     }
 
+    async function restartKernelAndClearOutputs() {
+      await restartKernel();
+      clearAllOutputs("Kernel restarted and all outputs cleared — save to persist");
+    }
+
     async function exportHtml() {
       if (!notebook) return;
       const response = await api("/api/export", {
@@ -1449,6 +1912,7 @@ std::string_view notebook_app_html() {
     bind("run", () => runCell());
     bind("run-all", runAll);
     bind("restart", restartKernel);
+    bind("clear-output", clearSelectedOutput);
     bind("move-up", () => moveSelected(-1));
     bind("move-down", () => moveSelected(1));
     bind("delete-cell", removeSelected);
@@ -1466,11 +1930,14 @@ std::string_view notebook_app_html() {
     bind("menu-markdown-below", () => insertCell("markdown", "below"));
     bind("menu-run", () => runCell());
     bind("menu-run-all", runAll);
+    bind("menu-clear-output", clearSelectedOutput);
+    bind("menu-clear-all", clearAllOutputs);
     bind("menu-code-type", () => setSelectedCellType("code"));
     bind("menu-markdown-type", () => setSelectedCellType("markdown"));
     bind("menu-restart", restartKernel);
+    bind("menu-restart-clear", restartKernelAndClearOutputs);
     bind("menu-theme", toggleTheme);
-    bind("menu-shortcuts", () => alert("Shift+Enter  Run and select next cell (creates one at the end)\nCmd/Ctrl+Enter  Run and stay in cell\nCmd/Ctrl+S  Save\nA  Insert code above\nB  Insert code below\nY  Change to Code\nM  Change to Markdown"));
+    bind("menu-shortcuts", () => alert("Shift+Enter  Run and select next cell (creates one at the end)\nCmd/Ctrl+Enter  Run and stay in cell\nCmd/Ctrl+S  Save\nAlt+O  Clear selected output\nShift+Alt+O  Clear all outputs\nA  Insert code above\nB  Insert code below\nY  Change to Code\nM  Change to Markdown"));
     cellTypeSelect.onchange = () => setSelectedCellType(cellTypeSelect.value);
 
     document.addEventListener("click", event => {
@@ -1490,7 +1957,13 @@ std::string_view notebook_app_html() {
       }
       if (["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName)) return;
       const key = event.key.toLowerCase();
-      if (event.key === "Enter" && event.shiftKey) {
+      if (event.altKey && event.shiftKey && key === "o") {
+        event.preventDefault();
+        clearAllOutputs();
+      } else if (event.altKey && key === "o") {
+        event.preventDefault();
+        clearSelectedOutput();
+      } else if (event.key === "Enter" && event.shiftKey) {
         event.preventDefault();
         runCell(selectedIndex(), true);
       } else if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {

@@ -40,6 +40,7 @@
   - [regex](stdlib/regex.md)
   - [runtime](stdlib/runtime.md)
   - [set](stdlib/set.md)
+  - [stats](stdlib/stats.md)
   - [text](stdlib/text.md)
 
 # Guides

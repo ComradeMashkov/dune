@@ -1,0 +1,2253 @@
+// Descriptive and inferential statistics in pure Dune.
+//
+// The API follows established conventions from Python's `statistics`, NumPy,
+// SciPy, Julia Statistics, and R: sample and population estimators have
+// explicit names, quantiles document their interpolation rule, and every
+// partial operation returns `Outcome<T, text>` instead of silently inventing a
+// value for empty or invalid data. Algorithms copy rather than mutate caller
+// arrays and are deterministic on the bytecode VM.
+import fmt;
+import math;
+import matrix;
+import outcome;
+
+// A compact five-number summary, using Type-7 linear quantiles.
+export record FiveNumberSummary derive eq, copy, debug {
+    export minimum: real64,
+    export first_quartile: real64,
+    export median: real64,
+    export third_quartile: real64,
+    export maximum: real64,
+
+    // Interquartile range (Q3 - Q1).
+    export fn iqr(): real64 {
+        return this.third_quartile - this.first_quartile;
+    }
+}
+
+// A comprehensive summary for a sample containing at least two values.
+export record Summary derive eq, copy, debug {
+    export count: int,
+    export sum: real64,
+    export mean: real64,
+    export minimum: real64,
+    export maximum: real64,
+    export range: real64,
+    export population_variance: real64,
+    export sample_variance: real64,
+    export population_stddev: real64,
+    export sample_stddev: real64,
+    export standard_error: real64,
+    export median: real64,
+    export first_quartile: real64,
+    export third_quartile: real64,
+    export interquartile_range: real64,
+    export skewness: real64,
+    export excess_kurtosis: real64,
+
+    // A concise human-readable rendering suitable for notebooks.
+    export fn to_text(): text {
+        return fmt.format(
+            "Summary(count={}, mean={}, stddev={}, min={}, median={}, max={})",
+            this.count,
+            this.mean,
+            this.sample_stddev,
+            this.minimum,
+            this.median,
+            this.maximum
+        );
+    }
+}
+
+// Sorted distinct numeric values and their occurrence counts.
+export record FrequencyTable derive copy {
+    export values: [real64],
+    export counts: [int],
+    export relative_frequencies: [real64],
+    export total: int,
+
+    // Number of distinct values.
+    export fn len(): int {
+        return this.values.len();
+    }
+}
+
+// Ordinary least-squares fit for y = slope*x + intercept, together with
+// diagnostics that are commonly needed in analysis notebooks.
+export record LinearRegression derive eq, copy, debug {
+    export slope: real64,
+    export intercept: real64,
+    export correlation: real64,
+    export r_squared: real64,
+    export residual_sum_squares: real64,
+    export mean_squared_error: real64,
+    export root_mean_squared_error: real64,
+    export residual_standard_error: real64,
+    export sample_count: int,
+
+    // Predict one response.
+    export fn predict(x: real64): real64 {
+        return this.slope * x + this.intercept;
+    }
+
+    // Predict responses for several numeric inputs.
+    export fn predict_all<T is numeric>(xs: [T]): [real64] {
+        result: [real64] = [];
+        for index = 0; index < xs.len(); index = index + 1 {
+            result.push(this.predict(xs[index] to real64));
+        }
+        return result;
+    }
+}
+
+// Equal- or variable-width histogram. Intervals are left-closed and
+// right-open, except the final interval also includes its right edge.
+export record Histogram {
+    export edges: [real64],
+    export counts: [int],
+    export densities: [real64],
+    export sample_count: int,
+    export included_count: int,
+    export underflow: int,
+    export overflow: int,
+
+    // Number of bins.
+    export fn len(): int {
+        return this.counts.len();
+    }
+
+    // Midpoint of each bin, useful as x coordinates for plot.bar.
+    export fn bin_centers(): [real64] {
+        centers: [real64] = [];
+        for index = 0; index < this.counts.len(); index = index + 1 {
+            centers.push((this.edges[index] + this.edges[index + 1]) / 2.0);
+        }
+        return centers;
+    }
+
+    // Counts converted to real64 for plotting and arithmetic.
+    export fn counts_as_real64(): [real64] {
+        values: [real64] = [];
+        for index = 0; index < this.counts.len(); index = index + 1 {
+            values.push(this.counts[index] to real64);
+        }
+        return values;
+    }
+
+    // Included counts divided by the number of included observations.
+    export fn relative_frequencies(): [real64] {
+        values: [real64] = [];
+        for index = 0; index < this.counts.len(); index = index + 1 {
+            if this.included_count == 0 {
+                values.push(0.0);
+            } else {
+                values.push((this.counts[index] to real64) / (this.included_count to real64));
+            }
+        }
+        return values;
+    }
+
+    // Concise notebook rendering; full data remains available in public fields.
+    export fn to_text(): text {
+        return fmt.format(
+            "Histogram(bins={}, samples={}, included={}, underflow={}, overflow={})",
+            this.counts.len(),
+            this.sample_count,
+            this.included_count,
+            this.underflow,
+            this.overflow
+        );
+    }
+}
+
+// Symmetric confidence interval around an estimate.
+export record ConfidenceInterval derive eq, copy, debug {
+    export estimate: real64,
+    export lower: real64,
+    export upper: real64,
+    export margin: real64,
+    export confidence: real64,
+}
+
+record WeightedData {
+    values: [real64],
+    weights: [real64],
+    total_weight: real64,
+    squared_weight_sum: real64,
+}
+
+fn empty_weighted_data(): WeightedData {
+    values: [real64] = [];
+    weights: [real64] = [];
+    return WeightedData {
+        values: values,
+        weights: weights,
+        total_weight: 0.0,
+        squared_weight_sum: 0.0,
+    };
+}
+
+fn prepared_weights<T is numeric, W is numeric>(values: [T], weights: [W]): outcome.Outcome<WeightedData, text> {
+    if values.len() == 0 {
+        return outcome.failed(empty_weighted_data(), "stats.weighted: expected at least one value");
+    }
+    if values.len() != weights.len() {
+        return outcome.failed(empty_weighted_data(), "stats.weighted: values and weights must have the same length");
+    }
+
+    sorted_values = as_real64(values);
+    sorted_weights = as_real64(weights);
+    total_weight: real64 = 0.0;
+    squared_weight_sum: real64 = 0.0;
+    for index = 0; index < sorted_weights.len(); index = index + 1 {
+        if sorted_weights[index] < 0.0 {
+            return outcome.failed(empty_weighted_data(), "stats.weighted: weights must be non-negative");
+        }
+        total_weight = total_weight + sorted_weights[index];
+        squared_weight_sum = squared_weight_sum + sorted_weights[index] * sorted_weights[index];
+    }
+    if total_weight <= 0.0 {
+        return outcome.failed(empty_weighted_data(), "stats.weighted: total weight must be positive");
+    }
+
+    // Stable insertion sort of value/weight pairs.
+    for index = 1; index < sorted_values.len(); index = index + 1 {
+        value = sorted_values[index];
+        weight = sorted_weights[index];
+        position = index;
+        while position > 0 && value < sorted_values[position - 1] {
+            sorted_values[position] = sorted_values[position - 1];
+            sorted_weights[position] = sorted_weights[position - 1];
+            position = position - 1;
+        }
+        sorted_values[position] = value;
+        sorted_weights[position] = weight;
+    }
+
+    result = WeightedData {
+        values: sorted_values,
+        weights: sorted_weights,
+        total_weight: total_weight,
+        squared_weight_sum: squared_weight_sum,
+    };
+    return outcome.done(result, "");
+}
+
+// Return a zero-valued FiveNumberSummary for use with Outcome.value_or.
+export fn empty_five_number_summary(): FiveNumberSummary {
+    return FiveNumberSummary {
+        minimum: 0.0,
+        first_quartile: 0.0,
+        median: 0.0,
+        third_quartile: 0.0,
+        maximum: 0.0,
+    };
+}
+
+// Return a zero-valued Summary for use with Outcome.value_or.
+export fn empty_summary(): Summary {
+    return Summary {
+        count: 0,
+        sum: 0.0,
+        mean: 0.0,
+        minimum: 0.0,
+        maximum: 0.0,
+        range: 0.0,
+        population_variance: 0.0,
+        sample_variance: 0.0,
+        population_stddev: 0.0,
+        sample_stddev: 0.0,
+        standard_error: 0.0,
+        median: 0.0,
+        first_quartile: 0.0,
+        third_quartile: 0.0,
+        interquartile_range: 0.0,
+        skewness: 0.0,
+        excess_kurtosis: 0.0,
+    };
+}
+
+// Return an empty FrequencyTable for use with Outcome.value_or.
+export fn empty_frequency_table(): FrequencyTable {
+    values: [real64] = [];
+    counts: [int] = [];
+    frequencies: [real64] = [];
+    return FrequencyTable {
+        values: values,
+        counts: counts,
+        relative_frequencies: frequencies,
+        total: 0,
+    };
+}
+
+// Copy numeric input into real64, the canonical accumulation precision used by
+// this module. The caller's array is never mutated.
+fn as_real64<T is numeric>(values: [T]): [real64] {
+    result: [real64] = [];
+    for index = 0; index < values.len(); index = index + 1 {
+        result.push(values[index] to real64);
+    }
+    return result;
+}
+
+// Stable ascending insertion sort over a copy. It is deliberately simple and
+// deterministic; the current language has no native sort primitive.
+fn sorted_copy<T is numeric>(values: [T]): [real64] {
+    result = as_real64(values);
+    for index = 1; index < result.len(); index = index + 1 {
+        current = result[index];
+        position = index;
+        while position > 0 && current < result[position - 1] {
+            result[position] = result[position - 1];
+            position = position - 1;
+        }
+        result[position] = current;
+    }
+    return result;
+}
+
+// Neumaier compensated summation, which retains small addends more accurately
+// than a naive left-to-right sum when magnitudes differ substantially.
+fn compensated_sum<T is numeric>(values: [T]): real64 {
+    total: real64 = 0.0;
+    compensation: real64 = 0.0;
+    for index = 0; index < values.len(); index = index + 1 {
+        value: real64 = values[index] to real64;
+        next = total + value;
+        if math.abs(total) >= math.abs(value) {
+            compensation = compensation + (total - next) + value;
+        } else {
+            compensation = compensation + (value - next) + total;
+        }
+        total = next;
+    }
+    return total + compensation;
+}
+
+fn failed_real(message: text): outcome.Outcome<real64, text> {
+    return outcome.failed(0.0, message);
+}
+
+fn done_real(value: real64): outcome.Outcome<real64, text> {
+    return outcome.done(value, "");
+}
+
+fn quantile_sorted(values: [real64], probability: real64, interpolation: text): outcome.Outcome<real64, text> {
+    if values.len() == 0 {
+        return failed_real("stats.quantile: expected at least one value");
+    }
+    if probability < 0.0 || probability > 1.0 {
+        return failed_real("stats.quantile: probability must be between 0 and 1");
+    }
+    if interpolation != "linear" && interpolation != "lower" && interpolation != "higher" &&
+       interpolation != "nearest" && interpolation != "midpoint" {
+        return failed_real("stats.quantile: method must be linear, lower, higher, nearest, or midpoint");
+    }
+
+    position = probability * ((values.len() - 1) to real64);
+    lower_index = math.floor(position) to int;
+    upper_index = math.ceil(position) to int;
+    lower = values[lower_index];
+    upper = values[upper_index];
+
+    if interpolation == "lower" {
+        return done_real(lower);
+    }
+    if interpolation == "higher" {
+        return done_real(upper);
+    }
+    if interpolation == "nearest" {
+        return done_real(values[math.round(position) to int]);
+    }
+    if interpolation == "midpoint" {
+        return done_real((lower + upper) / 2.0);
+    }
+
+    fraction = position - (lower_index to real64);
+    return done_real(lower + fraction * (upper - lower));
+}
+
+// Number of observations. Unlike reductions, this is defined for empty data.
+// example: stats.count([1.0, 2.0, 3.0])  // 3
+export fn count<T>(values: [T]): int {
+    return values.len();
+}
+
+// Compensated sum in real64. The empty sum is 0.
+// example: stats.sum([1, 2, 3])  // 6
+export fn sum<T is numeric>(values: [T]): real64 {
+    return compensated_sum(values);
+}
+
+// Arithmetic mean. Empty input returns Failed.
+// example: stats.mean([1.0, 2.0, 3.0]).value_or(0.0)  // 2
+export fn mean<T is numeric>(values: [T]): outcome.Outcome<real64, text> {
+    if values.len() == 0 {
+        return failed_real("stats.mean: expected at least one value");
+    }
+    return done_real(compensated_sum(values) / (values.len() to real64));
+}
+
+// Smallest value as real64. Empty input returns Failed.
+export fn minimum<T is numeric>(values: [T]): outcome.Outcome<real64, text> {
+    if values.len() == 0 {
+        return failed_real("stats.minimum: expected at least one value");
+    }
+    result: real64 = values[0] to real64;
+    for index = 1; index < values.len(); index = index + 1 {
+        value: real64 = values[index] to real64;
+        if value < result {
+            result = value;
+        }
+    }
+    return done_real(result);
+}
+
+// Largest value as real64. Empty input returns Failed.
+export fn maximum<T is numeric>(values: [T]): outcome.Outcome<real64, text> {
+    if values.len() == 0 {
+        return failed_real("stats.maximum: expected at least one value");
+    }
+    result: real64 = values[0] to real64;
+    for index = 1; index < values.len(); index = index + 1 {
+        value: real64 = values[index] to real64;
+        if value > result {
+            result = value;
+        }
+    }
+    return done_real(result);
+}
+
+// Difference between the largest and smallest observations.
+export fn data_range<T is numeric>(values: [T]): outcome.Outcome<real64, text> {
+    low: real64 = minimum(values)?;
+    high: real64 = maximum(values)?;
+    return done_real(high - low);
+}
+
+// Midpoint between the largest and smallest observations.
+export fn midrange<T is numeric>(values: [T]): outcome.Outcome<real64, text> {
+    low: real64 = minimum(values)?;
+    high: real64 = maximum(values)?;
+    return done_real((high + low) / 2.0);
+}
+
+// Conventional alias for minimum.
+export fn min<T is numeric>(values: [T]): outcome.Outcome<real64, text> {
+    return minimum(values);
+}
+
+// Conventional alias for maximum.
+export fn max<T is numeric>(values: [T]): outcome.Outcome<real64, text> {
+    return maximum(values);
+}
+
+// Conventional alias for data_range.
+export fn range<T is numeric>(values: [T]): outcome.Outcome<real64, text> {
+    return data_range(values);
+}
+
+// Population variance (divide by n), computed with Welford's stable one-pass
+// recurrence. A single observation has population variance 0.
+// example: stats.pvariance([1.0, 2.0, 3.0]).value_or(0.0)  // 0.666667
+export fn pvariance<T is numeric>(values: [T]): outcome.Outcome<real64, text> {
+    if values.len() == 0 {
+        return failed_real("stats.pvariance: expected at least one value");
+    }
+    running_mean: real64 = 0.0;
+    squared_deviations: real64 = 0.0;
+    for index = 0; index < values.len(); index = index + 1 {
+        value: real64 = values[index] to real64;
+        n: real64 = (index + 1) to real64;
+        delta = value - running_mean;
+        running_mean = running_mean + delta / n;
+        delta_after = value - running_mean;
+        squared_deviations = squared_deviations + delta * delta_after;
+    }
+    return done_real(squared_deviations / (values.len() to real64));
+}
+
+// Sample variance (divide by n-1), matching Python statistics.variance and
+// Julia var(corrected=true). At least two observations are required.
+// example: stats.variance([1.0, 2.0, 3.0]).value_or(0.0)  // 1
+export fn variance<T is numeric>(values: [T]): outcome.Outcome<real64, text> {
+    if values.len() < 2 {
+        return failed_real("stats.variance: expected at least two values");
+    }
+    running_mean: real64 = 0.0;
+    squared_deviations: real64 = 0.0;
+    for index = 0; index < values.len(); index = index + 1 {
+        value: real64 = values[index] to real64;
+        n: real64 = (index + 1) to real64;
+        delta = value - running_mean;
+        running_mean = running_mean + delta / n;
+        delta_after = value - running_mean;
+        squared_deviations = squared_deviations + delta * delta_after;
+    }
+    return done_real(squared_deviations / ((values.len() - 1) to real64));
+}
+
+// Explicitly named alias for pvariance.
+export fn population_variance<T is numeric>(values: [T]): outcome.Outcome<real64, text> {
+    return pvariance(values);
+}
+
+// Explicitly named alias for variance.
+export fn sample_variance<T is numeric>(values: [T]): outcome.Outcome<real64, text> {
+    return variance(values);
+}
+
+// Population standard deviation.
+export fn pstdev<T is numeric>(values: [T]): outcome.Outcome<real64, text> {
+    value: real64 = pvariance(values)?;
+    return done_real(math.sqrt(value));
+}
+
+// Sample standard deviation. At least two observations are required.
+// example: stats.stddev([1.0, 2.0, 3.0]).value_or(0.0)  // 1
+export fn stddev<T is numeric>(values: [T]): outcome.Outcome<real64, text> {
+    value: real64 = variance(values)?;
+    return done_real(math.sqrt(value));
+}
+
+// Explicitly named alias for pstdev.
+export fn population_stddev<T is numeric>(values: [T]): outcome.Outcome<real64, text> {
+    return pstdev(values);
+}
+
+// Explicitly named alias for stddev.
+export fn sample_stddev<T is numeric>(values: [T]): outcome.Outcome<real64, text> {
+    return stddev(values);
+}
+
+// Standard error of the arithmetic mean, using the sample standard deviation.
+export fn standard_error<T is numeric>(values: [T]): outcome.Outcome<real64, text> {
+    deviation: real64 = stddev(values)?;
+    return done_real(deviation / math.sqrt(values.len() to real64));
+}
+
+// Root mean square, useful for signal magnitude.
+export fn root_mean_square<T is numeric>(values: [T]): outcome.Outcome<real64, text> {
+    if values.len() == 0 {
+        return failed_real("stats.root_mean_square: expected at least one value");
+    }
+    squares: real64 = 0.0;
+    for index = 0; index < values.len(); index = index + 1 {
+        value: real64 = values[index] to real64;
+        squares = squares + value * value;
+    }
+    return done_real(math.sqrt(squares / (values.len() to real64)));
+}
+
+// Geometric mean. All observations must be strictly positive.
+export fn geometric_mean<T is numeric>(values: [T]): outcome.Outcome<real64, text> {
+    if values.len() == 0 {
+        return failed_real("stats.geometric_mean: expected at least one value");
+    }
+    logarithms: real64 = 0.0;
+    for index = 0; index < values.len(); index = index + 1 {
+        value: real64 = values[index] to real64;
+        if value <= 0.0 {
+            return failed_real("stats.geometric_mean: values must be positive");
+        }
+        logarithms = logarithms + math.ln(value);
+    }
+    return done_real(math.exp(logarithms / (values.len() to real64)));
+}
+
+// Harmonic mean. All observations must be strictly positive.
+export fn harmonic_mean<T is numeric>(values: [T]): outcome.Outcome<real64, text> {
+    if values.len() == 0 {
+        return failed_real("stats.harmonic_mean: expected at least one value");
+    }
+    reciprocal_sum: real64 = 0.0;
+    for index = 0; index < values.len(); index = index + 1 {
+        value: real64 = values[index] to real64;
+        if value <= 0.0 {
+            return failed_real("stats.harmonic_mean: values must be positive");
+        }
+        reciprocal_sum = reciprocal_sum + 1.0 / value;
+    }
+    return done_real((values.len() to real64) / reciprocal_sum);
+}
+
+// Median with linear averaging for an even-sized sample.
+// example: stats.median([4.0, 1.0, 3.0, 2.0]).value_or(0.0)  // 2.5
+export fn median<T is numeric>(values: [T]): outcome.Outcome<real64, text> {
+    return quantile_sorted(sorted_copy(values), 0.5, "linear");
+}
+
+// Lower middle observation (never averages for even-sized input).
+export fn median_low<T is numeric>(values: [T]): outcome.Outcome<real64, text> {
+    return quantile_sorted(sorted_copy(values), 0.5, "lower");
+}
+
+// Upper middle observation (never averages for even-sized input).
+export fn median_high<T is numeric>(values: [T]): outcome.Outcome<real64, text> {
+    return quantile_sorted(sorted_copy(values), 0.5, "higher");
+}
+
+// Type-7 linear quantile for probability in [0, 1]. This is the default used
+// by R, NumPy, and Julia Statistics.
+// example: stats.quantile([0.0, 10.0, 20.0], 0.25).value_or(0.0)  // 5
+export fn quantile<T is numeric>(values: [T], probability: real64): outcome.Outcome<real64, text> {
+    return quantile_sorted(sorted_copy(values), probability, "linear");
+}
+
+// Quantile with one of: linear, lower, higher, nearest, midpoint.
+export fn quantile_with<T is numeric>(values: [T], probability: real64, interpolation: text): outcome.Outcome<real64, text> {
+    return quantile_sorted(sorted_copy(values), probability, interpolation);
+}
+
+// Several Type-7 quantiles in one call. Probabilities retain caller order.
+export fn quantiles<T is numeric>(values: [T], probabilities: [real64]): outcome.Outcome<[real64], text> {
+    sorted = sorted_copy(values);
+    result: [real64] = [];
+    for index = 0; index < probabilities.len(); index = index + 1 {
+        result.push(quantile_sorted(sorted, probabilities[index], "linear")?);
+    }
+    return outcome.done(result, "");
+}
+
+// Conventional percentile for p in [0, 100], matching NumPy. Use quantile for
+// probabilities in [0, 1].
+// example: stats.percentile([0.0, 10.0, 20.0], 25.0).value_or(0.0)  // 5
+export fn percentile<T is numeric>(values: [T], percent: real64): outcome.Outcome<real64, text> {
+    if percent < 0.0 || percent > 100.0 {
+        return failed_real("stats.percentile: percent must be between 0 and 100");
+    }
+    return quantile(values, percent / 100.0);
+}
+
+// The minimum, quartiles, and maximum. Input is copied before sorting.
+export fn five_number_summary<T is numeric>(values: [T]): outcome.Outcome<FiveNumberSummary, text> {
+    sorted = sorted_copy(values);
+    if sorted.len() == 0 {
+        return outcome.failed(empty_five_number_summary(), "stats.five_number_summary: expected at least one value");
+    }
+    result = FiveNumberSummary {
+        minimum: sorted[0],
+        first_quartile: quantile_sorted(sorted, 0.25, "linear")?,
+        median: quantile_sorted(sorted, 0.5, "linear")?,
+        third_quartile: quantile_sorted(sorted, 0.75, "linear")?,
+        maximum: sorted[sorted.len() - 1],
+    };
+    return outcome.done(result, "");
+}
+
+// Interquartile range (Q3 - Q1).
+export fn interquartile_range<T is numeric>(values: [T]): outcome.Outcome<real64, text> {
+    summary: FiveNumberSummary = five_number_summary(values)?;
+    return done_real(summary.iqr());
+}
+
+// Median absolute deviation from the sample median.
+export fn median_absolute_deviation<T is numeric>(values: [T]): outcome.Outcome<real64, text> {
+    center: real64 = median(values)?;
+    deviations: [real64] = [];
+    for index = 0; index < values.len(); index = index + 1 {
+        deviations.push(math.abs((values[index] to real64) - center));
+    }
+    return median(deviations);
+}
+
+// Mean absolute deviation from the arithmetic mean.
+export fn mean_absolute_deviation<T is numeric>(values: [T]): outcome.Outcome<real64, text> {
+    center: real64 = mean(values)?;
+    deviations: real64 = 0.0;
+    for index = 0; index < values.len(); index = index + 1 {
+        deviations = deviations + math.abs((values[index] to real64) - center);
+    }
+    return done_real(deviations / (values.len() to real64));
+}
+
+// Mean after removing `fraction` from each tail. The fraction must be in
+// [0, 0.5), and at least one observation must remain.
+export fn trimmed_mean<T is numeric>(values: [T], fraction: real64): outcome.Outcome<real64, text> {
+    if values.len() == 0 {
+        return failed_real("stats.trimmed_mean: expected at least one value");
+    }
+    if fraction < 0.0 || fraction >= 0.5 {
+        return failed_real("stats.trimmed_mean: fraction must be between 0 inclusive and 0.5 exclusive");
+    }
+    sorted = sorted_copy(values);
+    trim = math.floor((sorted.len() to real64) * fraction) to int;
+    remaining = sorted.len() - 2 * trim;
+    total: real64 = 0.0;
+    for index = trim; index < sorted.len() - trim; index = index + 1 {
+        total = total + sorted[index];
+    }
+    return done_real(total / (remaining to real64));
+}
+
+// Winsorized mean: values in each trimmed tail are replaced with the nearest
+// retained boundary instead of removed.
+export fn winsorized_mean<T is numeric>(values: [T], fraction: real64): outcome.Outcome<real64, text> {
+    if values.len() == 0 {
+        return failed_real("stats.winsorized_mean: expected at least one value");
+    }
+    if fraction < 0.0 || fraction >= 0.5 {
+        return failed_real("stats.winsorized_mean: fraction must be between 0 inclusive and 0.5 exclusive");
+    }
+    sorted = sorted_copy(values);
+    trim = math.floor((sorted.len() to real64) * fraction) to int;
+    low = sorted[trim];
+    high = sorted[sorted.len() - trim - 1];
+    total: real64 = 0.0;
+    for index = 0; index < sorted.len(); index = index + 1 {
+        value = sorted[index];
+        if index < trim {
+            value = low;
+        }
+        if index >= sorted.len() - trim {
+            value = high;
+        }
+        total = total + value;
+    }
+    return done_real(total / (sorted.len() to real64));
+}
+
+// Sorted frequency table for numeric data.
+export fn frequencies<T is numeric>(values: [T]): outcome.Outcome<FrequencyTable, text> {
+    sorted = sorted_copy(values);
+    if sorted.len() == 0 {
+        return outcome.failed(empty_frequency_table(), "stats.frequencies: expected at least one value");
+    }
+    distinct: [real64] = [];
+    counts: [int] = [];
+    for index = 0; index < sorted.len(); index = index + 1 {
+        if distinct.len() == 0 || sorted[index] != distinct[distinct.len() - 1] {
+            distinct.push(sorted[index]);
+            counts.push(1);
+        } else {
+            last = counts.len() - 1;
+            counts[last] = counts[last] + 1;
+        }
+    }
+    relative: [real64] = [];
+    for index = 0; index < counts.len(); index = index + 1 {
+        relative.push((counts[index] to real64) / (sorted.len() to real64));
+    }
+    result = FrequencyTable {
+        values: distinct,
+        counts: counts,
+        relative_frequencies: relative,
+        total: sorted.len(),
+    };
+    return outcome.done(result, "");
+}
+
+// Smallest mode when several values share the maximum frequency.
+export fn mode<T is numeric>(values: [T]): outcome.Outcome<real64, text> {
+    table: FrequencyTable = frequencies(values)?;
+    best = 0;
+    for index = 1; index < table.counts.len(); index = index + 1 {
+        if table.counts[index] > table.counts[best] {
+            best = index;
+        }
+    }
+    return done_real(table.values[best]);
+}
+
+// Every mode, sorted ascending.
+export fn modes<T is numeric>(values: [T]): outcome.Outcome<[real64], text> {
+    table: FrequencyTable = frequencies(values)?;
+    highest = table.counts[0];
+    for index = 1; index < table.counts.len(); index = index + 1 {
+        if table.counts[index] > highest {
+            highest = table.counts[index];
+        }
+    }
+    result: [real64] = [];
+    for index = 0; index < table.counts.len(); index = index + 1 {
+        if table.counts[index] == highest {
+            result.push(table.values[index]);
+        }
+    }
+    return outcome.done(result, "");
+}
+
+// Fraction of observations less than or equal to `value`, in [0, 1].
+export fn percentile_rank<T is numeric>(values: [T], value: real64): outcome.Outcome<real64, text> {
+    if values.len() == 0 {
+        return failed_real("stats.percentile_rank: expected at least one value");
+    }
+    below_or_equal = 0;
+    for index = 0; index < values.len(); index = index + 1 {
+        if (values[index] to real64) <= value {
+            below_or_equal = below_or_equal + 1;
+        }
+    }
+    return done_real((below_or_equal to real64) / (values.len() to real64));
+}
+
+// Population skewness (third standardized central moment). Constant data
+// returns 0; at least one observation is required.
+export fn population_skewness<T is numeric>(values: [T]): outcome.Outcome<real64, text> {
+    center: real64 = mean(values)?;
+    second: real64 = 0.0;
+    third: real64 = 0.0;
+    for index = 0; index < values.len(); index = index + 1 {
+        delta = (values[index] to real64) - center;
+        second = second + delta * delta;
+        third = third + delta * delta * delta;
+    }
+    second = second / (values.len() to real64);
+    third = third / (values.len() to real64);
+    if second == 0.0 {
+        return done_real(0.0);
+    }
+    return done_real(third / math.pow(math.sqrt(second), 3));
+}
+
+// Bias-corrected sample skewness. At least three observations are required.
+export fn skewness<T is numeric>(values: [T]): outcome.Outcome<real64, text> {
+    if values.len() < 3 {
+        return failed_real("stats.skewness: expected at least three values");
+    }
+    population: real64 = population_skewness(values)?;
+    n = values.len() to real64;
+    correction = math.sqrt(n * (n - 1.0)) / (n - 2.0);
+    return done_real(correction * population);
+}
+
+// Population excess kurtosis (fourth standardized moment minus 3). Constant
+// data returns 0.
+export fn population_excess_kurtosis<T is numeric>(values: [T]): outcome.Outcome<real64, text> {
+    center: real64 = mean(values)?;
+    second: real64 = 0.0;
+    fourth: real64 = 0.0;
+    for index = 0; index < values.len(); index = index + 1 {
+        delta = (values[index] to real64) - center;
+        squared = delta * delta;
+        second = second + squared;
+        fourth = fourth + squared * squared;
+    }
+    second = second / (values.len() to real64);
+    fourth = fourth / (values.len() to real64);
+    if second == 0.0 {
+        return done_real(0.0);
+    }
+    return done_real(fourth / (second * second) - 3.0);
+}
+
+// Bias-corrected Fisher sample excess kurtosis. At least four observations are
+// required.
+export fn excess_kurtosis<T is numeric>(values: [T]): outcome.Outcome<real64, text> {
+    if values.len() < 4 {
+        return failed_real("stats.excess_kurtosis: expected at least four values");
+    }
+    population: real64 = population_excess_kurtosis(values)?;
+    n = values.len() to real64;
+    corrected = ((n - 1.0) / ((n - 2.0) * (n - 3.0))) * ((n + 1.0) * population + 6.0);
+    return done_real(corrected);
+}
+
+// Coefficient of variation: sample standard deviation divided by |mean|.
+export fn coefficient_of_variation<T is numeric>(values: [T]): outcome.Outcome<real64, text> {
+    center: real64 = mean(values)?;
+    if center == 0.0 {
+        return failed_real("stats.coefficient_of_variation: mean must be non-zero");
+    }
+    deviation: real64 = stddev(values)?;
+    return done_real(deviation / math.abs(center));
+}
+
+// Comprehensive descriptive summary. At least two observations are required
+// because the record includes sample variance and standard error. Skewness and
+// kurtosis are reported as 0 when the sample is too small or constant.
+// example: stats.describe([1.0, 2.0, 3.0]).value_or(stats.empty_summary()).mean  // 2
+export fn describe<T is numeric>(values: [T]): outcome.Outcome<Summary, text> {
+    if values.len() < 2 {
+        return outcome.failed(empty_summary(), "stats.describe: expected at least two values");
+    }
+    five: FiveNumberSummary = five_number_summary(values)?;
+    sample_variance: real64 = variance(values)?;
+    population_variance: real64 = pvariance(values)?;
+    sample_skew: real64 = 0.0;
+    sample_kurtosis: real64 = 0.0;
+    if values.len() >= 3 {
+        sample_skew = skewness(values)?;
+    }
+    if values.len() >= 4 {
+        sample_kurtosis = excess_kurtosis(values)?;
+    }
+    result = Summary {
+        count: values.len(),
+        sum: compensated_sum(values),
+        mean: mean(values)?,
+        minimum: five.minimum,
+        maximum: five.maximum,
+        range: five.maximum - five.minimum,
+        population_variance: population_variance,
+        sample_variance: sample_variance,
+        population_stddev: math.sqrt(population_variance),
+        sample_stddev: math.sqrt(sample_variance),
+        standard_error: math.sqrt(sample_variance) / math.sqrt(values.len() to real64),
+        median: five.median,
+        first_quartile: five.first_quartile,
+        third_quartile: five.third_quartile,
+        interquartile_range: five.iqr(),
+        skewness: sample_skew,
+        excess_kurtosis: sample_kurtosis,
+    };
+    return outcome.done(result, "");
+}
+
+// Arithmetic mean with non-negative reliability/frequency weights.
+// example: stats.weighted_mean([10.0, 20.0], [1.0, 3.0]).value_or(0.0)  // 17.5
+export fn weighted_mean<T is numeric, W is numeric>(values: [T], weights: [W]): outcome.Outcome<real64, text> {
+    data: WeightedData = prepared_weights(values, weights)?;
+    total: real64 = 0.0;
+    for index = 0; index < data.values.len(); index = index + 1 {
+        total = total + data.values[index] * data.weights[index];
+    }
+    return done_real(total / data.total_weight);
+}
+
+// Weighted population variance, dividing by the total weight.
+export fn weighted_pvariance<T is numeric, W is numeric>(values: [T], weights: [W]): outcome.Outcome<real64, text> {
+    data: WeightedData = prepared_weights(values, weights)?;
+    center: real64 = weighted_mean(values, weights)?;
+    total: real64 = 0.0;
+    for index = 0; index < data.values.len(); index = index + 1 {
+        delta = data.values[index] - center;
+        total = total + data.weights[index] * delta * delta;
+    }
+    return done_real(total / data.total_weight);
+}
+
+// Unbiased weighted sample variance for reliability weights. The denominator
+// is sum(w) - sum(w^2)/sum(w); it must be positive.
+export fn weighted_variance<T is numeric, W is numeric>(values: [T], weights: [W]): outcome.Outcome<real64, text> {
+    data: WeightedData = prepared_weights(values, weights)?;
+    denominator = data.total_weight - data.squared_weight_sum / data.total_weight;
+    if denominator <= 0.0 {
+        return failed_real("stats.weighted_variance: effective sample size must exceed one");
+    }
+    center: real64 = weighted_mean(values, weights)?;
+    total: real64 = 0.0;
+    for index = 0; index < data.values.len(); index = index + 1 {
+        delta = data.values[index] - center;
+        total = total + data.weights[index] * delta * delta;
+    }
+    return done_real(total / denominator);
+}
+
+// Weighted population standard deviation.
+export fn weighted_pstdev<T is numeric, W is numeric>(values: [T], weights: [W]): outcome.Outcome<real64, text> {
+    value: real64 = weighted_pvariance(values, weights)?;
+    return done_real(math.sqrt(value));
+}
+
+// Unbiased weighted sample standard deviation.
+export fn weighted_stddev<T is numeric, W is numeric>(values: [T], weights: [W]): outcome.Outcome<real64, text> {
+    value: real64 = weighted_variance(values, weights)?;
+    return done_real(math.sqrt(value));
+}
+
+// Weighted inverse-empirical-CDF quantile. Zero-weight observations do not
+// affect the threshold; q must be in [0, 1].
+export fn weighted_quantile<T is numeric, W is numeric>(values: [T], weights: [W], probability: real64): outcome.Outcome<real64, text> {
+    if probability < 0.0 || probability > 1.0 {
+        return failed_real("stats.weighted_quantile: probability must be between 0 and 1");
+    }
+    data: WeightedData = prepared_weights(values, weights)?;
+    if probability == 0.0 {
+        for index = 0; index < data.values.len(); index = index + 1 {
+            if data.weights[index] > 0.0 {
+                return done_real(data.values[index]);
+            }
+        }
+    }
+    threshold = probability * data.total_weight;
+    cumulative: real64 = 0.0;
+    for index = 0; index < data.values.len(); index = index + 1 {
+        cumulative = cumulative + data.weights[index];
+        if cumulative >= threshold && data.weights[index] > 0.0 {
+            return done_real(data.values[index]);
+        }
+    }
+    return done_real(data.values[data.values.len() - 1]);
+}
+
+fn require_paired<X is numeric, Y is numeric>(xs: [X], ys: [Y], minimum_count: int, operation: text): outcome.Outcome<int, text> {
+    if xs.len() != ys.len() {
+        return outcome.failed_int(fmt.format("stats.{}: inputs must have the same length", operation));
+    }
+    if xs.len() < minimum_count {
+        return outcome.failed_int(fmt.format("stats.{}: expected at least {} paired values", operation, minimum_count));
+    }
+    return outcome.done_int(xs.len());
+}
+
+// Population covariance (divide by n), using a stable online co-moment.
+export fn pcovariance<X is numeric, Y is numeric>(xs: [X], ys: [Y]): outcome.Outcome<real64, text> {
+    require_paired(xs, ys, 1, "pcovariance")?;
+    mean_x: real64 = 0.0;
+    mean_y: real64 = 0.0;
+    co_moment: real64 = 0.0;
+    for index = 0; index < xs.len(); index = index + 1 {
+        x: real64 = xs[index] to real64;
+        y: real64 = ys[index] to real64;
+        n: real64 = (index + 1) to real64;
+        delta_x = x - mean_x;
+        mean_x = mean_x + delta_x / n;
+        delta_y = y - mean_y;
+        mean_y = mean_y + delta_y / n;
+        co_moment = co_moment + delta_x * (y - mean_y);
+    }
+    return done_real(co_moment / (xs.len() to real64));
+}
+
+// Sample covariance (divide by n-1), matching Python statistics.covariance.
+// example: stats.covariance([1.0, 2.0, 3.0], [2.0, 4.0, 6.0]).value_or(0.0)  // 2
+export fn covariance<X is numeric, Y is numeric>(xs: [X], ys: [Y]): outcome.Outcome<real64, text> {
+    require_paired(xs, ys, 2, "covariance")?;
+    mean_x: real64 = 0.0;
+    mean_y: real64 = 0.0;
+    co_moment: real64 = 0.0;
+    for index = 0; index < xs.len(); index = index + 1 {
+        x: real64 = xs[index] to real64;
+        y: real64 = ys[index] to real64;
+        n: real64 = (index + 1) to real64;
+        delta_x = x - mean_x;
+        mean_x = mean_x + delta_x / n;
+        delta_y = y - mean_y;
+        mean_y = mean_y + delta_y / n;
+        co_moment = co_moment + delta_x * (y - mean_y);
+    }
+    return done_real(co_moment / ((xs.len() - 1) to real64));
+}
+
+// Explicitly named alias for population covariance.
+export fn population_covariance<X is numeric, Y is numeric>(xs: [X], ys: [Y]): outcome.Outcome<real64, text> {
+    return pcovariance(xs, ys);
+}
+
+// Explicitly named alias for sample covariance.
+export fn sample_covariance<X is numeric, Y is numeric>(xs: [X], ys: [Y]): outcome.Outcome<real64, text> {
+    return covariance(xs, ys);
+}
+
+// Pearson product-moment correlation. Constant input is reported explicitly.
+// example: stats.correlation([1.0, 2.0, 3.0], [2.0, 4.0, 6.0]).value_or(0.0)  // 1
+export fn correlation<X is numeric, Y is numeric>(xs: [X], ys: [Y]): outcome.Outcome<real64, text> {
+    require_paired(xs, ys, 2, "correlation")?;
+    mean_x: real64 = mean(xs)?;
+    mean_y: real64 = mean(ys)?;
+    xx: real64 = 0.0;
+    yy: real64 = 0.0;
+    xy: real64 = 0.0;
+    for index = 0; index < xs.len(); index = index + 1 {
+        dx = (xs[index] to real64) - mean_x;
+        dy = (ys[index] to real64) - mean_y;
+        xx = xx + dx * dx;
+        yy = yy + dy * dy;
+        xy = xy + dx * dy;
+    }
+    if xx == 0.0 || yy == 0.0 {
+        return failed_real("stats.correlation: both inputs must vary");
+    }
+    return done_real(xy / math.sqrt(xx * yy));
+}
+
+// Explicit alias for Pearson product-moment correlation.
+export fn pearson_correlation<X is numeric, Y is numeric>(xs: [X], ys: [Y]): outcome.Outcome<real64, text> {
+    return correlation(xs, ys);
+}
+
+fn average_ranks<T is numeric>(values: [T]): [real64] {
+    ranks: [real64] = [];
+    for index = 0; index < values.len(); index = index + 1 {
+        value: real64 = values[index] to real64;
+        less = 0;
+        equal = 0;
+        for other = 0; other < values.len(); other = other + 1 {
+            candidate: real64 = values[other] to real64;
+            if candidate < value {
+                less = less + 1;
+            }
+            if candidate == value {
+                equal = equal + 1;
+            }
+        }
+        ranks.push((less to real64) + ((equal + 1) to real64) / 2.0);
+    }
+    return ranks;
+}
+
+// Spearman rank correlation with average ranks for ties.
+export fn spearman_correlation<X is numeric, Y is numeric>(xs: [X], ys: [Y]): outcome.Outcome<real64, text> {
+    require_paired(xs, ys, 2, "spearman_correlation")?;
+    return correlation(average_ranks(xs), average_ranks(ys));
+}
+
+// Kendall tau-b rank correlation, correcting the denominator for ties in each
+// input. O(n^2), deterministic, and suitable for notebook-sized data.
+export fn kendall_tau<X is numeric, Y is numeric>(xs: [X], ys: [Y]): outcome.Outcome<real64, text> {
+    require_paired(xs, ys, 2, "kendall_tau")?;
+    concordant = 0;
+    discordant = 0;
+    ties_x = 0;
+    ties_y = 0;
+    for left = 0; left < xs.len(); left = left + 1 {
+        for right = left + 1; right < xs.len(); right = right + 1 {
+            dx = (xs[left] to real64) - (xs[right] to real64);
+            dy = (ys[left] to real64) - (ys[right] to real64);
+            if dx == 0.0 {
+                ties_x = ties_x + 1;
+            }
+            if dy == 0.0 {
+                ties_y = ties_y + 1;
+            }
+            product = dx * dy;
+            if product > 0.0 {
+                concordant = concordant + 1;
+            }
+            if product < 0.0 {
+                discordant = discordant + 1;
+            }
+        }
+    }
+    pairs = xs.len() * (xs.len() - 1) / 2;
+    denominator = math.sqrt(((pairs - ties_x) to real64) * ((pairs - ties_y) to real64));
+    if denominator == 0.0 {
+        return failed_real("stats.kendall_tau: rank variation is required in both inputs");
+    }
+    return done_real(((concordant - discordant) to real64) / denominator);
+}
+
+// Correlation between a series and itself shifted by `lag` observations.
+export fn autocorrelation<T is numeric>(values: [T], lag: int): outcome.Outcome<real64, text> {
+    if lag < 0 || lag >= values.len() {
+        return failed_real("stats.autocorrelation: lag must be between 0 and len(values)-1");
+    }
+    if values.len() - lag < 2 {
+        return failed_real("stats.autocorrelation: lag must leave at least two paired values");
+    }
+    leading: [real64] = [];
+    trailing: [real64] = [];
+    for index = 0; index < values.len() - lag; index = index + 1 {
+        leading.push(values[index] to real64);
+        trailing.push(values[index + lag] to real64);
+    }
+    return correlation(leading, trailing);
+}
+
+// Mean absolute error between observed and predicted values.
+export fn mean_absolute_error<Y is numeric, P is numeric>(observed: [Y], predicted: [P]): outcome.Outcome<real64, text> {
+    require_paired(observed, predicted, 1, "mean_absolute_error")?;
+    total: real64 = 0.0;
+    for index = 0; index < observed.len(); index = index + 1 {
+        total = total + math.abs((observed[index] to real64) - (predicted[index] to real64));
+    }
+    return done_real(total / (observed.len() to real64));
+}
+
+// Mean squared error between observed and predicted values.
+export fn mean_squared_error<Y is numeric, P is numeric>(observed: [Y], predicted: [P]): outcome.Outcome<real64, text> {
+    require_paired(observed, predicted, 1, "mean_squared_error")?;
+    total: real64 = 0.0;
+    for index = 0; index < observed.len(); index = index + 1 {
+        delta = (observed[index] to real64) - (predicted[index] to real64);
+        total = total + delta * delta;
+    }
+    return done_real(total / (observed.len() to real64));
+}
+
+// Root mean squared error.
+export fn root_mean_squared_error<Y is numeric, P is numeric>(observed: [Y], predicted: [P]): outcome.Outcome<real64, text> {
+    value: real64 = mean_squared_error(observed, predicted)?;
+    return done_real(math.sqrt(value));
+}
+
+// Coefficient of determination R^2. Constant observed data is rejected.
+export fn coefficient_of_determination<Y is numeric, P is numeric>(observed: [Y], predicted: [P]): outcome.Outcome<real64, text> {
+    require_paired(observed, predicted, 2, "coefficient_of_determination")?;
+    center: real64 = mean(observed)?;
+    residual: real64 = 0.0;
+    total: real64 = 0.0;
+    for index = 0; index < observed.len(); index = index + 1 {
+        error = (observed[index] to real64) - (predicted[index] to real64);
+        deviation = (observed[index] to real64) - center;
+        residual = residual + error * error;
+        total = total + deviation * deviation;
+    }
+    if total == 0.0 {
+        return failed_real("stats.coefficient_of_determination: observed values must vary");
+    }
+    return done_real(1.0 - residual / total);
+}
+
+// Ordinary least-squares regression with an intercept and diagnostics.
+// example: stats.linear_regression([1.0, 2.0, 3.0], [3.0, 5.0, 7.0]).value_or(stats.empty_regression()).slope  // 2
+export fn linear_regression<X is numeric, Y is numeric>(xs: [X], ys: [Y]): outcome.Outcome<LinearRegression, text> {
+    if xs.len() != ys.len() {
+        return outcome.failed(empty_regression(), "stats.linear_regression: inputs must have the same length");
+    }
+    if xs.len() < 2 {
+        return outcome.failed(empty_regression(), "stats.linear_regression: expected at least two paired values");
+    }
+    mean_x: real64 = mean(xs)?;
+    mean_y: real64 = mean(ys)?;
+    xx: real64 = 0.0;
+    yy: real64 = 0.0;
+    xy: real64 = 0.0;
+    for index = 0; index < xs.len(); index = index + 1 {
+        dx = (xs[index] to real64) - mean_x;
+        dy = (ys[index] to real64) - mean_y;
+        xx = xx + dx * dx;
+        yy = yy + dy * dy;
+        xy = xy + dx * dy;
+    }
+    if xx == 0.0 {
+        return outcome.failed(empty_regression(), "stats.linear_regression: x values must vary");
+    }
+    slope = xy / xx;
+    intercept = mean_y - slope * mean_x;
+    residual_sum: real64 = 0.0;
+    for index = 0; index < xs.len(); index = index + 1 {
+        predicted = slope * (xs[index] to real64) + intercept;
+        residual = (ys[index] to real64) - predicted;
+        residual_sum = residual_sum + residual * residual;
+    }
+    correlation_value: real64 = 0.0;
+    r_squared_value: real64 = 1.0;
+    if yy > 0.0 {
+        correlation_value = xy / math.sqrt(xx * yy);
+        r_squared_value = 1.0 - residual_sum / yy;
+    }
+    mse = residual_sum / (xs.len() to real64);
+    residual_error: real64 = 0.0;
+    if xs.len() > 2 {
+        residual_error = math.sqrt(residual_sum / ((xs.len() - 2) to real64));
+    }
+    result = LinearRegression {
+        slope: slope,
+        intercept: intercept,
+        correlation: correlation_value,
+        r_squared: r_squared_value,
+        residual_sum_squares: residual_sum,
+        mean_squared_error: mse,
+        root_mean_squared_error: math.sqrt(mse),
+        residual_standard_error: residual_error,
+        sample_count: xs.len(),
+    };
+    return outcome.done(result, "");
+}
+
+// Explicit alias emphasizing that the model has one predictor.
+export fn simple_linear_regression<X is numeric, Y is numeric>(xs: [X], ys: [Y]): outcome.Outcome<LinearRegression, text> {
+    return linear_regression(xs, ys);
+}
+
+// Zero-valued regression model for Outcome.value_or.
+export fn empty_regression(): LinearRegression {
+    return LinearRegression {
+        slope: 0.0,
+        intercept: 0.0,
+        correlation: 0.0,
+        r_squared: 0.0,
+        residual_sum_squares: 0.0,
+        mean_squared_error: 0.0,
+        root_mean_squared_error: 0.0,
+        residual_standard_error: 0.0,
+        sample_count: 0,
+    };
+}
+
+// Empty histogram for Outcome.value_or.
+export fn empty_histogram(): Histogram {
+    edges: [real64] = [];
+    counts: [int] = [];
+    densities: [real64] = [];
+    return Histogram {
+        edges: edges,
+        counts: counts,
+        densities: densities,
+        sample_count: 0,
+        included_count: 0,
+        underflow: 0,
+        overflow: 0,
+    };
+}
+
+fn validate_edges(edges: [real64], operation: text): outcome.Outcome<int, text> {
+    if edges.len() < 2 {
+        return outcome.failed_int(fmt.format("stats.{}: expected at least two bin edges", operation));
+    }
+    for index = 1; index < edges.len(); index = index + 1 {
+        if edges[index] <= edges[index - 1] {
+            return outcome.failed_int(fmt.format("stats.{}: bin edges must be strictly increasing", operation));
+        }
+    }
+    return outcome.done_int(edges.len() - 1);
+}
+
+// Histogram with caller-supplied, strictly increasing edges. Values below the
+// first edge and above the last edge are counted separately.
+export fn histogram_with_edges<T is numeric>(values: [T], edges: [real64]): outcome.Outcome<Histogram, text> {
+    bin_count: int = validate_edges(edges, "histogram_with_edges")?;
+    copied_edges: [real64] = [];
+    counts: [int] = [];
+    for index = 0; index < edges.len(); index = index + 1 {
+        copied_edges.push(edges[index]);
+    }
+    for index = 0; index < bin_count; index = index + 1 {
+        counts.push(0);
+    }
+
+    underflow = 0;
+    overflow = 0;
+    included = 0;
+    for index = 0; index < values.len(); index = index + 1 {
+        value: real64 = values[index] to real64;
+        if value < edges[0] {
+            underflow = underflow + 1;
+        } else {
+            if value > edges[edges.len() - 1] {
+                overflow = overflow + 1;
+            } else {
+                slot = bin_count - 1;
+                if value < edges[edges.len() - 1] {
+                    for candidate = 0; candidate < bin_count; candidate = candidate + 1 {
+                        if value >= edges[candidate] && value < edges[candidate + 1] {
+                            slot = candidate;
+                        }
+                    }
+                }
+                counts[slot] = counts[slot] + 1;
+                included = included + 1;
+            }
+        }
+    }
+
+    densities: [real64] = [];
+    for index = 0; index < bin_count; index = index + 1 {
+        width = edges[index + 1] - edges[index];
+        if included == 0 {
+            densities.push(0.0);
+        } else {
+            densities.push((counts[index] to real64) / ((included to real64) * width));
+        }
+    }
+
+    result = Histogram {
+        edges: copied_edges,
+        counts: counts,
+        densities: densities,
+        sample_count: values.len(),
+        included_count: included,
+        underflow: underflow,
+        overflow: overflow,
+    };
+    return outcome.done(result, "");
+}
+
+// Equal-width histogram over an explicit [lower, upper] range.
+export fn histogram_range<T is numeric>(values: [T], bins: int, lower: real64, upper: real64): outcome.Outcome<Histogram, text> {
+    if bins <= 0 {
+        return outcome.failed(empty_histogram(), "stats.histogram_range: bin count must be positive");
+    }
+    if lower >= upper {
+        return outcome.failed(empty_histogram(), "stats.histogram_range: lower bound must be less than upper bound");
+    }
+    edges: [real64] = [];
+    width = (upper - lower) / (bins to real64);
+    for index = 0; index <= bins; index = index + 1 {
+        edges.push(lower + (index to real64) * width);
+    }
+    // Pin the last edge to the caller's exact upper bound to avoid accumulated
+    // rounding error.
+    edges[bins] = upper;
+    return histogram_with_edges(values, edges);
+}
+
+// Equal-width histogram whose range is inferred from the data. Constant data
+// is centered in a synthetic unit-width range so all bins remain meaningful.
+// example: stats.histogram([1.0, 2.0, 3.0, 4.0], 2).value_or(stats.empty_histogram()).counts  // [2, 2]
+export fn histogram<T is numeric>(values: [T], bins: int): outcome.Outcome<Histogram, text> {
+    if values.len() == 0 {
+        return outcome.failed(empty_histogram(), "stats.histogram: expected at least one value");
+    }
+    if bins <= 0 {
+        return outcome.failed(empty_histogram(), "stats.histogram: bin count must be positive");
+    }
+    lower: real64 = minimum(values)?;
+    upper: real64 = maximum(values)?;
+    if lower == upper {
+        lower = lower - 0.5;
+        upper = upper + 0.5;
+    }
+    return histogram_range(values, bins, lower, upper);
+}
+
+// Bin index for each value using histogram edge semantics. Underflow is -1;
+// overflow is bin_count. Exact equality with the final edge lands in the final
+// bin.
+export fn digitize<T is numeric>(values: [T], edges: [real64]): outcome.Outcome<[int], text> {
+    bin_count: int = validate_edges(edges, "digitize")?;
+    result: [int] = [];
+    for index = 0; index < values.len(); index = index + 1 {
+        value: real64 = values[index] to real64;
+        slot = bin_count;
+        if value < edges[0] {
+            slot = 0 - 1;
+        } else {
+            if value <= edges[edges.len() - 1] {
+                slot = bin_count - 1;
+                if value < edges[edges.len() - 1] {
+                    for candidate = 0; candidate < bin_count; candidate = candidate + 1 {
+                        if value >= edges[candidate] && value < edges[candidate + 1] {
+                            slot = candidate;
+                        }
+                    }
+                }
+            }
+        }
+        result.push(slot);
+    }
+    return outcome.done(result, "");
+}
+
+// Counts of non-negative integer values, like NumPy bincount. The result has
+// at least `minimum_length` entries.
+export fn bincount(values: [int], minimum_length: int): outcome.Outcome<[int], text> {
+    empty: [int] = [];
+    if minimum_length < 0 {
+        return outcome.failed(empty, "stats.bincount: minimum_length must be non-negative");
+    }
+    largest = 0 - 1;
+    for index = 0; index < values.len(); index = index + 1 {
+        if values[index] < 0 {
+            return outcome.failed(empty, "stats.bincount: values must be non-negative");
+        }
+        if values[index] > largest {
+            largest = values[index];
+        }
+    }
+    length = minimum_length;
+    if largest + 1 > length {
+        length = largest + 1;
+    }
+    result: [int] = [];
+    for index = 0; index < length; index = index + 1 {
+        result.push(0);
+    }
+    for index = 0; index < values.len(); index = index + 1 {
+        result[values[index]] = result[values[index]] + 1;
+    }
+    return outcome.done(result, "");
+}
+
+// Cumulative compensated sum in real64. Empty input returns an empty array.
+export fn cumulative_sum<T is numeric>(values: [T]): [real64] {
+    result: [real64] = [];
+    total: real64 = 0.0;
+    compensation: real64 = 0.0;
+    for index = 0; index < values.len(); index = index + 1 {
+        value: real64 = values[index] to real64;
+        next = total + value;
+        if math.abs(total) >= math.abs(value) {
+            compensation = compensation + (total - next) + value;
+        } else {
+            compensation = compensation + (value - next) + total;
+        }
+        total = next;
+        result.push(total + compensation);
+    }
+    return result;
+}
+
+// Cumulative arithmetic mean after each observation.
+export fn cumulative_mean<T is numeric>(values: [T]): [real64] {
+    sums = cumulative_sum(values);
+    result: [real64] = [];
+    for index = 0; index < sums.len(); index = index + 1 {
+        result.push(sums[index] / ((index + 1) to real64));
+    }
+    return result;
+}
+
+fn validate_window(length: int, window: int, operation: text): outcome.Outcome<int, text> {
+    if window <= 0 {
+        return outcome.failed_int(fmt.format("stats.{}: window must be positive", operation));
+    }
+    if window > length {
+        return outcome.failed_int(fmt.format("stats.{}: window cannot exceed the data length", operation));
+    }
+    return outcome.done_int(length - window + 1);
+}
+
+// Sliding-window sums, one value for each complete window.
+export fn moving_sum<T is numeric>(values: [T], window: int): outcome.Outcome<[real64], text> {
+    output_count: int = validate_window(values.len(), window, "moving_sum")?;
+    result: [real64] = [];
+    current: real64 = 0.0;
+    for index = 0; index < window; index = index + 1 {
+        current = current + (values[index] to real64);
+    }
+    result.push(current);
+    for start = 1; start < output_count; start = start + 1 {
+        current = current - (values[start - 1] to real64) + (values[start + window - 1] to real64);
+        result.push(current);
+    }
+    return outcome.done(result, "");
+}
+
+// Sliding-window arithmetic means.
+// example: stats.moving_mean([1.0, 2.0, 3.0, 4.0], 2).value_or([])  // [1.5, 2.5, 3.5]
+export fn moving_mean<T is numeric>(values: [T], window: int): outcome.Outcome<[real64], text> {
+    sums: [real64] = moving_sum(values, window)?;
+    result: [real64] = [];
+    for index = 0; index < sums.len(); index = index + 1 {
+        result.push(sums[index] / (window to real64));
+    }
+    return outcome.done(result, "");
+}
+
+// Sliding population variance for each complete window.
+export fn moving_pvariance<T is numeric>(values: [T], window: int): outcome.Outcome<[real64], text> {
+    output_count: int = validate_window(values.len(), window, "moving_pvariance")?;
+    result: [real64] = [];
+    for start = 0; start < output_count; start = start + 1 {
+        slice: [real64] = [];
+        for index = start; index < start + window; index = index + 1 {
+            slice.push(values[index] to real64);
+        }
+        result.push(pvariance(slice)?);
+    }
+    return outcome.done(result, "");
+}
+
+// Sliding sample variance for each complete window (window >= 2).
+export fn moving_variance<T is numeric>(values: [T], window: int): outcome.Outcome<[real64], text> {
+    output_count: int = validate_window(values.len(), window, "moving_variance")?;
+    empty: [real64] = [];
+    if window < 2 {
+        return outcome.failed(empty, "stats.moving_variance: window must contain at least two values");
+    }
+    result: [real64] = [];
+    for start = 0; start < output_count; start = start + 1 {
+        slice: [real64] = [];
+        for index = start; index < start + window; index = index + 1 {
+            slice.push(values[index] to real64);
+        }
+        result.push(variance(slice)?);
+    }
+    return outcome.done(result, "");
+}
+
+// Sliding sample standard deviation for each complete window.
+export fn moving_stddev<T is numeric>(values: [T], window: int): outcome.Outcome<[real64], text> {
+    variances: [real64] = moving_variance(values, window)?;
+    result: [real64] = [];
+    for index = 0; index < variances.len(); index = index + 1 {
+        result.push(math.sqrt(variances[index]));
+    }
+    return outcome.done(result, "");
+}
+
+// Exponentially weighted moving average. `alpha` is in (0, 1]; the first output
+// equals the first input, and subsequent outputs use alpha*x + (1-alpha)*prev.
+export fn exponential_moving_average<T is numeric>(values: [T], alpha: real64): outcome.Outcome<[real64], text> {
+    empty: [real64] = [];
+    if values.len() == 0 {
+        return outcome.failed(empty, "stats.exponential_moving_average: expected at least one value");
+    }
+    if alpha <= 0.0 || alpha > 1.0 {
+        return outcome.failed(empty, "stats.exponential_moving_average: alpha must be greater than 0 and at most 1");
+    }
+    result: [real64] = [];
+    current: real64 = values[0] to real64;
+    result.push(current);
+    for index = 1; index < values.len(); index = index + 1 {
+        current = alpha * (values[index] to real64) + (1.0 - alpha) * current;
+        result.push(current);
+    }
+    return outcome.done(result, "");
+}
+
+// Sample z-scores (center by mean, scale by sample standard deviation).
+export fn z_scores<T is numeric>(values: [T]): outcome.Outcome<[real64], text> {
+    empty: [real64] = [];
+    center: real64 = mean(values)?;
+    scale: real64 = stddev(values)?;
+    if scale == 0.0 {
+        return outcome.failed(empty, "stats.z_scores: values must vary");
+    }
+    result: [real64] = [];
+    for index = 0; index < values.len(); index = index + 1 {
+        result.push(((values[index] to real64) - center) / scale);
+    }
+    return outcome.done(result, "");
+}
+
+// Population z-scores (scale by population standard deviation).
+export fn population_z_scores<T is numeric>(values: [T]): outcome.Outcome<[real64], text> {
+    empty: [real64] = [];
+    center: real64 = mean(values)?;
+    scale: real64 = pstdev(values)?;
+    if scale == 0.0 {
+        return outcome.failed(empty, "stats.population_z_scores: values must vary");
+    }
+    result: [real64] = [];
+    for index = 0; index < values.len(); index = index + 1 {
+        result.push(((values[index] to real64) - center) / scale);
+    }
+    return outcome.done(result, "");
+}
+
+// Scale data linearly into [0, 1]. Constant input is rejected explicitly.
+export fn min_max_scale<T is numeric>(values: [T]): outcome.Outcome<[real64], text> {
+    empty: [real64] = [];
+    low: real64 = minimum(values)?;
+    high: real64 = maximum(values)?;
+    width = high - low;
+    if width == 0.0 {
+        return outcome.failed(empty, "stats.min_max_scale: values must vary");
+    }
+    result: [real64] = [];
+    for index = 0; index < values.len(); index = index + 1 {
+        result.push(((values[index] to real64) - low) / width);
+    }
+    return outcome.done(result, "");
+}
+
+fn approximate_erf(value: real64): real64 {
+    sign: real64 = 1.0;
+    x = value;
+    if x < 0.0 {
+        sign = 0.0 - 1.0;
+        x = 0.0 - x;
+    }
+    t = 1.0 / (1.0 + 0.3275911 * x);
+    polynomial = (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t;
+    approximation = 1.0 - polynomial * math.exp(0.0 - x * x);
+    return sign * approximation;
+}
+
+// Standard-normal probability density.
+export fn standard_normal_pdf(value: real64): real64 {
+    return math.exp(0.0 - 0.5 * value * value) / 2.5066282746310002;
+}
+
+// Standard-normal cumulative distribution, approximated to about 1e-7.
+export fn standard_normal_cdf(value: real64): real64 {
+    if value == 0.0 {
+        return 0.5;
+    }
+    return 0.5 * (1.0 + approximate_erf(value / 1.4142135623730951));
+}
+
+// Inverse standard-normal CDF using Peter Acklam's rational approximation.
+export fn standard_normal_quantile(probability: real64): outcome.Outcome<real64, text> {
+    if probability <= 0.0 || probability >= 1.0 {
+        return failed_real("stats.standard_normal_quantile: probability must be strictly between 0 and 1");
+    }
+
+    a1: real64 = 0.0 - 39.69683028665376;
+    a2: real64 = 220.9460984245205;
+    a3: real64 = 0.0 - 275.9285104469687;
+    a4: real64 = 138.3577518672690;
+    a5: real64 = 0.0 - 30.66479806614716;
+    a6: real64 = 2.506628277459239;
+    b1: real64 = 0.0 - 54.47609879822406;
+    b2: real64 = 161.5858368580409;
+    b3: real64 = 0.0 - 155.6989798598866;
+    b4: real64 = 66.80131188771972;
+    b5: real64 = 0.0 - 13.28068155288572;
+    c1: real64 = 0.0 - 0.007784894002430293;
+    c2: real64 = 0.0 - 0.3223964580411365;
+    c3: real64 = 0.0 - 2.400758277161838;
+    c4: real64 = 0.0 - 2.549732539343734;
+    c5: real64 = 4.374664141464968;
+    c6: real64 = 2.938163982698783;
+    d1: real64 = 0.007784695709041462;
+    d2: real64 = 0.3224671290700398;
+    d3: real64 = 2.445134137142996;
+    d4: real64 = 3.754408661907416;
+    low: real64 = 0.02425;
+    high: real64 = 1.0 - low;
+
+    if probability < low {
+        q = math.sqrt(0.0 - 2.0 * math.ln(probability));
+        numerator = (((((c1 * q + c2) * q + c3) * q + c4) * q + c5) * q + c6);
+        denominator = ((((d1 * q + d2) * q + d3) * q + d4) * q + 1.0);
+        return done_real(numerator / denominator);
+    }
+    if probability > high {
+        q = math.sqrt(0.0 - 2.0 * math.ln(1.0 - probability));
+        numerator = (((((c1 * q + c2) * q + c3) * q + c4) * q + c5) * q + c6);
+        denominator = ((((d1 * q + d2) * q + d3) * q + d4) * q + 1.0);
+        return done_real(0.0 - numerator / denominator);
+    }
+
+    q = probability - 0.5;
+    r = q * q;
+    numerator = (((((a1 * r + a2) * r + a3) * r + a4) * r + a5) * r + a6) * q;
+    denominator = (((((b1 * r + b2) * r + b3) * r + b4) * r + b5) * r + 1.0);
+    return done_real(numerator / denominator);
+}
+
+// Normal-distribution density with explicit location and positive scale.
+export fn normal_pdf(value: real64, location: real64, scale: real64): outcome.Outcome<real64, text> {
+    if scale <= 0.0 {
+        return failed_real("stats.normal_pdf: scale must be positive");
+    }
+    z = (value - location) / scale;
+    return done_real(standard_normal_pdf(z) / scale);
+}
+
+// Normal-distribution cumulative probability.
+export fn normal_cdf(value: real64, location: real64, scale: real64): outcome.Outcome<real64, text> {
+    if scale <= 0.0 {
+        return failed_real("stats.normal_cdf: scale must be positive");
+    }
+    return done_real(standard_normal_cdf((value - location) / scale));
+}
+
+// Normal-distribution quantile.
+export fn normal_quantile(probability: real64, location: real64, scale: real64): outcome.Outcome<real64, text> {
+    if scale <= 0.0 {
+        return failed_real("stats.normal_quantile: scale must be positive");
+    }
+    z: real64 = standard_normal_quantile(probability)?;
+    return done_real(location + scale * z);
+}
+
+// Two-sided normal-approximation confidence interval for a sample mean.
+// `confidence` must be strictly between 0 and 1.
+export fn mean_confidence_interval<T is numeric>(values: [T], confidence: real64): outcome.Outcome<ConfidenceInterval, text> {
+    empty = ConfidenceInterval { estimate: 0.0, lower: 0.0, upper: 0.0, margin: 0.0, confidence: 0.0 };
+    if confidence <= 0.0 || confidence >= 1.0 {
+        return outcome.failed(empty, "stats.mean_confidence_interval: confidence must be strictly between 0 and 1");
+    }
+    if values.len() < 2 {
+        return outcome.failed(empty, "stats.mean_confidence_interval: expected at least two values");
+    }
+    estimate: real64 = mean(values)?;
+    error: real64 = standard_error(values)?;
+    critical: real64 = standard_normal_quantile(0.5 + confidence / 2.0)?;
+    margin = critical * error;
+    result = ConfidenceInterval {
+        estimate: estimate,
+        lower: estimate - margin,
+        upper: estimate + margin,
+        margin: margin,
+        confidence: confidence,
+    };
+    return outcome.done(result, "");
+}
+
+// Continuous uniform density over [lower, upper].
+export fn uniform_pdf(value: real64, lower: real64, upper: real64): outcome.Outcome<real64, text> {
+    if lower >= upper {
+        return failed_real("stats.uniform_pdf: lower bound must be less than upper bound");
+    }
+    if value < lower || value > upper {
+        return done_real(0.0);
+    }
+    return done_real(1.0 / (upper - lower));
+}
+
+// Continuous uniform cumulative probability.
+export fn uniform_cdf(value: real64, lower: real64, upper: real64): outcome.Outcome<real64, text> {
+    if lower >= upper {
+        return failed_real("stats.uniform_cdf: lower bound must be less than upper bound");
+    }
+    if value <= lower {
+        return done_real(0.0);
+    }
+    if value >= upper {
+        return done_real(1.0);
+    }
+    return done_real((value - lower) / (upper - lower));
+}
+
+// Exponential density for non-negative values and a positive rate.
+export fn exponential_pdf(value: real64, rate: real64): outcome.Outcome<real64, text> {
+    if rate <= 0.0 {
+        return failed_real("stats.exponential_pdf: rate must be positive");
+    }
+    if value < 0.0 {
+        return done_real(0.0);
+    }
+    return done_real(rate * math.exp(0.0 - rate * value));
+}
+
+// Exponential cumulative probability.
+export fn exponential_cdf(value: real64, rate: real64): outcome.Outcome<real64, text> {
+    if rate <= 0.0 {
+        return failed_real("stats.exponential_cdf: rate must be positive");
+    }
+    if value < 0.0 {
+        return done_real(0.0);
+    }
+    return done_real(1.0 - math.exp(0.0 - rate * value));
+}
+
+fn valid_probability(probability: real64): bool {
+    return probability >= 0.0 && probability <= 1.0;
+}
+
+// Bernoulli probability mass for outcome 0 or 1.
+export fn bernoulli_pmf(outcome_value: int, probability: real64): outcome.Outcome<real64, text> {
+    if !valid_probability(probability) {
+        return failed_real("stats.bernoulli_pmf: probability must be between 0 and 1");
+    }
+    if outcome_value != 0 && outcome_value != 1 {
+        return failed_real("stats.bernoulli_pmf: outcome must be 0 or 1");
+    }
+    if outcome_value == 1 {
+        return done_real(probability);
+    }
+    return done_real(1.0 - probability);
+}
+
+fn binomial_coefficient(n: int, k: int): real64 {
+    reduced = k;
+    if n - k < reduced {
+        reduced = n - k;
+    }
+    result: real64 = 1.0;
+    for index = 1; index <= reduced; index = index + 1 {
+        result = result * ((n - reduced + index) to real64) / (index to real64);
+    }
+    return result;
+}
+
+// Binomial probability mass for k successes in n independent trials.
+export fn binomial_pmf(k: int, n: int, probability: real64): outcome.Outcome<real64, text> {
+    if n < 0 {
+        return failed_real("stats.binomial_pmf: trial count must be non-negative");
+    }
+    if k < 0 || k > n {
+        return failed_real("stats.binomial_pmf: successes must be between 0 and n");
+    }
+    if !valid_probability(probability) {
+        return failed_real("stats.binomial_pmf: probability must be between 0 and 1");
+    }
+    mass = binomial_coefficient(n, k) * math.pow(probability, k) * math.pow(1.0 - probability, n - k);
+    return done_real(mass);
+}
+
+// Poisson probability mass for a non-negative count and positive rate.
+export fn poisson_pmf(k: int, rate: real64): outcome.Outcome<real64, text> {
+    if k < 0 {
+        return failed_real("stats.poisson_pmf: count must be non-negative");
+    }
+    if rate <= 0.0 {
+        return failed_real("stats.poisson_pmf: rate must be positive");
+    }
+    mass = math.exp(0.0 - rate);
+    for index = 1; index <= k; index = index + 1 {
+        mass = mass * rate / (index to real64);
+    }
+    return done_real(mass);
+}
+
+// Poisson cumulative probability P(X <= k), evaluated by a stable recurrence.
+export fn poisson_cdf(k: int, rate: real64): outcome.Outcome<real64, text> {
+    if k < 0 {
+        return failed_real("stats.poisson_cdf: count must be non-negative");
+    }
+    if rate <= 0.0 {
+        return failed_real("stats.poisson_cdf: rate must be positive");
+    }
+    term = math.exp(0.0 - rate);
+    total = term;
+    for index = 1; index <= k; index = index + 1 {
+        term = term * rate / (index to real64);
+        total = total + term;
+    }
+    return done_real(total);
+}
+
+// Empty real vector for Outcome.value_or in vector-oriented workflows.
+export fn empty_vector(): matrix.Vector<real64> {
+    values: [real64] = [];
+    return matrix.vector(values);
+}
+
+// Empty 0x0 real matrix for Outcome.value_or.
+export fn empty_matrix(): matrix.Matrix<real64> {
+    values: [real64] = [];
+    return matrix.Matrix.new(0, 0, values);
+}
+
+// Vector overloads keep the same names as array functions, so code can move
+// between raw arrays and matrix.Vector without changing its statistical API.
+export fn count<T is numeric>(values: matrix.Vector<T>): int {
+    return values.len();
+}
+
+export fn sum<T is numeric>(values: matrix.Vector<T>): real64 {
+    return sum(values.to_array());
+}
+
+export fn mean<T is numeric>(values: matrix.Vector<T>): outcome.Outcome<real64, text> {
+    return mean(values.to_array());
+}
+
+export fn minimum<T is numeric>(values: matrix.Vector<T>): outcome.Outcome<real64, text> {
+    return minimum(values.to_array());
+}
+
+export fn maximum<T is numeric>(values: matrix.Vector<T>): outcome.Outcome<real64, text> {
+    return maximum(values.to_array());
+}
+
+export fn data_range<T is numeric>(values: matrix.Vector<T>): outcome.Outcome<real64, text> {
+    return data_range(values.to_array());
+}
+
+export fn min<T is numeric>(values: matrix.Vector<T>): outcome.Outcome<real64, text> {
+    return minimum(values.to_array());
+}
+
+export fn max<T is numeric>(values: matrix.Vector<T>): outcome.Outcome<real64, text> {
+    return maximum(values.to_array());
+}
+
+export fn range<T is numeric>(values: matrix.Vector<T>): outcome.Outcome<real64, text> {
+    return data_range(values.to_array());
+}
+
+export fn pvariance<T is numeric>(values: matrix.Vector<T>): outcome.Outcome<real64, text> {
+    return pvariance(values.to_array());
+}
+
+export fn variance<T is numeric>(values: matrix.Vector<T>): outcome.Outcome<real64, text> {
+    return variance(values.to_array());
+}
+
+export fn population_variance<T is numeric>(values: matrix.Vector<T>): outcome.Outcome<real64, text> {
+    return pvariance(values.to_array());
+}
+
+export fn sample_variance<T is numeric>(values: matrix.Vector<T>): outcome.Outcome<real64, text> {
+    return variance(values.to_array());
+}
+
+export fn pstdev<T is numeric>(values: matrix.Vector<T>): outcome.Outcome<real64, text> {
+    return pstdev(values.to_array());
+}
+
+export fn stddev<T is numeric>(values: matrix.Vector<T>): outcome.Outcome<real64, text> {
+    return stddev(values.to_array());
+}
+
+export fn population_stddev<T is numeric>(values: matrix.Vector<T>): outcome.Outcome<real64, text> {
+    return pstdev(values.to_array());
+}
+
+export fn sample_stddev<T is numeric>(values: matrix.Vector<T>): outcome.Outcome<real64, text> {
+    return stddev(values.to_array());
+}
+
+export fn median<T is numeric>(values: matrix.Vector<T>): outcome.Outcome<real64, text> {
+    return median(values.to_array());
+}
+
+export fn quantile<T is numeric>(values: matrix.Vector<T>, probability: real64): outcome.Outcome<real64, text> {
+    return quantile(values.to_array(), probability);
+}
+
+export fn quantile_with<T is numeric>(values: matrix.Vector<T>, probability: real64, interpolation: text): outcome.Outcome<real64, text> {
+    return quantile_with(values.to_array(), probability, interpolation);
+}
+
+export fn percentile<T is numeric>(values: matrix.Vector<T>, percent: real64): outcome.Outcome<real64, text> {
+    return percentile(values.to_array(), percent);
+}
+
+export fn five_number_summary<T is numeric>(values: matrix.Vector<T>): outcome.Outcome<FiveNumberSummary, text> {
+    return five_number_summary(values.to_array());
+}
+
+export fn interquartile_range<T is numeric>(values: matrix.Vector<T>): outcome.Outcome<real64, text> {
+    return interquartile_range(values.to_array());
+}
+
+export fn median_absolute_deviation<T is numeric>(values: matrix.Vector<T>): outcome.Outcome<real64, text> {
+    return median_absolute_deviation(values.to_array());
+}
+
+export fn describe<T is numeric>(values: matrix.Vector<T>): outcome.Outcome<Summary, text> {
+    return describe(values.to_array());
+}
+
+export fn frequencies<T is numeric>(values: matrix.Vector<T>): outcome.Outcome<FrequencyTable, text> {
+    return frequencies(values.to_array());
+}
+
+export fn histogram<T is numeric>(values: matrix.Vector<T>, bins: int): outcome.Outcome<Histogram, text> {
+    return histogram(values.to_array(), bins);
+}
+
+export fn histogram_range<T is numeric>(values: matrix.Vector<T>, bins: int, lower: real64, upper: real64): outcome.Outcome<Histogram, text> {
+    return histogram_range(values.to_array(), bins, lower, upper);
+}
+
+export fn z_scores<T is numeric>(values: matrix.Vector<T>): outcome.Outcome<matrix.Vector<real64>, text> {
+    normalized: [real64] = z_scores(values.to_array())?;
+    return outcome.done(matrix.vector(normalized), "");
+}
+
+export fn population_z_scores<T is numeric>(values: matrix.Vector<T>): outcome.Outcome<matrix.Vector<real64>, text> {
+    normalized: [real64] = population_z_scores(values.to_array())?;
+    return outcome.done(matrix.vector(normalized), "");
+}
+
+export fn min_max_scale<T is numeric>(values: matrix.Vector<T>): outcome.Outcome<matrix.Vector<real64>, text> {
+    normalized: [real64] = min_max_scale(values.to_array())?;
+    return outcome.done(matrix.vector(normalized), "");
+}
+
+export fn moving_mean<T is numeric>(values: matrix.Vector<T>, window: int): outcome.Outcome<matrix.Vector<real64>, text> {
+    moved: [real64] = moving_mean(values.to_array(), window)?;
+    return outcome.done(matrix.vector(moved), "");
+}
+
+export fn moving_stddev<T is numeric>(values: matrix.Vector<T>, window: int): outcome.Outcome<matrix.Vector<real64>, text> {
+    moved: [real64] = moving_stddev(values.to_array(), window)?;
+    return outcome.done(matrix.vector(moved), "");
+}
+
+export fn exponential_moving_average<T is numeric>(values: matrix.Vector<T>, alpha: real64): outcome.Outcome<matrix.Vector<real64>, text> {
+    moved: [real64] = exponential_moving_average(values.to_array(), alpha)?;
+    return outcome.done(matrix.vector(moved), "");
+}
+
+export fn weighted_mean<T is numeric, W is numeric>(values: matrix.Vector<T>, weights: matrix.Vector<W>): outcome.Outcome<real64, text> {
+    return weighted_mean(values.to_array(), weights.to_array());
+}
+
+export fn weighted_variance<T is numeric, W is numeric>(values: matrix.Vector<T>, weights: matrix.Vector<W>): outcome.Outcome<real64, text> {
+    return weighted_variance(values.to_array(), weights.to_array());
+}
+
+export fn weighted_quantile<T is numeric, W is numeric>(values: matrix.Vector<T>, weights: matrix.Vector<W>, probability: real64): outcome.Outcome<real64, text> {
+    return weighted_quantile(values.to_array(), weights.to_array(), probability);
+}
+
+export fn covariance<X is numeric, Y is numeric>(xs: matrix.Vector<X>, ys: matrix.Vector<Y>): outcome.Outcome<real64, text> {
+    return covariance(xs.to_array(), ys.to_array());
+}
+
+export fn sample_covariance<X is numeric, Y is numeric>(xs: matrix.Vector<X>, ys: matrix.Vector<Y>): outcome.Outcome<real64, text> {
+    return covariance(xs.to_array(), ys.to_array());
+}
+
+export fn pcovariance<X is numeric, Y is numeric>(xs: matrix.Vector<X>, ys: matrix.Vector<Y>): outcome.Outcome<real64, text> {
+    return pcovariance(xs.to_array(), ys.to_array());
+}
+
+export fn population_covariance<X is numeric, Y is numeric>(xs: matrix.Vector<X>, ys: matrix.Vector<Y>): outcome.Outcome<real64, text> {
+    return pcovariance(xs.to_array(), ys.to_array());
+}
+
+export fn correlation<X is numeric, Y is numeric>(xs: matrix.Vector<X>, ys: matrix.Vector<Y>): outcome.Outcome<real64, text> {
+    return correlation(xs.to_array(), ys.to_array());
+}
+
+export fn pearson_correlation<X is numeric, Y is numeric>(xs: matrix.Vector<X>, ys: matrix.Vector<Y>): outcome.Outcome<real64, text> {
+    return correlation(xs.to_array(), ys.to_array());
+}
+
+export fn spearman_correlation<X is numeric, Y is numeric>(xs: matrix.Vector<X>, ys: matrix.Vector<Y>): outcome.Outcome<real64, text> {
+    return spearman_correlation(xs.to_array(), ys.to_array());
+}
+
+export fn kendall_tau<X is numeric, Y is numeric>(xs: matrix.Vector<X>, ys: matrix.Vector<Y>): outcome.Outcome<real64, text> {
+    return kendall_tau(xs.to_array(), ys.to_array());
+}
+
+export fn linear_regression<X is numeric, Y is numeric>(xs: matrix.Vector<X>, ys: matrix.Vector<Y>): outcome.Outcome<LinearRegression, text> {
+    return linear_regression(xs.to_array(), ys.to_array());
+}
+
+export fn simple_linear_regression<X is numeric, Y is numeric>(xs: matrix.Vector<X>, ys: matrix.Vector<Y>): outcome.Outcome<LinearRegression, text> {
+    return linear_regression(xs.to_array(), ys.to_array());
+}
+
+// Descriptive statistics over all matrix elements in row-major order.
+export fn describe<T is numeric>(values: matrix.Matrix<T>): outcome.Outcome<Summary, text> {
+    return describe(values.to_array());
+}
+
+// Histogram over all matrix elements in row-major order.
+export fn histogram<T is numeric>(values: matrix.Matrix<T>, bins: int): outcome.Outcome<Histogram, text> {
+    return histogram(values.to_array(), bins);
+}
+
+// One comprehensive Summary per matrix column. Rows are observations and
+// columns are variables, matching NumPy/SciPy's conventional data layout.
+export fn describe_columns<T is numeric>(values: matrix.Matrix<T>): outcome.Outcome<[Summary], text> {
+    empty: [Summary] = [];
+    if values.cols() == 0 {
+        return outcome.failed(empty, "stats.describe_columns: matrix must have at least one column");
+    }
+    if values.rows() < 2 {
+        return outcome.failed(empty, "stats.describe_columns: matrix must have at least two rows");
+    }
+    result: [Summary] = [];
+    for col = 0; col < values.cols(); col = col + 1 {
+        result.push(describe(values.column(col))?);
+    }
+    return outcome.done(result, "");
+}
+
+// One comprehensive Summary per matrix row.
+export fn describe_rows<T is numeric>(values: matrix.Matrix<T>): outcome.Outcome<[Summary], text> {
+    empty: [Summary] = [];
+    if values.rows() == 0 {
+        return outcome.failed(empty, "stats.describe_rows: matrix must have at least one row");
+    }
+    if values.cols() < 2 {
+        return outcome.failed(empty, "stats.describe_rows: matrix must have at least two columns");
+    }
+    result: [Summary] = [];
+    for row = 0; row < values.rows(); row = row + 1 {
+        result.push(describe(values.row(row))?);
+    }
+    return outcome.done(result, "");
+}
+
+// Column means as a Vector. Empty matrix axes return Failed, not a VM panic.
+export fn column_means<T is numeric>(values: matrix.Matrix<T>): outcome.Outcome<matrix.Vector<real64>, text> {
+    if values.cols() == 0 || values.rows() == 0 {
+        return outcome.failed(empty_vector(), "stats.column_means: matrix axes must be non-empty");
+    }
+    result: [real64] = [];
+    for col = 0; col < values.cols(); col = col + 1 {
+        result.push(mean(values.column(col))?);
+    }
+    return outcome.done(matrix.vector(result), "");
+}
+
+// Row means as a Vector.
+export fn row_means<T is numeric>(values: matrix.Matrix<T>): outcome.Outcome<matrix.Vector<real64>, text> {
+    if values.cols() == 0 || values.rows() == 0 {
+        return outcome.failed(empty_vector(), "stats.row_means: matrix axes must be non-empty");
+    }
+    result: [real64] = [];
+    for row = 0; row < values.rows(); row = row + 1 {
+        result.push(mean(values.row(row))?);
+    }
+    return outcome.done(matrix.vector(result), "");
+}
+
+// Sample variance of each matrix column.
+export fn column_variances<T is numeric>(values: matrix.Matrix<T>): outcome.Outcome<matrix.Vector<real64>, text> {
+    if values.cols() == 0 || values.rows() < 2 {
+        return outcome.failed(empty_vector(), "stats.column_variances: expected at least two rows and one column");
+    }
+    result: [real64] = [];
+    for col = 0; col < values.cols(); col = col + 1 {
+        result.push(variance(values.column(col))?);
+    }
+    return outcome.done(matrix.vector(result), "");
+}
+
+// Sample standard deviation of each matrix column.
+export fn column_stddevs<T is numeric>(values: matrix.Matrix<T>): outcome.Outcome<matrix.Vector<real64>, text> {
+    variances: matrix.Vector<real64> = column_variances(values)?;
+    result: [real64] = [];
+    for index = 0; index < variances.len(); index = index + 1 {
+        result.push(math.sqrt(variances.get(index)));
+    }
+    return outcome.done(matrix.vector(result), "");
+}
+
+// Median of each matrix column.
+export fn column_medians<T is numeric>(values: matrix.Matrix<T>): outcome.Outcome<matrix.Vector<real64>, text> {
+    if values.cols() == 0 || values.rows() == 0 {
+        return outcome.failed(empty_vector(), "stats.column_medians: matrix axes must be non-empty");
+    }
+    result: [real64] = [];
+    for col = 0; col < values.cols(); col = col + 1 {
+        result.push(median(values.column(col))?);
+    }
+    return outcome.done(matrix.vector(result), "");
+}
+
+// One histogram per matrix column, useful immediately after csv.read_matrix.
+export fn column_histograms<T is numeric>(values: matrix.Matrix<T>, bins: int): outcome.Outcome<[Histogram], text> {
+    empty: [Histogram] = [];
+    if values.cols() == 0 || values.rows() == 0 {
+        return outcome.failed(empty, "stats.column_histograms: matrix axes must be non-empty");
+    }
+    if bins <= 0 {
+        return outcome.failed(empty, "stats.column_histograms: bin count must be positive");
+    }
+    result: [Histogram] = [];
+    for col = 0; col < values.cols(); col = col + 1 {
+        result.push(histogram(values.column(col), bins)?);
+    }
+    return outcome.done(result, "");
+}
+
+// Sample covariance matrix. Rows are observations, columns are variables.
+export fn covariance_matrix<T is numeric>(values: matrix.Matrix<T>): outcome.Outcome<matrix.Matrix<real64>, text> {
+    if values.rows() < 2 || values.cols() == 0 {
+        return outcome.failed(empty_matrix(), "stats.covariance_matrix: expected at least two rows and one column");
+    }
+    rows: [[real64]] = [];
+    for left = 0; left < values.cols(); left = left + 1 {
+        row: [real64] = [];
+        for right = 0; right < values.cols(); right = right + 1 {
+            row.push(covariance(values.column(left), values.column(right))?);
+        }
+        rows.push(row);
+    }
+    return outcome.done(matrix.from_rows(rows), "");
+}
+
+// Pearson correlation matrix. Any constant column yields a clear Failed value.
+export fn correlation_matrix<T is numeric>(values: matrix.Matrix<T>): outcome.Outcome<matrix.Matrix<real64>, text> {
+    if values.rows() < 2 || values.cols() == 0 {
+        return outcome.failed(empty_matrix(), "stats.correlation_matrix: expected at least two rows and one column");
+    }
+    rows: [[real64]] = [];
+    for left = 0; left < values.cols(); left = left + 1 {
+        row: [real64] = [];
+        for right = 0; right < values.cols(); right = right + 1 {
+            row.push(correlation(values.column(left), values.column(right))?);
+        }
+        rows.push(row);
+    }
+    return outcome.done(matrix.from_rows(rows), "");
+}
+
+// Standardize every matrix column to sample mean 0 and sample standard
+// deviation 1. Constant columns are rejected explicitly.
+export fn standardize_columns<T is numeric>(values: matrix.Matrix<T>): outcome.Outcome<matrix.Matrix<real64>, text> {
+    centers: matrix.Vector<real64> = column_means(values)?;
+    scales: matrix.Vector<real64> = column_stddevs(values)?;
+    for col = 0; col < scales.len(); col = col + 1 {
+        if scales.get(col) == 0.0 {
+            return outcome.failed(empty_matrix(), "stats.standardize_columns: every column must vary");
+        }
+    }
+    flattened: [real64] = [];
+    for row = 0; row < values.rows(); row = row + 1 {
+        for col = 0; col < values.cols(); col = col + 1 {
+            standardized = ((values.get(row, col) to real64) - centers.get(col)) / scales.get(col);
+            flattened.push(standardized);
+        }
+    }
+    result = matrix.Matrix.new(values.rows(), values.cols(), flattened);
+    return outcome.done(result, "");
+}
+
+// Fit y on x using two columns from one observation matrix. This is convenient
+// for matrices loaded by the csv module.
+export fn linear_regression_columns<T is numeric>(values: matrix.Matrix<T>, x_column: int, y_column: int): outcome.Outcome<LinearRegression, text> {
+    if x_column < 0 || x_column >= values.cols() || y_column < 0 || y_column >= values.cols() {
+        return outcome.failed(empty_regression(), "stats.linear_regression_columns: column index out of range");
+    }
+    return linear_regression(values.column(x_column), values.column(y_column));
+}

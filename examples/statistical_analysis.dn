@@ -1,0 +1,58 @@
+import fmt;
+import io;
+import matrix;
+import plot;
+import stats;
+
+// A small observation table: each row is one observation and the columns are
+// x and y. The response follows y = 2*x + 1 exactly.
+data = matrix.from_rows([
+    [1.0, 3.0],
+    [2.0, 5.0],
+    [3.0, 7.0],
+    [4.0, 9.0],
+    [5.0, 11.0]
+]);
+
+// Arrays, Vector<T>, and Matrix<T> share the same stats API.
+x = data.column(0);
+y = data.column(1);
+summary = stats.describe(x).value_or(stats.empty_summary());
+
+io.println("summary");
+io.println(fmt.format(
+    "count={}, mean={}, median={}, q1={}, q3={}",
+    summary.count,
+    summary.mean,
+    summary.median,
+    summary.first_quartile,
+    summary.third_quartile
+));
+
+// Fit directly from matrix columns and use the returned model for prediction.
+model = stats.linear_regression_columns(data, 0, 1).value_or(stats.empty_regression());
+io.println("regression");
+io.println(fmt.format(
+    "slope={}, intercept={}, r2={}, predict(6)={}",
+    model.slope,
+    model.intercept,
+    model.r_squared,
+    model.predict(6.0)
+));
+
+// Compute a histogram once in stats, then pass the validated result to plot.
+histogram = stats.histogram(x, 2).value_or(stats.empty_histogram());
+io.println("histogram");
+io.println(fmt.format("bins={}, counts={},{}", histogram.len(), histogram.counts[0], histogram.counts[1]));
+io.println(plot.svg(plot.histogram(histogram)).contains("<svg"));
+
+// Rows are observations, so the covariance/correlation matrix describes the
+// relationships between columns and works directly after csv.read_matrix.
+covariances = stats.covariance_matrix(data).value_or(stats.empty_matrix());
+correlations = stats.correlation_matrix(data).value_or(stats.empty_matrix());
+io.println("matrix");
+io.println(fmt.format("cov_xy={}, corr_xy={}", covariances.get(0, 1), correlations.get(0, 1)));
+
+// Probability helpers use the same explicit Outcome error model.
+io.println("distribution");
+io.println(stats.normal_cdf(0.0, 0.0, 1.0).value_or(0.0));
