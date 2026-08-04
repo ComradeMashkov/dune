@@ -2,6 +2,9 @@ import io;
 // Bring in the standard-library matrix module, which provides Vector and
 // Matrix types along with numeric helpers (mean, dot, norm, etc.).
 import matrix;
+// The statistics module supplies validated ordinary least squares and model
+// diagnostics for arrays and matrix.Vector values.
+import stats;
 
 // This example fits a straight line y = slope * x + intercept to a set of
 // (x, y) points using ordinary least squares. The data is chosen so the fit
@@ -13,38 +16,21 @@ xs = matrix.vector([1.0, 2.0, 3.0, 4.0, 5.0]);
 // Note each ys value is exactly 2 * x + 1, so the true line is slope 2, intercept 1.
 ys = matrix.vector([3.0, 5.0, 7.0, 9.0, 11.0]);
 
-// Compute the arithmetic mean of the x samples (the x "center of mass").
-x_mean = xs.mean();
-// Compute the arithmetic mean of the y samples.
-y_mean = ys.mean();
-// Subtract the x mean from every x, giving x deviations from the average.
-centered_x = xs.sub(x_mean);
-// Subtract the y mean from every y, giving y deviations from the average.
-centered_y = ys.sub(y_mean);
-
-// Least-squares slope: covariance(x, y) / variance(x). Using centered vectors,
-// the numerator is the dot product of the deviations and the denominator is
-// the sum of squared x deviations. Both share the same 1/n factor, which cancels.
-slope = centered_x.dot(centered_y) / centered_x.dot(centered_x);
-// The best-fit line passes through the point (x_mean, y_mean), so the
-// intercept is recovered by rearranging y_mean = slope * x_mean + intercept.
-intercept = y_mean - slope * x_mean;
+// Fit a validated ordinary least-squares model. The default model is only used
+// to pin Outcome.value_or's type; these inputs are valid and produce Done.
+model = stats.linear_regression(xs, ys).value_or(stats.empty_regression());
 // Use the fitted line to extrapolate the predicted y at a new x = 6.0.
-prediction = slope * 6.0 + intercept;
+prediction = model.predict(6.0);
 
 // Label the block of output that follows.
 io.println("linear regression");
 // Print the fitted slope (should be 2, matching the data's true slope).
-io.println(slope);
+io.println(model.slope);
 // Print the fitted intercept (should be 1, matching the data's true intercept).
-io.println(intercept);
+io.println(model.intercept);
 // Print the extrapolated value at x = 6.0 (should be 2 * 6 + 1 = 13).
 io.println(prediction);
 
-// Residuals are the differences between the observed ys and the model's
-// predictions. Here we build the prediction vector by scaling every x by the
-// slope (xs.mul(slope)) then adding the intercept, and subtract from ys.
-residuals = ys.sub(xs.mul(slope).add(intercept));
-// Print the sum of squared residuals. Because this data lies exactly on the
-// line, every residual is zero and the total is 0.
-io.println(residuals.norm_squared());
+// The model exposes its residual sum of squares as a diagnostic. Because this
+// data lies exactly on the line, it is 0.
+io.println(model.residual_sum_squares);

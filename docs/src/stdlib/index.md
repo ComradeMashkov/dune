@@ -25,4 +25,5 @@ The standard library is ordinary Dune loaded from `.dn` files. Each page below i
 - [`regex`](regex.md) — Safe ASCII regular expressions for validation and text cleanup.
 - [`runtime`](runtime.md) — Runtime helpers such as `panic`.
 - [`set`](set.md) — A hash-set built in Dune.
+- [`stats`](stats.md) — Descriptive statistics, relationships, models, histograms, and probability helpers.
 - [`text`](text.md) — Text and glyph helpers.

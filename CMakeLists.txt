@@ -257,6 +257,16 @@ add_test(NAME cli_check_static_types COMMAND dune check ${CMAKE_CURRENT_SOURCE_D
 add_test(NAME cli_check_type_error COMMAND dune check ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/errors/type_error.dn)
 set_tests_properties(cli_check_type_error PROPERTIES WILL_FAIL TRUE)
 
+add_test(
+    NAME cli_stdlib_stats
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/stdlib/statistics_module.dn
+        -D EXPECTED_OUTPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/golden/stats.out
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
 # `dune repl` accepts scripted stdin while preserving bindings, imports, and
 # multi-line definitions between entries.
 add_test(
@@ -289,6 +299,20 @@ add_test(
         -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
         -D NOTEBOOK_FILE=${CMAKE_CURRENT_SOURCE_DIR}/examples/notebooks/plot_gallery.dnb
         -D HTML_OUTPUT_FILE=${CMAKE_CURRENT_BINARY_DIR}/notebook_plot_gallery.html
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_notebook_plot_case.cmake
+)
+
+add_test(
+    NAME cli_notebook_statistical_analysis
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D NOTEBOOK_FILE=${CMAKE_CURRENT_SOURCE_DIR}/examples/notebooks/statistical_analysis.dnb
+        -D UPDATE_BEFORE_CHECK=ON
+        -D UPDATED_NOTEBOOK_FILE=${CMAKE_CURRENT_BINARY_DIR}/notebook_statistical_analysis_checked.dnb
+        -D HTML_OUTPUT_FILE=${CMAKE_CURRENT_BINARY_DIR}/notebook_statistical_analysis.html
+        -D "EXPECTED_TITLE=Complete stats module reference"
+        -D "EXPECTED_HTML_MARKER=<math class=\"latex-math\""
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_notebook_plot_case.cmake
 )
 
@@ -965,5 +989,15 @@ add_test(
         -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/examples/linear_regression.dn
         -D EXPECTED_OUTPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/examples/golden/linear_regression.out
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
+    NAME cli_example_statistical_analysis
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/examples/statistical_analysis.dn
+        -D EXPECTED_OUTPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/examples/golden/statistical_analysis.out
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
 )

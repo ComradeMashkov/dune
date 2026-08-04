@@ -1,5 +1,6 @@
 #include "notebook/notebook.hpp"
 #include "notebook/server.hpp"
+#include "notebook/web_assets.hpp"
 
 #include <chrono>
 #include <filesystem>
@@ -155,6 +156,65 @@ bool executes_stateful_cells_and_recovers_after_edits() {
     report = kernel.execute(document);
     passed = expect(!report.success && report.cells.back().error.find("state.dnb#cell-runtime") != std::string::npos,
                     "expected runtime failures to identify their notebook cell") &&
+             passed;
+    return passed;
+}
+
+bool renders_latex_math_in_markdown_and_static_exports() {
+    dune::notebook::Document document;
+    document.title = "Math notebook";
+    document.cells = {dune::notebook::Cell{"math",
+                                           dune::notebook::CellKind::markdown,
+                                           R"markdown(# Mathematical notation
+
+Inline $E = mc^2$, \(\alpha + \beta\), and $\bar{x}$.
+
+$$
+\sum_{i=1}^{n} x_i = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}
+$$
+
+\[
+\begin{pmatrix}a & b \\ c & d\end{pmatrix}
+\]
+
+Safe $\text{<script>alert(1)</script>}$, literal `$not_math$`, and escaped \$5.)markdown",
+                                           {},
+                                           {},
+                                           0}};
+
+    const std::string html = dune::notebook::render_html(document);
+    bool passed = true;
+    passed = expect(html.find("<math class=\"latex-math\"") != std::string::npos &&
+                        html.find("display=\"inline\"") != std::string::npos &&
+                        html.find("display=\"block\"") != std::string::npos,
+                    "expected inline and display LaTeX to render as native MathML") &&
+             passed;
+    passed = expect(html.find("<mfrac>") != std::string::npos && html.find("<msqrt>") != std::string::npos &&
+                        html.find("<munderover>") != std::string::npos && html.find("<mtable") != std::string::npos,
+                    "expected fractions, roots, limits, and matrices in exported formulas") &&
+             passed;
+    passed = expect(html.find("<mrow class=\"latex-overbar\">") != std::string::npos &&
+                        html.find(".latex-overbar{border-top:.055em solid currentColor;padding-top:.16em}") !=
+                            std::string::npos &&
+                        html.find("‾") == std::string::npos,
+                    "expected a separated CSS rule instead of a merging overbar glyph") &&
+             passed;
+    const std::string_view notebook_app = dune::notebook::notebook_app_html();
+    passed = expect(notebook_app.find(".latex-overbar {") != std::string_view::npos &&
+                        notebook_app.find("border-top: .055em solid currentColor;") != std::string_view::npos &&
+                        notebook_app.find("padding-top: .16em;") != std::string_view::npos &&
+                        notebook_app.find("<mrow class=\"latex-overbar\">") != std::string_view::npos &&
+                        notebook_app.find("‾") == std::string_view::npos,
+                    "expected the interactive renderer to use the same separated overbar rule") &&
+             passed;
+    passed = expect(html.find("annotation encoding=\"application/x-tex\"") != std::string::npos &&
+                        html.find("<code>$not_math$</code>") != std::string::npos &&
+                        html.find("application/x-tex\">not_math") == std::string::npos,
+                    "expected accessible TeX annotations without parsing code spans") &&
+             passed;
+    passed = expect(html.find("<script>alert(1)</script>") == std::string::npos &&
+                        html.find("&lt;script&gt;alert(1)&lt;/script&gt;") != std::string::npos,
+                    "expected formula text to remain HTML escaped") &&
              passed;
     return passed;
 }
@@ -361,6 +421,15 @@ bool accepts_real_http_connections() {
                             app.find("function lexDune(source)") != std::string::npos &&
                             app.find("syntax-keyword") != std::string::npos &&
                             app.find("syncCodeHighlight(source, highlight)") != std::string::npos &&
+                            app.find("Clear selected output") != std::string::npos &&
+                            app.find("Clear all outputs") != std::string::npos &&
+                            app.find("Restart kernel and clear all outputs") != std::string::npos &&
+                            app.find("function clearSelectedOutput()") != std::string::npos &&
+                            app.find("function clearAllOutputs(") != std::string::npos &&
+                            app.find("class LatexMathParser") != std::string::npos &&
+                            app.find("function renderLatexMath(") != std::string::npos &&
+                            app.find("application/x-tex") != std::string::npos &&
+                            app.find("math-display") != std::string::npos &&
                             app.find("data:image/svg+xml") != std::string::npos &&
                             app.find("img-src 'self' data:") != std::string::npos &&
                             app.find("creates one at the end") != std::string::npos,
@@ -386,6 +455,7 @@ int main() {
     bool passed = true;
     passed = parses_and_serializes_versioned_dnb_documents() && passed;
     passed = executes_stateful_cells_and_recovers_after_edits() && passed;
+    passed = renders_latex_math_in_markdown_and_static_exports() && passed;
     passed = serves_secure_workspace_routes() && passed;
     passed = rejects_unsafe_server_tokens() && passed;
     passed = accepts_real_http_connections() && passed;

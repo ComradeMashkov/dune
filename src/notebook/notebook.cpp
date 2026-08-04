@@ -9,6 +9,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string_view>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 
@@ -478,10 +479,585 @@ std::string svg_data_uri(std::string_view svg) {
     return encoded;
 }
 
+struct MathNode {
+    std::string html;
+    bool movable_limits = false;
+};
+
+const std::unordered_map<std::string, std::string>& latex_symbols() {
+    static const std::unordered_map<std::string, std::string> symbols = {
+        {"alpha", "α"},
+        {"beta", "β"},
+        {"gamma", "γ"},
+        {"delta", "δ"},
+        {"epsilon", "ϵ"},
+        {"varepsilon", "ε"},
+        {"zeta", "ζ"},
+        {"eta", "η"},
+        {"theta", "θ"},
+        {"vartheta", "ϑ"},
+        {"iota", "ι"},
+        {"kappa", "κ"},
+        {"lambda", "λ"},
+        {"mu", "μ"},
+        {"nu", "ν"},
+        {"xi", "ξ"},
+        {"omicron", "ο"},
+        {"pi", "π"},
+        {"varpi", "ϖ"},
+        {"rho", "ρ"},
+        {"varrho", "ϱ"},
+        {"sigma", "σ"},
+        {"varsigma", "ς"},
+        {"tau", "τ"},
+        {"upsilon", "υ"},
+        {"phi", "ϕ"},
+        {"varphi", "φ"},
+        {"chi", "χ"},
+        {"psi", "ψ"},
+        {"omega", "ω"},
+        {"Gamma", "Γ"},
+        {"Delta", "Δ"},
+        {"Theta", "Θ"},
+        {"Lambda", "Λ"},
+        {"Xi", "Ξ"},
+        {"Pi", "Π"},
+        {"Sigma", "Σ"},
+        {"Upsilon", "Υ"},
+        {"Phi", "Φ"},
+        {"Psi", "Ψ"},
+        {"Omega", "Ω"},
+        {"pm", "±"},
+        {"mp", "∓"},
+        {"times", "×"},
+        {"div", "÷"},
+        {"cdot", "⋅"},
+        {"ast", "∗"},
+        {"star", "⋆"},
+        {"circ", "∘"},
+        {"bullet", "•"},
+        {"oplus", "⊕"},
+        {"otimes", "⊗"},
+        {"le", "≤"},
+        {"leq", "≤"},
+        {"ge", "≥"},
+        {"geq", "≥"},
+        {"ne", "≠"},
+        {"neq", "≠"},
+        {"approx", "≈"},
+        {"sim", "∼"},
+        {"simeq", "≃"},
+        {"equiv", "≡"},
+        {"propto", "∝"},
+        {"ll", "≪"},
+        {"gg", "≫"},
+        {"in", "∈"},
+        {"notin", "∉"},
+        {"ni", "∋"},
+        {"subset", "⊂"},
+        {"supset", "⊃"},
+        {"subseteq", "⊆"},
+        {"supseteq", "⊇"},
+        {"cup", "∪"},
+        {"cap", "∩"},
+        {"setminus", "∖"},
+        {"emptyset", "∅"},
+        {"forall", "∀"},
+        {"exists", "∃"},
+        {"nexists", "∄"},
+        {"neg", "¬"},
+        {"land", "∧"},
+        {"lor", "∨"},
+        {"wedge", "∧"},
+        {"vee", "∨"},
+        {"to", "→"},
+        {"rightarrow", "→"},
+        {"leftarrow", "←"},
+        {"leftrightarrow", "↔"},
+        {"Rightarrow", "⇒"},
+        {"Leftarrow", "⇐"},
+        {"Leftrightarrow", "⇔"},
+        {"mapsto", "↦"},
+        {"uparrow", "↑"},
+        {"downarrow", "↓"},
+        {"partial", "∂"},
+        {"nabla", "∇"},
+        {"infty", "∞"},
+        {"ell", "ℓ"},
+        {"hbar", "ℏ"},
+        {"Re", "ℜ"},
+        {"Im", "ℑ"},
+        {"aleph", "ℵ"},
+        {"prime", "′"},
+        {"angle", "∠"},
+        {"perp", "⊥"},
+        {"parallel", "∥"},
+        {"mid", "|"},
+        {"langle", "⟨"},
+        {"rangle", "⟩"},
+        {"lceil", "⌈"},
+        {"rceil", "⌉"},
+        {"lfloor", "⌊"},
+        {"rfloor", "⌋"},
+        {"ldots", "…"},
+        {"cdots", "⋯"},
+        {"vdots", "⋮"},
+        {"ddots", "⋱"},
+        {"therefore", "∴"},
+        {"because", "∵"},
+        {"sum", "∑"},
+        {"prod", "∏"},
+        {"coprod", "∐"},
+        {"int", "∫"},
+        {"iint", "∬"},
+        {"iiint", "∭"},
+        {"oint", "∮"},
+        {"bigcup", "⋃"},
+        {"bigcap", "⋂"},
+        {"bigvee", "⋁"},
+        {"bigwedge", "⋀"},
+    };
+    return symbols;
+}
+
+const std::unordered_set<std::string>& latex_named_operators() {
+    static const std::unordered_set<std::string> operators = {
+        "sin",  "cos",  "tan", "cot", "sec", "csc", "arcsin", "arccos", "arctan", "sinh",
+        "cosh", "tanh", "log", "ln",  "exp", "det", "dim",    "gcd",    "ker",    "hom",
+        "arg",  "deg",  "min", "max", "inf", "sup", "lim",    "liminf", "limsup", "Pr",
+    };
+    return operators;
+}
+
+const std::unordered_set<std::string>& latex_limit_operators() {
+    static const std::unordered_set<std::string> operators = {
+        "sum", "prod",   "coprod", "bigcup", "bigcap", "bigvee", "bigwedge",
+        "lim", "liminf", "limsup", "min",    "max",    "inf",    "sup",
+    };
+    return operators;
+}
+
+class LatexMathParser {
+public:
+    explicit LatexMathParser(std::string_view source) : source_(source) {}
+
+    std::string parse() {
+        return parse_expression('\0');
+    }
+
+private:
+    std::string parse_expression(char closing) {
+        std::string result;
+        while (position_ < source_.size()) {
+            skip_spaces();
+            if (position_ >= source_.size()) {
+                break;
+            }
+            if (closing != '\0' && source_[position_] == closing) {
+                ++position_;
+                break;
+            }
+            result += parse_scripted_atom().html;
+        }
+        return result;
+    }
+
+    MathNode parse_scripted_atom() {
+        MathNode base = parse_atom();
+        skip_spaces();
+        if (source_.substr(position_).starts_with("\\limits")) {
+            position_ += 7;
+            skip_spaces();
+            base.movable_limits = true;
+        }
+
+        std::optional<std::string> lower;
+        std::optional<std::string> upper;
+        while (position_ < source_.size() && (source_[position_] == '_' || source_[position_] == '^')) {
+            const char marker = source_[position_++];
+            MathNode argument = parse_argument();
+            if (marker == '_') {
+                lower = std::move(argument.html);
+            } else {
+                upper = std::move(argument.html);
+            }
+            skip_spaces();
+        }
+        if (!lower && !upper) {
+            return base;
+        }
+        if (lower && upper) {
+            const std::string tag = base.movable_limits ? "munderover" : "msubsup";
+            return {"<" + tag + ">" + base.html + "<mrow>" + *lower + "</mrow><mrow>" + *upper + "</mrow></" + tag +
+                        ">",
+                    false};
+        }
+        const bool is_lower = lower.has_value();
+        const std::string tag = base.movable_limits ? (is_lower ? "munder" : "mover") : (is_lower ? "msub" : "msup");
+        const std::string& script = is_lower ? *lower : *upper;
+        return {"<" + tag + ">" + base.html + "<mrow>" + script + "</mrow></" + tag + ">", false};
+    }
+
+    MathNode parse_argument() {
+        skip_spaces();
+        if (position_ < source_.size() && source_[position_] == '{') {
+            ++position_;
+            return {"<mrow>" + parse_expression('}') + "</mrow>", false};
+        }
+        return parse_scripted_atom();
+    }
+
+    MathNode parse_atom() {
+        if (position_ >= source_.size()) {
+            return {};
+        }
+        const char character = source_[position_];
+        if (character == '{') {
+            ++position_;
+            return {"<mrow>" + parse_expression('}') + "</mrow>", false};
+        }
+        if (character == '\\') {
+            return parse_command();
+        }
+        if (std::isdigit(static_cast<unsigned char>(character)) != 0 ||
+            (character == '.' && position_ + 1 < source_.size() &&
+             std::isdigit(static_cast<unsigned char>(source_[position_ + 1])) != 0)) {
+            const std::size_t start = position_++;
+            while (position_ < source_.size() &&
+                   (std::isdigit(static_cast<unsigned char>(source_[position_])) != 0 || source_[position_] == '.')) {
+                ++position_;
+            }
+            return {"<mn>" + html_escape(source_.substr(start, position_ - start)) + "</mn>", false};
+        }
+        if (std::isalpha(static_cast<unsigned char>(character)) != 0) {
+            ++position_;
+            return {"<mi>" + html_escape(source_.substr(position_ - 1, 1)) + "</mi>", false};
+        }
+
+        const std::size_t glyph_size = utf8_glyph_size(static_cast<unsigned char>(character));
+        const std::size_t available = std::min(glyph_size, source_.size() - position_);
+        const std::string glyph = html_escape(source_.substr(position_, available));
+        position_ += available;
+        if (std::string_view("+-*/=(),[]<>|:;!").find(character) != std::string_view::npos) {
+            return {"<mo>" + (character == '-' ? std::string("−") : glyph) + "</mo>", false};
+        }
+        if (character == '\'') {
+            return {"<mo>′</mo>", false};
+        }
+        return {"<mi>" + glyph + "</mi>", false};
+    }
+
+    MathNode parse_command() {
+        ++position_;
+        if (position_ >= source_.size()) {
+            return {"<mo>\\</mo>", false};
+        }
+        std::string command;
+        if (std::isalpha(static_cast<unsigned char>(source_[position_])) != 0) {
+            const std::size_t start = position_;
+            while (position_ < source_.size() && std::isalpha(static_cast<unsigned char>(source_[position_])) != 0) {
+                ++position_;
+            }
+            command = std::string(source_.substr(start, position_ - start));
+        } else {
+            command.assign(1, source_[position_++]);
+        }
+
+        if (command == "frac" || command == "dfrac" || command == "tfrac") {
+            const MathNode numerator = parse_argument();
+            const MathNode denominator = parse_argument();
+            return {"<mfrac><mrow>" + numerator.html + "</mrow><mrow>" + denominator.html + "</mrow></mfrac>", false};
+        }
+        if (command == "binom") {
+            const MathNode upper = parse_argument();
+            const MathNode lower = parse_argument();
+            return {"<mrow><mo stretchy=\"true\">(</mo><mfrac linethickness=\"0\"><mrow>" + upper.html +
+                        "</mrow><mrow>" + lower.html + "</mrow></mfrac><mo stretchy=\"true\">)</mo></mrow>",
+                    false};
+        }
+        if (command == "sqrt") {
+            skip_spaces();
+            std::optional<std::string> index;
+            if (position_ < source_.size() && source_[position_] == '[') {
+                ++position_;
+                const std::size_t start = position_;
+                while (position_ < source_.size() && source_[position_] != ']') {
+                    ++position_;
+                }
+                index = LatexMathParser(source_.substr(start, position_ - start)).parse();
+                if (position_ < source_.size()) {
+                    ++position_;
+                }
+            }
+            const MathNode radicand = parse_argument();
+            if (index) {
+                return {"<mroot><mrow>" + radicand.html + "</mrow><mrow>" + *index + "</mrow></mroot>", false};
+            }
+            return {"<msqrt><mrow>" + radicand.html + "</mrow></msqrt>", false};
+        }
+        if (command == "text" || command == "textrm" || command == "mbox") {
+            return {"<mtext>" + html_escape(parse_raw_group()) + "</mtext>", false};
+        }
+        if (command == "operatorname") {
+            return {"<mi mathvariant=\"normal\">" + html_escape(parse_raw_group()) + "</mi>", true};
+        }
+        if (command == "begin") {
+            return parse_environment(parse_raw_group());
+        }
+        if (command == "left" || command == "right" || command == "middle") {
+            const std::string delimiter = read_delimiter();
+            if (delimiter.empty()) {
+                return {"<mrow></mrow>", false};
+            }
+            return {"<mo stretchy=\"true\">" + html_escape(delimiter) + "</mo>", false};
+        }
+
+        static const std::unordered_map<std::string, std::pair<std::string, std::string>> styles = {
+            {"mathrm", {"mathvariant", "normal"}},          {"mathbf", {"mathvariant", "bold"}},
+            {"mathit", {"mathvariant", "italic"}},          {"mathsf", {"mathvariant", "sans-serif"}},
+            {"mathtt", {"mathvariant", "monospace"}},       {"mathbb", {"mathvariant", "double-struck"}},
+            {"mathcal", {"mathvariant", "script"}},         {"mathfrak", {"mathvariant", "fraktur"}},
+            {"boldsymbol", {"mathvariant", "bold-italic"}},
+        };
+        if (const auto style = styles.find(command); style != styles.end()) {
+            const MathNode content = parse_argument();
+            return {"<mstyle " + style->second.first + "=\"" + style->second.second + "\">" + content.html +
+                        "</mstyle>",
+                    false};
+        }
+
+        if (command == "bar" || command == "overline") {
+            const MathNode content = parse_argument();
+            return {"<mrow class=\"latex-overbar\"><mrow>" + content.html + "</mrow></mrow>", false};
+        }
+
+        static const std::unordered_map<std::string, std::string> accents = {
+            {"hat", "^"},  {"widehat", "^"}, {"vec", "→"},   {"tilde", "~"}, {"widetilde", "~"}, {"dot", "˙"},
+            {"ddot", "¨"}, {"breve", "˘"},   {"check", "ˇ"}, {"acute", "´"}, {"grave", "`"},
+        };
+        if (const auto accent = accents.find(command); accent != accents.end()) {
+            const MathNode content = parse_argument();
+            return {"<mover accent=\"true\"><mrow>" + content.html + "</mrow><mo>" + accent->second + "</mo></mover>",
+                    false};
+        }
+        if (command == "underline") {
+            const MathNode content = parse_argument();
+            return {"<munder accentunder=\"true\"><mrow>" + content.html + "</mrow><mo>_</mo></munder>", false};
+        }
+
+        if (command == "," || command == ":" || command == ";" || command == "quad" || command == "qquad" ||
+            command == " " || command == "!") {
+            const std::string width = command == "qquad"  ? "2em"
+                                      : command == "quad" ? "1em"
+                                      : command == ";"    ? "0.278em"
+                                      : command == ":"    ? "0.222em"
+                                      : command == "!"    ? "-0.167em"
+                                                          : "0.167em";
+            return {"<mspace width=\"" + width + "\"/>", false};
+        }
+
+        if (const auto symbol = latex_symbols().find(command); symbol != latex_symbols().end()) {
+            return {"<mo>" + symbol->second + "</mo>", latex_limit_operators().contains(command)};
+        }
+        if (latex_named_operators().contains(command)) {
+            return {"<mi mathvariant=\"normal\">" + html_escape(command) + "</mi>",
+                    latex_limit_operators().contains(command)};
+        }
+        if (command == "%" || command == "$" || command == "#" || command == "_" || command == "{" || command == "}" ||
+            command == "&") {
+            return {"<mo>" + html_escape(command) + "</mo>", false};
+        }
+        return {"<mtext>\\" + html_escape(command) + "</mtext>", false};
+    }
+
+    MathNode parse_environment(const std::string& environment) {
+        const std::string closing = "\\end{" + environment + "}";
+        const std::size_t end = source_.find(closing, position_);
+        if (end == std::string_view::npos) {
+            return {"<mtext>\\begin{" + html_escape(environment) + "}</mtext>", false};
+        }
+        std::string content(source_.substr(position_, end - position_));
+        position_ = end + closing.size();
+        if (environment == "array") {
+            std::string_view view = trim_whitespace(content);
+            if (view.starts_with("{")) {
+                const std::size_t specification_end = view.find('}');
+                if (specification_end != std::string_view::npos) {
+                    content = std::string(view.substr(specification_end + 1));
+                }
+            }
+        }
+
+        const auto rows = split_environment(content);
+        std::string table = "<mtable columnspacing=\"1em\" rowspacing=\"0.35em\">";
+        for (const auto& row : rows) {
+            table += "<mtr>";
+            for (const std::string& cell : row) {
+                table += "<mtd><mrow>" + LatexMathParser(cell).parse() + "</mrow></mtd>";
+            }
+            table += "</mtr>";
+        }
+        table += "</mtable>";
+
+        std::string left;
+        std::string right;
+        if (environment == "pmatrix") {
+            left = "(";
+            right = ")";
+        } else if (environment == "bmatrix") {
+            left = "[";
+            right = "]";
+        } else if (environment == "Bmatrix") {
+            left = "{";
+            right = "}";
+        } else if (environment == "vmatrix") {
+            left = "|";
+            right = "|";
+        } else if (environment == "Vmatrix") {
+            left = "‖";
+            right = "‖";
+        } else if (environment == "cases") {
+            left = "{";
+        }
+        if (!left.empty()) {
+            table = "<mrow><mo stretchy=\"true\">" + html_escape(left) + "</mo>" + table;
+            if (!right.empty()) {
+                table += "<mo stretchy=\"true\">" + html_escape(right) + "</mo>";
+            }
+            table += "</mrow>";
+        }
+        return {table, false};
+    }
+
+    static std::vector<std::vector<std::string>> split_environment(std::string_view content) {
+        std::vector<std::vector<std::string>> rows(1);
+        rows.back().emplace_back();
+        int depth = 0;
+        for (std::size_t index = 0; index < content.size(); ++index) {
+            const char character = content[index];
+            if (character == '{') {
+                ++depth;
+            } else if (character == '}' && depth > 0) {
+                --depth;
+            }
+            if (depth == 0 && character == '&') {
+                rows.back().emplace_back();
+                continue;
+            }
+            if (depth == 0 && character == '\\' && index + 1 < content.size() && content[index + 1] == '\\') {
+                rows.emplace_back();
+                rows.back().emplace_back();
+                ++index;
+                continue;
+            }
+            rows.back().back() += character;
+        }
+        return rows;
+    }
+
+    std::string parse_raw_group() {
+        skip_spaces();
+        if (position_ >= source_.size() || source_[position_] != '{') {
+            return {};
+        }
+        ++position_;
+        const std::size_t start = position_;
+        int depth = 1;
+        while (position_ < source_.size() && depth > 0) {
+            if (source_[position_] == '{') {
+                ++depth;
+            } else if (source_[position_] == '}') {
+                --depth;
+            }
+            ++position_;
+        }
+        const std::size_t end = depth == 0 ? position_ - 1 : position_;
+        return std::string(source_.substr(start, end - start));
+    }
+
+    std::string read_delimiter() {
+        skip_spaces();
+        if (position_ >= source_.size()) {
+            return {};
+        }
+        if (source_[position_] != '\\') {
+            const char delimiter = source_[position_++];
+            return delimiter == '.' ? std::string() : std::string(1, delimiter);
+        }
+        ++position_;
+        const std::size_t start = position_;
+        if (position_ < source_.size() && std::isalpha(static_cast<unsigned char>(source_[position_])) != 0) {
+            while (position_ < source_.size() && std::isalpha(static_cast<unsigned char>(source_[position_])) != 0) {
+                ++position_;
+            }
+        } else if (position_ < source_.size()) {
+            ++position_;
+        }
+        const std::string name(source_.substr(start, position_ - start));
+        static const std::unordered_map<std::string, std::string> delimiters = {
+            {"langle", "⟨"}, {"rangle", "⟩"}, {"lceil", "⌈"}, {"rceil", "⌉"}, {"lfloor", "⌊"}, {"rfloor", "⌋"},
+            {"vert", "|"},   {"Vert", "‖"},   {"|", "‖"},     {"{", "{"},     {"}", "}"},      {".", ""},
+        };
+        if (const auto delimiter = delimiters.find(name); delimiter != delimiters.end()) {
+            return delimiter->second;
+        }
+        return name;
+    }
+
+    void skip_spaces() {
+        while (position_ < source_.size() && std::isspace(static_cast<unsigned char>(source_[position_])) != 0) {
+            ++position_;
+        }
+    }
+
+    static std::size_t utf8_glyph_size(unsigned char lead) {
+        if ((lead & 0x80U) == 0)
+            return 1;
+        if ((lead & 0xE0U) == 0xC0U)
+            return 2;
+        if ((lead & 0xF0U) == 0xE0U)
+            return 3;
+        if ((lead & 0xF8U) == 0xF0U)
+            return 4;
+        return 1;
+    }
+
+    std::string_view source_;
+    std::size_t position_ = 0;
+};
+
+std::string render_latex_math(std::string_view source, bool display) {
+    const std::string math = LatexMathParser(source).parse();
+    return "<math class=\"latex-math\" xmlns=\"http://www.w3.org/1998/Math/MathML\" display=\"" +
+           std::string(display ? "block" : "inline") + "\" aria-label=\"" + html_escape(source) +
+           "\"><semantics><mrow>" + math + "</mrow><annotation encoding=\"application/x-tex\">" + html_escape(source) +
+           "</annotation></semantics></math>";
+}
+
+std::size_t find_unescaped(std::string_view text, std::string_view delimiter, std::size_t start) {
+    std::size_t position = start;
+    while ((position = text.find(delimiter, position)) != std::string_view::npos) {
+        std::size_t slashes = 0;
+        for (std::size_t index = position; index > 0 && text[index - 1] == '\\'; --index) {
+            ++slashes;
+        }
+        if (slashes % 2 == 0) {
+            return position;
+        }
+        position += delimiter.size();
+    }
+    return std::string_view::npos;
+}
+
 std::string inline_markdown(std::string_view text) {
     std::string rendered;
     std::size_t position = 0;
     while (position < text.size()) {
+        if (text[position] == '\\' && position + 1 < text.size() && text[position + 1] == '$') {
+            rendered += '$';
+            position += 2;
+            continue;
+        }
         if (text[position] == '`') {
             const std::size_t end = text.find('`', position + 1);
             if (end != std::string_view::npos) {
@@ -490,27 +1066,110 @@ std::string inline_markdown(std::string_view text) {
                 continue;
             }
         }
-        if (position + 1 < text.size() && text[position] == '*' && text[position + 1] == '*') {
-            const std::size_t end = text.find("**", position + 2);
+        if (position + 1 < text.size() && text[position] == '\\' && text[position + 1] == '(') {
+            const std::size_t end = find_unescaped(text, "\\)", position + 2);
             if (end != std::string_view::npos) {
-                rendered += "<strong>" + html_escape(text.substr(position + 2, end - position - 2)) + "</strong>";
+                rendered += render_latex_math(text.substr(position + 2, end - position - 2), false);
                 position = end + 2;
                 continue;
             }
         }
-        rendered += html_escape(text.substr(position, 1));
-        ++position;
+        if (text[position] == '$' && (position + 1 >= text.size() || text[position + 1] != '$')) {
+            const std::size_t end = find_unescaped(text, "$", position + 1);
+            if (end != std::string_view::npos && end > position + 1) {
+                rendered += render_latex_math(text.substr(position + 1, end - position - 1), false);
+                position = end + 1;
+                continue;
+            }
+        }
+        if (position + 1 < text.size() && text[position] == '*' && text[position + 1] == '*') {
+            const std::size_t end = text.find("**", position + 2);
+            if (end != std::string_view::npos) {
+                rendered += "<strong>" + inline_markdown(text.substr(position + 2, end - position - 2)) + "</strong>";
+                position = end + 2;
+                continue;
+            }
+        }
+        if (text[position] == '*') {
+            const std::size_t end = text.find('*', position + 1);
+            if (end != std::string_view::npos) {
+                rendered += "<em>" + inline_markdown(text.substr(position + 1, end - position - 1)) + "</em>";
+                position = end + 1;
+                continue;
+            }
+        }
+        const unsigned char lead = static_cast<unsigned char>(text[position]);
+        const std::size_t glyph_size = (lead & 0x80U) == 0       ? 1
+                                       : (lead & 0xE0U) == 0xC0U ? 2
+                                       : (lead & 0xF0U) == 0xE0U ? 3
+                                       : (lead & 0xF8U) == 0xF0U ? 4
+                                                                 : 1;
+        const std::size_t available = std::min(glyph_size, text.size() - position);
+        rendered += html_escape(text.substr(position, available));
+        position += available;
     }
     return rendered;
 }
 
+struct DisplayMathBlock {
+    std::string source;
+    std::size_t last_line = 0;
+};
+
+std::optional<DisplayMathBlock> display_math_block(const std::vector<std::string>& lines, std::size_t first_line) {
+    const std::string_view opening_line = trim_whitespace(lines[first_line]);
+    std::string_view opening;
+    std::string_view closing;
+    if (opening_line.starts_with("$$")) {
+        opening = "$$";
+        closing = "$$";
+    } else if (opening_line.starts_with("\\[")) {
+        opening = "\\[";
+        closing = "\\]";
+    } else {
+        return std::nullopt;
+    }
+
+    std::string source(opening_line.substr(opening.size()));
+    if (const std::size_t close = find_unescaped(source, closing, 0); close != std::string::npos) {
+        if (!trim_whitespace(std::string_view(source).substr(close + closing.size())).empty()) {
+            return std::nullopt;
+        }
+        source.resize(close);
+        return DisplayMathBlock{std::move(source), first_line};
+    }
+
+    for (std::size_t line = first_line + 1; line < lines.size(); ++line) {
+        const std::string_view candidate = lines[line];
+        const std::size_t close = find_unescaped(candidate, closing, 0);
+        if (close == std::string_view::npos) {
+            if (!source.empty())
+                source += '\n';
+            source += candidate;
+            continue;
+        }
+        if (!trim_whitespace(candidate.substr(close + closing.size())).empty()) {
+            return std::nullopt;
+        }
+        if (!source.empty())
+            source += '\n';
+        source += candidate.substr(0, close);
+        return DisplayMathBlock{std::move(source), line};
+    }
+    return std::nullopt;
+}
+
 std::string render_markdown(std::string_view markdown) {
     std::istringstream input{std::string(markdown)};
+    std::vector<std::string> lines;
+    for (std::string line; std::getline(input, line);) {
+        lines.push_back(std::move(line));
+    }
     std::string html;
-    std::string line;
     bool in_list = false;
     bool in_code = false;
-    while (std::getline(input, line)) {
+    for (std::size_t line_index = 0; line_index < lines.size(); ++line_index) {
+        const std::string& line = lines[line_index];
         if (line.starts_with("```")) {
             if (in_list) {
                 html += "</ul>";
@@ -522,6 +1181,15 @@ std::string render_markdown(std::string_view markdown) {
         }
         if (in_code) {
             html += html_escape(line) + "\n";
+            continue;
+        }
+        if (const auto math = display_math_block(lines, line_index)) {
+            if (in_list) {
+                html += "</ul>";
+                in_list = false;
+            }
+            html += "<div class=\"math-display\">" + render_latex_math(math->source, true) + "</div>";
+            line_index = math->last_line;
             continue;
         }
         if (line.starts_with("- ")) {
@@ -742,7 +1410,10 @@ max-width:100%;height:auto;margin:0 auto}.error{border-left:3px solid var(--dang
 padding:4px 12px 8px}.markdown h1,.markdown h2{border-bottom:1px solid var(--border);padding-bottom:.18em;
 line-height:1.22}.markdown h1{font-size:1.85em}.markdown h2{font-size:1.45em}.markdown code{border-radius:2px;
 background:var(--code);padding:.1em .3em}.markdown pre{overflow:auto;border:1px solid var(--border);border-radius:2px;
-background:var(--code);padding:10px}@media(max-width:700px){main{padding-inline:6px}.cell{grid-template-columns:58px minmax(0,1fr)}
+background:var(--code);padding:10px}.latex-math{color:currentColor;font-family:"STIX Two Math","Cambria Math",
+"Times New Roman",serif;font-size:1.08em}.latex-overbar{border-top:.055em solid currentColor;padding-top:.16em}
+.math-display{max-width:100%;margin:.8em 0;overflow-x:auto;padding:.15em 0;
+text-align:center}.math-display>.latex-math{margin:0 auto}@media(max-width:700px){main{padding-inline:6px}.cell{grid-template-columns:58px minmax(0,1fr)}
 .prompt{padding-right:5px;font-size:10px}.export-label{display:none}})css";
     html << "</style></head><body><header class=\"export-header\"><div class=\"brand\"><span class=\"mark\">D</span>"
             "Dune Notebook</div><strong class=\"export-title\">"
