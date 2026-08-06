@@ -820,6 +820,66 @@ io.println('\0' to int);)dune"),
                        "20\n40\n", "expected user-defined higher-order method output") &&
              passed;
 
+    // Full closures: scalar snapshots, independent factory environments,
+    // nested calls, immediately invoked lambdas, and captured callables.
+    passed = expect_eq(run_source("factor: int = 10; scale = fn(value: int): int { value * factor }; "
+                                  "io.println(scale(4)); factor = 20; io.println(scale(4)); "
+                                  "fn make_multiplier(factor: int): fn(int): int { "
+                                  "return fn(value: int): int { value * factor }; } "
+                                  "times_three = make_multiplier(3); times_four = make_multiplier(4); "
+                                  "io.println(times_three(5)); io.println(times_four(5)); "
+                                  "io.println(make_multiplier(10)(5)); "
+                                  "io.println((fn(value: int): int { value * value })(6)); "
+                                  "increment = fn(value: int): int { value + 1 }; "
+                                  "then_double = fn(value: int): int { increment(value) * 2 }; "
+                                  "io.println(then_double(4));"),
+                       "40\n40\n15\n20\n50\n36\n10\n", "expected closure environments and callable chains") &&
+             passed;
+    // Context flows through a function-valued tail expression, including the
+    // inner lambda's omitted parameter and result annotations.
+    passed = expect_eq(run_source("factory: fn(text): fn(text): text = "
+                                  "fn(prefix) { fn(suffix) { prefix + suffix } }; "
+                                  "io.println(factory(\"du\")(\"ne\"));"),
+                       "dune\n", "expected nested contextual lambdas to run") &&
+             passed;
+    // Closures are regular values inside aggregates. Each loop iteration
+    // snapshots its own scalar before the callable is stored in the array.
+    passed =
+        expect_eq(run_source("callbacks: [fn(): int] = []; "
+                             "for value in 1..4 { callbacks.push(fn(): int { value }); } "
+                             "io.println(callbacks[0]()); io.println(callbacks[1]()); io.println(callbacks[2]());"),
+                  "1\n2\n3\n", "expected closures stored in arrays to keep independent captures") &&
+        passed;
+    // Captured aggregate bindings are snapshots of shared handles: mutation is
+    // visible outside and across copied closure values without rebinding.
+    passed = expect_eq(run_source("record Box { value: int } "
+                                  "items = [1]; box = Box { value: 5 }; "
+                                  "update = fn(next: int): unit { items.push(next); box.value = next; return; }; "
+                                  "copy = update; update(2); copy(3); "
+                                  "io.println(items.len()); io.println(items[2]); io.println(box.value);"),
+                       "3\n3\n3\n", "expected captured aggregate handles to stay shared") &&
+             passed;
+    // Lambdas integrate with pure-Dune higher-order stdlib methods and generic
+    // functions can return concrete closure instances.
+    passed = expect_eq(run_source("import array; "
+                                  "fn remember<T>(value: T): fn(): T { fn(): T { value } } "
+                                  "values = [1, 2, 3, 4]; "
+                                  "doubled = values.map(fn(value: int): int { value * 2 }); "
+                                  "evens = doubled.filter(fn(value: int): bool { value % 4 == 0 }); "
+                                  "answer = remember(42); label = remember(\"dune\"); "
+                                  "io.println(evens.len()); io.println(evens[1]); "
+                                  "io.println(answer()); io.println(label());"),
+                       "2\n8\n42\ndune\n", "expected lambda callbacks and generic returned closures") &&
+             passed;
+    // User-facing foreign functions remain callable when stored and captured;
+    // the standard library itself still stays pure Dune.
+    passed = expect_eq(run_source("foreign fn c_sqrt(value: real64): real64 = \"sqrt\"; "
+                                  "native: fn(real64): real64 = c_sqrt; "
+                                  "wrapped = fn(value: real64): real64 { native(value) }; "
+                                  "io.println(wrapped(81.0));"),
+                       "9\n", "expected a captured foreign function value to run on the VM") &&
+             passed;
+
     // Modules v2: aliased and selective / grouped stdlib imports resolve to the
     // same canonical symbols at run time.
     passed = expect_eq(run_source("import math as m; from array import range, sum; "

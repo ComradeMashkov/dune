@@ -3,6 +3,7 @@
 #include "ast/ast.hpp"
 
 #include <deque>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -94,12 +95,18 @@ public:
         std::size_t failed_tag = 0;
     };
 
+    struct ClosureCapture {
+        std::string name;
+        Type type;
+    };
+
     void check(const Program& program);
     const std::unordered_map<const Expression*, Type>& expression_types() const;
     const std::unordered_map<const Expression*, Type>& iterable_element_types() const;
     const std::unordered_map<const Expression*, std::string>& resolved_calls() const;
     const std::unordered_map<const Expression*, VariantResolution>& resolved_variants() const;
     const std::unordered_map<const Expression*, TryResolution>& resolved_tries() const;
+    const std::unordered_map<const Expression*, std::vector<ClosureCapture>>& closure_captures() const;
     const std::deque<Statement>& instantiated_functions() const;
     const std::unordered_map<std::string, StructDefinition>& structs() const;
     const std::unordered_map<std::string, EnumDefinition>& enums() const;
@@ -153,6 +160,7 @@ private:
     Type check_assignment_target(const Expression& target, SourceLocation location);
     Type check_member_assignment_target(const Expression& target, SourceLocation location);
     Type check_expression(const Expression& expression, const TypeAnnotation& expected = {});
+    Type check_lambda_expression(const Expression& expression, const TypeAnnotation& expected);
     Type check_binary_expression(const Expression& expression, const TypeAnnotation& expected);
     Type check_membership_expression(const Expression& expression);
     Type check_when_expression(const Expression& expression, const TypeAnnotation& expected);
@@ -266,6 +274,9 @@ private:
     void pop_scope();
     VariableBinding* find_binding(const std::string& name);
     const VariableBinding* find_binding(const std::string& name) const;
+    std::optional<std::size_t> binding_scope_index(const std::string& name) const;
+    void record_closure_capture(const std::string& name, const Type& type, std::size_t binding_scope);
+    bool is_captured_binding(std::size_t binding_scope) const;
     bool has_visible_constant(const std::string& name) const;
     void declare_binding(const std::string& name, const Type& type, bool constant, SourceLocation location,
                          bool reassignable = true);
@@ -302,8 +313,16 @@ private:
     std::unordered_map<const Expression*, std::string> resolved_calls_;
     std::unordered_map<const Expression*, VariantResolution> resolved_variants_;
     std::unordered_map<const Expression*, TryResolution> resolved_tries_;
+    std::unordered_map<const Expression*, std::vector<ClosureCapture>> closure_captures_;
     std::unordered_set<std::string> imports_;
     const FunctionSignature* current_function_ = nullptr;
+    struct LambdaContext {
+        const Expression* expression = nullptr;
+        std::size_t outer_scope_count = 0;
+        std::vector<ClosureCapture> captures;
+        std::unordered_set<std::string> capture_names;
+    };
+    std::vector<LambdaContext> lambda_contexts_;
     std::string current_module_;
     std::size_t loop_depth_ = 0;
 };

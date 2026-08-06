@@ -1050,6 +1050,57 @@ int main() {
                                    "expected generic-function-as-value diagnostic") &&
              passed;
 
+    // Lambdas and closures: contextual parameter typing, nested returned
+    // closures, generic captures, aggregate handles, and callable expressions.
+    passed = expect_valid("factor: int = 10; "
+                          "scale: fn(int): int = fn(value) { value * factor }; "
+                          "make_adder = fn(base: int): fn(int): int { fn(value: int): int { base + value } }; "
+                          "add_two = make_adder(2); direct: int = make_adder(3)(4); "
+                          "immediate: int = (fn(value: int): int { value + 1 })(41); "
+                          "items = [1]; append = fn(value: int): unit { items.push(value); return; }; "
+                          "append(2); io.println(scale(add_two(direct + immediate)));",
+                          "expected typed lambdas and closure captures to validate") &&
+             passed;
+    passed = expect_valid("factory: fn(text): fn(text): text = fn(prefix) { fn(suffix) { prefix + suffix } }; "
+                          "joined: text = factory(\"du\")(\"ne\");",
+                          "expected nested lambda tail expressions to inherit contextual function types") &&
+             passed;
+    passed = expect_valid("fn remember<T>(value: T): fn(): T { fn(): T { value } } "
+                          "get_int = remember(42); get_text = remember(\"dune\"); "
+                          "answer: int = get_int(); label: text = get_text();",
+                          "expected closures in generic functions to monomorphize") &&
+             passed;
+    passed = expect_valid("record Box { value: int } box = Box { value: 1 }; "
+                          "update = fn(next: int): unit { box.value = next; return; }; update(2);",
+                          "expected captured record handles to remain mutable") &&
+             passed;
+    passed = expect_error_contains("value: int = 1; change = fn(): int { value = 2; value };",
+                                   "cannot reassign captured variable 'value'",
+                                   "expected captured binding reassignment diagnostic") &&
+             passed;
+    passed = expect_error_contains("left = 1; right = 2; change = fn(): unit { (left, right) = (3, 4); return; };",
+                                   "cannot reassign captured variable 'left'",
+                                   "expected captured tuple binding reassignment diagnostic") &&
+             passed;
+    passed = expect_error_contains("bad: fn(int): bool = fn(value: int): int { value };",
+                                   "expected type 'fn(int): bool' but got 'fn(int): int'",
+                                   "expected lambda signature mismatch diagnostic") &&
+             passed;
+    passed = expect_error_contains("f = fn(value: int): int { value }; result = f(true);",
+                                   "expected type 'int' but got 'bool'", "expected lambda argument diagnostic") &&
+             passed;
+    passed =
+        expect_error_contains("f = fn(value: int): int { value }; result = f();",
+                              "function value expects 1 argument(s) but got 0", "expected lambda arity diagnostic") &&
+        passed;
+    passed = expect_error_contains("value = 42; result = value();", "cannot call value of type 'int'",
+                                   "expected non-callable value diagnostic") &&
+             passed;
+    passed = expect_error_contains("for i = 0; i < 1; i = i + 1 { f = fn(): int { break; 1 }; }",
+                                   "break statement outside loop",
+                                   "expected lambda loop control not to escape into outer loop") &&
+             passed;
+
     // --- Modules v2: aliases, selective / grouped imports, visibility ---------
     passed = expect_valid("import math as m; from array import range, sum; "
                           "total: int = sum(range(1, 4)); ok: bool = m.PI > 3.0; io.println(total); io.println(ok);",

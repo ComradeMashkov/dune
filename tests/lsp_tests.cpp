@@ -703,6 +703,28 @@ bool highlights_semantic_symbols_and_literals() {
     return passed;
 }
 
+bool highlights_lambda_parameters_captures_and_calls() {
+    const std::string source = "factor: int = 3;\n"
+                               "scale: fn(int): int = fn(value: int): int { value * factor };\n"
+                               "result = scale(4);\n";
+    const std::vector<dune::lsp::SemanticToken> tokens = dune::lsp::semantic_tokens_source(source);
+    const std::size_t declaration = semantic_modifier_mask("declaration");
+    bool passed = true;
+    passed = expect_semantic_token(source, tokens, "fn(value", 3, 5, "parameter", declaration,
+                                   "expected lambda parameter declaration token") &&
+             passed;
+    passed = expect_semantic_token(source, tokens, "{ value *", 2, 5, "parameter", 0,
+                                   "expected lambda parameter reference token") &&
+             passed;
+    passed = expect_semantic_token(source, tokens, "* factor", 2, 6, "variable", 0,
+                                   "expected captured variable reference token") &&
+             passed;
+    passed =
+        expect_semantic_token(source, tokens, "scale(4)", 0, 5, "variable", 0, "expected function-value call token") &&
+        passed;
+    return passed;
+}
+
 bool highlights_utf8_with_utf16_ranges() {
     const std::string source = "// 🙂 docs\nvalue: text = \"é\" + \"🙂\";\n";
     const std::vector<dune::lsp::SemanticToken> tokens = dune::lsp::semantic_tokens_source(source);
@@ -920,6 +942,7 @@ int main() {
     passed = hovers_aliased_module_member() && passed;
     passed = exposes_complete_semantic_token_legend() && passed;
     passed = highlights_semantic_symbols_and_literals() && passed;
+    passed = highlights_lambda_parameters_captures_and_calls() && passed;
     passed = highlights_utf8_with_utf16_ranges() && passed;
     passed = highlights_valid_prefix_of_incomplete_source() && passed;
     passed = foreknown_keyword_has_no_definition() && passed;

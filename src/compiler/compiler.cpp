@@ -708,6 +708,7 @@ private:
         case ExpressionKind::call:
         case ExpressionKind::method_call:
             return evaluate_call(expression);
+        case ExpressionKind::lambda:
         case ExpressionKind::array:
         case ExpressionKind::array_comprehension:
         case ExpressionKind::tuple:
@@ -1004,6 +1005,7 @@ Bytecode Compiler::compile_program(const Program& program, bool print_tail_expre
     local_types_.clear();
     local_scopes_.clear();
     functions_.clear();
+    lambdas_.clear();
     foreknown_functions_.clear();
     foreknown_values_.clear();
     structs_.clear();
@@ -1017,6 +1019,7 @@ Bytecode Compiler::compile_program(const Program& program, bool print_tail_expre
     resolved_calls_ = type_checker.resolved_calls();
     resolved_variants_ = type_checker.resolved_variants();
     resolved_tries_ = type_checker.resolved_tries();
+    closure_captures_ = type_checker.closure_captures();
     collect_structs(type_checker.structs());
     collect_enums(type_checker.enums());
     collect_type_aliases(program.statements);
@@ -1034,6 +1037,10 @@ Bytecode Compiler::compile_program(const Program& program, bool print_tail_expre
     collect_functions(program.statements);
     for (const Statement& statement : instantiated_functions) {
         collect_function(statement);
+    }
+    collect_lambdas(program.statements);
+    for (const Statement& statement : instantiated_functions) {
+        collect_lambdas(statement);
     }
     evaluate_foreknown_constants();
     compile_statements(program.statements);
@@ -1054,6 +1061,10 @@ Bytecode Compiler::compile_program(const Program& program, bool print_tail_expre
             compile_test(statement);
         }
     }
+    for (const auto& [expression, index] : lambdas_) {
+        (void)index;
+        compile_lambda(*expression);
+    }
 
     instructions_ = nullptr;
     repl_expression_statement_ = nullptr;
@@ -1063,7 +1074,7 @@ Bytecode Compiler::compile_program(const Program& program, bool print_tail_expre
 void Compiler::compile_test(const Statement& statement) {
     const std::size_t function_index = bytecode_.functions.size();
     bytecode_.functions.push_back(
-        Bytecode::Function{"__test_" + std::to_string(function_index), "", 0, 0, {}, false});
+        Bytecode::Function{"__test_" + std::to_string(function_index), "", 0, 0, 0, {}, false});
     bytecode_.tests.push_back(Bytecode::Test{statement.name, function_index});
 
     Bytecode::Function& function = bytecode_.functions.at(function_index);
@@ -1088,6 +1099,77 @@ void Compiler::collect_functions(const std::vector<Statement>& statements) {
     }
 }
 
+void Compiler::collect_lambdas(const std::vector<Statement>& statements) {
+    for (const Statement& statement : statements) {
+        collect_lambdas(statement);
+    }
+}
+
+void Compiler::collect_lambdas(const Statement& statement) {
+    if (statement.expression != nullptr) {
+        collect_lambdas(*statement.expression);
+    }
+    if (statement.target != nullptr) {
+        collect_lambdas(*statement.target);
+    }
+    for (const Parameter& parameter : statement.parameters) {
+        if (parameter.default_value != nullptr) {
+            collect_lambdas(*parameter.default_value);
+        }
+    }
+    for (const std::unique_ptr<Expression>& argument : statement.arguments) {
+        if (argument != nullptr) {
+            collect_lambdas(*argument);
+        }
+    }
+    collect_lambdas(statement.body);
+    collect_lambdas(statement.else_body);
+    if (statement.initializer != nullptr) {
+        collect_lambdas(*statement.initializer);
+    }
+    if (statement.increment != nullptr) {
+        collect_lambdas(*statement.increment);
+    }
+}
+
+void Compiler::collect_lambdas(const Expression& expression) {
+    // Uninstantiated generic function bodies are present in the program but are
+    // intentionally not type-checked or compiled. Their concrete clones are
+    // collected separately after monomorphization.
+    if (expression.kind == ExpressionKind::lambda && expression_types_.contains(&expression) &&
+        !lambdas_.contains(&expression)) {
+        const std::size_t index = bytecode_.functions.size();
+        lambdas_[&expression] = index;
+        const auto captures = closure_captures_.find(&expression);
+        const std::size_t capture_count = captures == closure_captures_.end() ? 0 : captures->second.size();
+        bytecode_.functions.push_back(Bytecode::Function{"<lambda@" + std::to_string(expression.location.line) + ":" +
+                                                             std::to_string(expression.location.column) + ">",
+                                                         "",
+                                                         expression.parameters.size(),
+                                                         capture_count,
+                                                         0,
+                                                         {},
+                                                         false});
+    }
+    if (expression.left != nullptr) {
+        collect_lambdas(*expression.left);
+    }
+    if (expression.right != nullptr) {
+        collect_lambdas(*expression.right);
+    }
+    for (const std::unique_ptr<Expression>& argument : expression.arguments) {
+        if (argument != nullptr) {
+            collect_lambdas(*argument);
+        }
+    }
+    for (const Parameter& parameter : expression.parameters) {
+        if (parameter.default_value != nullptr) {
+            collect_lambdas(*parameter.default_value);
+        }
+    }
+    collect_lambdas(expression.body);
+}
+
 void Compiler::collect_function(const Statement& statement) {
     if (statement.kind != StatementKind::function || !statement.generic_parameters.empty()) {
         return;
@@ -1108,7 +1190,7 @@ void Compiler::collect_function(const Statement& statement) {
     }
     const std::string extern_symbol = statement.extern_symbol.empty() ? statement.name : statement.extern_symbol;
     bytecode_.functions.push_back(
-        Bytecode::Function{statement.name, extern_symbol, statement.parameters.size(), 0, {}, statement.is_extern});
+        Bytecode::Function{statement.name, extern_symbol, statement.parameters.size(), 0, 0, {}, statement.is_extern});
 }
 
 void Compiler::collect_structs(const std::unordered_map<std::string, TypeChecker::StructDefinition>& structs) {
@@ -1217,6 +1299,79 @@ void Compiler::compile_function(const Statement& statement) {
     emit(OpCode::push_constant, add_constant(default_value(return_type)));
     emit(OpCode::return_value);
 
+    function.local_count = local_count_;
+}
+
+void Compiler::compile_lambda(const Expression& expression) {
+    const auto lambda = lambdas_.find(&expression);
+    if (lambda == lambdas_.end()) {
+        throw std::runtime_error("lambda was not collected before compilation");
+    }
+    Bytecode::Function& function = bytecode_.functions.at(lambda->second);
+    const Type& function_type = expression_type(expression);
+    if (function_type.kind != ValueType::function_type ||
+        function_type.arguments.size() != expression.parameters.size()) {
+        throw std::runtime_error("invalid inferred lambda type");
+    }
+
+    locals_.clear();
+    local_types_.clear();
+    local_scopes_.clear();
+    loop_stack_.clear();
+    temporary_count_ = 0;
+    local_count_ = 0;
+    instructions_ = &function.instructions;
+    reset_scopes();
+
+    std::vector<std::tuple<std::string, Type, std::size_t>> parameter_locals;
+    parameter_locals.reserve(expression.parameters.size());
+    for (std::size_t index = 0; index < expression.parameters.size(); ++index) {
+        parameter_locals.emplace_back(expression.parameters[index].name, normalize_type(function_type.arguments[index]),
+                                      local_count_++);
+    }
+
+    const auto captures = closure_captures_.find(&expression);
+    const std::vector<TypeChecker::ClosureCapture> empty_captures;
+    const std::vector<TypeChecker::ClosureCapture>& captured =
+        captures == closure_captures_.end() ? empty_captures : captures->second;
+    std::vector<std::tuple<std::string, Type, std::size_t>> capture_locals;
+    capture_locals.reserve(captured.size());
+    for (const TypeChecker::ClosureCapture& capture : captured) {
+        capture_locals.emplace_back(capture.name, normalize_type(capture.type), local_count_++);
+    }
+
+    compile_global_constants();
+    auto install_local = [&](const std::tuple<std::string, Type, std::size_t>& entry) {
+        const auto& [name, type, slot] = entry;
+        ScopedLocal local;
+        local.name = name;
+        local_scopes_.back().push_back(std::move(local));
+        locals_[name] = slot;
+        local_types_[name] = type;
+    };
+    for (const auto& parameter : parameter_locals) {
+        install_local(parameter);
+    }
+    for (const auto& capture : capture_locals) {
+        install_local(capture);
+    }
+
+    const Type return_type =
+        function_type.element != nullptr ? normalize_type(*function_type.element) : make_type(ValueType::unit_type);
+    const bool has_tail_expression =
+        !expression.body.empty() && expression.body.back().kind == StatementKind::expression_statement &&
+        expression.body.back().expression != nullptr && return_type.kind != ValueType::unit_type;
+    if (has_tail_expression) {
+        for (std::size_t index = 0; index + 1 < expression.body.size(); ++index) {
+            compile_statement(expression.body[index]);
+        }
+        compile_expression(*expression.body.back().expression);
+        emit(OpCode::return_value);
+    } else {
+        compile_statements(expression.body);
+        emit(OpCode::push_constant, add_constant(default_value(return_type)));
+        emit(OpCode::return_value);
+    }
     function.local_count = local_count_;
 }
 
@@ -1775,10 +1930,13 @@ void Compiler::compile_expression(const Expression& expression) {
             compile_expression(*argument);
         }
 
-        // A call the type checker did not bind to a concrete function is a call
-        // through a function value: load the callable and dispatch dynamically.
+        // A call the type checker did not bind to a concrete named function is
+        // dispatched through the value produced by its callee expression.
         if (!resolved_calls_.contains(&expression)) {
-            emit(OpCode::load_local, resolve_local(expression.lexeme));
+            if (expression.left == nullptr) {
+                throw std::runtime_error("call expression is missing its function value");
+            }
+            compile_expression(*expression.left);
             emit(OpCode::call_value);
             return;
         }
@@ -1796,6 +1954,16 @@ void Compiler::compile_expression(const Expression& expression) {
     case ExpressionKind::when_expression:
         compile_when_expression(expression);
         return;
+    case ExpressionKind::lambda: {
+        const auto captures = closure_captures_.find(&expression);
+        if (captures != closure_captures_.end()) {
+            for (const TypeChecker::ClosureCapture& capture : captures->second) {
+                emit(OpCode::load_local, resolve_local(capture.name));
+            }
+        }
+        emit(OpCode::make_closure, lambdas_.at(&expression));
+        return;
+    }
     }
 }
 
@@ -2054,6 +2222,7 @@ void Compiler::compile_assignment_target(const Expression& target, const Express
     case ExpressionKind::binary:
     case ExpressionKind::range:
     case ExpressionKind::when_expression:
+    case ExpressionKind::lambda:
     case ExpressionKind::call:
     case ExpressionKind::method_call:
         break;

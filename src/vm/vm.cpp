@@ -143,10 +143,11 @@ Value make_variant(std::size_t tag, std::string name, std::shared_ptr<Value> pay
     return result;
 }
 
-Value make_callable(std::size_t function_index) {
+Value make_callable(std::size_t function_index, std::vector<Value> captures = {}) {
     Value result;
     result.kind = ValueKind::callable;
     result.function_index = function_index;
+    result.closure_captures = std::make_shared<std::vector<Value>>(std::move(captures));
     return result;
 }
 
@@ -845,6 +846,19 @@ void VirtualMachine::execute(std::ostream& output, std::ostream& error, std::ist
             stack_.push_back(make_callable(instruction.operand));
             ++frame.ip;
             break;
+        case OpCode::make_closure: {
+            const Bytecode::Function& function = bytecode_.functions.at(instruction.operand);
+            if (stack_.size() < function.capture_count) {
+                throw std::runtime_error("not enough captured values on stack for closure");
+            }
+            std::vector<Value> captures(function.capture_count);
+            for (std::size_t index = function.capture_count; index > 0; --index) {
+                captures[index - 1] = pop();
+            }
+            stack_.push_back(make_callable(instruction.operand, std::move(captures)));
+            ++frame.ip;
+            break;
+        }
         case OpCode::call_value: {
             const Value callable = pop();
             if (callable.kind != ValueKind::callable) {
@@ -854,7 +868,9 @@ void VirtualMachine::execute(std::ostream& output, std::ostream& error, std::ist
             // Increment before pushing the callee frame: call_function may
             // reallocate frames_ and invalidate `frame`.
             ++frame.ip;
-            call_function(callable.function_index);
+            static const std::vector<Value> empty_captures;
+            call_function(callable.function_index,
+                          callable.closure_captures != nullptr ? *callable.closure_captures : empty_captures);
             break;
         }
         case OpCode::return_value: {
@@ -1458,13 +1474,16 @@ void VirtualMachine::execute(std::ostream& output, std::ostream& error, std::ist
     }
 }
 
-void VirtualMachine::call_function(std::size_t function_index) {
+void VirtualMachine::call_function(std::size_t function_index, const std::vector<Value>& captures) {
     const Bytecode::Function& function = bytecode_.functions.at(function_index);
     if (stack_.size() < function.arity) {
         throw std::runtime_error("not enough arguments on stack for function call");
     }
 
     if (function.is_extern) {
+        if (!captures.empty()) {
+            throw std::runtime_error("foreign functions cannot have closure captures");
+        }
         std::vector<Value> arguments(function.arity);
         for (std::size_t index = function.arity; index > 0; --index) {
             arguments[index - 1] = pop();
@@ -1474,9 +1493,16 @@ void VirtualMachine::call_function(std::size_t function_index) {
         return;
     }
 
+    if (captures.size() != function.capture_count) {
+        throw std::runtime_error("closure capture count mismatch");
+    }
+
     std::vector<Value> locals(function.local_count);
     for (std::size_t index = function.arity; index > 0; --index) {
         locals[index - 1] = pop();
+    }
+    for (std::size_t index = 0; index < captures.size(); ++index) {
+        locals[function.arity + index] = captures[index];
     }
 
     const std::size_t base = stack_.size();

@@ -104,10 +104,11 @@ Phase 1 accepts integer *literals* only. Named const parameters, const
 expressions (`N + 1`), and shape inference from array literals are planned
 follow-ups (see issue #43).
 
-## Function values and method chaining
+## Function values
 
-A named function can be passed by name as a first-class value wherever a function
-type `fn(T): U` is expected. This powers the higher-order array pipeline.
+Function types use `fn(P1, P2): R`. Named functions and lambdas are ordinary
+values: they can be stored in bindings and aggregates, passed, returned, copied,
+and invoked through any function-valued expression.
 
 ```dn
 import array;
@@ -117,12 +118,123 @@ fn square(value: int): int { return value * value; }
 
 values: [int] = [-2, 3, -1, 4];
 result = values.filter(is_positive).map(square).sum();
-print(result);   // 25
 ```
 
+An overloaded named function needs an expected function type so the checker can
+select one signature. Generic named functions are monomorphized at call sites;
+they cannot be stored by bare name without concrete type arguments.
+
+## Lambdas
+
+A lambda starts with `fn` but has no name:
+
+```dn
+square = fn(value: int): int {
+    value * value
+};
+
+result: int = square(6); // 36
+```
+
+The body is a full function body. It supports local bindings, loops,
+conditionals, `when`, early `return`, and a final tail expression. A `unit`
+lambda can use `return;`.
+
+When the target has a function type, omitted annotations are inferred from that
+context:
+
+```dn
+increment: fn(int): int = fn(value) { value + 1 };
+```
+
+Without a contextual function type, omitted parameter and result annotations use
+the same `int` defaults as named functions. Explicit annotations are recommended
+at public or non-obvious boundaries because diagnostics then show the intended
+signature directly.
+
+Lambdas do not declare their own generic parameter list. They may, however,
+appear inside a generic named function; monomorphization substitutes the
+concrete types through the lambda and its capture environment:
+
+```dn
+fn remember<T>(value: T): fn(): T {
+    fn(): T { value }
+}
+
+answer = remember(42);
+label = remember("Dune");
+```
+
+## Closures and captures
+
+A lambda becomes a closure when it references a binding outside its own body.
+Captures follow Dune's ordinary value semantics and are evaluated once when the
+closure is created:
+
+- scalars, text, and callable bindings are snapshots;
+- arrays and records copy their shared handles, so aggregate mutation remains
+  visible through every alias;
+- rebinding the original variable later does not change an existing closure;
+- a captured name cannot be reassigned inside the closure;
+- nested closures forward any outer values needed by their own children.
+
+```dn
+factor: int = 10;
+scale = fn(value: int): int { value * factor };
+factor = 20;
+scale(4); // 40: the closure captured 10
+
+items = [1];
+append = fn(value: int): unit {
+    items.push(value); // aggregate contents may change
+    return;
+};
+append(2); // the outer array is now [1, 2]
+```
+
+Factory calls create independent environments, so closures can safely outlive
+the function invocation that created them:
+
+```dn
+fn make_adder(base: int): fn(int): int {
+    return fn(value: int): int { base + value };
+}
+
+add_two = make_adder(2);
+add_ten = make_adder(10);
+```
+
+## Calling function-producing expressions
+
+Any expression with a function type is callable. Parenthesized lambdas can be
+invoked immediately, and calls can be chained when a function returns another
+function:
+
+```dn
+answer = (fn(value: int): int { value + 1 })(41);
+same = make_adder(40)(2);
+
+callbacks: [fn(): int] = [fn(): int { 40 }, fn(): int { 2 }];
+also = callbacks[0]() + callbacks[1]();
+```
+
+The checker reports the complete expected and actual `fn(...)` signatures for
+argument, arity, and return mismatches. Calling a non-function value is rejected
+before bytecode generation.
+
+## Standard-library integration
+
 `import array;` supplies `map(fn(T): U)`, `filter(fn(T): bool)`,
-`reduce`/`fold`, `any`, `all`, and `count_where`. Function values run on the
-bytecode VM.
+`reduce`/`fold`, `any`, `all`, and `count_where`. Named functions and capturing
+lambdas use the same callback path:
+
+```dn
+offset = 3;
+shifted = [1, 2, 3].map(fn(value: int): int { value + offset });
+```
+
+Function values and closures run on Dune's canonical bytecode VM; there is no
+separate backend or native-only closure behavior.
 
 ## Foreign functions
 

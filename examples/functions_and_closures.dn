@@ -1,0 +1,89 @@
+import array;
+import fmt;
+import io;
+
+// Lambdas are ordinary values with `fn(...)` types. A tail expression returns
+// its value; a target function type can provide omitted annotations.
+square = fn(value: int): int { value * value };
+increment: fn(int): int = fn(value) { value + 1 };
+io.println(fmt.format("square={}, increment={}", square(6), increment(41)));
+
+// Scalar captures are snapshots made when the closure is created.
+factor: int = 10;
+scale = fn(value: int): int { value * factor };
+before = scale(5);
+factor = 20;
+after = scale(5);
+io.println(fmt.format("snapshot={}/{}, outer={}", before, after, factor));
+
+// Captured array and record values keep shared handles. The binding cannot be
+// reassigned inside the closure, but aggregate contents remain mutable.
+record Box { value: int }
+items = [1];
+box = Box { value: 1 };
+update = fn(next: int): unit {
+    items.push(next);
+    box.value = next;
+    return;
+};
+update_copy = update;
+update(2);
+update_copy(3);
+io.println(fmt.format("shared={}/{}", items.len(), box.value));
+
+// A returned closure keeps its environment alive. Each factory invocation owns
+// an independent environment.
+fn make_multiplier(captured_factor: int): fn(int): int {
+    return fn(value: int): int { value * captured_factor };
+}
+
+times_three = make_multiplier(3);
+times_four = make_multiplier(4);
+io.println(fmt.format("factories={}/{}/{}", times_three(5), times_four(5), make_multiplier(10)(5)));
+
+// Nested closures forward captures through every enclosing environment.
+three_level = fn(first: int): fn(int): fn(int): int {
+    fn(second: int): fn(int): int {
+        fn(third: int): int { first + second + third }
+    }
+};
+io.println(fmt.format("nested={}", three_level(10)(20)(12)));
+
+// Function values can themselves be captured and composed.
+fn compose(first: fn(int): int, second: fn(int): int): fn(int): int {
+    return fn(value: int): int { second(first(value)) };
+}
+
+add_one = fn(value: int): int { value + 1 };
+double = fn(value: int): int { value * 2 };
+io.println(fmt.format("compose={}", compose(add_one, double)(20)));
+
+// Lambdas inside generic functions are specialized with their concrete capture
+// and return types.
+fn remember<T>(value: T): fn(): T {
+    fn(): T { value }
+}
+
+answer = remember(42);
+label = remember("Dune");
+io.println(fmt.format("generic={}/{}", answer(), label()));
+
+// Closures are ordinary aggregate elements. Each iteration creates a closure
+// with its own scalar snapshot before the callable is stored in the array.
+callbacks: [fn(): int] = [];
+for captured in 1..4 {
+    callbacks.push(fn(): int { captured });
+}
+io.println(fmt.format("stored={}/{}/{}", callbacks[0](), callbacks[1](), callbacks[2]()));
+
+// The same lambdas plug directly into the pure-Dune higher-order array API.
+pipeline = [0 - 3, 2, 0 - 1, 4, 5]
+    .filter(fn(value: int): bool { value > 0 })
+    .map(fn(value: int): int { value * value })
+    .fold(0, fn(total: int, value: int): int { total + value });
+io.println(fmt.format("pipeline={}", pipeline));
+
+// Any function-producing expression is callable: immediate lambdas and chained
+// calls use the same indirect-call bytecode path.
+immediate = (fn(value: int): int { value * value })(7);
+io.println(fmt.format("immediate={}", immediate));
