@@ -107,6 +107,7 @@ TypeAnnotation receiver_type_for_record(const Statement& statement) {
 }
 
 std::unique_ptr<Expression> clone_expression(const Expression& expression);
+Statement clone_statement(const Statement& statement);
 
 std::unique_ptr<Expression> clone_expression_pointer(const std::unique_ptr<Expression>& expression) {
     if (expression == nullptr) {
@@ -132,6 +133,16 @@ std::unique_ptr<Expression> clone_expression(const Expression& expression) {
     result->location = expression.location;
     result->type = clone_type_annotation(expression.type);
     result->field_names = expression.field_names;
+    result->parameters.reserve(expression.parameters.size());
+    for (const Parameter& parameter : expression.parameters) {
+        result->parameters.push_back(
+            Parameter{parameter.name, clone_type_annotation(parameter.type), parameter.location, parameter.exported,
+                      clone_expression_pointer(parameter.default_value), parameter.doc_comment});
+    }
+    result->body.reserve(expression.body.size());
+    for (const Statement& statement : expression.body) {
+        result->body.push_back(clone_statement(statement));
+    }
     result->arguments.reserve(expression.arguments.size());
     for (const std::unique_ptr<Expression>& argument : expression.arguments) {
         result->arguments.push_back(clone_expression_pointer(argument));
@@ -139,8 +150,6 @@ std::unique_ptr<Expression> clone_expression(const Expression& expression) {
 
     return result;
 }
-
-Statement clone_statement(const Statement& statement);
 
 std::unique_ptr<Statement> clone_statement_pointer(const std::unique_ptr<Statement>& statement) {
     if (statement == nullptr) {

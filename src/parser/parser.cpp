@@ -60,10 +60,25 @@ std::unique_ptr<Expression> make_cast(std::unique_ptr<Expression> value, TypeAnn
     return expression;
 }
 
-std::unique_ptr<Expression> make_call(std::string name, std::vector<std::unique_ptr<Expression>> arguments,
-                                      SourceLocation location) {
-    auto expression = std::make_unique<Expression>(Expression{ExpressionKind::call, std::move(name), nullptr, nullptr});
+std::unique_ptr<Expression> make_call(std::unique_ptr<Expression> callee,
+                                      std::vector<std::unique_ptr<Expression>> arguments, SourceLocation location) {
+    std::string name;
+    if (callee != nullptr && callee->kind == ExpressionKind::identifier) {
+        name = callee->lexeme;
+    }
+    auto expression =
+        std::make_unique<Expression>(Expression{ExpressionKind::call, std::move(name), std::move(callee), nullptr});
     expression->arguments = std::move(arguments);
+    expression->location = location;
+    return expression;
+}
+
+std::unique_ptr<Expression> make_lambda(std::vector<Parameter> parameters, TypeAnnotation return_type,
+                                        std::vector<Statement> body, SourceLocation location) {
+    auto expression = std::make_unique<Expression>(Expression{ExpressionKind::lambda, "", nullptr, nullptr});
+    expression->parameters = std::move(parameters);
+    expression->type = std::move(return_type);
+    expression->body = std::move(body);
     expression->location = location;
     return expression;
 }
@@ -604,7 +619,10 @@ Statement Parser::statement_dispatch() {
         return extern_statement();
     }
 
-    if (match(TokenType::fn_keyword)) {
+    // `fn name(...)` declares a named function; `fn(...) { ... }` starts a
+    // lambda expression and must fall through to expression parsing below.
+    if (check(TokenType::fn_keyword) && !check_next(TokenType::left_paren)) {
+        advance();
         return function_statement();
     }
 
@@ -1861,13 +1879,9 @@ std::unique_ptr<Expression> Parser::call() {
     while (true) {
         if (match(TokenType::left_paren)) {
             const SourceLocation location = expr->location;
-            if (expr->kind != ExpressionKind::identifier) {
-                throw DiagnosticError(location_from_token(peek()), "expected function name before arguments");
-            }
-
             std::vector<std::unique_ptr<Expression>> parsed_arguments = arguments();
             consume(TokenType::right_paren, "expected ')' after function arguments");
-            expr = make_call(expr->lexeme, std::move(parsed_arguments), location);
+            expr = make_call(std::move(expr), std::move(parsed_arguments), location);
             continue;
         }
 
@@ -1952,6 +1966,10 @@ std::unique_ptr<Expression> Parser::call() {
 }
 
 std::unique_ptr<Expression> Parser::primary() {
+    if (match(TokenType::fn_keyword)) {
+        return lambda_expression();
+    }
+
     if (match(TokenType::number)) {
         return make_leaf(ExpressionKind::number, previous().lexeme, location_from_token(previous()));
     }
@@ -2027,6 +2045,21 @@ std::unique_ptr<Expression> Parser::primary() {
     }
 
     throw DiagnosticError(location_from_token(peek()), "expected expression");
+}
+
+std::unique_ptr<Expression> Parser::lambda_expression() {
+    const Token& keyword = previous();
+    consume(TokenType::left_paren, "expected '(' after fn in lambda expression");
+    std::vector<Parameter> parsed_parameters = parameters();
+    consume(TokenType::right_paren, "expected ')' after lambda parameters");
+
+    TypeAnnotation return_type;
+    if (match(TokenType::colon)) {
+        return_type = type_annotation();
+    }
+
+    consume(TokenType::left_brace, "expected '{' before lambda body");
+    return make_lambda(std::move(parsed_parameters), std::move(return_type), block(), location_from_token(keyword));
 }
 
 } // namespace dune

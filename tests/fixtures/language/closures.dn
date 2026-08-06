@@ -1,0 +1,44 @@
+import array;
+import io;
+
+factor: int = 10;
+scale = fn(value: int): int { value * factor };
+io.println(scale(4));
+factor = 20;
+io.println(scale(4));
+
+fn make_multiplier(factor: int): fn(int): int {
+    return fn(value: int): int { value * factor };
+}
+
+times_three = make_multiplier(3);
+times_four = make_multiplier(4);
+io.println(times_three(5));
+io.println(times_four(5));
+io.println(make_multiplier(10)(5));
+io.println((fn(value: int): int { value * value })(6));
+
+values = [1, 2, 3, 4];
+doubled = values.map(fn(value: int): int { value * 2 });
+evens = doubled.filter(fn(value: int): bool { value % 4 == 0 });
+io.println(evens.len());
+io.println(evens[1]);
+
+record Box { value: int }
+items = [1];
+box = Box { value: 5 };
+update = fn(next: int): unit { items.push(next); box.value = next; return; };
+copy = update;
+update(2);
+copy(3);
+io.println(items.len());
+io.println(box.value);
+
+fn remember<T>(value: T): fn(): T {
+    fn(): T { value }
+}
+
+answer = remember(42);
+label = remember("dune");
+io.println(answer());
+io.println(label());

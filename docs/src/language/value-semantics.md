@@ -307,19 +307,27 @@ The VM implementation may use C++ moves internally as an optimization only
 when this is unobservable. Such implementation details cannot change the rules
 on this page.
 
-## Reserved rules for closures and resources
+## Closures and reserved resource rules
 
-Closures and resource-owning values are not part of the current release. Their
-future implementations must extend this model without silently changing
-ordinary values:
+Closures extend the same model without changing ordinary values:
 
 - a closure capture copies the captured Dune value at closure creation;
   scalars/text are snapshots, while captured array/record handles continue to
   share their object;
 - rebinding the original local after capture does not retarget the captured
   value;
-- mutable captured bindings, if introduced, require explicit shared capture
-  state rather than changing ordinary assignment semantics;
+- captured bindings cannot be reassigned from inside a closure; aggregate
+  contents can still be mutated through their shared handles;
+- nested closures forward captured values through their enclosing closure
+  environments, and returned closures keep those environments alive;
+- callable values can themselves be captured and composed.
+
+See [Functions and generics](functions.md#closures-and-captures) for syntax and
+examples.
+
+Resource-owning values are still reserved work. Their future implementation
+must preserve today's value and closure behavior:
+
 - resource-owning types must be explicitly marked move-only and use an explicit
   move/consume operation;
 - the type checker must reject copying a move-only resource and using it after
@@ -327,5 +335,5 @@ ordinary values:
 - adding resources must not make today's arrays, records, arguments, or returns
   implicitly move-only.
 
-These are compatibility constraints for the planned closure and resource work,
-not syntax that is accepted today.
+These are compatibility constraints for planned resource work, not resource
+syntax that is accepted today.

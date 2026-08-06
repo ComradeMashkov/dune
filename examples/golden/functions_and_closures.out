@@ -1,0 +1,10 @@
+square=36, increment=42
+snapshot=50/50, outer=20
+shared=3/3
+factories=15/20/50
+nested=42
+compose=42
+generic=42/Dune
+stored=1/2/3
+pipeline=45
+immediate=49

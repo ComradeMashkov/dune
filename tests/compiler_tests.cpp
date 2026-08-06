@@ -71,6 +71,37 @@ bool compiles_function_table_and_call() {
     return passed;
 }
 
+bool compiles_lambda_capture_environments_and_indirect_calls() {
+    const dune::Bytecode bytecode = compile_source("factor: int = 10; scale = fn(value: int): int { value * factor }; "
+                                                   "result: int = scale(4);");
+
+    bool saw_make_closure = false;
+    bool saw_indirect_call = false;
+    for (const dune::Instruction& instruction : bytecode.instructions) {
+        saw_make_closure = saw_make_closure || instruction.op == dune::OpCode::make_closure;
+        saw_indirect_call = saw_indirect_call || instruction.op == dune::OpCode::call_value;
+    }
+
+    const dune::Bytecode::Function* lambda = nullptr;
+    for (const dune::Bytecode::Function& function : bytecode.functions) {
+        if (function.name.starts_with("<lambda@")) {
+            lambda = &function;
+            break;
+        }
+    }
+
+    bool passed = true;
+    passed = expect(saw_make_closure, "expected closure construction opcode") && passed;
+    passed = expect(saw_indirect_call, "expected indirect closure call opcode") && passed;
+    passed = expect(lambda != nullptr, "expected compiled lambda chunk") && passed;
+    if (lambda != nullptr) {
+        passed = expect(lambda->arity == 1, "expected lambda arity") && passed;
+        passed = expect(lambda->capture_count == 1, "expected one closure capture") && passed;
+        passed = expect(lambda->local_count >= 2, "expected parameter and capture local slots") && passed;
+    }
+    return passed;
+}
+
 bool compiles_unit_call_statement() {
     const dune::Bytecode bytecode = compile_source("fn log(message: text): unit { io.println(message); } log(\"done\");");
 
@@ -976,6 +1007,7 @@ bool compiles_static_shape_matrix_program() {
 int main() {
     bool passed = true;
     passed = compiles_function_table_and_call() && passed;
+    passed = compiles_lambda_capture_environments_and_indirect_calls() && passed;
     passed = compiles_unit_call_statement() && passed;
     passed = compiles_type_aliases() && passed;
     passed = compiles_formatted_print() && passed;

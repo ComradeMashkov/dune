@@ -1,0 +1,173 @@
+{
+  "dune_notebook": 1,
+  "metadata": {
+    "title": "Functions, lambdas, and closures"
+  },
+  "cells": [
+    {
+      "id": "overview",
+      "cell_type": "markdown",
+      "source": "# Functions, lambdas, and closures\n\nA complete executable tour of first-class functions in Dune: typed and contextually typed lambdas, tail expressions, callbacks, immutable capture snapshots, shared aggregate handles, returned and nested closures, captured function values, generic factories, immediately invoked lambdas, control flow, and plot integration. All code cells are intentionally unexecuted; run them in order with **Shift+Enter**."
+    },
+    {
+      "id": "imports",
+      "cell_type": "code",
+      "source": "import array;\nimport fmt;\nimport io;\nimport plot;",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "lambda-basics-title",
+      "cell_type": "markdown",
+      "source": "## Typed lambdas and tail expressions\n\nThe form is `fn(parameters): ReturnType { body }`. The last expression is returned without an explicit `return`. A target function type can supply omitted parameter and return annotations."
+    },
+    {
+      "id": "lambda-basics",
+      "cell_type": "code",
+      "source": "square = fn(value: int): int { value * value };\nincrement: fn(int): int = fn(value) { value + 1 };\nfmt.format(\"square(6)={}, increment(41)={}\", square(6), increment(41))",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "explicit-return",
+      "cell_type": "code",
+      "source": "absolute = fn(value: int): int {\n    if value < 0 { return 0 - value; }\n    return value;\n};\nfmt.format(\"abs(-9)={}\", absolute(0 - 9))",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "callbacks-title",
+      "cell_type": "markdown",
+      "source": "## Higher-order collection pipelines\n\nLambdas have the ordinary `fn(T): U` type, so they work directly with the pure-Dune array module."
+    },
+    {
+      "id": "callbacks",
+      "cell_type": "code",
+      "source": "pipeline_values = [0 - 3, 2, 0 - 1, 4, 5];\npipeline_result = pipeline_values\n    .filter(fn(value: int): bool { value > 0 })\n    .map(fn(value: int): int { value * value })\n    .fold(0, fn(total: int, value: int): int { total + value });\npipeline_result",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "capture-title",
+      "cell_type": "markdown",
+      "source": "## Capture semantics\n\nA closure snapshots each outer binding when it is created. Reassigning the original scalar later does not retarget the closure. Captured names cannot be rebound inside the closure."
+    },
+    {
+      "id": "scalar-snapshot",
+      "cell_type": "code",
+      "source": "factor: int = 10;\nscale = fn(value: int): int { value * factor };\nbefore = scale(5);\nfactor = 20;\nafter = scale(5);\nfmt.format(\"before={}, after={}, outer factor={}\", before, after, factor)",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "aggregate-capture-title",
+      "cell_type": "markdown",
+      "source": "Arrays and records are captured as Dune values whose handles remain shared. The binding is an immutable snapshot, while aggregate contents remain mutable. Copies of a closure can therefore operate on the same captured aggregate."
+    },
+    {
+      "id": "array-capture",
+      "cell_type": "code",
+      "source": "captured_items = [1];\nappend_item = fn(value: int): unit { captured_items.push(value); return; };\nappend_copy = append_item;\nappend_item(2);\nappend_copy(3);\nfmt.format(\"len={}, last={}\", captured_items.len(), captured_items[2])",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "record-capture",
+      "cell_type": "code",
+      "source": "record ClosureBox { value: int }\nclosure_box = ClosureBox { value: 1 };\nset_box = fn(next: int): unit { closure_box.value = next; return; };\nset_box(42);\nclosure_box.value",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "factory-title",
+      "cell_type": "markdown",
+      "source": "## Returning nested closures\n\nEvery factory call creates an independent environment. Function types can themselves be return types."
+    },
+    {
+      "id": "closure-factory",
+      "cell_type": "code",
+      "source": "fn make_multiplier(captured_factor: int): fn(int): int {\n    return fn(value: int): int { value * captured_factor };\n}\ntimes_three = make_multiplier(3);\ntimes_four = make_multiplier(4);\nfmt.format(\"3*5={}, 4*5={}, chained={}\", times_three(5), times_four(5), make_multiplier(10)(5))",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "nested-captures",
+      "cell_type": "code",
+      "source": "three_level = fn(first: int): fn(int): fn(int): int {\n    fn(second: int): fn(int): int {\n        fn(third: int): int { first + second + third }\n    }\n};\nthree_level(10)(20)(12)",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "function-captures-title",
+      "cell_type": "markdown",
+      "source": "## Capturing and composing function values\n\nA closure may capture other callables. This makes higher-order composition an ordinary Dune function."
+    },
+    {
+      "id": "compose",
+      "cell_type": "code",
+      "source": "fn compose(first: fn(int): int, second: fn(int): int): fn(int): int {\n    return fn(value: int): int { second(first(value)) };\n}\nadd_one = fn(value: int): int { value + 1 };\ndouble = fn(value: int): int { value * 2 };\nadd_then_double = compose(add_one, double);\nfmt.format(\"composed={}\", add_then_double(20))",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "generic-title",
+      "cell_type": "markdown",
+      "source": "## Closures from generic functions\n\nGeneric named functions are monomorphized at their call sites. A lambda inside such a function receives the resulting concrete capture and function type."
+    },
+    {
+      "id": "generic-closures",
+      "cell_type": "code",
+      "source": "fn remember<T>(value: T): fn(): T {\n    fn(): T { value }\n}\nremember_answer = remember(42);\nremember_label = remember(\"Dune\");\nfmt.format(\"answer={}, label={}\", remember_answer(), remember_label())",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "stored-closures-title",
+      "cell_type": "markdown",
+      "source": "## Closures in aggregates\n\nClosures are ordinary Dune values and can be stored in arrays. Each loop iteration below creates an independent scalar capture; an indexed expression can be invoked directly."
+    },
+    {
+      "id": "stored-closures",
+      "cell_type": "code",
+      "source": "callbacks: [fn(): int] = [];\nfor captured in 1..4 {\n    callbacks.push(fn(): int { captured });\n}\nfmt.format(\"stored captures: {}, {}, {}\", callbacks[0](), callbacks[1](), callbacks[2]())",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "immediate-title",
+      "cell_type": "markdown",
+      "source": "## Callable expressions\n\nCalls are not restricted to variable names: a lambda can be invoked immediately, and a call that returns a function can be called again."
+    },
+    {
+      "id": "immediate-calls",
+      "cell_type": "code",
+      "source": "immediate = (fn(value: int): int { value * value })(7);\nchained = make_multiplier(6)(7);\nfmt.format(\"immediate={}, chained={}\", immediate, chained)",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "control-flow-title",
+      "cell_type": "markdown",
+      "source": "## Full function bodies\n\nLambda bodies support local bindings, conditionals, loops, early returns, method calls, and tail expressions through the same compiler path as named functions."
+    },
+    {
+      "id": "control-flow",
+      "cell_type": "code",
+      "source": "sum_until = fn(limit: int): int {\n    total: int = 0;\n    for value = 0; value <= limit; value = value + 1 {\n        total = total + value;\n    }\n    total\n};\nsum_until(10)",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "id": "plot-title",
+      "cell_type": "markdown",
+      "source": "## Plot integration\n\nCallbacks can transform scientific data before it is passed to another Dune module. This final cell renders the generated curve inline."
+    },
+    {
+      "id": "plot-integration",
+      "cell_type": "code",
+      "source": "curve_x = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0];\ncurve_offset: real64 = 1.5;\ncurve_y = curve_x.map(fn(value: real64): real64 { value * value + curve_offset });\nplot.svg(plot.line(curve_x, curve_y).title(\"Generated by a captured lambda\").x_label(\"x\").y_label(\"f(x)\").grid(5).size(720, 360))",
+      "execution_count": null,
+      "outputs": []
+    }
+  ]
+}

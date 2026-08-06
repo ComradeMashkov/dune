@@ -1077,6 +1077,17 @@ std::optional<std::string> literal_expression_type(const Expression& expression)
         return "(unknown, unknown)";
     case ExpressionKind::struct_literal:
         return expression.lexeme;
+    case ExpressionKind::lambda: {
+        std::string signature = "fn(";
+        for (std::size_t index = 0; index < expression.parameters.size(); ++index) {
+            if (index > 0) {
+                signature += ", ";
+            }
+            signature += type_annotation_name(expression.parameters[index].type);
+        }
+        signature += "): " + type_annotation_name(expression.type, "int");
+        return signature;
+    }
     case ExpressionKind::array_comprehension:
     case ExpressionKind::identifier:
     case ExpressionKind::index:
@@ -2208,6 +2219,10 @@ void collect_semantic_metadata(const std::vector<Statement>& statements,
 
 using SemanticScopes = std::vector<SemanticSymbolTable>;
 
+void classify_statement_semantics(const std::vector<Statement>& statements, SemanticLocationMap& locations,
+                                  SemanticScopes& scopes, const SemanticSymbolTable& globals,
+                                  std::optional<SemanticClassification> callable_classification = std::nullopt);
+
 std::optional<SemanticClassification>
 lookup_semantic_symbol(const SemanticScopes& scopes, const SemanticSymbolTable& globals, const std::string& name) {
     for (auto scope = scopes.rbegin(); scope != scopes.rend(); ++scope) {
@@ -2249,16 +2264,34 @@ void classify_expression_semantics(const Expression& expression, SemanticLocatio
     }
 
     if (expression.kind == ExpressionKind::call) {
-        SemanticClassification classification = lookup_semantic_symbol(scopes, globals, expression.lexeme)
-                                                    .value_or(SemanticClassification{SemanticTokenType::function, 0});
-        if (is_builtin_function_name(expression.lexeme)) {
-            classification = SemanticClassification{SemanticTokenType::function,
-                                                    semantic_modifier(SemanticTokenModifier::default_library)};
+        if (expression.left != nullptr && expression.left->kind == ExpressionKind::identifier) {
+            SemanticClassification classification =
+                lookup_semantic_symbol(scopes, globals, expression.lexeme)
+                    .value_or(SemanticClassification{SemanticTokenType::function, 0});
+            if (is_builtin_function_name(expression.lexeme)) {
+                classification = SemanticClassification{SemanticTokenType::function,
+                                                        semantic_modifier(SemanticTokenModifier::default_library)};
+            }
+            mark_semantic_location(locations, expression.left->location, classification);
+        } else if (expression.left != nullptr) {
+            classify_expression_semantics(*expression.left, locations, scopes, globals);
         }
-        mark_semantic_location(locations, expression.location, classification);
         for (const std::unique_ptr<Expression>& argument : expression.arguments) {
             classify_expression_semantics(*argument, locations, scopes, globals);
         }
+        return;
+    }
+
+    if (expression.kind == ExpressionKind::lambda) {
+        SemanticScopes lambda_scopes = scopes;
+        SemanticSymbolTable lambda_scope;
+        for (const Parameter& parameter : expression.parameters) {
+            const SemanticClassification classification = declared_symbol(SemanticTokenType::parameter, 0, false);
+            mark_semantic_location(locations, parameter.location, classification);
+            lambda_scope[parameter.name] = classification;
+        }
+        lambda_scopes.push_back(std::move(lambda_scope));
+        classify_statement_semantics(expression.body, locations, lambda_scopes, globals);
         return;
     }
 
@@ -2305,10 +2338,6 @@ void classify_expression_semantics(const Expression& expression, SemanticLocatio
         classify_expression_semantics(*argument, locations, scopes, globals);
     }
 }
-
-void classify_statement_semantics(const std::vector<Statement>& statements, SemanticLocationMap& locations,
-                                  SemanticScopes& scopes, const SemanticSymbolTable& globals,
-                                  std::optional<SemanticClassification> callable_classification = std::nullopt);
 
 void classify_callable_semantics(const Statement& statement, SemanticClassification classification,
                                  SemanticLocationMap& locations, SemanticScopes& scopes,

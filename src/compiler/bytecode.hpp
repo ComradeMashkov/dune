@@ -44,8 +44,10 @@ struct Value {
     // choices as text by default (`value_to_text`).
     std::string variant_name;
     std::shared_ptr<Value> variant_payload;
-    // For `callable`: index into Bytecode::functions of the referenced function.
+    // For `callable`: index into Bytecode::functions plus the immutable capture
+    // environment created for a closure. Named functions use an empty vector.
     std::size_t function_index = 0;
+    std::shared_ptr<std::vector<Value>> closure_captures;
 };
 
 enum class OpCode {
@@ -74,6 +76,7 @@ enum class OpCode {
     jump,
     call,
     push_function,
+    make_closure,
     call_value,
     return_value,
     pop,
@@ -137,6 +140,7 @@ struct Bytecode {
         std::string name;
         std::string extern_symbol;
         std::size_t arity = 0;
+        std::size_t capture_count = 0;
         std::size_t local_count = 0;
         std::vector<Instruction> instructions;
         bool is_extern = false;

@@ -1363,6 +1363,51 @@ bool parses_const_generic_arguments() {
     return passed;
 }
 
+bool parses_lambdas_and_callable_expression_chains() {
+    const dune::Program program =
+        parse_source("factor = 10; scale: fn(int): int = fn(value: int): int { value * factor }; "
+                     "answer = (fn(value: int): int { value + 1 })(41); "
+                     "nested = make_adder(2)(3); selected = callbacks[0]();");
+    if (!expect(program.statements.size() == 5, "expected five lambda-related statements")) {
+        return false;
+    }
+
+    bool passed = true;
+    const dune::Expression& lambda = *program.statements[1].expression;
+    passed = expect(lambda.kind == dune::ExpressionKind::lambda, "expected lambda expression") && passed;
+    passed = expect(lambda.parameters.size() == 1, "expected one lambda parameter") && passed;
+    passed = expect(lambda.parameters[0].name == "value", "expected lambda parameter name") && passed;
+    passed =
+        expect(lambda.parameters[0].type.has_type && lambda.parameters[0].type.type.kind == dune::ValueType::int_type,
+               "expected typed lambda parameter") &&
+        passed;
+    passed = expect(lambda.type.has_type && lambda.type.type.kind == dune::ValueType::int_type,
+                    "expected typed lambda result") &&
+             passed;
+    passed = expect(lambda.body.size() == 1 && lambda.body[0].kind == dune::StatementKind::expression_statement,
+                    "expected lambda tail expression") &&
+             passed;
+
+    const dune::Expression& immediate = *program.statements[2].expression;
+    passed = expect(immediate.kind == dune::ExpressionKind::call, "expected immediate call") && passed;
+    passed = expect(immediate.left != nullptr && immediate.left->kind == dune::ExpressionKind::lambda,
+                    "expected lambda callee") &&
+             passed;
+
+    const dune::Expression& chained = *program.statements[3].expression;
+    passed = expect(chained.kind == dune::ExpressionKind::call, "expected outer chained call") && passed;
+    passed = expect(chained.left != nullptr && chained.left->kind == dune::ExpressionKind::call,
+                    "expected call result as callee") &&
+             passed;
+
+    const dune::Expression& indexed = *program.statements[4].expression;
+    passed = expect(indexed.kind == dune::ExpressionKind::call, "expected indexed callable invocation") && passed;
+    passed = expect(indexed.left != nullptr && indexed.left->kind == dune::ExpressionKind::index,
+                    "expected index expression as callee") &&
+             passed;
+    return passed;
+}
+
 } // namespace
 
 int main() {
@@ -1411,6 +1456,7 @@ int main() {
     passed = parses_try_operator() && passed;
     passed = parses_try_operator_binds_tighter_than_binary() && passed;
     passed = parses_const_generic_arguments() && passed;
+    passed = parses_lambdas_and_callable_expression_chains() && passed;
 
     return passed ? 0 : 1;
 }

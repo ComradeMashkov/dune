@@ -138,11 +138,15 @@ dune notebook check notebooks/demo.dnb
 dune notebook export notebooks/demo.dnb --html
 ```
 
-See the runnable [`scientific_workflow.dnb`](examples/notebooks/scientific_workflow.dnb)
+See the runnable [`scientific_workflow.dnb`](examples/notebooks/scientific_workflow.dnb),
 [`plot_gallery.dnb`](examples/notebooks/plot_gallery.dnb), and
-[`statistical_analysis.dnb`](examples/notebooks/statistical_analysis.dnb)
+[`statistical_analysis.dnb`](examples/notebooks/statistical_analysis.dnb), and
+[`functions_and_closures.dnb`](examples/notebooks/functions_and_closures.dnb)
 examples, plus the
 [notebook guide](https://comrademashkov.github.io/dune/guides/notebooks.html).
+
+For the same feature in a normal source file, run
+[`examples/functions_and_closures.dn`](examples/functions_and_closures.dn).
 
 ## Standard library
 
@@ -176,7 +180,7 @@ the repository root). See the [editor guide](https://comrademashkov.github.io/du
 
 Dune implements a compact but real language: a static type checker with
 overloads, generics and bounds, contracts, records, choices, tuples, and type
-aliases; first-class function values; array comprehensions; operator
+aliases; first-class function values, lambdas, and capturing closures; array comprehensions; operator
 overloading; a bytecode compiler and VM with runtime bounds checks; and the CLI,
 LSP, doc generator, and test runner above. The
 [language reference](https://comrademashkov.github.io/dune/) covers each feature

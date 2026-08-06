@@ -124,6 +124,7 @@ TypeAnnotation substitute_type_annotation(const TypeAnnotation& annotation,
 }
 
 std::unique_ptr<Expression> clone_expression(const Expression& expression);
+Statement clone_statement(const Statement& statement);
 
 std::unique_ptr<Expression> clone_expression_pointer(const std::unique_ptr<Expression>& expression) {
     if (expression == nullptr) {
@@ -149,6 +150,16 @@ std::unique_ptr<Expression> clone_expression(const Expression& expression) {
     result->location = expression.location;
     result->type = clone_type_annotation(expression.type);
     result->field_names = expression.field_names;
+    result->parameters.reserve(expression.parameters.size());
+    for (const Parameter& parameter : expression.parameters) {
+        result->parameters.push_back(
+            Parameter{parameter.name, clone_type_annotation(parameter.type), parameter.location, parameter.exported,
+                      clone_expression_pointer(parameter.default_value), parameter.doc_comment});
+    }
+    result->body.reserve(expression.body.size());
+    for (const Statement& statement : expression.body) {
+        result->body.push_back(clone_statement(statement));
+    }
     result->arguments.reserve(expression.arguments.size());
     for (const std::unique_ptr<Expression>& argument : expression.arguments) {
         result->arguments.push_back(clone_expression_pointer(argument));
@@ -156,8 +167,6 @@ std::unique_ptr<Expression> clone_expression(const Expression& expression) {
 
     return result;
 }
-
-Statement clone_statement(const Statement& statement);
 
 std::unique_ptr<Statement> clone_statement_pointer(const std::unique_ptr<Statement>& statement) {
     if (statement == nullptr) {
@@ -249,6 +258,15 @@ void substitute_statement(Statement& statement, const std::unordered_map<std::st
 
 void substitute_expression(Expression& expression, const std::unordered_map<std::string, Type>& substitutions) {
     expression.type = substitute_type_annotation(expression.type, substitutions);
+    for (Parameter& parameter : expression.parameters) {
+        parameter.type = substitute_type_annotation(parameter.type, substitutions);
+        if (parameter.default_value != nullptr) {
+            substitute_expression(*parameter.default_value, substitutions);
+        }
+    }
+    for (Statement& statement : expression.body) {
+        substitute_statement(statement, substitutions);
+    }
 
     if (expression.left != nullptr) {
         substitute_expression(*expression.left, substitutions);
@@ -601,12 +619,15 @@ void TypeChecker::check(const Program& program) {
     iterable_element_types_.clear();
     resolved_calls_.clear();
     resolved_variants_.clear();
+    resolved_tries_.clear();
+    closure_captures_.clear();
     instantiated_function_keys_.clear();
     instantiated_functions_.clear();
     instantiated_function_traces_.clear();
     current_module_.clear();
     current_function_ = nullptr;
     scopes_.clear();
+    lambda_contexts_.clear();
     loop_depth_ = 0;
 
     for (const Statement& statement : program.statements) {
@@ -762,6 +783,11 @@ const std::unordered_map<const Expression*, TypeChecker::VariantResolution>& Typ
 
 const std::unordered_map<const Expression*, TypeChecker::TryResolution>& TypeChecker::resolved_tries() const {
     return resolved_tries_;
+}
+
+const std::unordered_map<const Expression*, std::vector<TypeChecker::ClosureCapture>>&
+TypeChecker::closure_captures() const {
+    return closure_captures_;
 }
 
 const std::deque<Statement>& TypeChecker::instantiated_functions() const {
@@ -1207,14 +1233,18 @@ void TypeChecker::check_function(const Statement& statement) {
     const std::string previous_module = current_module_;
     current_module_ = module_name(statement.name);
     current_function_ = &function;
-    check_statements(statement.body);
     const bool has_tail_expression = !statement.body.empty() &&
                                      statement.body.back().kind == StatementKind::expression_statement &&
                                      statement.body.back().expression != nullptr;
     if (function.return_type.kind != ValueType::unit_type && has_tail_expression) {
+        for (std::size_t index = 0; index + 1 < statement.body.size(); ++index) {
+            check_statement(statement.body[index]);
+        }
         expect_type(function.return_type,
                     check_expression(*statement.body.back().expression, expected_type(function.return_type)),
                     statement.body.back().expression->location);
+    } else {
+        check_statements(statement.body);
     }
 
     if (function.return_type.kind != ValueType::unit_type && !has_tail_expression &&
@@ -1297,6 +1327,11 @@ void TypeChecker::check_statement(const Statement& statement) {
             }
             declare_binding(name, actual, false, statement.location);
             return;
+        }
+        if (const std::optional<std::size_t> scope = binding_scope_index(name);
+            scope.has_value() && is_captured_binding(*scope)) {
+            throw DiagnosticError(statement.location, "cannot reassign captured variable '" + name +
+                                                          "'; closure captures are immutable snapshots");
         }
         if (variable->constant) {
             throw DiagnosticError(statement.location, "cannot assign to constant '" + name + "'");
@@ -1537,6 +1572,8 @@ void TypeChecker::require_foreknown_expression(const Expression& expression,
             require_foreknown_expression(*argument, locals);
         }
         return;
+    case ExpressionKind::lambda:
+        throw DiagnosticError(expression.location, "lambda expressions are not foreknown");
     case ExpressionKind::call: {
         if (expression.lexeme == "format" || is_io_builtin(expression.lexeme)) {
             throw DiagnosticError(expression.location, "function '" + expression.lexeme + "' is not foreknown");
@@ -1629,6 +1666,12 @@ void TypeChecker::check_tuple_destructuring_assignment(const Expression& target,
 
             declare_binding(binding.lexeme, actual.arguments[index], false, binding.location);
             continue;
+        }
+
+        if (const std::optional<std::size_t> scope = binding_scope_index(binding.lexeme);
+            scope.has_value() && is_captured_binding(*scope)) {
+            throw DiagnosticError(binding.location, "cannot reassign captured variable '" + binding.lexeme +
+                                                        "'; closure captures are immutable snapshots");
         }
 
         if (variable->constant) {
@@ -1762,6 +1805,7 @@ Type TypeChecker::check_assignment_target(const Expression& target, SourceLocati
     case ExpressionKind::binary:
     case ExpressionKind::range:
     case ExpressionKind::when_expression:
+    case ExpressionKind::lambda:
     case ExpressionKind::call:
     case ExpressionKind::method_call:
         throw DiagnosticError(location, "invalid assignment target");
@@ -1845,6 +1889,9 @@ Type TypeChecker::check_expression(const Expression& expression, const TypeAnnot
         const VariableBinding* variable = find_binding(expression.lexeme);
         if (variable != nullptr) {
             actual = variable->type;
+            if (const std::optional<std::size_t> scope = binding_scope_index(expression.lexeme)) {
+                record_closure_capture(expression.lexeme, actual, *scope);
+            }
             break;
         }
 
@@ -1930,6 +1977,9 @@ Type TypeChecker::check_expression(const Expression& expression, const TypeAnnot
     case ExpressionKind::when_expression:
         actual = check_when_expression(expression, wanted);
         break;
+    case ExpressionKind::lambda:
+        actual = check_lambda_expression(expression, wanted);
+        break;
     case ExpressionKind::call:
         actual = check_call_expression(expression, wanted);
         break;
@@ -1948,6 +1998,87 @@ Type TypeChecker::check_expression(const Expression& expression, const TypeAnnot
 
     expression_types_[&expression] = actual;
     return actual;
+}
+
+Type TypeChecker::check_lambda_expression(const Expression& expression, const TypeAnnotation& expected) {
+    const Type* contextual =
+        expected.has_type && expected.type.kind == ValueType::function_type ? &expected.type : nullptr;
+    if (contextual != nullptr && contextual->arguments.size() != expression.parameters.size()) {
+        throw DiagnosticError(expression.location,
+                              "expected lambda with " + std::to_string(contextual->arguments.size()) +
+                                  " parameter(s) but got " + std::to_string(expression.parameters.size()));
+    }
+
+    std::vector<Type> parameter_types;
+    parameter_types.reserve(expression.parameters.size());
+    for (std::size_t index = 0; index < expression.parameters.size(); ++index) {
+        const Parameter& parameter = expression.parameters[index];
+        Type type;
+        if (parameter.type.has_type) {
+            type = normalize_type(parameter.type.type);
+        } else if (contextual != nullptr) {
+            type = clone_type(contextual->arguments[index]);
+        } else {
+            // Match named functions: an omitted annotation keeps Dune's `int`
+            // default, while a contextual fn type can infer a richer type.
+            type = make_type(ValueType::int_type);
+        }
+        validate_known_type(type, parameter.location);
+        parameter_types.push_back(std::move(type));
+    }
+
+    Type return_type;
+    if (expression.type.has_type) {
+        return_type = normalize_type(expression.type.type);
+    } else if (contextual != nullptr && contextual->element != nullptr) {
+        return_type = clone_type(*contextual->element);
+    } else {
+        return_type = make_type(ValueType::int_type);
+    }
+    validate_known_type(return_type, expression.location);
+
+    FunctionSignature lambda_function;
+    lambda_function.name = "<lambda>";
+    lambda_function.parameters = parameter_types;
+    lambda_function.return_type = return_type;
+    lambda_function.location = expression.location;
+
+    const FunctionSignature* previous_function = current_function_;
+    const std::size_t previous_loop_depth = loop_depth_;
+    current_function_ = &lambda_function;
+    loop_depth_ = 0;
+
+    lambda_contexts_.push_back(LambdaContext{&expression, scopes_.size(), {}, {}});
+    push_scope();
+    for (std::size_t index = 0; index < expression.parameters.size(); ++index) {
+        const Parameter& parameter = expression.parameters[index];
+        declare_binding(parameter.name, parameter_types[index], false, parameter.location);
+    }
+
+    const bool has_tail_expression = !expression.body.empty() &&
+                                     expression.body.back().kind == StatementKind::expression_statement &&
+                                     expression.body.back().expression != nullptr;
+    if (return_type.kind != ValueType::unit_type && has_tail_expression) {
+        for (std::size_t index = 0; index + 1 < expression.body.size(); ++index) {
+            check_statement(expression.body[index]);
+        }
+        expect_type(return_type, check_expression(*expression.body.back().expression, expected_type(return_type)),
+                    expression.body.back().expression->location);
+    } else {
+        check_statements(expression.body);
+    }
+    if (return_type.kind != ValueType::unit_type && !has_tail_expression && !statements_return(expression.body)) {
+        throw DiagnosticError(expression.location, "lambda must return type '" + type_name(return_type) + "'");
+    }
+
+    pop_scope();
+    LambdaContext context = std::move(lambda_contexts_.back());
+    lambda_contexts_.pop_back();
+    closure_captures_[&expression] = std::move(context.captures);
+    current_function_ = previous_function;
+    loop_depth_ = previous_loop_depth;
+
+    return make_function_type(std::move(parameter_types), std::move(return_type));
 }
 
 // Maps an overloadable binary operator to the record method it dispatches to.
@@ -2153,6 +2284,21 @@ Type TypeChecker::check_when_expression(const Expression& expression, const Type
 }
 
 Type TypeChecker::check_call_expression(const Expression& expression, const TypeAnnotation& expected) {
+    if (expression.left == nullptr) {
+        throw DiagnosticError(expression.location, "call expression is missing its function value");
+    }
+
+    // Calls whose callee is not a plain name dispatch through the value produced
+    // by that expression. This covers immediately invoked lambdas and chains
+    // such as `make_adder(2)(3)`.
+    if (expression.left->kind != ExpressionKind::identifier) {
+        const Type callee = check_expression(*expression.left);
+        if (callee.kind != ValueType::function_type) {
+            throw DiagnosticError(expression.left->location, "cannot call value of type '" + type_name(callee) + "'");
+        }
+        return check_indirect_call(expression, callee);
+    }
+
     if (expression.lexeme == "print") {
         const bool has_print_function = overloads_.contains("print") || generic_overloads_.contains("print");
         const VariableBinding* print_binding = find_binding("print");
@@ -2190,8 +2336,14 @@ Type TypeChecker::check_call_expression(const Expression& expression, const Type
     // A local binding of function type shadows any same-named function: calling it
     // is an indirect call through the function value (e.g. `predicate(x)` inside
     // a higher-order stdlib method).
-    if (const VariableBinding* variable = find_binding(expression.lexeme);
-        variable != nullptr && variable->type.kind == ValueType::function_type) {
+    if (const VariableBinding* variable = find_binding(expression.lexeme); variable != nullptr) {
+        if (variable->type.kind != ValueType::function_type) {
+            throw DiagnosticError(expression.left->location,
+                                  "cannot call value of type '" + type_name(variable->type) + "'");
+        }
+        if (const std::optional<std::size_t> scope = binding_scope_index(expression.lexeme)) {
+            record_closure_capture(expression.lexeme, variable->type, *scope);
+        }
         return check_indirect_call(expression, variable->type);
     }
 
@@ -4467,6 +4619,28 @@ const TypeChecker::VariableBinding* TypeChecker::find_binding(const std::string&
     }
 
     return nullptr;
+}
+
+std::optional<std::size_t> TypeChecker::binding_scope_index(const std::string& name) const {
+    for (std::size_t index = scopes_.size(); index > 0; --index) {
+        if (scopes_[index - 1].contains(name)) {
+            return index - 1;
+        }
+    }
+    return std::nullopt;
+}
+
+void TypeChecker::record_closure_capture(const std::string& name, const Type& type, std::size_t binding_scope) {
+    for (LambdaContext& context : lambda_contexts_) {
+        if (binding_scope >= context.outer_scope_count || !context.capture_names.insert(name).second) {
+            continue;
+        }
+        context.captures.push_back(ClosureCapture{name, clone_type(type)});
+    }
+}
+
+bool TypeChecker::is_captured_binding(std::size_t binding_scope) const {
+    return !lambda_contexts_.empty() && binding_scope < lambda_contexts_.back().outer_scope_count;
 }
 
 bool TypeChecker::has_visible_constant(const std::string& name) const {

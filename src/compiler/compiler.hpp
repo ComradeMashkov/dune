@@ -21,12 +21,16 @@ private:
     Bytecode compile_program(const Program& program, bool print_tail_expression);
     void collect_function(const Statement& statement);
     void collect_functions(const std::vector<Statement>& statements);
+    void collect_lambdas(const std::vector<Statement>& statements);
+    void collect_lambdas(const Statement& statement);
+    void collect_lambdas(const Expression& expression);
     void collect_structs(const std::unordered_map<std::string, TypeChecker::StructDefinition>& structs);
     void collect_enums(const std::unordered_map<std::string, TypeChecker::EnumDefinition>& enums);
     void collect_type_aliases(const std::vector<Statement>& statements);
     void collect_global_constants(const std::vector<Statement>& statements);
     void evaluate_foreknown_constants();
     void compile_function(const Statement& statement);
+    void compile_lambda(const Expression& expression);
     void compile_test(const Statement& statement);
     void compile_global_constants();
     void compile_statements(const std::vector<Statement>& statements);
@@ -99,6 +103,7 @@ private:
     std::unordered_map<std::string, Type> local_types_;
     std::vector<std::vector<ScopedLocal>> local_scopes_;
     std::unordered_map<std::string, std::size_t> functions_;
+    std::unordered_map<const Expression*, std::size_t> lambdas_;
     std::unordered_map<std::string, const Statement*> foreknown_functions_;
     std::unordered_map<std::string, Value> foreknown_values_;
     std::unordered_map<std::string, StructLayout> structs_;
@@ -110,6 +115,7 @@ private:
     std::unordered_map<const Expression*, std::string> resolved_calls_;
     std::unordered_map<const Expression*, TypeChecker::VariantResolution> resolved_variants_;
     std::unordered_map<const Expression*, TypeChecker::TryResolution> resolved_tries_;
+    std::unordered_map<const Expression*, std::vector<TypeChecker::ClosureCapture>> closure_captures_;
     std::vector<LoopJumps> loop_stack_;
     std::vector<Instruction>* instructions_ = nullptr;
     const Statement* repl_expression_statement_ = nullptr;

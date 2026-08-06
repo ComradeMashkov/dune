@@ -407,6 +407,7 @@ module.exports = grammar({
     ),
 
     _primary_expression: $ => choice(
+      $.lambda_expression,
       $.array_comprehension,
       $.array_literal,
       $.record_literal,
@@ -419,6 +420,13 @@ module.exports = grammar({
       $.boolean,
       $.constructor_identifier,
       $.identifier,
+    ),
+
+    lambda_expression: $ => seq(
+      "fn",
+      field("parameters", $.parameter_list),
+      optional(seq(":", field("return_type", $._type))),
+      field("body", $.block),
     ),
 
     parenthesized_expression: $ => seq("(", $._expression, ")"),
@@ -519,7 +527,15 @@ module.exports = grammar({
     ),
 
     call_expression: $ => prec(PREC.call, seq(
-      field("function", choice($.identifier, $.constructor_identifier)),
+      field("function", choice(
+        $.identifier,
+        $.constructor_identifier,
+        $.lambda_expression,
+        $.parenthesized_expression,
+        $.call_expression,
+        $.method_call_expression,
+        $.index_expression,
+      )),
       field("arguments", $.argument_list),
     )),
 

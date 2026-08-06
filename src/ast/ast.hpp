@@ -10,6 +10,7 @@
 namespace dune {
 
 struct Expression;
+struct Statement;
 
 enum class ValueType {
     int_type,
@@ -98,6 +99,7 @@ enum class ExpressionKind {
     binary,
     range,
     when_expression,
+    lambda,
     call,
     method_call,
 };
@@ -109,6 +111,11 @@ struct Expression {
     std::unique_ptr<Expression> right;
     std::vector<std::unique_ptr<Expression>> arguments;
     std::vector<std::string> field_names;
+    // Lambda expressions reuse the language's ordinary parameter and statement
+    // nodes so their bodies support the same control flow, returns, and tail
+    // expressions as named functions.
+    std::vector<Parameter> parameters;
+    std::vector<Statement> body;
     SourceLocation location;
     TypeAnnotation type;
 };

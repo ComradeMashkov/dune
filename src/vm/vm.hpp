@@ -27,7 +27,7 @@ private:
         std::size_t stack_base = 0;
     };
 
-    void call_function(std::size_t function_index);
+    void call_function(std::size_t function_index, const std::vector<Value>& captures = {});
     Value call_extern_function(const Bytecode::Function& function, std::vector<Value> arguments);
     Value pop();
 

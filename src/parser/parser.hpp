@@ -91,6 +91,7 @@ private:
     std::unique_ptr<Expression> call();
     std::unique_ptr<Expression> when_expression();
     std::unique_ptr<Expression> when_pattern(bool allow_record_pattern);
+    std::unique_ptr<Expression> lambda_expression();
     std::unique_ptr<Expression> primary();
 
     std::vector<Token> tokens_;
