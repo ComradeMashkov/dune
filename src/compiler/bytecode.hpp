@@ -24,6 +24,11 @@ enum class ValueKind {
 };
 
 struct Value {
+    // Language-level copy semantics are intentional here: scalars, immutable
+    // text, and callables copy independently; arrays and records copy shared
+    // handles. Tuple/variant shells are immutable, while aggregate values held
+    // inside them retain their shared handles. Assignment, calls, and returns
+    // must never expose a moved-from Value to Dune code.
     ValueKind kind = ValueKind::signed_integer;
     std::int64_t signed_value = 0;
     std::uint64_t unsigned_value = 0;

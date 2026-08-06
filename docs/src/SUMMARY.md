@@ -6,6 +6,7 @@
 
 - [Syntax basics](language/syntax.md)
 - [Types](language/types.md)
+- [Values, copying, and mutation](language/value-semantics.md)
 - [Functions and generics](language/functions.md)
 - [Compile-time evaluation (`foreknown`)](language/foreknown.md)
 - [Records, methods, and contracts](language/records.md)

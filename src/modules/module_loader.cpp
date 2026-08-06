@@ -181,6 +181,7 @@ Statement clone_statement(const Statement& statement) {
     result.exported = statement.exported;
     result.is_extern = statement.is_extern;
     result.is_record_member = statement.is_record_member;
+    result.has_receiver = statement.has_receiver;
     result.is_constructor = statement.is_constructor;
     result.is_static_record_member = statement.is_static_record_member;
     result.is_foreknown = statement.is_foreknown;
@@ -222,6 +223,7 @@ void desugar_impls(Program& program) {
                 if (function.is_constructor || function.is_static_record_member) {
                     function.name = statement.name + "." + function.name;
                 } else {
+                    function.has_receiver = true;
                     function.parameters.insert(
                         function.parameters.begin(),
                         Parameter{"this", clone_type_annotation(receiver_type), statement.location});
@@ -251,6 +253,7 @@ void desugar_impls(Program& program) {
             generic_parameters.insert(generic_parameters.end(), function.generic_parameters.begin(),
                                       function.generic_parameters.end());
             function.generic_parameters = std::move(generic_parameters);
+            function.has_receiver = true;
             function.parameters.insert(function.parameters.begin(),
                                        Parameter{"this", clone_type_annotation(statement.type), statement.location});
             function.exported = statement.exported || function.exported;

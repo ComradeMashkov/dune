@@ -3,7 +3,10 @@
 ## Records
 
 A record groups named fields. It can also declare methods, which receive the
-instance as `this`.
+instance as `this`. Records are shared handles: assignment, arguments, and
+returns preserve the identity of the same mutable record. `this` cannot be
+reassigned, but its fields may be mutated. See
+[Values, copying, and mutation](value-semantics.md#method-receivers).
 
 ```dn
 record Point {
@@ -35,7 +38,8 @@ record Counter {
 `derive` asks the compiler to generate common methods from the fields:
 
 - `eq` generates `equals` (structural equality).
-- `copy` generates `copy` (a deep copy).
+- `copy` generates `copy` (a shallow copy: the record is new, but nested
+  arrays and records remain shared).
 - `debug` generates `to_text` (a debug rendering).
 
 ```dn
@@ -44,6 +48,10 @@ record Vec2 derive eq, copy {
     y: int,
 }
 ```
+
+The generated `copy()` creates a new outer record. Each field is copied using
+normal Dune semantics, so nested arrays and records remain shared. See
+[Explicit copies](value-semantics.md#explicit-copies).
 
 ## The Display contract
 

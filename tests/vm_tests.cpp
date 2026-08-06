@@ -680,6 +680,13 @@ io.println('\0' to int);)dune"),
                                   "io.println(scalar); io.println(scalar_copy);"),
                        "2\n6\n4\n9\n1\n2\n", "expected mutability and aliasing output") &&
              passed;
+    passed = expect_eq(run_source("record Counter { value: int, "
+                                  "fn increment(): unit { this.value = this.value + 1; } } "
+                                  "const values: [int] = [1]; values[0] = 2; values.push(3); "
+                                  "const counter: Counter = Counter { value: 4 }; counter.increment(); "
+                                  "io.println(values[0]); io.println(values.len()); io.println(counter.value);"),
+                       "2\n2\n5\n", "expected const to preserve binding while allowing shared mutation") &&
+             passed;
     passed = expect_eq(run_source("import maybe; import outcome; import assert; import collections; "
                                   "maybe_value: maybe.Maybe<int> = maybe.present(42); "
                                   "missing: maybe.Maybe<int> = maybe.absent(0); "

@@ -153,6 +153,10 @@ struct Statement {
     bool exported = false;
     bool is_extern = false;
     bool is_record_member = false;
+    // Set by receiver-method desugaring when an implicit `this` parameter is
+    // inserted. Kept separate from is_record_member because extension methods
+    // also have receivers but use different export/resolution rules.
+    bool has_receiver = false;
     bool is_constructor = false;
     bool is_static_record_member = false;
     bool is_foreknown = false;

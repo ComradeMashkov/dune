@@ -12,6 +12,16 @@ name: text = "Dune";   // explicit type
 x = x - 1;             // reassignment
 ```
 
+Use `const` when the name itself must not be reassigned or shadowed. `const`
+does not recursively freeze an array or record; see
+[Values, copying, and mutation](value-semantics.md#const-freezes-a-binding-not-an-object).
+
+```dn
+const answer: int = 42;
+const values: [int] = [1];
+values.push(2); // valid: values still names the same mutable array
+```
+
 Statements end with a semicolon. Blocks are delimited with `{ }`.
 
 ## Numeric literals

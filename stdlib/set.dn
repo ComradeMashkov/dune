@@ -84,6 +84,17 @@ export record Set {
         this.items = [];
     }
 
+    // A copy with a fresh backing array.
+    // example: s = set.Set.new(); s.add("a"); s.copy().contains("a")  // 1
+    export fn copy(): Set {
+        result: Set = Set.new();
+        for index = 0; index < this.items.len(); index = index + 1 {
+            result.items.push(this.items[index]);
+        }
+
+        return result;
+    }
+
     // A copy of the values in insertion order.
     // example: s = set.Set.new(); s.add("a"); s.add("b"); s.values()
     export fn values(): [text] {

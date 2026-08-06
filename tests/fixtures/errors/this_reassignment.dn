@@ -1,0 +1,7 @@
+record Counter {
+    value: int,
+
+    fn replace(): unit {
+        this = Counter { value: 0 };
+    }
+}

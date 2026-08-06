@@ -6,6 +6,12 @@ A small NumPy-style foundation: vectors and matrices.
 
 Use vectors for one-dimensional numeric data and matrices for row-major two-dimensional data. Constructors such as `vector`, `from_rows`, `from_flat`, `zeros`, `ones`, `identity`, and `diagonal` keep setup explicit, while methods perform shape validation before operations that require compatible dimensions.
 
+Ordinary assignment aliases a vector or matrix record. Use `copy()` when the
+numeric backing array must be independent; see Dune's
+[value semantics](../language/value-semantics.md#explicit-copies).
+`vector(data)` and `from_flat(rows, cols, data)` intentionally wrap `data`
+without copying it, while `from_rows(rows)` creates a fresh flat backing array.
+
 ```dn
 import io;
 import matrix;
@@ -57,7 +63,7 @@ A fixed-length numeric vector backed by a flat array `data`.
 - `fn get(index: int): T` — Element at `index`.
 - `fn set(index: int, value: T): unit` — Overwrite the element at `index` in place.
 - `fn to_array(): [T]` — A plain array copy of the elements.
-- `fn copy(): Vector<T>` — A deep copy of this vector (new backing array).
+- `fn copy(): Vector<T>` — A copy of this vector with a fresh numeric backing array.
 - `fn equals(other: Vector<T>): bool` — Element-wise equality with `other` (same length and same values).
 - `fn same_shape(other: Vector<T>): bool` — True when `other` has the same length (shape) as this vector.
 - `fn slice(start: int, end: int): Vector<T>` — A sub-vector over [start, end) as a new vector.
@@ -112,7 +118,7 @@ A dense 2-D matrix stored row-major in a flat array of length rows*cols.
 - `fn get(row: int, col: int): T` — Element at (row, col).
 - `fn set(row: int, col: int, value: T): unit` — Overwrite the element at (row, col) in place.
 - `fn to_array(): [T]` — A plain row-major array copy of all elements.
-- `fn copy(): Matrix<T>` — A deep copy of this matrix.
+- `fn copy(): Matrix<T>` — A copy of this matrix with a fresh numeric backing array.
 - `fn equals(other: Matrix<T>): bool` — Element-wise equality with `other` (same shape and same values).
 - `fn same_shape(other: Matrix<T>): bool` — True when `other` has the same rows and cols.
 - `fn can_matmul(other: Matrix<T>): bool` — True when this matrix can be multiplied by `other` (cols == other.rows).
@@ -162,7 +168,7 @@ A dense 2-D matrix stored row-major in a flat array of length rows*cols.
 
 ### `fn vector<T is numeric>(data: [T]): Vector<T>`
 
-Free-function constructor: build a Vector from an array.
+Build a Vector that wraps the supplied array without copying it.
 
 **Example:**
 ```dune
@@ -171,7 +177,7 @@ matrix.vector([1, 2, 3])
 
 ### `fn from_flat<T is numeric>(rows: int, cols: int, data: [T]): Matrix<T>`
 
-Build a Matrix from flat row-major data plus explicit dimensions.
+Build a Matrix that wraps the supplied flat row-major array without copying it.
 
 **Example:**
 ```dune

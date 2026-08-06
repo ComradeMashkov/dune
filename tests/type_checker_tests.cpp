@@ -531,12 +531,32 @@ int main() {
                                    "chosen: int = when value { Present(x) => x; Absent => 0; }; io.println(x);",
                                    "undefined variable 'x'", "expected arrow when payload scope error") &&
              passed;
-    passed = expect_error_contains("const values: [int] = [1]; values[0] = 2;",
-                                   "cannot mutate through constant binding 'values'",
-                                   "expected const indexed assignment error") &&
+    passed = expect_valid("record Box { value: int } "
+                          "const values: [int] = [1]; values[0] = 2; values.push(3); "
+                          "const box: Box = Box { value: 1 }; box.value = 2;",
+                          "expected mutation through const bindings to validate") &&
+             passed;
+    passed = expect_valid("const values: [int] = [1]; "
+                          "fn update(): unit { values[0] = 2; values.push(3); } update();",
+                          "expected global const aggregate mutation inside a function to validate") &&
              passed;
     passed = expect_valid("const values: [int] = [1]; alias = values; alias[0] = 2;",
                           "expected const array alias mutation to validate") &&
+             passed;
+    passed = expect_valid("record Counter { value: int, fn increment(): unit { this.value = this.value + 1; } } "
+                          "const counter: Counter = Counter { value: 0 }; counter.increment();",
+                          "expected const receiver mutation to validate") &&
+             passed;
+    passed = expect_error_contains(
+                 "record Box { value: int, fn replace(): unit { this = Box { value: 2 }; } }",
+                 "cannot reassign method receiver 'this'", "expected method receiver reassignment error") &&
+             passed;
+    passed = expect_valid("fn replace(this: int): int { this = 2; return this; } value = replace(1);",
+                          "expected an ordinary parameter named this to remain reassignable") &&
+             passed;
+    passed = expect_error_contains("method<T> [T].replace(): unit { this = []; } values = [1]; values.replace();",
+                                   "cannot reassign method receiver 'this'",
+                                   "expected extension method receiver reassignment error") &&
              passed;
     passed = expect_error_contains("io.println(true + 1);", "expected numeric type but got 'bool'",
                                    "expected invalid binary operation") &&

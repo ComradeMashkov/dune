@@ -4,7 +4,7 @@ A hash-map style dictionary built in Dune.
 
 `dict` is a generic dictionary from `text` keys to values of type `V`. It keeps keys and values in insertion order and stores them in parallel arrays, so the behavior is simple and deterministic across backends.
 
-Use `Dict<V>` when you need a mutable string-keyed map with explicit optional lookups. `set` inserts or overwrites, `get` returns `Maybe<V>`, and `keys` and `values` return fresh arrays in insertion order.
+Use `Dict<V>` when you need a mutable string-keyed map with explicit optional lookups. `set` inserts or overwrites, `get` returns `Maybe<V>`, and `keys` and `values` return fresh arrays in insertion order. `copy()` creates independent dictionary structure but copies generic values shallowly, following Dune's normal [value semantics](../language/value-semantics.md#explicit-copies).
 
 ```dn
 import dict;
@@ -38,5 +38,6 @@ The first iteration keeps keys as `text` and stores entries in two parallel arra
 - `fn len(): int` — The number of key/value pairs stored.
 - `fn is_empty(): bool` — True when the dictionary holds no entries.
 - `fn clear(): unit` — Drop all entries, leaving an empty dictionary.
+- `fn copy(): Dict<V>` — A shallow copy with fresh key/value arrays. — e.g. `d: dict.Dict<int> = dict.Dict.new(); d.set("a", 1); d.copy().len()  // 1`
 - `fn keys(): [text]` — A copy of the keys in insertion order. — e.g. `d: dict.Dict<int> = dict.Dict.new(); d.set("a", 1); d.set("b", 2); d.keys()`
 - `fn values(): [V]` — A copy of the values in insertion order. — e.g. `d: dict.Dict<int> = dict.Dict.new(); d.set("a", 1); d.set("b", 2); d.values()`

@@ -1,6 +1,6 @@
 `dict` is a generic dictionary from `text` keys to values of type `V`. It keeps keys and values in insertion order and stores them in parallel arrays, so the behavior is simple and deterministic across backends.
 
-Use `Dict<V>` when you need a mutable string-keyed map with explicit optional lookups. `set` inserts or overwrites, `get` returns `Maybe<V>`, and `keys` and `values` return fresh arrays in insertion order.
+Use `Dict<V>` when you need a mutable string-keyed map with explicit optional lookups. `set` inserts or overwrites, `get` returns `Maybe<V>`, and `keys` and `values` return fresh arrays in insertion order. `copy()` creates independent dictionary structure but copies generic values shallowly, following Dune's normal [value semantics](../language/value-semantics.md#explicit-copies).
 
 ```dn
 import dict;
