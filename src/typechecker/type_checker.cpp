@@ -198,6 +198,7 @@ Statement clone_statement(const Statement& statement) {
     result.exported = statement.exported;
     result.is_extern = statement.is_extern;
     result.is_record_member = statement.is_record_member;
+    result.has_receiver = statement.has_receiver;
     result.is_constructor = statement.is_constructor;
     result.is_static_record_member = statement.is_static_record_member;
     result.is_foreknown = statement.is_foreknown;
@@ -272,19 +273,6 @@ std::vector<const Expression*> expression_refs(const std::vector<std::unique_ptr
     }
 
     return result;
-}
-
-const std::string* root_identifier(const Expression& expression) {
-    if (expression.kind == ExpressionKind::identifier) {
-        return &expression.lexeme;
-    }
-
-    if ((expression.kind == ExpressionKind::member || expression.kind == ExpressionKind::index) &&
-        expression.left != nullptr) {
-        return root_identifier(*expression.left);
-    }
-
-    return nullptr;
 }
 
 } // namespace
@@ -1212,7 +1200,8 @@ void TypeChecker::check_function(const Statement& statement) {
 
     for (std::size_t index = 0; index < statement.parameters.size(); ++index) {
         const Parameter& parameter = statement.parameters[index];
-        declare_binding(parameter.name, function.parameters[index], false, parameter.location);
+        declare_binding(parameter.name, function.parameters[index], false, parameter.location,
+                        !(statement.has_receiver && parameter.name == "this"));
     }
 
     const std::string previous_module = current_module_;
@@ -1311,6 +1300,9 @@ void TypeChecker::check_statement(const Statement& statement) {
         }
         if (variable->constant) {
             throw DiagnosticError(statement.location, "cannot assign to constant '" + name + "'");
+        }
+        if (!variable->reassignable) {
+            throw DiagnosticError(statement.location, "cannot reassign method receiver '" + name + "'");
         }
 
         expect_type(variable->type, check_expression(*statement.expression, expected_type(variable->type)),
@@ -1642,6 +1634,10 @@ void TypeChecker::check_tuple_destructuring_assignment(const Expression& target,
         if (variable->constant) {
             throw DiagnosticError(binding.location, "cannot assign to constant '" + binding.lexeme + "'");
         }
+        if (!variable->reassignable) {
+            throw DiagnosticError(binding.location,
+                                  "cannot reassign method receiver '" + binding.lexeme + "'");
+        }
 
         expect_type(variable->type, actual.arguments[index], binding.location);
     }
@@ -1711,11 +1707,6 @@ bool TypeChecker::known_iterable_record_element_type(const Type& iterable, Type&
 }
 
 Type TypeChecker::check_assignment_target(const Expression& target, SourceLocation location) {
-    const std::string* root = root_identifier(target);
-    if (root != nullptr && has_visible_constant(*root)) {
-        throw DiagnosticError(location, "cannot mutate through constant binding '" + *root + "'");
-    }
-
     Type result = make_type(ValueType::unit_type);
     switch (target.kind) {
     case ExpressionKind::identifier: {
@@ -4483,7 +4474,8 @@ bool TypeChecker::has_visible_constant(const std::string& name) const {
     return (binding != nullptr && binding->constant) || global_constants_.contains(name);
 }
 
-void TypeChecker::declare_binding(const std::string& name, const Type& type, bool constant, SourceLocation location) {
+void TypeChecker::declare_binding(const std::string& name, const Type& type, bool constant, SourceLocation location,
+                                  bool reassignable) {
     if (scopes_.empty()) {
         push_scope();
     }
@@ -4496,7 +4488,7 @@ void TypeChecker::declare_binding(const std::string& name, const Type& type, boo
         throw DiagnosticError(location, "cannot shadow constant '" + name + "'");
     }
 
-    scopes_.back().emplace(name, VariableBinding{type, constant});
+    scopes_.back().emplace(name, VariableBinding{type, constant, reassignable});
 }
 
 void TypeChecker::expect_type(const Type& expected, const Type& actual, SourceLocation location) const {

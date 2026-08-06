@@ -1,0 +1,242 @@
+import io;
+import array;
+import dict;
+import set;
+import matrix;
+
+// This fixture is the executable specification for Dune value semantics.
+// Every ordinary assignment, argument, and return copies a Dune value. For a
+// mutable aggregate that value is a shared handle; no operation below moves
+// from, invalidates, or implicitly deep-copies its source.
+
+record Bag derive copy {
+    name: text,
+    values: [int],
+
+    fn add(value: int): unit {
+        this.values.push(value);
+    }
+}
+
+choice Payload {
+    Values([int]),
+    Empty,
+}
+
+fn mutate_array(values: [int]): unit {
+    values[0] = 21;
+}
+
+fn rebind_array(values: [int]): unit {
+    // Parameter rebinding is local to this call.
+    values = [99, 100];
+    values[0] = 101;
+}
+
+fn return_array(values: [int]): [int] {
+    return values;
+}
+
+fn mutate_bag(bag: Bag): unit {
+    bag.name = "argument";
+}
+
+fn rebind_bag(bag: Bag): unit {
+    bag = Bag { name: "local", values: [0] };
+    bag.name = "still local";
+}
+
+fn return_bag(bag: Bag): Bag {
+    return bag;
+}
+
+fn mutate_payload(items: [int]): int {
+    items[0] = 41;
+    return 0;
+}
+
+fn mutate_scores(scores: dict.Dict<[int]>): unit {
+    scores.set("call", [52]);
+}
+
+fn rebind_scores(scores: dict.Dict<[int]>): unit {
+    scores = dict.Dict.new();
+    scores.set("local", [99]);
+}
+
+fn increment(value: int): int { return value + 1; }
+fn decrement(value: int): int { return value - 1; }
+
+// Scalars, immutable text, glyphs, and function handles are copied values.
+number = 10;
+number_copy = number;
+number_copy = 20;
+io.println(number);
+io.println(number_copy);
+
+word = "alpha";
+word_copy = word;
+word_copy = "beta";
+io.println(word);
+io.println(word_copy);
+
+letter = 'a';
+letter_copy = letter;
+letter_copy = 'b';
+io.println(letter);
+io.println(letter_copy);
+
+operation: fn(int): int = increment;
+saved_operation = operation;
+operation = decrement;
+io.println(saved_operation(5));
+io.println(operation(5));
+
+// Arrays share storage on ordinary assignment. const freezes only the binding,
+// so direct indexed and method mutation remain legal and observable.
+values: [int] = [1];
+values_alias = values;
+values_alias[0] = 2;
+io.println(values[0]);
+
+const fixed_values: [int] = [3];
+fixed_values[0] = 4;
+fixed_values.push(5);
+io.println(fixed_values[0]);
+io.println(fixed_values.len());
+
+const fixed_bag: Bag = Bag { name: "fixed", values: [5] };
+fixed_bag.name = "mutated";
+fixed_bag.add(6);
+io.println(fixed_bag.name);
+io.println(fixed_bag.values.len());
+
+// copy() allocates a fresh outer array but is deliberately shallow.
+outer: [int] = [6];
+outer_copy = outer.copy();
+outer_copy.push(7);
+appended_outer = outer.append(8);
+io.println(outer.len());
+io.println(outer_copy.len());
+io.println(appended_outer.len());
+
+nested: [[int]] = [[8]];
+nested_copy = nested.copy();
+nested_copy[0][0] = 9;
+io.println(nested[0][0]);
+
+// Array slicing also creates a fresh outer array and copies elements shallowly.
+slice_source: [[int]] = [[12], [13]];
+slice_copy = slice_source[0:1];
+slice_copy.push([14]);
+slice_copy[0][0] = 15;
+io.println(slice_source.len());
+io.println(slice_copy.len());
+io.println(slice_source[0][0]);
+
+// Records are shared handles. derive copy creates a new outer record while
+// retaining ordinary (shallow) value semantics for every field.
+bag: Bag = Bag { name: "original", values: [10] };
+bag_alias = bag;
+bag_alias.name = "alias";
+io.println(bag.name);
+
+bag_copy = bag.copy();
+bag_copy.name = "copy";
+bag_copy.values[0] = 11;
+io.println(bag.name);
+io.println(bag_copy.name);
+io.println(bag.values[0]);
+
+// Arguments receive copied handles. Mutation reaches the caller, rebinding a
+// parameter does not, and neither consumes the source value.
+argument_values: [int] = [20];
+mutate_array(argument_values);
+rebind_array(argument_values);
+io.println(argument_values[0]);
+io.println(argument_values.len());
+argument_values.push(22);
+io.println(argument_values.len());
+
+mutate_bag(bag);
+io.println(bag.name);
+rebind_bag(bag);
+io.println(bag.name);
+bag.add(12);
+io.println(bag.values.len());
+
+// Returned aggregates retain their shared identity with the returned source.
+returned_values = return_array(argument_values);
+returned_values[0] = 23;
+io.println(argument_values[0]);
+
+returned_bag = return_bag(bag);
+returned_bag.name = "returned";
+io.println(bag.name);
+
+// Tuple and choice shells are immutable, but aggregate elements/payloads are
+// handles and therefore keep sharing their mutable objects.
+tuple_values: [int] = [30];
+(unpacked_values, marker) = (tuple_values, 7);
+unpacked_values[0] = 31;
+io.println(tuple_values[0]);
+io.println(marker);
+
+payload_values: [int] = [40];
+payload: Payload = Values(payload_values);
+when payload {
+    is Values(items) { mutate_payload(items) }
+    is Empty { 0 }
+};
+io.println(payload_values[0]);
+
+// Collection copy methods create independent collection structure. Generic
+// dictionary values still follow shallow semantics.
+scores: dict.Dict<[int]> = dict.Dict.new();
+scores.set("a", [50]);
+scores_alias = scores;
+scores_alias.set("alias", [53]);
+mutate_scores(scores);
+rebind_scores(scores);
+scores_copy = scores.copy();
+scores_copy.set("b", [60]);
+empty_score: [int] = [];
+copied_score = scores_copy.get("a").value_or(empty_score);
+copied_score[0] = 51;
+io.println(scores.len());
+io.println(scores_copy.len());
+io.println(scores.get("a").value_or(empty_score)[0]);
+io.println(scores.contains("call"));
+io.println(scores.contains("local"));
+
+names: set.Set = set.Set.new();
+names.add("a");
+names_alias = names;
+names_alias.add("alias");
+names_copy = names.copy();
+names_copy.add("b");
+io.println(names.len());
+io.println(names_copy.len());
+
+// vector()/from_flat() deliberately wrap their input arrays. Ordinary record
+// assignment and the constructor input therefore alias; copy() allocates fresh
+// numeric backing storage.
+vector_data: [int] = [60, 0];
+vector = matrix.vector(vector_data);
+vector_alias = vector;
+vector_alias.set(0, 61);
+vector_copy = vector.copy();
+vector_copy.set(0, 62);
+io.println(vector_data[0]);
+io.println(vector.get(0));
+io.println(vector_copy.get(0));
+
+grid_data: [int] = [70, 0];
+grid = matrix.from_flat(1, 2, grid_data);
+grid_alias = grid;
+grid_alias.set(0, 0, 71);
+grid_copy = grid.copy();
+grid_copy.set(0, 0, 72);
+io.println(grid_data[0]);
+io.println(grid.get(0, 0));
+io.println(grid_copy.get(0, 0));

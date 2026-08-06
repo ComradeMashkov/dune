@@ -63,7 +63,7 @@ export record Vector<T is numeric> {
         return values;
     }
 
-    // A deep copy of this vector (new backing array).
+    // A copy of this vector with a fresh numeric backing array.
     export fn copy(): Vector<T> {
         return Vector.new(this.to_array());
     }
@@ -556,7 +556,7 @@ export record Matrix<T is numeric> {
         return values;
     }
 
-    // A deep copy of this matrix.
+    // A copy of this matrix with a fresh numeric backing array.
     export fn copy(): Matrix<T> {
         return Matrix.new(this.rows, this.cols, this.to_array());
     }
@@ -1028,13 +1028,13 @@ export record Matrix<T is numeric> {
     }
 }
 
-// Free-function constructor: build a Vector from an array.
+// Build a Vector that wraps the supplied array without copying it.
 // example: matrix.vector([1, 2, 3])
 export fn vector<T is numeric>(data: [T]): Vector<T> {
     return Vector.new(data);
 }
 
-// Build a Matrix from flat row-major data plus explicit dimensions.
+// Build a Matrix that wraps the supplied flat row-major array without copying it.
 // example: matrix.from_flat(2, 2, [1, 2, 3, 4])
 export fn from_flat<T is numeric>(rows: int, cols: int, data: [T]): Matrix<T> {
     return Matrix.new(rows, cols, data);

@@ -679,6 +679,36 @@ add_test(
 )
 
 add_test(
+    NAME cli_value_semantics
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/language/value_semantics.dn
+        -D EXPECTED_OUTPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/golden/value_semantics.out
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
+    NAME cli_const_reassignment
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/errors/const_reassignment.dn
+        -D EXPECTED_ERROR="cannot assign to constant 'values'"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_failure_case.cmake
+)
+
+add_test(
+    NAME cli_this_reassignment
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/errors/this_reassignment.dn
+        -D EXPECTED_ERROR="cannot reassign method receiver 'this'"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_failure_case.cmake
+)
+
+add_test(
     NAME cli_object_model
     COMMAND
         ${CMAKE_COMMAND}

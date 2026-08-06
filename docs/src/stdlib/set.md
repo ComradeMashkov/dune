@@ -4,7 +4,7 @@ A hash-set built in Dune.
 
 `set` is a mutable collection of unique `text` values. It keeps values in insertion order and stores them in a simple array, giving deterministic behavior with a small API.
 
-Use `Set` when you need membership checks, duplicate suppression, and removal for strings. `add` ignores duplicates, `contains` reports membership, `remove` tells you whether anything was removed, and `values` returns a fresh array of the stored values.
+Use `Set` when you need membership checks, duplicate suppression, and removal for strings. `add` ignores duplicates, `contains` reports membership, `remove` tells you whether anything was removed, and `values` returns a fresh array of the stored values. `copy()` creates a set with an independent backing array.
 
 ```dn
 import io;
@@ -37,4 +37,5 @@ Like `dict`, the first iteration stores items in a single array and scans linear
 - `fn len(): int` — The number of elements currently in the set.
 - `fn is_empty(): bool` — True when the set holds no elements.
 - `fn clear(): unit` — Drop all elements, leaving an empty set. — e.g. `s = set.Set.new(); s.add("a"); s.clear(); s.is_empty()  // 1`
+- `fn copy(): Set` — A copy with a fresh backing array. — e.g. `s = set.Set.new(); s.add("a"); s.copy().contains("a")  // 1`
 - `fn values(): [text]` — A copy of the values in insertion order. — e.g. `s = set.Set.new(); s.add("a"); s.add("b"); s.values()`

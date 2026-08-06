@@ -50,6 +50,10 @@ io.println(values[0]);        // 1
 middle: [int] = values[1:3];
 ```
 
+Array assignment shares the same mutable array. Use `import array;` and
+`values.copy()` for a fresh outer array; that operation is shallow. See
+[Values, copying, and mutation](value-semantics.md#explicit-copies).
+
 ## Tuples
 
 Tuples group a fixed number of values of possibly different types and can be
@@ -59,6 +63,9 @@ destructured on assignment.
 pair = (1, "one");
 (number, label) = pair;
 ```
+
+The tuple shell is immutable. Arrays and records stored in tuple elements keep
+their normal shared-handle semantics.
 
 ## Type aliases
 

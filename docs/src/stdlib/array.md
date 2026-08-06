@@ -9,6 +9,10 @@ over the element type; some carry a `T is numeric` bound for arithmetic.
 
 Use `array` when you want the built-in `[T]` type to feel like a small collection library. It adds copying, slicing, concatenation, searching, and value-counting helpers, plus higher-order pipelines such as `map`, `filter`, `fold`, `reduce`, `any`, and `all`.
 
+`copy()` creates a fresh outer array and copies elements shallowly. Nested
+arrays and records remain shared according to Dune's
+[value semantics](../language/value-semantics.md#explicit-copies).
+
 The module also provides numeric reductions and constructors: `range`, `repeat`, `zeros`, `ones`, `full`, `sum`, `product`, `min`, `max`, `argmin`, and `argmax`. Importing the module enables both free-function calls and receiver-style calls on arrays.
 
 ```dn

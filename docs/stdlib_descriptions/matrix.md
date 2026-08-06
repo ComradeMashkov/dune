@@ -2,6 +2,12 @@
 
 Use vectors for one-dimensional numeric data and matrices for row-major two-dimensional data. Constructors such as `vector`, `from_rows`, `from_flat`, `zeros`, `ones`, `identity`, and `diagonal` keep setup explicit, while methods perform shape validation before operations that require compatible dimensions.
 
+Ordinary assignment aliases a vector or matrix record. Use `copy()` when the
+numeric backing array must be independent; see Dune's
+[value semantics](../language/value-semantics.md#explicit-copies).
+`vector(data)` and `from_flat(rows, cols, data)` intentionally wrap `data`
+without copying it, while `from_rows(rows)` creates a fresh flat backing array.
+
 ```dn
 import io;
 import matrix;

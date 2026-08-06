@@ -116,7 +116,12 @@ private:
 
     struct VariableBinding {
         Type type;
+        // Constants cannot be reassigned or shadowed, but their aggregate
+        // values remain mutable through the binding.
         bool constant = false;
+        // Method receivers are mutable objects but the `this` binding itself
+        // cannot be replaced. Ordinary parameters remain reassignable.
+        bool reassignable = true;
     };
 
     void declare_struct(const Statement& statement);
@@ -262,7 +267,8 @@ private:
     VariableBinding* find_binding(const std::string& name);
     const VariableBinding* find_binding(const std::string& name) const;
     bool has_visible_constant(const std::string& name) const;
-    void declare_binding(const std::string& name, const Type& type, bool constant, SourceLocation location);
+    void declare_binding(const std::string& name, const Type& type, bool constant, SourceLocation location,
+                         bool reassignable = true);
 
     const FunctionSignature& resolve_overload(const std::string& name, const std::vector<const Expression*>& arguments,
                                               SourceLocation location, const TypeAnnotation& expected);

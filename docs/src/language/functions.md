@@ -13,6 +13,11 @@ fn add(a: int, b: int): int {
 total: int = add(10, 20);
 ```
 
+Arguments and return values follow Dune's uniform value semantics: scalars are
+independent values, while arrays and records are shared handles. Parameter
+reassignment stays local, but aggregate mutation is visible to the caller. See
+[Values, copying, and mutation](value-semantics.md#function-arguments).
+
 Functions may be **overloaded** by the number and types of their parameters; the
 type checker selects the matching definition at each call site.
 
