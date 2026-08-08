@@ -33,6 +33,37 @@ area = when s {
 };
 ```
 
+### Exhaustiveness and unreachable arms
+
+The type checker proves that every `choice` variant is handled. A match may
+list every variant explicitly or finish with `_`. If variants are missing, the
+diagnostic names each one in declaration order. Repeating a variant, or placing
+an arm after `_`, is an error because that arm can never be selected.
+
+```dn
+import fmt;
+
+choice Status { Ready, Running(int), Failed(text) }
+
+label = when status {
+    Ready => "ready";
+    Running(count) => fmt.format("running {}", count);
+    Failed(message) => message;
+};
+```
+
+Literal matches over `int`, real numbers, `glyph`, and `text` require a final
+`_` because their possible values are not finite. Duplicate literal arms are
+rejected. A `bool` match is exhaustive when it handles both `true` and `false`,
+so it does not need a redundant fallback:
+
+```dn
+state = when enabled {
+    true => "enabled";
+    false => "disabled";
+};
+```
+
 ## Optional and result: `maybe` and `outcome`
 
 The standard library builds two common choices on top of this machinery:

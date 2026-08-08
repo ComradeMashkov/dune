@@ -663,6 +663,36 @@ add_test(
 )
 
 add_test(
+    NAME cli_when_exhaustiveness
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/language/when_exhaustiveness.dn
+        -D EXPECTED_OUTPUT="idle\nrunning 3\nstopped\nyes\nno"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
+    NAME cli_non_exhaustive_when
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/errors/non_exhaustive_when.dn
+        -D EXPECTED_ERROR="missing variants: Running, Failed"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_failure_case.cmake
+)
+
+add_test(
+    NAME cli_unreachable_when_branch
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/errors/unreachable_when_branch.dn
+        -D EXPECTED_ERROR="unreachable when branch after '_' fallback"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_failure_case.cmake
+)
+
+add_test(
     NAME cli_pattern_matching
     COMMAND
         ${CMAKE_COMMAND}
