@@ -123,6 +123,42 @@ bool compiles_unit_call_statement() {
     return passed;
 }
 
+bool compiles_defer_registration_and_scope_unwinding() {
+    const dune::Bytecode bytecode =
+        compile_source("fn cleanup(value: int): unit { io.println(value); } "
+                       "fn run(): unit { defer cleanup(0); while true { defer cleanup(1); "
+                       "if true { continue; } break; } }");
+
+    const dune::Bytecode::Function* run = nullptr;
+    for (const dune::Bytecode::Function& function : bytecode.functions) {
+        if (function.name == "run") {
+            run = &function;
+            break;
+        }
+    }
+    if (!expect(run != nullptr, "expected compiled defer test function")) {
+        return false;
+    }
+
+    bool saw_closure = false;
+    bool saw_defer_push = false;
+    bool saw_scope_enter = false;
+    bool saw_scope_exit = false;
+    for (const dune::Instruction& instruction : run->instructions) {
+        saw_closure = saw_closure || instruction.op == dune::OpCode::make_closure;
+        saw_defer_push = saw_defer_push || instruction.op == dune::OpCode::defer_push;
+        saw_scope_enter = saw_scope_enter || instruction.op == dune::OpCode::defer_scope_enter;
+        saw_scope_exit = saw_scope_exit || instruction.op == dune::OpCode::defer_scope_exit;
+    }
+
+    bool passed = true;
+    passed = expect(saw_closure, "expected defer cleanup closure construction") && passed;
+    passed = expect(saw_defer_push, "expected defer registration opcode") && passed;
+    passed = expect(saw_scope_enter, "expected defer scope entry opcode") && passed;
+    passed = expect(saw_scope_exit, "expected normal and early defer scope exits") && passed;
+    return passed;
+}
+
 bool compiles_type_aliases() {
     const dune::Bytecode bytecode =
         compile_source("type Count = int; type Pair<T, U> = (T, U); "
@@ -1009,6 +1045,7 @@ int main() {
     passed = compiles_function_table_and_call() && passed;
     passed = compiles_lambda_capture_environments_and_indirect_calls() && passed;
     passed = compiles_unit_call_statement() && passed;
+    passed = compiles_defer_registration_and_scope_unwinding() && passed;
     passed = compiles_type_aliases() && passed;
     passed = compiles_formatted_print() && passed;
     passed = compiles_arrays_and_module_calls() && passed;

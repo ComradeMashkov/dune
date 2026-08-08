@@ -5,6 +5,7 @@
   "const"
   "continue"
   "contract"
+  "defer"
   "derive"
   "else"
   "export"

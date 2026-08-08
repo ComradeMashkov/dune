@@ -10,7 +10,8 @@
 
 Dune keeps systems-style code small, readable, and predictable: explicit types
 where they matter, overloads and generics, records with methods, choices matched
-by `when`, operator overloading, and modules loaded from `.dn` files. The type
+by `when`, deterministic cleanup with `defer`, operator overloading, and modules
+loaded from `.dn` files. The type
 checker rejects mismatched assignments, calls, returns, and operators before
 execution; the VM adds runtime checks for things like invalid indexes and slices.
 
@@ -147,6 +148,8 @@ examples, plus the
 
 For the same feature in a normal source file, run
 [`examples/functions_and_closures.dn`](examples/functions_and_closures.dn).
+For resource lifetime and every `defer` exit path, run
+[`examples/defer_cleanup.dn`](examples/defer_cleanup.dn).
 
 ## Standard library
 
@@ -180,8 +183,9 @@ the repository root). See the [editor guide](https://comrademashkov.github.io/du
 
 Dune implements a compact but real language: a static type checker with
 overloads, generics and bounds, contracts, records, choices, tuples, and type
-aliases; first-class function values, lambdas, and capturing closures; array comprehensions; operator
-overloading; a bytecode compiler and VM with runtime bounds checks; and the CLI,
+aliases; first-class function values, lambdas, and capturing closures; array
+comprehensions; deterministic `defer` cleanup; operator overloading; a bytecode
+compiler and VM with runtime bounds checks; and the CLI,
 LSP, doc generator, and test runner above. The
 [language reference](https://comrademashkov.github.io/dune/) covers each feature
 in detail.

@@ -11,7 +11,7 @@
       keywords: {
         keyword:
           "fn method record choice contract with derive import from as module " +
-          "export const static return if else while for in break continue when " +
+          "export const static return if else while for in break continue defer when " +
           "is to type foreign print",
         literal: "true false",
         built_in:

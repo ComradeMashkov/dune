@@ -45,6 +45,7 @@ private:
     Statement continue_statement();
     Statement contract_statement();
     Statement const_statement();
+    Statement defer_statement();
     Statement export_statement();
     Statement extern_statement();
     Statement foreknown_statement();

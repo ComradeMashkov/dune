@@ -74,6 +74,23 @@ int main() {
     using enum dune::TokenType;
 
     bool passed = true;
+    passed = expect_tokens("defer close(); defer { close(); }",
+                           {
+                               {defer_keyword, "defer"},
+                               {identifier, "close"},
+                               {left_paren, "("},
+                               {right_paren, ")"},
+                               {semicolon, ";"},
+                               {defer_keyword, "defer"},
+                               {left_brace, "{"},
+                               {identifier, "close"},
+                               {left_paren, "("},
+                               {right_paren, ")"},
+                               {semicolon, ";"},
+                               {right_brace, "}"},
+                               {eof, ""},
+                           }) &&
+             passed;
 
     passed = expect_tokens("x = 40 + 2;\nprint(x);",
                            {

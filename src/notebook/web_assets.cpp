@@ -699,7 +699,7 @@ std::string_view notebook_app_html() {
     }
 
     const duneKeywords = new Set([
-      "as", "break", "choice", "const", "continue", "contract", "derive", "else", "export", "fn",
+      "as", "break", "choice", "const", "continue", "contract", "defer", "derive", "else", "export", "fn",
       "for", "foreknown", "foreign", "from", "if", "import", "in", "is", "method", "module", "record",
       "return", "static", "test", "to", "type", "when", "while", "with"
     ]);

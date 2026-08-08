@@ -158,9 +158,32 @@ bool completes_keywords_and_local_symbols() {
     passed = expect(has_completion(completions, "method"), "expected keyword completion") && passed;
     passed = expect(has_completion(completions, "in"), "expected for-in keyword completion") && passed;
     passed = expect(has_completion(completions, "fn"), "expected fn keyword completion") && passed;
+    passed = expect(has_completion(completions, "defer"), "expected defer keyword completion") && passed;
     passed = expect(has_completion(completions, "real64"), "expected type completion") && passed;
     passed = expect(has_completion(completions, "add"), "expected function completion") && passed;
     passed = expect(has_completion(completions, "total"), "expected local variable completion") && passed;
+    return passed;
+}
+
+bool supports_defer_diagnostics_and_semantic_highlighting() {
+    bool passed = true;
+    const std::vector<dune::lsp::Diagnostic> valid =
+        dune::lsp::diagnose_source(with_test_print("defer print(1);"));
+    passed = expect(valid.empty(), "expected valid defer source to have no diagnostics") && passed;
+
+    const std::vector<dune::lsp::Diagnostic> invalid = dune::lsp::diagnose_source("defer 42;");
+    passed = expect(invalid.size() == 1, "expected one non-unit defer diagnostic") && passed;
+    if (!invalid.empty()) {
+        passed = expect(invalid[0].message.find("deferred expression must return 'unit'") != std::string::npos,
+                        "expected defer result diagnostic") &&
+                 passed;
+    }
+
+    const std::string source = with_test_print("defer print(1);");
+    const std::vector<dune::lsp::SemanticToken> tokens = dune::lsp::semantic_tokens_source(source);
+    passed = expect_semantic_token(source, tokens, "defer print", 0, 5, "keyword", 0,
+                                   "expected defer semantic keyword token") &&
+             passed;
     return passed;
 }
 
@@ -929,6 +952,7 @@ int main() {
     passed = diagnoses_type_errors_with_range() && passed;
     passed = diagnoses_non_exhaustive_when_with_missing_variants() && passed;
     passed = completes_keywords_and_local_symbols() && passed;
+    passed = supports_defer_diagnostics_and_semantic_highlighting() && passed;
     passed = completes_imported_module_members() && passed;
     passed = completes_typed_record_methods() && passed;
     passed = hovers_local_symbols() && passed;

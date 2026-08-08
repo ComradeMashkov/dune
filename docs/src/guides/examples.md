@@ -15,6 +15,7 @@ dune examples/matrix_basics.dn
 | `statistical_analysis.dn` | Descriptive statistics, regression, histograms, probability helpers, and [`matrix`](../stdlib/matrix.md)/[`plot`](../stdlib/plot.md) integration. |
 | `collection_pipeline.dn` | The higher-order `filter`/`map`/`sum` pipeline with [function values](../language/functions.md#function-values). |
 | `functions_and_closures.dn` | Typed lambdas, capture snapshots, shared aggregate handles, nested/generic closures, stored closures, composition, callbacks, and callable-expression chains. |
+| `defer_cleanup.dn` | Deterministic [resource cleanup with `defer`](../language/resource-cleanup.md): LIFO, captures, early exits, `?`, and loop scopes. |
 | `geometry.dn` + `geometry_demo.dn` | A two-file program showing [module](../language/modules.md) declarations, aliases, and selective imports. |
 | `documented.dn` | Every comment form plus `brief`/`param`/`returns` [doc-comments](../language/comments.md) on a function, record fields, and a method. |
 

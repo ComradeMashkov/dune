@@ -98,6 +98,20 @@ bool expect_fixture_error_contains(const std::string& source, const std::string&
 
 int main() {
     bool passed = true;
+    passed = expect_valid("fn close(): unit { return; } value: int = 1; "
+                          "defer close(); defer { io.println(value); close(); }",
+                          "expected expression and block defer forms to type-check") &&
+             passed;
+    passed = expect_error_contains("defer 42;", "deferred expression must return 'unit' but got 'int'",
+                                   "expected deferred expressions to require unit results") &&
+             passed;
+    passed = expect_error_contains("defer io.println(later); later: int = 1;", "undefined variable 'later'",
+                                   "expected defer to capture only bindings already in scope") &&
+             passed;
+    passed = expect_error_contains("foreknown fn invalid(): unit { defer { return; } return; }",
+                                   "defer statements are not allowed in foreknown functions",
+                                   "expected foreknown defer to be rejected") &&
+             passed;
 
     passed = expect_valid("fn add(a: int, b: int): int { return a + b; } "
                           "total: int = add(10, 20); done: bool = total == 30; io.println(done);",

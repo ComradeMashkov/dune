@@ -131,6 +131,7 @@ enum class StatementKind {
     for_in_statement,
     break_statement,
     continue_statement,
+    defer_statement,
     function,
     method_block,
     struct_statement,
