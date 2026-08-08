@@ -997,6 +997,16 @@ add_test(
 )
 
 add_test(
+    NAME cli_defer_non_unit_error
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/errors/defer_non_unit.dn
+        -D EXPECTED_ERROR="deferred expression must return 'unit'"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_failure_case.cmake
+)
+
+add_test(
     NAME cli_example_hello
     COMMAND
         ${CMAKE_COMMAND}
@@ -1053,6 +1063,16 @@ add_test(
         -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/examples/functions_and_closures.dn
         -D EXPECTED_OUTPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/examples/golden/functions_and_closures.out
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
+    NAME cli_example_defer_cleanup
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/examples/defer_cleanup.dn
+        -D EXPECTED_OUTPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/examples/golden/defer_cleanup.out
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
 )
 

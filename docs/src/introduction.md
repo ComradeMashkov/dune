@@ -3,8 +3,8 @@
 Dune is a small, statically typed, compiled language with a clean C-family
 syntax. It has function overloading, generics with bounds, records, choices
 (tagged unions) with `when` expressions, contracts, first-class function values,
-lambdas and value-capturing closures,
-and a module system with a standard library written in Dune itself.
+lambdas and value-capturing closures, deterministic cleanup with `defer`, and a
+module system with a standard library written in Dune itself.
 
 ```dn
 // Doc-comments above a declaration are shown on hover in the editor.

@@ -128,6 +128,11 @@ struct RunResult {
     std::string error;
 };
 
+struct RunFailure {
+    std::string output;
+    std::string error;
+};
+
 RunResult run_source_with_streams(const std::string& source, const std::string& input_text) {
     dune::Lexer lexer(test_source(source));
     dune::Parser parser(lexer.tokenize());
@@ -142,9 +147,35 @@ RunResult run_source_with_streams(const std::string& source, const std::string& 
     return RunResult{output.str(), error.str()};
 }
 
+RunFailure run_failing_source(const std::string& source) {
+    dune::Lexer lexer(test_source(source));
+    dune::Parser parser(lexer.tokenize());
+    dune::ModuleLoader loader;
+    dune::Compiler compiler;
+    dune::VirtualMachine vm(compiler.compile(loader.resolve(parser.parse())));
+
+    std::ostringstream output;
+    try {
+        vm.run(output);
+    } catch (const std::runtime_error& error) {
+        return RunFailure{output.str(), error.what()};
+    }
+
+    return RunFailure{output.str(), ""};
+}
+
 bool expect_eq(const std::string& actual, const std::string& expected, const char* message) {
     if (actual != expected) {
         std::cerr << message << ": expected '" << expected << "', got '" << actual << "'\n";
+        return false;
+    }
+
+    return true;
+}
+
+bool expect(bool condition, const char* message) {
+    if (!condition) {
+        std::cerr << message << '\n';
         return false;
     }
 
@@ -366,6 +397,71 @@ bool test_failure_unwinds() {
 
     std::cerr << "expected a panicking test body to throw out of run_test\n";
     return false;
+}
+
+bool runs_deferred_cleanup_on_every_exit_path() {
+    bool passed = true;
+
+    passed = expect_eq(run_source("value: int = 1; defer io.println(value); value = 2; "
+                                  "{ defer io.println(10); defer io.println(20); io.println(30); }"),
+                       "30\n20\n10\n1\n", "expected nested LIFO cleanup and scalar capture snapshots") &&
+             passed;
+
+    passed = expect_eq(run_source("fn answer(): int { { defer io.println(7); return 42; } } io.println(answer());"),
+                       "7\n42\n", "expected nested early return cleanup to preserve the return value") &&
+             passed;
+
+    passed = expect_eq(run_source("for i in 0..3 { defer io.println(i); "
+                                  "if i == 0 { continue; } if i == 1 { break; } }"),
+                       "0\n1\n", "expected continue and break to clean each loop iteration") &&
+             passed;
+
+    passed = expect_eq(run_source("import outcome; "
+                                  "fn attempt(): outcome.Outcome<int, text> { defer io.println(9); "
+                                  "value: int = outcome.failed_int(\"no\")?; return outcome.done_int(value); } "
+                                  "result = attempt(); io.println(result.is_failed());"),
+                       "9\n1\n", "expected '?' propagation to run function cleanup") &&
+             passed;
+
+    passed = expect_eq(run_source("values: [int] = [1]; "
+                                  "defer { values.push(3); io.println(values.len()); } values.push(2);"),
+                       "3\n", "expected aggregate captures to retain shared handles") &&
+             passed;
+
+    passed = expect_eq(run_only_tests("import io; test \"cleanup\" { defer io.println(55); }"), "55\n",
+                       "expected test chunks to run deferred cleanup") &&
+             passed;
+
+    passed = expect_eq(run_source("defer { defer io.println(2); io.println(1); }"), "1\n2\n",
+                       "expected cleanup blocks to support their own nested defer") &&
+             passed;
+
+    const RunFailure cleanup_primary =
+        run_failing_source("import runtime; defer io.println(1); "
+                           "defer { runtime.panic(\"cleanup primary\"); } defer io.println(2);");
+    passed = expect_eq(cleanup_primary.output, "2\n1\n",
+                       "expected remaining cleanup after a normal-exit cleanup failure") &&
+             passed;
+    passed = expect(cleanup_primary.error.find("cleanup primary") != std::string::npos,
+                    "expected a normal-exit cleanup failure to become primary") &&
+             passed;
+
+    const RunFailure panic = run_failing_source(
+        "import runtime; "
+        "fn inner(): unit { defer io.println(1); defer { runtime.panic(\"cleanup failed\"); } "
+        "defer io.println(2); runtime.panic(\"primary\"); } "
+        "fn outer(): unit { defer io.println(3); inner(); } outer();");
+    passed = expect_eq(panic.output, "2\n1\n3\n",
+                       "expected panic cleanup to continue in LIFO and inner-to-outer order") &&
+             passed;
+    passed = expect(panic.error.find("primary") != std::string::npos,
+                    "expected the original panic to remain the primary error") &&
+             passed;
+    passed = expect(panic.error.find("while running deferred cleanup: cleanup failed") != std::string::npos,
+                    "expected cleanup failures to be attached to the primary error") &&
+             passed;
+
+    return passed;
 }
 
 } // namespace
@@ -918,6 +1014,7 @@ io.println('\0' to int);)dune"),
 
     passed = runs_only_test_blocks() && passed;
     passed = test_failure_unwinds() && passed;
+    passed = runs_deferred_cleanup_on_every_exit_path() && passed;
 
     return passed ? 0 : 1;
 }

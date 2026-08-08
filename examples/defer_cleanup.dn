@@ -1,0 +1,64 @@
+import fmt;
+import io;
+import outcome;
+
+record DemoResource {
+    name: text,
+    open: bool,
+
+    /** Releases the resource. Call as `defer resource.close();` after acquisition. */
+    fn close(): unit {
+        if this.open {
+            this.open = false;
+            io.println(fmt.format("close {}", this.name));
+        }
+    }
+}
+
+fn open_resource(name: text): DemoResource {
+    io.println(fmt.format("open {}", name));
+    return DemoResource { name: name, open: true };
+}
+
+fn process(early: bool): int {
+    resource = open_resource("report");
+    defer io.println("process cleanup complete");
+    defer resource.close();
+
+    label: text = "captured at registration";
+    defer io.println(label);
+    label = "changed later";
+
+    {
+        defer io.println("leave nested scope");
+        io.println("process body");
+    }
+
+    if early {
+        return 7;
+    }
+    return 42;
+}
+
+io.println(fmt.format("result {}", process(true)));
+
+fn propagate_failure(): outcome.Outcome<int, text> {
+    resource = open_resource("outcome");
+    defer resource.close();
+    value: int = outcome.failed_int("unavailable")?;
+    return outcome.done_int(value);
+}
+
+result = propagate_failure();
+io.println(fmt.format("failed {}", result.is_failed()));
+
+for iteration in 0..2 {
+    defer io.println(fmt.format("leave iteration {}", iteration));
+    if iteration == 0 {
+        continue;
+    }
+    break;
+}
+
+defer io.println("registered first, runs last");
+defer io.println("registered last, runs first");

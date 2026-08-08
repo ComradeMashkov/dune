@@ -496,9 +496,10 @@ void add_completion(std::vector<CompletionItem>& completions, std::string label,
 
 void add_static_completions(std::vector<CompletionItem>& completions) {
     for (const std::string_view keyword :
-         {"break",   "choice", "const", "continue", "contract", "derive", "else",   "export", "fn",     "foreknown",
-          "foreign", "for",    "if",    "import",   "in",       "is",     "method", "print",  "record", "return",
-          "static",  "to",     "type",  "when",     "while",    "with",   "true",   "false"}) {
+         {"break",   "choice",  "const",  "continue", "contract", "defer",  "derive", "else",   "export",
+          "fn",      "foreknown", "foreign", "for",      "if",       "import", "in",     "is",     "method",
+          "print",   "record",  "return", "static",   "to",       "type",   "when",   "while",  "with",
+          "true",    "false"}) {
         add_completion(completions, std::string(keyword), "keyword", completion_kind_keyword);
     }
 
@@ -1409,6 +1410,7 @@ std::string declaration_hover(const Statement& statement) {
     case StatementKind::for_in_statement:
     case StatementKind::break_statement:
     case StatementKind::continue_statement:
+    case StatementKind::defer_statement:
     case StatementKind::return_statement:
     case StatementKind::expression_statement:
     case StatementKind::import_statement:
@@ -1889,6 +1891,7 @@ std::optional<std::string> builtin_hover(const Token& token) {
     case TokenType::in_keyword:
     case TokenType::break_keyword:
     case TokenType::continue_keyword:
+    case TokenType::defer_keyword:
     case TokenType::test_keyword:
     case TokenType::static_keyword:
     case TokenType::to_keyword:

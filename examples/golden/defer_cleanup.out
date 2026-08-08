@@ -1,0 +1,14 @@
+open report
+process body
+leave nested scope
+captured at registration
+close report
+process cleanup complete
+result 7
+open outcome
+close outcome
+failed 1
+leave iteration 0
+leave iteration 1
+registered last, runs first
+registered first, runs last

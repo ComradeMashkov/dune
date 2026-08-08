@@ -702,10 +702,27 @@ void VirtualMachine::run_test(std::size_t function_index, std::ostream& output) 
 }
 
 void VirtualMachine::execute(std::ostream& output, std::ostream& error, std::istream& input) {
-    while (!frames_.empty()) {
+    try {
+        execute_until(output, error, input, 0);
+    } catch (const std::exception& exception) {
+        const std::string primary_error = exception.what();
+        std::vector<std::string> cleanup_errors;
+        unwind_frames_to(0, output, error, input, cleanup_errors);
+
+        std::string message = primary_error;
+        for (const std::string& cleanup_error : cleanup_errors) {
+            message += "\nwhile running deferred cleanup: " + cleanup_error;
+        }
+        throw std::runtime_error(message);
+    }
+}
+
+void VirtualMachine::execute_until(std::ostream& output, std::ostream& error, std::istream& input,
+                                   std::size_t frame_depth) {
+    while (frames_.size() > frame_depth) {
         CallFrame& frame = frames_.back();
         if (frame.ip >= frame.instructions->size()) {
-            return;
+            throw std::runtime_error("instruction pointer moved past the end of a function");
         }
 
         const Instruction& instruction = frame.instructions->at(frame.ip);
@@ -861,25 +878,66 @@ void VirtualMachine::execute(std::ostream& output, std::ostream& error, std::ist
         }
         case OpCode::call_value: {
             const Value callable = pop();
-            if (callable.kind != ValueKind::callable) {
-                throw std::runtime_error("attempted to call a non-function value");
-            }
-
-            // Increment before pushing the callee frame: call_function may
+            // Increment before pushing the callee frame: call_callable may
             // reallocate frames_ and invalidate `frame`.
             ++frame.ip;
-            static const std::vector<Value> empty_captures;
-            call_function(callable.function_index,
-                          callable.closure_captures != nullptr ? *callable.closure_captures : empty_captures);
+            call_callable(callable);
+            break;
+        }
+        case OpCode::defer_scope_enter:
+            frame.defer_scope_starts.push_back(frame.deferred_calls.size());
+            ++frame.ip;
+            break;
+        case OpCode::defer_push: {
+            const Value callable = pop();
+            if (callable.kind != ValueKind::callable) {
+                throw std::runtime_error("defer expects a callable cleanup");
+            }
+            frame.deferred_calls.push_back(callable);
+            ++frame.ip;
+            break;
+        }
+        case OpCode::defer_scope_exit: {
+            if (frame.awaiting_defer_result) {
+                pop();
+                frame.awaiting_defer_result = false;
+            }
+            if (frame.defer_scope_starts.empty()) {
+                throw std::runtime_error("defer scope stack underflow");
+            }
+
+            const std::size_t scope_start = frame.defer_scope_starts.back();
+            if (frame.deferred_calls.size() > scope_start) {
+                const Value callable = frame.deferred_calls.back();
+                frame.deferred_calls.pop_back();
+                frame.awaiting_defer_result = true;
+                call_callable(callable);
+                break;
+            }
+
+            frame.defer_scope_starts.pop_back();
+            ++frame.ip;
             break;
         }
         case OpCode::return_value: {
-            const Value result = pop();
+            if (frame.awaiting_defer_result) {
+                pop();
+                frame.awaiting_defer_result = false;
+            }
+            if (!frame.pending_return.has_value()) {
+                frame.pending_return = pop();
+            }
+            if (!frame.deferred_calls.empty()) {
+                const Value callable = frame.deferred_calls.back();
+                frame.deferred_calls.pop_back();
+                frame.awaiting_defer_result = true;
+                call_callable(callable);
+                break;
+            }
+
+            const Value result = *frame.pending_return;
             const std::size_t base = frames_.back().stack_base;
             frames_.pop_back();
-            if (frames_.empty()) {
-                return;
-            }
 
             // Discard any operands the returning frame left on the shared stack
             // (an early `?` return can unwind mid-expression with values still pushed).
@@ -887,7 +945,9 @@ void VirtualMachine::execute(std::ostream& output, std::ostream& error, std::ist
                 stack_.resize(base);
             }
 
-            stack_.push_back(result);
+            if (!frames_.empty()) {
+                stack_.push_back(result);
+            }
             break;
         }
         case OpCode::pop:
@@ -1468,8 +1528,76 @@ void VirtualMachine::execute(std::ostream& output, std::ostream& error, std::ist
             output << value_to_text(pop()) << '\n';
             ++frame.ip;
             break;
-        case OpCode::halt:
-            return;
+        case OpCode::halt: {
+            if (frame.awaiting_defer_result) {
+                pop();
+                frame.awaiting_defer_result = false;
+            }
+            if (!frame.deferred_calls.empty()) {
+                const Value callable = frame.deferred_calls.back();
+                frame.deferred_calls.pop_back();
+                frame.awaiting_defer_result = true;
+                call_callable(callable);
+                break;
+            }
+
+            const std::size_t base = frame.stack_base;
+            frames_.pop_back();
+            if (stack_.size() > base) {
+                stack_.resize(base);
+            }
+            break;
+        }
+        }
+    }
+}
+
+void VirtualMachine::call_callable(const Value& callable) {
+    if (callable.kind != ValueKind::callable) {
+        throw std::runtime_error("attempted to call a non-function value");
+    }
+
+    static const std::vector<Value> empty_captures;
+    call_function(callable.function_index,
+                  callable.closure_captures != nullptr ? *callable.closure_captures : empty_captures);
+}
+
+void VirtualMachine::unwind_frames_to(std::size_t frame_depth, std::ostream& output, std::ostream& error,
+                                      std::istream& input, std::vector<std::string>& cleanup_errors) {
+    while (frames_.size() > frame_depth) {
+        const std::size_t owner_depth = frames_.size();
+        const std::size_t stack_base = frames_.back().stack_base;
+        if (stack_.size() > stack_base) {
+            stack_.resize(stack_base);
+        }
+
+        while (!frames_.back().deferred_calls.empty()) {
+            const Value callable = frames_.back().deferred_calls.back();
+            frames_.back().deferred_calls.pop_back();
+
+            try {
+                call_callable(callable);
+                if (frames_.size() > owner_depth) {
+                    execute_until(output, error, input, owner_depth);
+                }
+                if (stack_.size() > stack_base) {
+                    stack_.resize(stack_base);
+                }
+            } catch (const std::exception& exception) {
+                const std::string cleanup_error = exception.what();
+                if (frames_.size() > owner_depth) {
+                    unwind_frames_to(owner_depth, output, error, input, cleanup_errors);
+                }
+                if (stack_.size() > stack_base) {
+                    stack_.resize(stack_base);
+                }
+                cleanup_errors.push_back(cleanup_error);
+            }
+        }
+
+        frames_.pop_back();
+        if (stack_.size() > stack_base) {
+            stack_.resize(stack_base);
         }
     }
 }

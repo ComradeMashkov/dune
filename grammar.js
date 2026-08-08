@@ -61,6 +61,7 @@ module.exports = grammar({
       $.for_statement,
       $.break_statement,
       $.continue_statement,
+      $.defer_statement,
       $.test_declaration,
       $.block,
       $.expression_statement,
@@ -271,6 +272,14 @@ module.exports = grammar({
     break_statement: _ => seq("break", ";"),
 
     continue_statement: _ => seq("continue", ";"),
+
+    defer_statement: $ => seq(
+      "defer",
+      choice(
+        seq(field("cleanup", $._expression), ";"),
+        field("cleanup", $.block),
+      ),
+    ),
 
     if_statement: $ => seq(
       "if",

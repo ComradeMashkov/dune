@@ -485,6 +485,10 @@ Token Lexer::identifier(std::size_t start, std::size_t line, std::size_t column)
         return Token{TokenType::continue_keyword, lexeme, line, column};
     }
 
+    if (lexeme == "defer") {
+        return Token{TokenType::defer_keyword, lexeme, line, column};
+    }
+
     if (lexeme == "static") {
         return Token{TokenType::static_keyword, lexeme, line, column};
     }

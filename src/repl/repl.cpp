@@ -178,6 +178,7 @@ std::string terminate_entry(std::string source) {
     case StatementKind::for_in_statement:
     case StatementKind::break_statement:
     case StatementKind::continue_statement:
+    case StatementKind::defer_statement:
     case StatementKind::function:
     case StatementKind::method_block:
     case StatementKind::struct_statement:

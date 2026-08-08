@@ -1408,6 +1408,41 @@ bool parses_lambdas_and_callable_expression_chains() {
     return passed;
 }
 
+bool parses_deferred_expressions_and_blocks() {
+    const dune::Program program =
+        parse_source("defer close(); defer { flush(); close(); }; defer { return; }");
+    if (!expect(program.statements.size() == 3, "expected three defer statements")) {
+        return false;
+    }
+
+    bool passed = true;
+    const dune::Statement& expression_defer = program.statements[0];
+    passed = expect(expression_defer.kind == dune::StatementKind::defer_statement,
+                    "expected expression defer statement") &&
+             passed;
+    passed = expect(expression_defer.name == "expression", "expected expression defer form") && passed;
+    passed = expect(expression_defer.expression != nullptr &&
+                        expression_defer.expression->kind == dune::ExpressionKind::lambda,
+                    "expected deferred expression to lower to a lambda") &&
+             passed;
+    passed = expect(expression_defer.expression->parameters.empty(), "expected zero-argument cleanup lambda") && passed;
+    passed = expect(expression_defer.expression->type.has_type &&
+                        expression_defer.expression->type.type.kind == dune::ValueType::unit_type,
+                    "expected unit cleanup lambda") &&
+             passed;
+
+    const dune::Statement& block_defer = program.statements[1];
+    passed = expect(block_defer.kind == dune::StatementKind::defer_statement && block_defer.name == "block",
+                    "expected block defer form") &&
+             passed;
+    passed = expect(block_defer.expression->body.size() == 2, "expected complete deferred block body") && passed;
+    passed = expect(program.statements[2].expression->body[0].kind == dune::StatementKind::return_statement,
+                    "expected return to belong to the cleanup block") &&
+             passed;
+    passed = expect_parse_error("defer close()", "expected deferred expression to require a semicolon") && passed;
+    return passed;
+}
+
 } // namespace
 
 int main() {
@@ -1457,6 +1492,7 @@ int main() {
     passed = parses_try_operator_binds_tighter_than_binary() && passed;
     passed = parses_const_generic_arguments() && passed;
     passed = parses_lambdas_and_callable_expression_chains() && passed;
+    passed = parses_deferred_expressions_and_blocks() && passed;
 
     return passed ? 0 : 1;
 }

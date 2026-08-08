@@ -34,6 +34,7 @@ private:
     void compile_test(const Statement& statement);
     void compile_global_constants();
     void compile_statements(const std::vector<Statement>& statements);
+    void compile_scoped_statements(const std::vector<Statement>& statements);
     void compile_statement(const Statement& statement);
     void compile_for_in_statement(const Statement& statement);
     void compile_range_for_in_statement(const Statement& statement, const Type& element_type);
@@ -73,10 +74,14 @@ private:
     void reset_scopes();
     void push_scope();
     void pop_scope();
+    void enter_defer_scope();
+    void leave_defer_scope();
+    void emit_defer_unwind_to(std::size_t target_depth);
     std::size_t emit(OpCode op, std::size_t operand = 0);
     void patch_operand(std::size_t instruction_index, std::size_t operand);
 
     struct LoopJumps {
+        std::size_t defer_scope_depth = 0;
         std::vector<std::size_t> breaks;
         std::vector<std::size_t> continues;
     };
@@ -121,6 +126,7 @@ private:
     const Statement* repl_expression_statement_ = nullptr;
     std::size_t temporary_count_ = 0;
     std::size_t local_count_ = 0;
+    std::size_t defer_scope_depth_ = 0;
 };
 
 } // namespace dune

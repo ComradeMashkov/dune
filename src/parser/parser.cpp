@@ -696,6 +696,10 @@ Statement Parser::statement_dispatch() {
         return continue_statement();
     }
 
+    if (match(TokenType::defer_keyword)) {
+        return defer_statement();
+    }
+
     if (match(TokenType::left_brace)) {
         return block_statement();
     }
@@ -787,6 +791,31 @@ Statement Parser::continue_statement() {
 
     Statement statement{StatementKind::continue_statement, "", nullptr, {}, {}};
     statement.location = location_from_token(keyword);
+    return statement;
+}
+
+Statement Parser::defer_statement() {
+    const Token& keyword = previous();
+    const SourceLocation location = location_from_token(keyword);
+    std::vector<Statement> cleanup_body;
+    std::string form = "expression";
+
+    if (match(TokenType::left_brace)) {
+        cleanup_body = block();
+        match(TokenType::semicolon);
+        form = "block";
+    } else {
+        std::unique_ptr<Expression> cleanup = expression();
+        consume(TokenType::semicolon, "expected ';' after deferred expression");
+        Statement expression_statement{StatementKind::expression_statement, "", std::move(cleanup), {}, {}};
+        expression_statement.location = expression_statement.expression->location;
+        cleanup_body.push_back(std::move(expression_statement));
+    }
+
+    TypeAnnotation unit_type{true, Type{ValueType::unit_type, nullptr}};
+    Statement statement{StatementKind::defer_statement, std::move(form),
+                        make_lambda({}, std::move(unit_type), std::move(cleanup_body), location), {}, {}};
+    statement.location = location;
     return statement;
 }
 

@@ -118,6 +118,18 @@ bool recovers_from_runtime_errors() {
     return passed;
 }
 
+bool runs_top_level_defer_at_the_end_of_an_entry() {
+    const ReplResult result = run_repl("import io;\ndefer io.println(\"cleanup\");\n:quit\n");
+
+    bool passed = true;
+    passed = expect(result.status == 0, "expected defer REPL session success") && passed;
+    passed = expect(result.output == "Dune test\nType :help for help.\ncleanup\n",
+                    "expected top-level REPL defer cleanup") &&
+             passed;
+    passed = expect(result.error.empty(), "expected no defer REPL diagnostics") && passed;
+    return passed;
+}
+
 bool renders_interactive_prompts_and_reports_incomplete_eof() {
     const ReplResult prompted = run_repl("fn answer(): int {\nreturn 42;\n}\nanswer()\n:quit\n", true);
     const ReplResult incomplete = run_repl("fn unfinished(): int {\n");
@@ -139,6 +151,7 @@ int main() {
     passed = keeps_language_state_and_recovers_from_type_errors() && passed;
     passed = supports_commands_and_reset() && passed;
     passed = recovers_from_runtime_errors() && passed;
+    passed = runs_top_level_defer_at_the_end_of_an_entry() && passed;
     passed = renders_interactive_prompts_and_reports_incomplete_eof() && passed;
     return passed ? 0 : 1;
 }

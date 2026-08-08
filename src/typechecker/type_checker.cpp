@@ -1520,6 +1520,21 @@ void TypeChecker::check_statement(const Statement& statement) {
             throw DiagnosticError(statement.location, "continue statement outside loop");
         }
         return;
+    case StatementKind::defer_statement: {
+        const Type cleanup_type = make_function_type({}, make_type(ValueType::unit_type));
+        expect_type(cleanup_type, check_expression(*statement.expression, expected_type(cleanup_type)),
+                    statement.location);
+
+        if (statement.name == "expression") {
+            const Statement& cleanup = statement.expression->body.front();
+            const Type& result = expression_types_.at(cleanup.expression.get());
+            if (result.kind != ValueType::unit_type) {
+                throw DiagnosticError(cleanup.expression->location,
+                                      "deferred expression must return 'unit' but got '" + type_name(result) + "'");
+            }
+        }
+        return;
+    }
     case StatementKind::function:
         throw DiagnosticError(statement.location, "function declarations are only allowed at top level");
     case StatementKind::method_block:
@@ -1623,6 +1638,8 @@ void TypeChecker::check_foreknown_statement(const Statement& statement, std::uno
     case StatementKind::break_statement:
     case StatementKind::continue_statement:
         return;
+    case StatementKind::defer_statement:
+        throw DiagnosticError(statement.location, "defer statements are not allowed in foreknown functions");
     case StatementKind::return_statement:
         if (statement.expression != nullptr) {
             require_foreknown_expression(*statement.expression, locals);
@@ -4309,6 +4326,7 @@ bool TypeChecker::statement_returns(const Statement& statement) const {
     case StatementKind::type_alias_statement:
     case StatementKind::break_statement:
     case StatementKind::continue_statement:
+    case StatementKind::defer_statement:
     case StatementKind::expression_statement:
     case StatementKind::import_statement:
     case StatementKind::module_declaration:

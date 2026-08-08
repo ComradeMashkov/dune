@@ -930,6 +930,8 @@ private:
             throw BreakSignal{};
         case StatementKind::continue_statement:
             throw ContinueSignal{};
+        case StatementKind::defer_statement:
+            throw std::runtime_error("defer statements are not foreknown");
         case StatementKind::return_statement:
             throw ReturnSignal{statement.expression == nullptr ? make_unit()
                                                                : evaluate_expression(*statement.expression)};
@@ -1014,6 +1016,7 @@ Bytecode Compiler::compile_program(const Program& program, bool print_tail_expre
     global_constants_.clear();
     loop_stack_.clear();
     temporary_count_ = 0;
+    defer_scope_depth_ = 0;
     expression_types_ = type_checker.expression_types();
     iterable_element_types_ = type_checker.iterable_element_types();
     resolved_calls_ = type_checker.resolved_calls();
@@ -1083,6 +1086,7 @@ void Compiler::compile_test(const Statement& statement) {
     local_scopes_.clear();
     loop_stack_.clear();
     temporary_count_ = 0;
+    defer_scope_depth_ = 0;
     local_count_ = 0;
     instructions_ = &function.instructions;
     reset_scopes();
@@ -1259,6 +1263,7 @@ void Compiler::compile_function(const Statement& statement) {
     local_scopes_.clear();
     loop_stack_.clear();
     temporary_count_ = 0;
+    defer_scope_depth_ = 0;
     local_count_ = 0;
     instructions_ = &function.instructions;
     reset_scopes();
@@ -1319,6 +1324,7 @@ void Compiler::compile_lambda(const Expression& expression) {
     local_scopes_.clear();
     loop_stack_.clear();
     temporary_count_ = 0;
+    defer_scope_depth_ = 0;
     local_count_ = 0;
     instructions_ = &function.instructions;
     reset_scopes();
@@ -1394,6 +1400,14 @@ void Compiler::compile_statements(const std::vector<Statement>& statements) {
     }
 }
 
+void Compiler::compile_scoped_statements(const std::vector<Statement>& statements) {
+    push_scope();
+    enter_defer_scope();
+    compile_statements(statements);
+    leave_defer_scope();
+    pop_scope();
+}
+
 void Compiler::compile_statement(const Statement& statement) {
     switch (statement.kind) {
     case StatementKind::binding:
@@ -1432,16 +1446,12 @@ void Compiler::compile_statement(const Statement& statement) {
         return;
     }
     case StatementKind::block:
-        push_scope();
-        compile_statements(statement.body);
-        pop_scope();
+        compile_scoped_statements(statement.body);
         return;
     case StatementKind::if_statement: {
         compile_expression(*statement.expression);
         const std::size_t false_jump = emit(OpCode::jump_if_false);
-        push_scope();
-        compile_statements(statement.body);
-        pop_scope();
+        compile_scoped_statements(statement.body);
 
         if (statement.else_body.empty()) {
             patch_operand(false_jump, instructions_->size());
@@ -1450,9 +1460,7 @@ void Compiler::compile_statement(const Statement& statement) {
 
         const std::size_t end_jump = emit(OpCode::jump);
         patch_operand(false_jump, instructions_->size());
-        push_scope();
-        compile_statements(statement.else_body);
-        pop_scope();
+        compile_scoped_statements(statement.else_body);
         patch_operand(end_jump, instructions_->size());
         return;
     }
@@ -1460,10 +1468,8 @@ void Compiler::compile_statement(const Statement& statement) {
         const std::size_t loop_start = instructions_->size();
         compile_expression(*statement.expression);
         const std::size_t exit_jump = emit(OpCode::jump_if_false);
-        loop_stack_.push_back(LoopJumps{});
-        push_scope();
-        compile_statements(statement.body);
-        pop_scope();
+        loop_stack_.push_back(LoopJumps{defer_scope_depth_, {}, {}});
+        compile_scoped_statements(statement.body);
         LoopJumps jumps = std::move(loop_stack_.back());
         loop_stack_.pop_back();
         for (const std::size_t jump : jumps.continues) {
@@ -1485,10 +1491,8 @@ void Compiler::compile_statement(const Statement& statement) {
         const std::size_t loop_start = instructions_->size();
         compile_expression(*statement.expression);
         const std::size_t exit_jump = emit(OpCode::jump_if_false);
-        loop_stack_.push_back(LoopJumps{});
-        push_scope();
-        compile_statements(statement.body);
-        pop_scope();
+        loop_stack_.push_back(LoopJumps{defer_scope_depth_, {}, {}});
+        compile_scoped_statements(statement.body);
         LoopJumps jumps = std::move(loop_stack_.back());
         loop_stack_.pop_back();
         const std::size_t continue_target = instructions_->size();
@@ -1513,13 +1517,19 @@ void Compiler::compile_statement(const Statement& statement) {
         if (loop_stack_.empty()) {
             throw std::runtime_error("break statement outside loop");
         }
+        emit_defer_unwind_to(loop_stack_.back().defer_scope_depth);
         loop_stack_.back().breaks.push_back(emit(OpCode::jump));
         return;
     case StatementKind::continue_statement:
         if (loop_stack_.empty()) {
             throw std::runtime_error("continue statement outside loop");
         }
+        emit_defer_unwind_to(loop_stack_.back().defer_scope_depth);
         loop_stack_.back().continues.push_back(emit(OpCode::jump));
+        return;
+    case StatementKind::defer_statement:
+        compile_expression(*statement.expression);
+        emit(OpCode::defer_push);
         return;
     case StatementKind::function:
     case StatementKind::method_block:
@@ -1589,10 +1599,8 @@ void Compiler::compile_range_for_in_statement(const Statement& statement, const 
     emit(OpCode::load_local, current_slot);
     emit(OpCode::store_local, item_slot);
 
-    loop_stack_.push_back(LoopJumps{});
-    push_scope();
-    compile_statements(statement.body);
-    pop_scope();
+    loop_stack_.push_back(LoopJumps{defer_scope_depth_, {}, {}});
+    compile_scoped_statements(statement.body);
     LoopJumps jumps = std::move(loop_stack_.back());
     loop_stack_.pop_back();
     const std::size_t continue_target = instructions_->size();
@@ -1637,10 +1645,8 @@ void Compiler::compile_array_for_in_statement(const Statement& statement, const 
     emit(OpCode::load_index);
     emit(OpCode::store_local, item_slot);
 
-    loop_stack_.push_back(LoopJumps{});
-    push_scope();
-    compile_statements(statement.body);
-    pop_scope();
+    loop_stack_.push_back(LoopJumps{defer_scope_depth_, {}, {}});
+    compile_scoped_statements(statement.body);
     LoopJumps jumps = std::move(loop_stack_.back());
     loop_stack_.pop_back();
     const std::size_t continue_target = instructions_->size();
@@ -2647,6 +2653,30 @@ void Compiler::pop_scope() {
     }
 
     local_scopes_.pop_back();
+}
+
+void Compiler::enter_defer_scope() {
+    emit(OpCode::defer_scope_enter);
+    ++defer_scope_depth_;
+}
+
+void Compiler::leave_defer_scope() {
+    if (defer_scope_depth_ == 0) {
+        throw std::runtime_error("defer scope stack underflow during compilation");
+    }
+
+    emit(OpCode::defer_scope_exit);
+    --defer_scope_depth_;
+}
+
+void Compiler::emit_defer_unwind_to(std::size_t target_depth) {
+    if (target_depth > defer_scope_depth_) {
+        throw std::runtime_error("invalid defer scope unwind target");
+    }
+
+    for (std::size_t depth = defer_scope_depth_; depth > target_depth; --depth) {
+        emit(OpCode::defer_scope_exit);
+    }
 }
 
 std::size_t Compiler::resolve_local(const std::string& name) const {
