@@ -1,0 +1,33 @@
+import io;
+import fmt;
+
+choice State {
+    Idle,
+    Running(int),
+    Failed(text),
+}
+
+fn describe(state: State): text {
+    return when state {
+        Idle => "idle";
+        Running(jobs) => fmt.format("running {}", jobs);
+        Failed(message) => message;
+    };
+}
+
+fn boolean_label(value: bool): text {
+    return when value {
+        true => "yes";
+        false => "no";
+    };
+}
+
+idle: State = Idle;
+running: State = Running(3);
+failed: State = Failed("stopped");
+
+io.println(describe(idle));
+io.println(describe(running));
+io.println(describe(failed));
+io.println(boolean_label(true));
+io.println(boolean_label(false));

@@ -3,6 +3,7 @@
 #include "ast/literal_utils.hpp"
 #include "diagnostics/diagnostic.hpp"
 
+#include <bit>
 #include <cstdint>
 #include <limits>
 #include <optional>
@@ -30,6 +31,126 @@ std::string module_name(const std::string& name) {
 std::string module_member_name(const std::string& name) {
     const std::size_t separator = name.find('.');
     return separator == std::string::npos ? name : name.substr(separator + 1);
+}
+
+char decode_pattern_glyph(const std::string& lexeme) {
+    if (lexeme.size() == 3) {
+        return lexeme[1];
+    }
+
+    switch (lexeme[2]) {
+    case 'n':
+        return '\n';
+    case 'r':
+        return '\r';
+    case 't':
+        return '\t';
+    case '0':
+        return '\0';
+    case '\'':
+        return '\'';
+    default:
+        return '\\';
+    }
+}
+
+std::string decode_pattern_text(const std::string& lexeme) {
+    if (lexeme.size() >= 3 && lexeme[0] == 'r' && lexeme[1] == '"') {
+        return lexeme.substr(2, lexeme.size() - 3);
+    }
+
+    std::string result;
+    for (std::size_t index = 1; index + 1 < lexeme.size(); ++index) {
+        if (lexeme[index] != '\\') {
+            result += lexeme[index];
+            continue;
+        }
+
+        ++index;
+        switch (lexeme[index]) {
+        case 'n':
+            result += '\n';
+            break;
+        case 'r':
+            result += '\r';
+            break;
+        case 't':
+            result += '\t';
+            break;
+        case '0':
+            result += '\0';
+            break;
+        case '"':
+            result += '"';
+            break;
+        default:
+            result += '\\';
+            break;
+        }
+    }
+
+    return result;
+}
+
+std::optional<std::string> scalar_pattern_key(const Expression& pattern, ValueType subject_type) {
+    const Expression* literal = &pattern;
+    bool negative = false;
+    if (pattern.kind == ExpressionKind::unary && pattern.lexeme == "-" && pattern.right != nullptr) {
+        literal = pattern.right.get();
+        negative = true;
+    }
+
+    if (subject_type == ValueType::real32_type || subject_type == ValueType::real_type) {
+        if (literal->kind != ExpressionKind::number && literal->kind != ExpressionKind::floating) {
+            return std::nullopt;
+        }
+
+        double value = literal->kind == ExpressionKind::number
+                           ? static_cast<double>(parse_unsigned_integer_literal(literal->lexeme))
+                           : std::stod(clean_real_literal(literal->lexeme));
+        if (negative) {
+            value = -value;
+        }
+        if (value == 0.0) {
+            value = 0.0;
+        }
+        return "real:" + std::to_string(std::bit_cast<std::uint64_t>(value));
+    }
+
+    if (literal->kind == ExpressionKind::number) {
+        const std::string value = std::to_string(parse_unsigned_integer_literal(literal->lexeme));
+        return std::string("integer:") + (negative && value != "0" ? "-" : "") + value;
+    }
+
+    if (pattern.kind == ExpressionKind::boolean) {
+        return "boolean:" + pattern.lexeme;
+    }
+    if (pattern.kind == ExpressionKind::character) {
+        return "glyph:" + std::string(1, decode_pattern_glyph(pattern.lexeme));
+    }
+    if (pattern.kind == ExpressionKind::string) {
+        return "text:" + decode_pattern_text(pattern.lexeme);
+    }
+
+    return std::nullopt;
+}
+
+std::string pattern_name(const Expression& pattern) {
+    if (pattern.kind == ExpressionKind::unary && pattern.right != nullptr) {
+        return pattern.lexeme + pattern.right->lexeme;
+    }
+    return pattern.lexeme;
+}
+
+std::string join_names(const std::vector<std::string>& names) {
+    std::string result;
+    for (std::size_t index = 0; index < names.size(); ++index) {
+        if (index != 0) {
+            result += ", ";
+        }
+        result += names[index];
+    }
+    return result;
 }
 
 std::string expression_type_name(const Expression& expression) {
@@ -2254,6 +2375,8 @@ Type TypeChecker::check_when_expression(const Expression& expression, const Type
     }
 
     bool has_wildcard = false;
+    std::unordered_set<std::string> covered_literals;
+    std::unordered_set<std::string> covered_booleans;
     Type result_type;
     bool has_result_type = false;
     for (std::size_t index = 0; index < expression.arguments.size(); index += 2) {
@@ -2261,10 +2384,31 @@ Type TypeChecker::check_when_expression(const Expression& expression, const Type
         const Expression& result = *expression.arguments[index + 1];
         const bool wildcard = pattern.kind == ExpressionKind::identifier && pattern.lexeme == "_";
 
+        if (has_wildcard) {
+            throw DiagnosticError(pattern.location, "unreachable when branch after '_' fallback");
+        }
+
         if (wildcard) {
+            if (subject.kind == ValueType::bool_type && covered_booleans.size() == 2) {
+                throw DiagnosticError(pattern.location,
+                                      "unreachable '_' fallback; both boolean values are already covered");
+            }
             has_wildcard = true;
         } else {
             expect_type(subject, check_expression(pattern, expected_type(subject)), pattern.location);
+
+            const std::optional<std::string> key = scalar_pattern_key(pattern, subject.kind);
+            if (key.has_value() && !covered_literals.insert(*key).second) {
+                throw DiagnosticError(pattern.location,
+                                      "duplicate when branch for pattern '" + pattern_name(pattern) + "'");
+            }
+            if (subject.kind == ValueType::bool_type && covered_booleans.size() == 2) {
+                throw DiagnosticError(pattern.location,
+                                      "unreachable when branch; both boolean values are already covered");
+            }
+            if (pattern.kind == ExpressionKind::boolean) {
+                covered_booleans.insert(pattern.lexeme);
+            }
         }
 
         const Type value = check_expression(result, has_result_type ? expected_type(result_type) : expected);
@@ -2276,7 +2420,8 @@ Type TypeChecker::check_when_expression(const Expression& expression, const Type
         expect_type(result_type, value, result.location);
     }
 
-    if (!has_wildcard) {
+    const bool covers_every_boolean = subject.kind == ValueType::bool_type && covered_booleans.size() == 2;
+    if (!has_wildcard && !covers_every_boolean) {
         throw DiagnosticError(expression.location, "when expression needs a '_' fallback arm");
     }
 
@@ -3643,7 +3788,15 @@ Type TypeChecker::check_enum_when_expression(const Expression& expression, const
         std::string binding_name;
         Type binding_type;
         bool has_binding = false;
+        if (has_wildcard) {
+            throw DiagnosticError(pattern.location, "unreachable when branch after '_' fallback");
+        }
+
         if (wildcard) {
+            if (covered_tags.size() == definition->second.variants.size()) {
+                throw DiagnosticError(pattern.location, "unreachable '_' fallback; every variant of '" +
+                                                            type_name(subject) + "' is already covered");
+            }
             has_wildcard = true;
         } else {
             VariantResolution resolution = resolve_variant_pattern(pattern, subject);
@@ -3675,8 +3828,17 @@ Type TypeChecker::check_enum_when_expression(const Expression& expression, const
     }
 
     if (!has_wildcard && covered_tags.size() != definition->second.variants.size()) {
-        throw DiagnosticError(expression.location,
-                              "when expression does not cover every variant of '" + type_name(subject) + "'");
+        std::vector<std::string> missing_variants;
+        for (const EnumVariant& variant : definition->second.variants) {
+            if (!covered_tags.contains(variant.tag)) {
+                missing_variants.push_back(base_name(variant.name));
+            }
+        }
+
+        const std::string label = missing_variants.size() == 1 ? "missing variant: " : "missing variants: ";
+        throw DiagnosticError(expression.location, "when expression does not cover every variant of '" +
+                                                       type_name(subject) + "'; " + label +
+                                                       join_names(missing_variants));
     }
 
     return result_type;

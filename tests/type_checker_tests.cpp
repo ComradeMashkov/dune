@@ -369,6 +369,10 @@ int main() {
                           "fallback: int = when missing { Present(x) => x, _ => 7 };",
                           "expected arrow-style choice when expressions to validate") &&
              passed;
+    passed = expect_valid("flag: bool = true; "
+                          "label: text = when flag { true => \"enabled\"; false => \"disabled\"; };",
+                          "expected exhaustive boolean when expression without fallback to validate") &&
+             passed;
     passed = expect_valid("record Point { x: int, y: int } "
                           "fn minmax(): (int, int) { return (2, 5); } "
                           "(lo, hi) = minmax(); "
@@ -785,8 +789,13 @@ int main() {
              passed;
     passed = expect_error_contains("choice Maybe { Present(int), Absent, } value: Maybe = Absent; "
                                    "chosen: int = when value { is Present(x) { x } };",
-                                   "when expression does not cover every variant of 'Maybe'",
+                                   "when expression does not cover every variant of 'Maybe'; missing variant: Absent",
                                    "expected non-exhaustive choice when error") &&
+             passed;
+    passed = expect_error_contains("choice State { Ready, Running(int), Failed(text), } value: State = Ready; "
+                                   "label: int = when value { Ready => 0; };",
+                                   "missing variants: Running, Failed",
+                                   "expected all missing choice variants in declaration order") &&
              passed;
     passed = expect_error_contains("choice Maybe { Present(int), Absent, } value: Maybe = Absent; "
                                    "chosen: int = when value { is Present(x) { x } is Absent(x) { x } };",
@@ -800,6 +809,53 @@ int main() {
                                    "chosen: int = when value { Present(x) => x; Present(y) => y; Absent => 0; };",
                                    "duplicate when branch for variant 'Present'",
                                    "expected duplicate arrow variant pattern error") &&
+             passed;
+    passed = expect_error_contains("choice Maybe { Present(int), Absent, } value: Maybe = Absent; "
+                                   "chosen: int = when value { Present(x) => x; _ => 0; Absent => 1; };",
+                                   "unreachable when branch after '_' fallback",
+                                   "expected choice branch after fallback to be unreachable") &&
+             passed;
+    passed = expect_error_contains("choice Maybe { Present(int), Absent, } value: Maybe = Absent; "
+                                   "chosen: int = when value { Present(x) => x; Absent => 0; _ => 1; };",
+                                   "unreachable '_' fallback; every variant of 'Maybe' is already covered",
+                                   "expected redundant choice fallback to be unreachable") &&
+             passed;
+    passed = expect_error_contains("value: int = when 1 { 1 => 10; 0x1 => 20; _ => 30; };",
+                                   "duplicate when branch for pattern '0x1'",
+                                   "expected equivalent integer literal patterns to be duplicates") &&
+             passed;
+    passed = expect_error_contains("value: int = when 0 { -0 => 10; 0 => 20; _ => 30; };",
+                                   "duplicate when branch for pattern '0'",
+                                   "expected signed zero integer patterns to be duplicates") &&
+             passed;
+    passed = expect_error_contains("value: real64 = when 1.0 { 1.0 => 10.0; 1.00 => 20.0; _ => 30.0; };",
+                                   "duplicate when branch for pattern '1.00'",
+                                   "expected equivalent real literal patterns to be duplicates") &&
+             passed;
+    passed = expect_error_contains("value: int = when 'a' { 'a' => 1; 'a' => 2; _ => 0; };",
+                                   "duplicate when branch for pattern ''a''",
+                                   "expected duplicate glyph literal pattern error") &&
+             passed;
+    passed = expect_error_contains(
+                 R"dune(value: int = when "line\\n" { "line\\n" => 1; r"line\n" => 2; _ => 0; };)dune",
+                 R"(duplicate when branch for pattern 'r"line\n"')",
+                 "expected semantically equivalent escaped and raw text patterns to be duplicates") &&
+             passed;
+    passed = expect_error_contains("value: int = when 1 { 1 => 10; _ => 20; 2 => 30; };",
+                                   "unreachable when branch after '_' fallback",
+                                   "expected scalar branch after fallback to be unreachable") &&
+             passed;
+    passed =
+        expect_error_contains("flag: bool = true; value: int = when flag { true => 1; true => 2; _ => 0; };",
+                              "duplicate when branch for pattern 'true'", "expected duplicate boolean pattern error") &&
+        passed;
+    passed = expect_error_contains("flag: bool = true; value: int = when flag { true => 1; false => 0; _ => 2; };",
+                                   "unreachable '_' fallback; both boolean values are already covered",
+                                   "expected redundant boolean fallback to be unreachable") &&
+             passed;
+    passed = expect_error_contains("flag: bool = true; value: int = when flag { true => 1; false => 0; flag => 2; };",
+                                   "unreachable when branch; both boolean values are already covered",
+                                   "expected branch after exhaustive boolean literals to be unreachable") &&
              passed;
     passed = expect_error_contains("pair: (int, int) = (1, 2, 3);", "tuple literal expected 2 elements but got 3",
                                    "expected tuple literal arity error") &&

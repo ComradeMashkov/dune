@@ -133,6 +133,23 @@ bool diagnoses_type_errors_with_range() {
     return passed;
 }
 
+bool diagnoses_non_exhaustive_when_with_missing_variants() {
+    const std::vector<dune::lsp::Diagnostic> diagnostics =
+        dune::lsp::diagnose_source("choice State { Ready, Running(int), Failed(text) }\n"
+                                   "state: State = Ready;\n"
+                                   "label: text = when state { Ready => \"ready\"; };\n");
+
+    bool passed = true;
+    passed = expect(diagnostics.size() == 1, "expected one non-exhaustive when diagnostic") && passed;
+    if (!diagnostics.empty()) {
+        passed = expect(diagnostics[0].message.find("missing variants: Running, Failed") != std::string::npos,
+                        "expected LSP diagnostic to list every missing variant") &&
+                 passed;
+    }
+
+    return passed;
+}
+
 bool completes_keywords_and_local_symbols() {
     const std::vector<dune::lsp::CompletionItem> completions =
         dune::lsp::complete_source("fn add(a: int, b: int): int { return a + b; }\ntotal: int = add(10, 20);");
@@ -910,6 +927,7 @@ int main() {
     bool passed = true;
     passed = diagnoses_valid_source() && passed;
     passed = diagnoses_type_errors_with_range() && passed;
+    passed = diagnoses_non_exhaustive_when_with_missing_variants() && passed;
     passed = completes_keywords_and_local_symbols() && passed;
     passed = completes_imported_module_members() && passed;
     passed = completes_typed_record_methods() && passed;

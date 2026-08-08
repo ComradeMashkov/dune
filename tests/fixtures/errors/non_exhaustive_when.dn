@@ -1,0 +1,10 @@
+choice State {
+    Ready,
+    Running(int),
+    Failed(text),
+}
+
+state: State = Ready;
+label: text = when state {
+    Ready => "ready";
+};

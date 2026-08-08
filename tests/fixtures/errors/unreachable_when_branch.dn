@@ -1,0 +1,11 @@
+choice Maybe {
+    Present(int),
+    Absent,
+}
+
+value: Maybe = Absent;
+number: int = when value {
+    Present(inner) => inner;
+    _ => 0;
+    Absent => 1;
+};
