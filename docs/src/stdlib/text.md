@@ -27,7 +27,7 @@ io.println(text.is_alpha(clean.char_at(0)));
 
 ### `method text.len(): int`
 
-The length in glyphs of this text (forwards to the native operation).
+The length in UTF-8 bytes of this text (forwards to the VM operation).
 
 ### `method text.is_empty(): bool`
 
@@ -70,7 +70,7 @@ The substring from `start` (inclusive) to `end` (exclusive).
 
 ### `method text.prefix(end: int): text`
 
-The first `end` glyphs of the text.
+The first `end` UTF-8 bytes of the text.
 
 ### `method text.suffix(start: int): text`
 

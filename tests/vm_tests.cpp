@@ -603,13 +603,15 @@ io.println('\0' to int);)dune"),
     passed = expect_eq(run_source("foreign fn c_sqrt(value: real64): real64 = \"sqrt\"; "
                                   "message: text = \"dune language\"; io.println(message[0]); "
                                   "io.println(message[5:13]); io.println(message[:4]); io.println(message[5:]); "
+                                  "io.println(message[:]); "
                                   "values: [int] = [1, 2, 3, 4, 5]; middle: [int] = values[1:4]; "
-                                  "io.println(middle.len()); io.println(middle[0]); io.println(middle[2]); "
+                                  "whole: [int] = values[:]; io.println(middle.len()); io.println(middle[0]); "
+                                  "io.println(middle[2]); io.println(whole.len()); "
                                   "total = 0; "
                                   "for i = 0; i < 6; i = i + 1 { "
                                   "if i == 1 { continue; } if i == 4 { break; } total = total + i; } "
                                   "io.println(total); io.println(c_sqrt(81.0));"),
-                       "d\nlanguage\ndune\nlanguage\n3\n2\n4\n5\n9\n",
+                       "d\nlanguage\ndune\nlanguage\ndune language\n3\n2\n4\n5\n5\n9\n",
                        "expected foreign functions slices text indexing and for loop output") &&
              passed;
     passed = expect_eq(run_source("values: [int] = [1, 2, 3, 4]; total = 0; "
@@ -877,6 +879,15 @@ io.println('\0' to int);)dune"),
         expect_error_contains("values: [int] = [1, 2]; bad: [int] = values[2:1];",
                               "slice start cannot be greater than slice end", "expected invalid slice range error") &&
         passed;
+    passed = expect_error_contains("values: [int] = [1, 2]; bad: [int] = values[-1:1];",
+                                   "slice bound out of bounds", "expected negative slice bound error") &&
+             passed;
+    passed = expect_error_contains("values: [int] = [1, 2]; bad: [int] = values[0:3];",
+                                   "slice bound out of bounds", "expected array slice bounds error") &&
+             passed;
+    passed = expect_error_contains("message: text = \"done\"; bad: text = message[0:5];",
+                                   "slice bound out of bounds", "expected text slice bounds error") &&
+             passed;
     passed =
         expect_error_contains("x: int = true;", "expected type 'int' but got 'bool'", "expected static type error") &&
         passed;

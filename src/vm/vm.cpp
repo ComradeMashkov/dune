@@ -506,7 +506,7 @@ std::vector<Value>& record_fields(const Value& value) {
 }
 
 bool is_default_bound(const Value& value) {
-    return value.kind == ValueKind::signed_integer && value.signed_value == -1;
+    return value.kind == ValueKind::unit;
 }
 
 std::size_t slice_bound(const Value& value, std::size_t default_value, std::size_t length) {
@@ -514,7 +514,18 @@ std::size_t slice_bound(const Value& value, std::size_t default_value, std::size
         return default_value;
     }
 
-    const std::size_t bound = index_value(value);
+    std::size_t bound = 0;
+    if (value.kind == ValueKind::signed_integer) {
+        if (value.signed_value < 0) {
+            throw std::runtime_error("slice bound out of bounds");
+        }
+        bound = static_cast<std::size_t>(value.signed_value);
+    } else if (value.kind == ValueKind::unsigned_integer) {
+        bound = static_cast<std::size_t>(value.unsigned_value);
+    } else {
+        throw std::runtime_error("slice bound must be integer");
+    }
+
     if (bound > length) {
         throw std::runtime_error("slice bound out of bounds");
     }

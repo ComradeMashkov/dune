@@ -87,7 +87,11 @@ accidentally shared between separately constructed records.
 Array slicing (`values[start:end]`) creates a fresh outer array and copies the
 selected elements using the same shallow value rules. A nested array or record
 inside a slice therefore remains shared. Text slicing creates another immutable
-`text` value.
+`text` value. Slice bounds are zero-based, right-exclusive, and may be omitted.
+
+Text positions currently count UTF-8 bytes. Therefore `text.len()`, indexing,
+and slicing use the same byte-offset coordinate system; slice bounds should be
+placed on UTF-8 character boundaries when the text contains non-ASCII data.
 
 Some wrapper constructors intentionally retain a supplied array. In the
 `matrix` module, `vector(data)`, `Vector.new(data)`, `from_flat(rows, cols,
