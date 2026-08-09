@@ -13,3 +13,19 @@ Use `fresh` in new code.
 **Attribute:** `@test`
 
 Verifies the public behavior.
+
+### `fn preview(): int`
+
+> **Experimental:** the API may change before 1.0
+
+> **Available since:** 0.14.0
+
+Tries the next-generation implementation.
+
+### `fn calculate(): int`
+
+> **Must use:** the returned value must not be discarded — store or inspect the result
+
+> **Available since:** 0.14.0
+
+Computes a value that callers must handle.

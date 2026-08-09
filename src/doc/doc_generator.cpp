@@ -358,6 +358,16 @@ void append_attributes(std::vector<std::string>& out, const Statement& statement
     for (const Attribute& attribute : statement.attributes) {
         if (attribute.name == "deprecated" && !attribute.arguments.empty()) {
             out.push_back("> **Deprecated:** " + attribute.arguments.front().value);
+        } else if (attribute.name == "experimental" && !attribute.arguments.empty()) {
+            out.push_back("> **Experimental:** " + attribute.arguments.front().value);
+        } else if (attribute.name == "must_use") {
+            std::string message = "> **Must use:** the returned value must not be discarded";
+            if (!attribute.arguments.empty()) {
+                message += " — " + attribute.arguments.front().value;
+            }
+            out.push_back(std::move(message));
+        } else if (attribute.name == "since" && !attribute.arguments.empty()) {
+            out.push_back("> **Available since:** " + attribute.arguments.front().value);
         } else {
             out.push_back("**Attribute:** `" + attribute_source(attribute) + "`");
         }

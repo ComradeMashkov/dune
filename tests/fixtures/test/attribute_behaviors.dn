@@ -1,0 +1,32 @@
+import runtime;
+import io;
+
+@test
+@ignore("not enabled in CI")
+fn skipped(): unit {
+    runtime.panic("an ignored test must never run");
+}
+
+@test
+@should_panic
+fn accepts_any_panic(): unit {
+    runtime.panic("any panic");
+}
+
+@test
+@should_panic("specific panic")
+fn matches_panic_message(): unit {
+    runtime.panic("a specific panic occurred");
+}
+
+@test
+@should_fail("array index out of bounds")
+fn accepts_typed_runtime_failure(): unit {
+    values: [int] = [1];
+    io.println(values[5]);
+}
+
+@test
+fn ordinary(): unit {
+    return;
+}

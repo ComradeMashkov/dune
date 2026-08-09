@@ -84,11 +84,13 @@ kernel behavior, and CI workflow.
 dune test path/to/program.dn
 ```
 
-Runs every [`@test` function and `test "..." { ... }`](testing.md) block in the file and prints a
-per-test `ok`/`FAILED` line plus a summary. Each block runs in isolation — the
-file's top-level code is skipped, so only the tests execute — while top-level
-functions, constants, and imports remain in scope. A failed assertion aborts
-just that test; the command exits non-zero if any test fails.
+Runs every [`@test` function and `test "..." { ... }`](testing.md) block in the
+file and prints a per-test `ok`/`FAILED`/`ignored` line plus a summary. Each test
+runs in isolation — the file's top-level code is skipped, so only the tests
+execute — while top-level functions, constants, and imports remain in scope. A
+failed assertion aborts just that test; `@should_panic` and `@should_fail` can
+make a matching failure the expected result, and `@ignore` skips a test. The
+command exits non-zero if any non-ignored test fails.
 
 ## Language server
 

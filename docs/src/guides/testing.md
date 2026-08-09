@@ -50,6 +50,33 @@ fn double_handles_zero(): unit {
 An attributed test function must take no parameters, explicitly return `unit`,
 and cannot be generic, `foreign`, or `foreknown`.
 
+Use `@ignore` to keep a temporarily disabled test discoverable, optionally with
+a reason:
+
+```dune
+@test
+@ignore("requires a local database")
+fn database_round_trip(): unit { }
+```
+
+Use `@should_panic` when failure is the behavior under test. An optional text
+argument requires the panic report to contain that text:
+
+```dune
+import runtime;
+
+@test
+@should_panic("index out of bounds")
+fn rejects_invalid_index(): unit {
+    runtime.panic("index out of bounds");
+}
+```
+
+An expected-panic test fails if it returns normally or produces a different
+message. Use `@should_fail("message")` instead when any typed runtime failure,
+such as a bounds or arithmetic error, is acceptable. `@ignore`,
+`@should_panic`, and `@should_fail` are mutually exclusive.
+
 ## Assertions
 
 The [`assert`](../stdlib/assert.md) module provides the helpers that fail a
@@ -85,6 +112,8 @@ handles integers, reals, text, and booleans alike. Import the helpers with
   and failed.
 - **Exit code.** `dune test` exits non-zero if any test fails, which lets it
   gate a CI pipeline.
+- **Ignored tests.** `@ignore` tests are not executed and are reported in a
+  separate ignored count; they do not make the command fail.
 
 A failing run looks like this:
 

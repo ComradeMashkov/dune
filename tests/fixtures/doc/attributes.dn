@@ -9,3 +9,17 @@ export fn old(): int {
 export fn verifies(): unit {
     return;
 }
+
+/// Tries the next-generation implementation.
+@experimental("the API may change before 1.0")
+@since("0.14.0")
+export fn preview(): int {
+    return 2;
+}
+
+/// Computes a value that callers must handle.
+@must_use("store or inspect the result")
+@since("0.14.0")
+export fn calculate(): int {
+    return 42;
+}

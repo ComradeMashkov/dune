@@ -4,9 +4,10 @@ Dune ships a Language Server (`dune lsp`) and a Zed extension.
 
 ## What the language server provides
 
-- **Diagnostics** — type errors and `@deprecated` warnings with precise source ranges.
-- **Completions** — keywords, local symbols, imported module members, and typed
-  receiver methods.
+- **Diagnostics** — type errors plus `@deprecated`, `@experimental`, and
+  `@must_use` warnings with precise source ranges.
+- **Completions** — keywords, built-in attributes, local symbols, imported
+  module members, and typed receiver methods.
 - **Hover** — the signature, [attributes](../language/attributes.md), and
   [doc-comment](../language/comments.md) of a symbol,
   including symbols from other modules.

@@ -131,6 +131,21 @@ bool validates_source_attributes_and_emits_deprecation_warnings() {
                           "@test fn verifies(): unit { return; }",
                           "expected all supported declaration attributes to validate") &&
              passed;
+    passed = expect_valid("@experimental(\"the API may change\") @since(\"0.14.0\") "
+                          "fn preview(): int { return 1; } "
+                          "@must_use(\"handle the result\") fn calculate(): int { return 2; } "
+                          "@ignore(\"not on this platform\") @test fn skipped(): unit { } "
+                          "@should_panic(\"boom\") @test fn panics(): unit { } "
+                          "@should_fail(\"bounds\") @test fn fails(): unit { }",
+                          "expected lifecycle, result, and test-control attributes to validate") &&
+             passed;
+    passed = expect_valid("@experimental(\"new constant\") @since(\"0.14.0\") const PREVIEW: int = 1; "
+                          "@experimental(\"new record\") @since(\"0.14.0\") record Preview { value: int } "
+                          "@experimental(\"new choice\") @since(\"0.14.0\") choice Trial { Ready } "
+                          "@experimental(\"new alias\") @since(\"0.14.0\") type TrialInt = int; "
+                          "@experimental(\"new contract\") @since(\"0.14.0\") contract TrialContract { run(): unit; }",
+                          "expected lifecycle metadata on every supported declaration kind") &&
+             passed;
 
     const std::vector<dune::Diagnostic> diagnostics =
         diagnostics_for("@deprecated(\"use fresh\") fn old(): int { return 1; } "
@@ -160,10 +175,54 @@ bool validates_source_attributes_and_emits_deprecation_warnings() {
     passed = expect_attribute(saw_alias, "expected deprecated type alias warning") && passed;
     passed = expect_attribute(saw_contract, "expected deprecated contract bound warning") && passed;
 
+    const std::vector<dune::Diagnostic> experimental_uses =
+        diagnostics_for("@experimental(\"use stable\") fn preview(): int { return 1; } "
+                        "@experimental(\"use LIMIT\") const PREVIEW_LIMIT: int = 2; "
+                        "@experimental(\"use Stable\") record Preview { value: int } "
+                        "@experimental(\"use Current\") choice Trial { Ready } "
+                        "@experimental(\"use StableAlias\") type TrialAlias = int; "
+                        "@experimental(\"use StableContract\") contract TrialContract { run(): unit; } "
+                        "fn constrained<T is TrialContract>(value: T): T { return value; } "
+                        "answer: int = preview() + PREVIEW_LIMIT; item = Preview { value: 3 }; "
+                        "state: Trial = Ready; aliased: TrialAlias = 4;");
+    passed = expect_attribute(experimental_uses.size() >= 7,
+                              "expected warnings for every experimental value and type use") &&
+             passed;
+    for (const dune::Diagnostic& diagnostic : experimental_uses) {
+        passed = expect_attribute(diagnostic.message.find("experimental") != std::string::npos,
+                                  "expected experimental usage warning") &&
+                 passed;
+    }
+
     const std::vector<dune::Diagnostic> imported =
         fixture_diagnostics_for("import attribute_api; answer: int = attribute_api.old_answer();");
     passed = expect_attribute(imported.size() == 1 && imported.front().message.find("old_answer") != std::string::npos,
                               "expected @deprecated metadata to survive module export and qualification") &&
+             passed;
+
+    const std::vector<dune::Diagnostic> experimental =
+        fixture_diagnostics_for("import attribute_api; value: int = attribute_api.preview();");
+    passed = expect_attribute(experimental.size() == 1 &&
+                                  experimental.front().message.find("experimental function 'preview'") !=
+                                      std::string::npos,
+                              "expected @experimental metadata to survive module export and qualification") &&
+             passed;
+
+    const std::vector<dune::Diagnostic> must_use = fixture_diagnostics_for(
+        "import attribute_api; attribute_api.status(); handled: int = attribute_api.status();");
+    passed = expect_attribute(must_use.size() == 1 &&
+                                  must_use.front().message.find("unused return value of @must_use function 'status'") !=
+                                      std::string::npos,
+                              "expected @must_use to warn only when the result is discarded") &&
+             passed;
+
+    const std::vector<dune::Diagnostic> generic_must_use =
+        diagnostics_for("@must_use fn identity<T>(value: T): T { return value; } "
+                        "identity(1); handled: int = identity(2);");
+    passed = expect_attribute(generic_must_use.size() == 1 &&
+                                  generic_must_use.front().message.find("@must_use function 'identity'") !=
+                                      std::string::npos,
+                              "expected @must_use metadata on an instantiated generic function") &&
              passed;
 
     passed = expect_error_contains("@unknown fn value(): unit { }", "unknown attribute '@unknown'",
@@ -192,6 +251,39 @@ bool validates_source_attributes_and_emits_deprecation_warnings() {
              passed;
     passed = expect_error_contains("@test foreign fn value(): unit = \"value\";", "foreign function",
                                    "expected foreign @test functions to be rejected") &&
+             passed;
+    passed = expect_error_contains("@experimental fn value(): unit { }", "exactly one text message",
+                                   "expected @experimental to require a message") &&
+             passed;
+    passed = expect_error_contains("@since(1) fn value(): unit { }", "exactly one text message",
+                                   "expected @since to require a text version") &&
+             passed;
+    passed = expect_error_contains("@deprecated(\"old\") @experimental(\"new\") fn value(): unit { }",
+                                   "cannot be combined", "expected conflicting lifecycle attributes to fail") &&
+             passed;
+    passed = expect_error_contains("@must_use fn value(): unit { }", "must explicitly return a value",
+                                   "expected @must_use on a unit function to fail") &&
+             passed;
+    passed = expect_error_contains("@must_use const value: int = 1;", "only be applied to a function",
+                                   "expected @must_use on a constant to fail") &&
+             passed;
+    passed = expect_error_contains("@ignore fn value(): unit { }", "requires @test",
+                                   "expected @ignore without @test to fail") &&
+             passed;
+    passed = expect_error_contains("@should_panic fn value(): unit { }", "requires @test",
+                                   "expected @should_panic without @test to fail") &&
+             passed;
+    passed = expect_error_contains("@should_fail fn value(): unit { }", "requires @test",
+                                   "expected @should_fail without @test to fail") &&
+             passed;
+    passed = expect_error_contains("@test @ignore @should_panic fn value(): unit { }", "cannot be combined",
+                                   "expected conflicting test controls to fail") &&
+             passed;
+    passed = expect_error_contains("@test @should_panic @should_fail fn value(): unit { }", "cannot be combined",
+                                   "expected multiple failure expectations to fail") &&
+             passed;
+    passed = expect_error_contains("@test @ignore(1) fn value(): unit { }", "at most one text message",
+                                   "expected invalid @ignore arguments to fail") &&
              passed;
     return passed;
 }

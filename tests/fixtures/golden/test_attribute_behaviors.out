@@ -1,0 +1,8 @@
+running 5 tests
+test "skipped" ... ignored (not enabled in CI)
+test "accepts_any_panic" ... ok (expected panic)
+test "matches_panic_message" ... ok (expected panic)
+test "accepts_typed_runtime_failure" ... ok (expected failure)
+test "ordinary" ... ok
+
+test result: ok. 4 passed; 0 failed; 1 ignored

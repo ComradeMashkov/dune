@@ -122,9 +122,12 @@ private:
         SourceLocation location;
         bool is_foreknown = false;
         std::string deprecated_message;
+        std::string experimental_message;
+        bool must_use = false;
+        std::string must_use_message;
     };
 
-    struct DeprecatedSymbol {
+    struct UsageWarningSymbol {
         std::string kind;
         std::string message;
     };
@@ -141,11 +144,15 @@ private:
 
     void declare_struct(const Statement& statement);
     void validate_attributes(const Statement& statement);
-    void emit_deprecation_warning(const std::string& name, const DeprecatedSymbol& deprecated,
+    void emit_deprecation_warning(const std::string& name, const UsageWarningSymbol& deprecated,
                                   SourceLocation location) const;
-    void emit_function_deprecation_warning(const FunctionSignature& function, SourceLocation location) const;
-    void emit_type_deprecation_warnings(const Type& type, const SourceLocation& location,
-                                        std::string_view excluded_name = {}) const;
+    void emit_experimental_warning(const std::string& name, const UsageWarningSymbol& experimental,
+                                   SourceLocation location) const;
+    void emit_symbol_usage_warnings(const std::string& name, SourceLocation location) const;
+    void emit_function_usage_warnings(const FunctionSignature& function, SourceLocation location) const;
+    void emit_type_usage_warnings(const Type& type, const SourceLocation& location,
+                                  std::string_view excluded_name = {}) const;
+    void emit_must_use_warning(const Expression& expression) const;
     void define_struct(const Statement& statement);
     void declare_enum(const Statement& statement);
     void define_enum(const Statement& statement);
@@ -320,7 +327,8 @@ private:
     std::unordered_map<std::string, std::string> instantiated_function_traces_;
     std::vector<std::unordered_map<std::string, VariableBinding>> scopes_;
     std::unordered_map<std::string, Type> global_constants_;
-    std::unordered_map<std::string, DeprecatedSymbol> deprecated_symbols_;
+    std::unordered_map<std::string, UsageWarningSymbol> deprecated_symbols_;
+    std::unordered_map<std::string, UsageWarningSymbol> experimental_symbols_;
     std::unordered_map<std::string, std::unordered_set<std::string>> module_exports_;
     std::unordered_set<std::string> known_modules_;
     std::unordered_map<const Expression*, Type> expression_types_;

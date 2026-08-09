@@ -641,11 +641,17 @@ bool supports_attribute_diagnostics_hover_and_highlighting() {
     const std::string source = "@deprecated(\"use fresh\")\n"
                                "fn old(): int { return 1; }\n"
                                "answer: int = old();\n"
-                               "@test fn verifies(): unit { }\n";
+                               "@test @ignore(\"later\") fn verifies(): unit { }\n";
     const std::vector<dune::lsp::Diagnostic> diagnostics = dune::lsp::diagnose_source(source);
     bool passed = true;
     const std::vector<dune::lsp::CompletionItem> completions = dune::lsp::complete_source(source);
     passed = expect(has_completion(completions, "@deprecated"), "expected @deprecated completion") && passed;
+    passed = expect(has_completion(completions, "@experimental"), "expected @experimental completion") && passed;
+    passed = expect(has_completion(completions, "@ignore"), "expected @ignore completion") && passed;
+    passed = expect(has_completion(completions, "@must_use"), "expected @must_use completion") && passed;
+    passed = expect(has_completion(completions, "@should_panic"), "expected @should_panic completion") && passed;
+    passed = expect(has_completion(completions, "@should_fail"), "expected @should_fail completion") && passed;
+    passed = expect(has_completion(completions, "@since"), "expected @since completion") && passed;
     passed = expect(has_completion(completions, "@test"), "expected @test completion") && passed;
     passed = expect(diagnostics.size() == 1, "expected one LSP deprecation diagnostic") && passed;
     if (diagnostics.size() == 1) {
@@ -666,11 +672,36 @@ bool supports_attribute_diagnostics_hover_and_highlighting() {
             passed;
     }
 
+    const std::string lifecycle_source = "@experimental(\"the API may change\")\n"
+                                         "@since(\"0.14.0\")\n"
+                                         "fn preview(): int { return 1; }\n";
+    const std::optional<dune::lsp::Hover> lifecycle_hover =
+        dune::lsp::hover_source(lifecycle_source, {}, {}, 2, 4);
+    passed = expect(lifecycle_hover.has_value(), "expected hover for lifecycle attributes") && passed;
+    if (lifecycle_hover.has_value()) {
+        passed = expect(lifecycle_hover->contents.find("Experimental:") != std::string::npos,
+                        "expected experimental callout in hover") &&
+                 passed;
+        passed = expect(lifecycle_hover->contents.find("Available since:") != std::string::npos,
+                        "expected since callout in hover") &&
+                 passed;
+    }
+
+    const std::vector<dune::lsp::Diagnostic> must_use_diagnostics =
+        dune::lsp::diagnose_source("@must_use(\"handle it\") fn calculate(): int { return 1; } calculate();");
+    passed = expect(must_use_diagnostics.size() == 1 &&
+                        must_use_diagnostics.front().message.find("unused return value") != std::string::npos,
+                    "expected an LSP @must_use warning") &&
+             passed;
+
     const std::vector<dune::lsp::SemanticToken> tokens = dune::lsp::semantic_tokens_source(source);
     passed = expect_semantic_token(source, tokens, "@deprecated", 1, 10, "decorator", 0,
                                    "expected @deprecated decorator token") &&
              passed;
     passed = expect_semantic_token(source, tokens, "@test", 1, 4, "decorator", 0, "expected @test decorator token") &&
+             passed;
+    passed = expect_semantic_token(source, tokens, "@ignore", 1, 6, "decorator", 0,
+                                   "expected @ignore decorator token") &&
              passed;
     return passed;
 }

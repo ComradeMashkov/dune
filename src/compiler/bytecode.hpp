@@ -156,10 +156,17 @@ struct Bytecode {
     std::vector<Function> functions;
 
     // A `test "name" { ... }` block or an `@test` function, represented by a
-    // zero-arg function chunk in `functions`. Run one-by-one by `dune test`.
+    // zero-arg function chunk in `functions`. Execution-policy metadata for
+    // `@ignore`, `@should_panic`, and `@should_fail` is consumed by `dune test`.
     struct Test {
         std::string name;
         std::size_t function_index = 0;
+        bool ignored = false;
+        std::string ignore_reason;
+        bool should_panic = false;
+        std::string expected_panic;
+        bool should_fail = false;
+        std::string expected_failure;
     };
 
     std::vector<Test> tests;

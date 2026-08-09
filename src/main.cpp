@@ -284,24 +284,82 @@ int run_test_file(const std::string& path) {
     std::cout << "running " << tests.size() << (tests.size() == 1 ? " test\n" : " tests\n");
     std::size_t passed = 0;
     std::size_t failed = 0;
+    std::size_t ignored = 0;
+    const auto report_test_error = [](const std::exception& error) {
+        std::istringstream lines(error.what());
+        std::string line;
+        while (std::getline(lines, line)) {
+            std::cout << "    " << line << '\n';
+        }
+    };
     for (const dune::Bytecode::Test& test : tests) {
+        if (test.ignored) {
+            std::cout << "test \"" << test.name << "\" ... ignored";
+            if (!test.ignore_reason.empty()) {
+                std::cout << " (" << test.ignore_reason << ")";
+            }
+            std::cout << '\n';
+            ++ignored;
+            continue;
+        }
+
         try {
             vm.run_test(test.function_index, std::cout);
-            std::cout << "test \"" << test.name << "\" ... ok\n";
-            ++passed;
+            if (test.should_panic || test.should_fail) {
+                std::cout << "test \"" << test.name << "\" ... FAILED\n";
+                std::cout << "    expected test to " << (test.should_panic ? "panic" : "fail");
+                const std::string& expected_message =
+                    test.should_panic ? test.expected_panic : test.expected_failure;
+                if (!expected_message.empty()) {
+                    std::cout << " with a message containing '" << expected_message << "'";
+                }
+                std::cout << '\n';
+                ++failed;
+            } else {
+                std::cout << "test \"" << test.name << "\" ... ok\n";
+                ++passed;
+            }
+        } catch (const dune::RuntimeError& error) {
+            const bool expected_panic =
+                test.should_panic && error.kind() == dune::RuntimeErrorKind::panic &&
+                (test.expected_panic.empty() || error.message().find(test.expected_panic) != std::string::npos);
+            const bool expected_failure =
+                test.should_fail &&
+                (test.expected_failure.empty() || error.message().find(test.expected_failure) != std::string::npos);
+            if (expected_panic || expected_failure) {
+                std::cout << "test \"" << test.name << "\" ... ok (expected "
+                          << (expected_panic ? "panic" : "failure") << ")\n";
+                ++passed;
+                continue;
+            }
+
+            std::cout << "test \"" << test.name << "\" ... FAILED\n";
+            if (test.should_panic && error.kind() != dune::RuntimeErrorKind::panic) {
+                std::cout << "    expected test to panic, but got " << dune::runtime_error_kind_name(error.kind())
+                          << '\n';
+            } else if (test.should_panic && !test.expected_panic.empty()) {
+                std::cout << "    expected panic message containing '" << test.expected_panic << "'\n";
+            } else if (test.should_fail && !test.expected_failure.empty()) {
+                std::cout << "    expected failure message containing '" << test.expected_failure << "'\n";
+            }
+            report_test_error(error);
+            ++failed;
         } catch (const std::exception& error) {
             std::cout << "test \"" << test.name << "\" ... FAILED\n";
-            std::istringstream lines(error.what());
-            std::string line;
-            while (std::getline(lines, line)) {
-                std::cout << "    " << line << '\n';
+            if (test.should_panic || test.should_fail) {
+                std::cout << "    expected test to " << (test.should_panic ? "panic" : "fail") << '\n';
             }
+            report_test_error(error);
             ++failed;
         }
     }
 
     std::cout << "\ntest result: " << (failed == 0 ? "ok" : "FAILED") << ". " << passed << " passed; " << failed
-              << " failed\n";
+              << " failed";
+    if (ignored > 0) {
+        std::cout << "; " << ignored << " ignored";
+    }
+    std::cout << '\n';
     return failed == 0 ? 0 : 1;
 }
 

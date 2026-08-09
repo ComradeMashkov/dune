@@ -8,3 +8,13 @@ export fn old_answer(): int {
 export fn answer(): int {
     return 42;
 }
+
+@experimental("the API may change")
+export fn preview(): int {
+    return 7;
+}
+
+@must_use("handle the returned status")
+export fn status(): int {
+    return 1;
+}

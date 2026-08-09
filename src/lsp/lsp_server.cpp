@@ -505,6 +505,17 @@ void add_static_completions(std::vector<CompletionItem>& completions) {
     }
 
     add_completion(completions, "@deprecated", "attribute: mark a declaration as deprecated", completion_kind_keyword);
+    add_completion(completions, "@experimental", "attribute: warn that an API is experimental",
+                   completion_kind_keyword);
+    add_completion(completions, "@ignore", "attribute: skip an @test function", completion_kind_keyword);
+    add_completion(completions, "@must_use", "attribute: warn when a return value is discarded",
+                   completion_kind_keyword);
+    add_completion(completions, "@should_panic", "attribute: require an @test function to panic",
+                   completion_kind_keyword);
+    add_completion(completions, "@should_fail", "attribute: require an @test function to fail",
+                   completion_kind_keyword);
+    add_completion(completions, "@since", "attribute: record the version that introduced an API",
+                   completion_kind_keyword);
     add_completion(completions, "@test", "attribute: register a test function", completion_kind_keyword);
 
     for (const std::string_view type :
@@ -1481,6 +1492,15 @@ std::string declaration_hover(const Statement& statement) {
     for (const Attribute& attribute : statement.attributes) {
         if (attribute.name == "deprecated" && !attribute.arguments.empty()) {
             hover += "\n\n> **Deprecated:** " + attribute.arguments.front().value;
+        } else if (attribute.name == "experimental" && !attribute.arguments.empty()) {
+            hover += "\n\n> **Experimental:** " + attribute.arguments.front().value;
+        } else if (attribute.name == "must_use") {
+            hover += "\n\n> **Must use:** the returned value must not be discarded";
+            if (!attribute.arguments.empty()) {
+                hover += " — " + attribute.arguments.front().value;
+            }
+        } else if (attribute.name == "since" && !attribute.arguments.empty()) {
+            hover += "\n\n> **Available since:** " + attribute.arguments.front().value;
         }
     }
     return hover;
