@@ -1,0 +1,10 @@
+module attribute_api;
+
+@deprecated("use answer")
+export fn old_answer(): int {
+    return 42;
+}
+
+export fn answer(): int {
+    return 42;
+}

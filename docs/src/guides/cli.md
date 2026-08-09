@@ -84,7 +84,7 @@ kernel behavior, and CI workflow.
 dune test path/to/program.dn
 ```
 
-Runs every [`test "..." { ... }`](testing.md) block in the file and prints a
+Runs every [`@test` function and `test "..." { ... }`](testing.md) block in the file and prints a
 per-test `ok`/`FAILED` line plus a summary. Each block runs in isolation — the
 file's top-level code is skipped, so only the tests execute — while top-level
 functions, constants, and imports remain in scope. A failed assertion aborts

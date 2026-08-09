@@ -40,6 +40,7 @@ std::string_view notebook_app_html() {
       --syntax-declaration: #8250df;
       --syntax-namespace: #0969da;
       --syntax-constant: #0550ae;
+      --syntax-attribute: #8250df;
       --syntax-operator: #cf222e;
       --syntax-invalid: #cf222e;
       --code-selection: rgba(47, 125, 189, .28);
@@ -77,6 +78,7 @@ std::string_view notebook_app_html() {
       --syntax-declaration: #c792ea;
       --syntax-namespace: #89ddff;
       --syntax-constant: #f78c6c;
+      --syntax-attribute: #c792ea;
       --syntax-operator: #89ddff;
       --syntax-invalid: #ff5370;
       --code-selection: rgba(103, 169, 223, .32);
@@ -390,6 +392,7 @@ std::string_view notebook_app_html() {
     .syntax-declaration { color: var(--syntax-declaration); font-weight: 600; }
     .syntax-namespace { color: var(--syntax-namespace); }
     .syntax-constant { color: var(--syntax-constant); }
+    .syntax-attribute { color: var(--syntax-attribute); font-weight: 600; }
     .syntax-operator { color: var(--syntax-operator); }
     .syntax-invalid {
       color: var(--syntax-invalid);
@@ -893,6 +896,20 @@ std::string_view notebook_app_html() {
           while (isIdentifierPart(source[position])) position += 1;
           const identifier = source.slice(start, position);
           append(identifierKind(identifier, position), start, position);
+          continue;
+        }
+        if (current === "@") {
+          position += 1;
+          let sawName = false;
+          while (position < source.length) {
+            if (!isAsciiAlpha(source[position]) && source[position] !== "_") break;
+            sawName = true;
+            position += 1;
+            while (isIdentifierPart(source[position])) position += 1;
+            if (source[position] !== ".") break;
+            position += 1;
+          }
+          append(sawName && source[position - 1] !== "." ? "attribute" : "invalid", start, position);
           continue;
         }
         const pair = source.slice(position, position + 2);

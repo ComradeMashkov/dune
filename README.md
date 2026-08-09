@@ -89,7 +89,7 @@ elsewhere.
 | `dune check <file.dn>` | Type-check only, printing a short pipeline trace. |
 | `dune repl` | Start an interactive VM session with persistent definitions. |
 | `dune notebook <command>` | Create, run, check, export, or serve `.dnb` notebooks. |
-| `dune test <file.dn>` | Run every `test "..." { ... }` block and report results. |
+| `dune test <file.dn>` | Run every `@test` function and `test "..." { ... }` block. |
 | `dune doc <path> [-o dir]` | Generate Markdown API docs from source doc-comments. |
 | `dune lsp` | Start the editor language server (diagnostics, hover, completion). |
 

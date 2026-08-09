@@ -279,7 +279,11 @@ EvaluationResult Session::evaluate(const std::string& source, const std::string&
     std::istringstream runtime_input;
     try {
         Compiler compiler;
-        VirtualMachine vm(compiler.compile_repl(parse_source(candidate_source, source_directory_, source_units)));
+        Bytecode bytecode = compiler.compile_repl(parse_source(candidate_source, source_directory_, source_units));
+        for (const Diagnostic& diagnostic : compiler.diagnostics()) {
+            runtime_error << severity_label(diagnostic.severity) << ": " << diagnostic.message << '\n';
+        }
+        VirtualMachine vm(std::move(bytecode));
         vm.run(runtime_output, runtime_error, runtime_input);
 
         const std::string current_output = runtime_output.str();

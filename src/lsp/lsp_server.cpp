@@ -475,7 +475,8 @@ std::string diagnostics_json(const std::vector<Diagnostic>& diagnostics) {
 
         json += "{\"range\":{\"start\":{\"line\":" + std::to_string(line) + ",\"character\":" + std::to_string(start) +
                 "},\"end\":{\"line\":" + std::to_string(line) + ",\"character\":" + std::to_string(end) +
-                "}},\"severity\":1,\"source\":\"dune\",\"message\":\"" + json_escape(diagnostic.message) + "\"}";
+                "}},\"severity\":" + std::to_string(diagnostic.severity) + ",\"source\":\"dune\",\"message\":\"" +
+                json_escape(diagnostic.message) + "\"}";
     }
 
     json += "]";
@@ -502,6 +503,9 @@ void add_static_completions(std::vector<CompletionItem>& completions) {
           "true",    "false"}) {
         add_completion(completions, std::string(keyword), "keyword", completion_kind_keyword);
     }
+
+    add_completion(completions, "@deprecated", "attribute: mark a declaration as deprecated", completion_kind_keyword);
+    add_completion(completions, "@test", "attribute: register a test function", completion_kind_keyword);
 
     for (const std::string_view type :
          {"int",   "bool",  "i8",     "i16",    "i32",    "i64",  "isize",  "u8",     "u16",   "u32",  "u64",
@@ -1375,6 +1379,46 @@ std::string with_doc(std::string code, const std::string& doc) {
     return code + "\n\n---\n\n" + rendered;
 }
 
+std::string attribute_argument_text(const AttributeArgument& argument) {
+    if (argument.kind != AttributeArgumentKind::text) {
+        return argument.value;
+    }
+
+    std::string result = "\"";
+    for (const char current : argument.value) {
+        switch (current) {
+        case '\\':
+            result += "\\\\";
+            break;
+        case '"':
+            result += "\\\"";
+            break;
+        case '\n':
+            result += "\\n";
+            break;
+        default:
+            result += current;
+            break;
+        }
+    }
+    return result + "\"";
+}
+
+std::string attribute_text(const Attribute& attribute) {
+    std::string result = "@" + attribute.name;
+    if (attribute.arguments.empty()) {
+        return result;
+    }
+    result += "(";
+    for (std::size_t index = 0; index < attribute.arguments.size(); ++index) {
+        if (index > 0) {
+            result += ", ";
+        }
+        result += attribute_argument_text(attribute.arguments[index]);
+    }
+    return result + ")";
+}
+
 std::string declaration_hover(const Statement& statement) {
     std::string signature;
     switch (statement.kind) {
@@ -1423,7 +1467,23 @@ std::string declaration_hover(const Statement& statement) {
         return {};
     }
 
-    return with_doc(code_hover(std::move(signature)), statement.doc_comment);
+    if (!statement.attributes.empty()) {
+        std::string attributed_signature;
+        for (const Attribute& attribute : statement.attributes) {
+            attributed_signature += attribute_text(attribute);
+            attributed_signature += '\n';
+        }
+        attributed_signature += signature;
+        signature = std::move(attributed_signature);
+    }
+
+    std::string hover = with_doc(code_hover(std::move(signature)), statement.doc_comment);
+    for (const Attribute& attribute : statement.attributes) {
+        if (attribute.name == "deprecated" && !attribute.arguments.empty()) {
+            hover += "\n\n> **Deprecated:** " + attribute.arguments.front().value;
+        }
+    }
+    return hover;
 }
 
 std::optional<std::string> parameter_hover(const std::vector<Parameter>& parameters, const std::string& name) {
@@ -1861,6 +1921,7 @@ std::optional<std::string> builtin_hover(const Token& token) {
     case TokenType::dot:
     case TokenType::dot_dot:
     case TokenType::question:
+    case TokenType::at:
     case TokenType::semicolon:
     case TokenType::left_paren:
     case TokenType::right_paren:
@@ -2732,6 +2793,18 @@ std::vector<SemanticToken> build_semantic_tokens(const std::string& source,
         }
     }
 
+    for (std::size_t index = 0; index + 1 < tokens.size(); ++index) {
+        if (tokens[index].type != TokenType::at) {
+            continue;
+        }
+        std::size_t cursor = index + 1;
+        set_token_classification(classifications, cursor, SemanticClassification{SemanticTokenType::decorator, 0});
+        while (cursor + 2 < tokens.size() && tokens[cursor + 1].type == TokenType::dot) {
+            cursor += 2;
+            set_token_classification(classifications, cursor, SemanticClassification{SemanticTokenType::decorator, 0});
+        }
+    }
+
     classify_import_tokens(tokens, classifications, imports, modules);
 
     for (std::size_t index = 0; index + 1 < tokens.size(); ++index) {
@@ -2974,7 +3047,14 @@ std::vector<Diagnostic> diagnose_source(const std::string& source, const std::st
         ModuleLoader loader(module_search_paths(directory));
         TypeChecker checker;
         checker.check(loader.resolve(parser.parse(), directory));
-        return {};
+        std::vector<Diagnostic> diagnostics;
+        diagnostics.reserve(checker.diagnostics().size());
+        for (const dune::Diagnostic& diagnostic : checker.diagnostics()) {
+            diagnostics.push_back(Diagnostic{diagnostic.location.line, diagnostic.location.column,
+                                             diagnostic.location.column + diagnostic.location.length - 1,
+                                             diagnostic.message, diagnostic.severity == Severity::warning ? 2U : 1U});
+        }
+        return diagnostics;
     } catch (const std::exception& error) {
         return {diagnostic_from_exception(error)};
     }

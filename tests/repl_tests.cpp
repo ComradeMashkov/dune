@@ -145,6 +145,23 @@ bool runs_top_level_defer_at_the_end_of_an_entry() {
     return passed;
 }
 
+bool supports_multiline_attributes_and_deprecation_warnings() {
+    const ReplResult result = run_repl("@deprecated(\"use fresh\")\n"
+                                       "fn old(): int { return 1; }\n"
+                                       "old()\n"
+                                       ":quit\n");
+
+    bool passed = true;
+    passed = expect(result.status == 0, "expected attributed REPL session success") && passed;
+    passed = expect(result.output == "Dune test\nType :help for help.\n1\n",
+                    "expected attributed function to remain callable") &&
+             passed;
+    passed = expect(result.error.find("warning: use of deprecated function 'old': use fresh") != std::string::npos,
+                    "expected REPL deprecation warning") &&
+             passed;
+    return passed;
+}
+
 bool renders_interactive_prompts_and_reports_incomplete_eof() {
     const ReplResult prompted = run_repl("fn answer(): int {\nreturn 42;\n}\nanswer()\n:quit\n", true);
     const ReplResult incomplete = run_repl("fn unfinished(): int {\n");
@@ -167,6 +184,7 @@ int main() {
     passed = supports_commands_and_reset() && passed;
     passed = recovers_from_runtime_errors() && passed;
     passed = runs_top_level_defer_at_the_end_of_an_entry() && passed;
+    passed = supports_multiline_attributes_and_deprecation_warnings() && passed;
     passed = renders_interactive_prompts_and_reports_incomplete_eof() && passed;
     return passed ? 0 : 1;
 }

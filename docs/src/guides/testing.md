@@ -1,8 +1,9 @@
 # Writing tests
 
-Dune has tests built into the language. A `test` block is a top-level construct
-that names a small piece of code to run, and the [`dune test`](cli.md#run-tests)
-command runs every block in a file and reports the results.
+Dune has tests built into the language. Tests can be written as a named `test`
+block or as a zero-argument `unit` function marked with
+[`@test`](../language/attributes.md#test). The [`dune test`](cli.md#run-tests)
+command discovers both forms and reports the results.
 
 ## A first test
 
@@ -36,6 +37,19 @@ The name after `test` is an ordinary string literal, so it can contain spaces
 and punctuation. The body is a normal block: it can declare bindings, call
 functions, and loop, just like a function body.
 
+The function form is useful when a test should also have an ordinary
+declaration name:
+
+```dune
+@test
+fn double_handles_zero(): unit {
+    assert_eq(double(0), 0);
+}
+```
+
+An attributed test function must take no parameters, explicitly return `unit`,
+and cannot be generic, `foreign`, or `foreknown`.
+
 ## Assertions
 
 The [`assert`](../stdlib/assert.md) module provides the helpers that fail a
@@ -59,7 +73,8 @@ handles integers, reals, text, and booleans alike. Import the helpers with
 
 ## How tests run
 
-- **Isolation.** `dune test` runs *only* the `test` blocks. A file's top-level
+- **Isolation.** `dune test` runs *only* attributed test functions and `test`
+  blocks. A file's top-level
   code (statements outside any function or test) does not run, so a script and
   its tests can live in the same file.
 - **Shared declarations.** Top-level functions, constants, records, and imports
@@ -93,7 +108,7 @@ inside the test. See [Runtime errors and stack traces](../language/runtime-error
 
 ## Rules
 
-- `test` blocks are only allowed at the top level of a file. A `test` inside a
-  function or another block is a compile-time error.
-- Test blocks are ignored when a file is run normally with `dune path/to/file.dn`;
-  they exist purely for `dune test`.
+- `test` blocks and `@test` functions are only allowed at the top level of a
+  file. A test inside a function or another block is a compile-time error.
+- `test` blocks are ignored when a file is run normally. An `@test` function is
+  not run automatically, but remains callable like any other named function.

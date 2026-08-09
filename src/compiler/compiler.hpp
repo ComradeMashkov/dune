@@ -16,6 +16,7 @@ class Compiler {
 public:
     Bytecode compile(const Program& program);
     Bytecode compile_repl(const Program& program);
+    const std::vector<Diagnostic>& diagnostics() const;
 
 private:
     Bytecode compile_program(const Program& program, bool print_tail_expression);
@@ -128,6 +129,7 @@ private:
     std::size_t temporary_count_ = 0;
     std::size_t local_count_ = 0;
     std::size_t defer_scope_depth_ = 0;
+    std::vector<Diagnostic> diagnostics_;
 };
 
 } // namespace dune

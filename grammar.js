@@ -39,6 +39,7 @@ module.exports = grammar({
     )),
 
     _statement: $ => choice(
+      $.attributed_declaration,
       $.export_statement,
       $.import_statement,
       $.from_import_statement,
@@ -661,6 +662,42 @@ module.exports = grammar({
     character: _ => token(seq("'", choice(/[^'\\\n]/, seq("\\", /[nrt0'\\]/)), "'")),
 
     string: _ => token(choice(seq('r"', repeat(/[^"\n]/), '"'), seq('"', repeat(choice(/[^"\\\n]/, seq("\\", /[nrt0"\\]/))), '"'))),
+
+    attributed_declaration: $ => seq(
+      repeat1($.attribute),
+      choice(
+        $.export_statement,
+        $.function_declaration,
+        $.foreknown_declaration,
+        $.foreign_function_declaration,
+        $.record_declaration,
+        $.contract_declaration,
+        $.choice_declaration,
+        $.type_alias_declaration,
+        $.const_statement,
+      ),
+    ),
+
+    attribute: $ => seq(
+      "@",
+      field("name", $.attribute_name),
+      optional(seq("(", optional(commaSep($.attribute_argument)), optional(","), ")")),
+    ),
+
+    attribute_name: $ => seq(
+      choice($.identifier, "test"),
+      repeat(seq(".", choice($.identifier, "test"))),
+    ),
+
+    attribute_argument: $ => choice(
+      $.string,
+      $.character,
+      $.number,
+      $.float,
+      "true",
+      "false",
+      seq("-", choice($.number, $.float)),
+    ),
   },
 });
 

@@ -94,10 +94,113 @@ bool expect_fixture_error_contains(const std::string& source, const std::string&
     return false;
 }
 
+std::vector<dune::Diagnostic> diagnostics_for(const std::string& source) {
+    dune::Lexer lexer(test_source(source));
+    dune::Parser parser(lexer.tokenize());
+    dune::ModuleLoader loader;
+    dune::TypeChecker checker;
+    checker.check(loader.resolve(parser.parse(), {}, "<attribute-test>"));
+    return checker.diagnostics();
+}
+
+std::vector<dune::Diagnostic> fixture_diagnostics_for(const std::string& source) {
+    const std::filesystem::path fixtures = std::filesystem::path(DUNE_FIXTURES_PATH);
+    dune::Lexer lexer(test_source(source));
+    dune::Parser parser(lexer.tokenize());
+    dune::ModuleLoader loader({std::filesystem::path(DUNE_STDLIB_PATH), fixtures / "types"});
+    dune::TypeChecker checker;
+    checker.check(loader.resolve(parser.parse(), {}, "<attribute-import-test>"));
+    return checker.diagnostics();
+}
+
+bool expect_attribute(bool condition, const char* message) {
+    if (!condition) {
+        std::cerr << message << '\n';
+    }
+    return condition;
+}
+
+bool validates_source_attributes_and_emits_deprecation_warnings() {
+    bool passed = true;
+    passed = expect_valid("@deprecated(\"use fresh\") fn old(): int { return 1; } "
+                          "@deprecated(\"use NEW_LIMIT\") const OLD_LIMIT: int = 2; "
+                          "@deprecated(\"use Modern\") record Legacy { value: int } "
+                          "@deprecated(\"use Current\") choice OldChoice { Gone } "
+                          "@deprecated(\"use NewAlias\") type OldAlias = int; "
+                          "@deprecated(\"use ModernContract\") contract OldContract { run(): unit; } "
+                          "@test fn verifies(): unit { return; }",
+                          "expected all supported declaration attributes to validate") &&
+             passed;
+
+    const std::vector<dune::Diagnostic> diagnostics =
+        diagnostics_for("@deprecated(\"use fresh\") fn old(): int { return 1; } "
+                        "@deprecated(\"use NEW_LIMIT\") const OLD_LIMIT: int = 2; "
+                        "@deprecated(\"use Modern\") record Legacy { value: int } "
+                        "@deprecated(\"use Current\") choice OldChoice { Gone } "
+                        "@deprecated(\"use NewAlias\") type OldAlias = int; "
+                        "@deprecated(\"use ModernContract\") contract OldContract { run(): unit; } "
+                        "fn constrained<T is OldContract>(value: T): T { return value; } "
+                        "answer: int = old() + OLD_LIMIT; legacy = Legacy { value: 3 }; "
+                        "state: OldChoice = Gone; aliased: OldAlias = 4;");
+    passed = expect_attribute(diagnostics.size() >= 7, "expected warnings for every deprecated value and type use") &&
+             passed;
+    bool saw_alias = false;
+    bool saw_contract = false;
+    for (const dune::Diagnostic& diagnostic : diagnostics) {
+        passed =
+            expect_attribute(diagnostic.severity == dune::Severity::warning, "expected deprecations to be warnings") &&
+            passed;
+        passed = expect_attribute(diagnostic.has_location && diagnostic.location.source_name == "<attribute-test>",
+                                  "expected source-mapped deprecation warning") &&
+                 passed;
+        saw_alias = saw_alias || diagnostic.message.find("deprecated type alias 'OldAlias'") != std::string::npos;
+        saw_contract =
+            saw_contract || diagnostic.message.find("deprecated contract 'OldContract'") != std::string::npos;
+    }
+    passed = expect_attribute(saw_alias, "expected deprecated type alias warning") && passed;
+    passed = expect_attribute(saw_contract, "expected deprecated contract bound warning") && passed;
+
+    const std::vector<dune::Diagnostic> imported =
+        fixture_diagnostics_for("import attribute_api; answer: int = attribute_api.old_answer();");
+    passed = expect_attribute(imported.size() == 1 && imported.front().message.find("old_answer") != std::string::npos,
+                              "expected @deprecated metadata to survive module export and qualification") &&
+             passed;
+
+    passed = expect_error_contains("@unknown fn value(): unit { }", "unknown attribute '@unknown'",
+                                   "expected unknown attributes to be rejected") &&
+             passed;
+    passed = expect_error_contains("@test @test fn value(): unit { }", "duplicate attribute '@test'",
+                                   "expected duplicate attributes to be rejected") &&
+             passed;
+    passed = expect_error_contains("@deprecated(1) fn value(): unit { }", "exactly one text message",
+                                   "expected invalid @deprecated arguments to be rejected") &&
+             passed;
+    passed = expect_error_contains("@deprecated(\"no\") value: int = 1;", "top-level declarations",
+                                   "expected attributes on mutable bindings to be rejected") &&
+             passed;
+    passed = expect_error_contains("@test const value: int = 1;", "only be applied to a function",
+                                   "expected @test on constants to be rejected") &&
+             passed;
+    passed = expect_error_contains("@test fn value(input: int): unit { }", "must not have parameters",
+                                   "expected parameterized @test functions to be rejected") &&
+             passed;
+    passed = expect_error_contains("@test fn value(): int { return 1; }", "explicitly return unit",
+                                   "expected non-unit @test functions to be rejected") &&
+             passed;
+    passed = expect_error_contains("@test fn value<T>(): unit { }", "cannot be generic",
+                                   "expected generic @test functions to be rejected") &&
+             passed;
+    passed = expect_error_contains("@test foreign fn value(): unit = \"value\";", "foreign function",
+                                   "expected foreign @test functions to be rejected") &&
+             passed;
+    return passed;
+}
+
 } // namespace
 
 int main() {
     bool passed = true;
+    passed = validates_source_attributes_and_emits_deprecation_warnings() && passed;
     passed = expect_valid("fn close(): unit { return; } value: int = 1; "
                           "defer close(); defer { io.println(value); close(); }",
                           "expected expression and block defer forms to type-check") &&

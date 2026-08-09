@@ -381,22 +381,37 @@ bool runs_only_test_blocks() {
     const std::string output = run_only_tests("import io;\n"
                                               "io.println(\"toplevel\");\n"
                                               "fn label(): text { return \"body\"; }\n"
+                                              "@test fn attributed(): unit { io.println(\"attribute\"); }\n"
                                               "test \"one\" { io.println(label()); }\n"
                                               "test \"two\" { io.println(\"two\"); }");
-    return expect_eq(output, "body\ntwo\n", "expected only the test bodies to run, in order");
+    return expect_eq(output, "attribute\nbody\ntwo\n", "expected only attributed functions and test bodies to run");
 }
 
 bool test_failure_unwinds() {
     // A runtime panic inside a test body (here an out-of-bounds index) must
     // propagate out of run_test so the runner can mark that test failed.
+    bool block_failed = false;
     try {
         run_only_tests("import io;\ntest \"boom\" { values = [1, 2]; io.println(values[9]); }");
     } catch (const std::runtime_error&) {
-        return true;
+        block_failed = true;
     }
 
-    std::cerr << "expected a panicking test body to throw out of run_test\n";
-    return false;
+    bool attributed_failed = false;
+    try {
+        run_only_tests("import io;\n@test fn attributed_boom(): unit { values = [1, 2]; "
+                       "io.println(values[9]); }");
+    } catch (const std::runtime_error& error) {
+        attributed_failed = std::string(error.what()).find("test \"attributed_boom\"") != std::string::npos;
+    }
+
+    if (!block_failed) {
+        std::cerr << "expected a panicking test block to throw out of run_test\n";
+    }
+    if (!attributed_failed) {
+        std::cerr << "expected an attributed test failure to retain its test frame\n";
+    }
+    return block_failed && attributed_failed;
 }
 
 bool reports_typed_runtime_errors_with_source_mapped_frames() {

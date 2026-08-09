@@ -1013,9 +1013,14 @@ Bytecode Compiler::compile_repl(const Program& program) {
     return compile_program(program, true);
 }
 
+const std::vector<Diagnostic>& Compiler::diagnostics() const {
+    return diagnostics_;
+}
+
 Bytecode Compiler::compile_program(const Program& program, bool print_tail_expression) {
     TypeChecker type_checker;
     type_checker.check(program);
+    diagnostics_ = type_checker.diagnostics();
 
     bytecode_ = Bytecode{};
     locals_.clear();
@@ -1078,6 +1083,15 @@ Bytecode Compiler::compile_program(const Program& program, bool print_tail_expre
     for (const Statement& statement : program.statements) {
         if (statement.kind == StatementKind::test_block) {
             compile_test(statement);
+            continue;
+        }
+        if (statement.kind == StatementKind::function && statement.generic_parameters.empty()) {
+            const bool is_test = std::any_of(statement.attributes.begin(), statement.attributes.end(),
+                                             [](const Attribute& attribute) { return attribute.name == "test"; });
+            if (is_test) {
+                bytecode_.tests.push_back(
+                    Bytecode::Test{statement.name, resolve_function(function_key(statement.name, {}))});
+            }
         }
     }
     for (const auto& [expression, index] : lambdas_) {

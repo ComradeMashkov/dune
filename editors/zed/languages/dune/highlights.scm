@@ -71,6 +71,9 @@
 (string) @string
 (character) @string.special
 
+(attribute
+  name: (attribute_name) @attribute)
+
 ; Definitions
 (function_declaration
   name: (identifier) @function)

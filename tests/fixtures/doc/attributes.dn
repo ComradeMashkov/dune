@@ -1,0 +1,11 @@
+/// Use `fresh` in new code.
+@deprecated("use fresh")
+export fn old(): int {
+    return 1;
+}
+
+/// Verifies the public behavior.
+@test
+export fn verifies(): unit {
+    return;
+}

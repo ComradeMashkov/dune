@@ -741,7 +741,7 @@ void VirtualMachine::run(std::ostream& output, std::ostream& error, std::istream
     execute(output, error, input);
 }
 
-// Runs a single compiled test chunk to completion. The caller (`dune test`)
+// Runs a single compiled test function or block chunk to completion. The caller (`dune test`)
 // wraps this in try/catch: a failed assertion aborts via `runtime.panic`
 // (a thrown RuntimeError), which unwinds out of here and marks the test
 // failed without killing the process.
@@ -750,7 +750,7 @@ void VirtualMachine::run_test(std::size_t function_index, std::ostream& output) 
     stack_.clear();
     frames_.clear();
     CallFrame frame{&function.instructions, 0, std::vector<Value>(function.local_count), 0};
-    frame.function_name = function.name;
+    frame.function_name = function.name.starts_with("test \"") ? function.name : "test \"" + function.name + "\"";
     frame.declaration = function.location;
     frames_.push_back(std::move(frame));
     execute(output, std::cerr, std::cin);

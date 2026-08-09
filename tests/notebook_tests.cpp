@@ -440,6 +440,8 @@ bool accepts_real_http_connections() {
                             app.find("animation: cell-ring-travel 6s linear infinite") != std::string::npos &&
                             app.find("function lexDune(source)") != std::string::npos &&
                             app.find("syntax-keyword") != std::string::npos &&
+                            app.find("syntax-attribute") != std::string::npos &&
+                            app.find("current === \"@\"") != std::string::npos &&
                             app.find("syncCodeHighlight(source, highlight)") != std::string::npos &&
                             app.find("Clear selected output") != std::string::npos &&
                             app.find("Clear all outputs") != std::string::npos &&

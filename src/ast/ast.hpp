@@ -145,6 +145,29 @@ enum class StatementKind {
     test_block,
 };
 
+enum class AttributeArgumentKind {
+    integer,
+    real,
+    glyph,
+    text,
+    boolean,
+};
+
+// Attribute arguments are deliberately limited to literals. `value` contains
+// the decoded string for text arguments and the source spelling for every
+// other kind, which keeps metadata independent from runtime expressions.
+struct AttributeArgument {
+    AttributeArgumentKind kind = AttributeArgumentKind::text;
+    std::string value;
+    SourceLocation location;
+};
+
+struct Attribute {
+    std::string name;
+    std::vector<AttributeArgument> arguments;
+    SourceLocation location;
+};
+
 struct Statement {
     StatementKind kind;
     std::string name;
@@ -182,6 +205,9 @@ struct Statement {
     // leading comment of the statement's first token; rendered by LSP hover and
     // available to documentation tooling.
     std::string doc_comment;
+    // Source-level metadata written immediately before this declaration, such
+    // as `@deprecated("use matrix.dot")` or `@test`.
+    std::vector<Attribute> attributes;
 };
 
 struct Program {

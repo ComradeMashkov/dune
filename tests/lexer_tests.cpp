@@ -864,5 +864,26 @@ int main() {
                            }) &&
              passed;
 
+    passed = expect_tokens("@deprecated(\"use fresh\") @test fn old(): unit { }",
+                           {
+                               {at, "@"},
+                               {identifier, "deprecated"},
+                               {left_paren, "("},
+                               {string_literal, "\"use fresh\""},
+                               {right_paren, ")"},
+                               {at, "@"},
+                               {test_keyword, "test"},
+                               {fn_keyword, "fn"},
+                               {identifier, "old"},
+                               {left_paren, "("},
+                               {right_paren, ")"},
+                               {colon, ":"},
+                               {unit_keyword, "unit"},
+                               {left_brace, "{"},
+                               {right_brace, "}"},
+                               {eof, ""},
+                           }) &&
+             passed;
+
     return passed ? 0 : 1;
 }

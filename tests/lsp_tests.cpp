@@ -637,6 +637,44 @@ bool exposes_complete_semantic_token_legend() {
     return passed;
 }
 
+bool supports_attribute_diagnostics_hover_and_highlighting() {
+    const std::string source = "@deprecated(\"use fresh\")\n"
+                               "fn old(): int { return 1; }\n"
+                               "answer: int = old();\n"
+                               "@test fn verifies(): unit { }\n";
+    const std::vector<dune::lsp::Diagnostic> diagnostics = dune::lsp::diagnose_source(source);
+    bool passed = true;
+    const std::vector<dune::lsp::CompletionItem> completions = dune::lsp::complete_source(source);
+    passed = expect(has_completion(completions, "@deprecated"), "expected @deprecated completion") && passed;
+    passed = expect(has_completion(completions, "@test"), "expected @test completion") && passed;
+    passed = expect(diagnostics.size() == 1, "expected one LSP deprecation diagnostic") && passed;
+    if (diagnostics.size() == 1) {
+        passed = expect(diagnostics[0].severity == 2, "expected LSP warning severity") && passed;
+        passed = expect(diagnostics[0].message.find("deprecated function 'old'") != std::string::npos,
+                        "expected deprecation warning message") &&
+                 passed;
+    }
+
+    const std::optional<dune::lsp::Hover> hover = dune::lsp::hover_source(source, {}, {}, 1, 4);
+    passed = expect(hover.has_value(), "expected hover for attributed declaration") && passed;
+    if (hover.has_value()) {
+        passed = expect(hover->contents.find("@deprecated(\"use fresh\")") != std::string::npos,
+                        "expected attribute metadata in hover") &&
+                 passed;
+        passed =
+            expect(hover->contents.find("Deprecated:") != std::string::npos, "expected deprecation callout in hover") &&
+            passed;
+    }
+
+    const std::vector<dune::lsp::SemanticToken> tokens = dune::lsp::semantic_tokens_source(source);
+    passed = expect_semantic_token(source, tokens, "@deprecated", 1, 10, "decorator", 0,
+                                   "expected @deprecated decorator token") &&
+             passed;
+    passed = expect_semantic_token(source, tokens, "@test", 1, 4, "decorator", 0, "expected @test decorator token") &&
+             passed;
+    return passed;
+}
+
 bool highlights_semantic_symbols_and_literals() {
     const std::string source = "/** Computes a boxed value. */\n"
                                "module sample;\n"
@@ -983,6 +1021,7 @@ int main() {
     passed = defines_aliased_module_name() && passed;
     passed = hovers_aliased_module_member() && passed;
     passed = exposes_complete_semantic_token_legend() && passed;
+    passed = supports_attribute_diagnostics_hover_and_highlighting() && passed;
     passed = highlights_semantic_symbols_and_literals() && passed;
     passed = highlights_lambda_parameters_captures_and_calls() && passed;
     passed = highlights_utf8_with_utf16_ranges() && passed;

@@ -16,6 +16,7 @@
 - [Runtime errors and stack traces](language/runtime-errors.md)
 - [Modules](language/modules.md)
 - [Comments and doc-comments](language/comments.md)
+- [Source-level attributes](language/attributes.md)
 
 # Standard library
 

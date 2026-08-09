@@ -1036,6 +1036,25 @@ bool compiles_test_blocks_into_separate_chunks() {
     return passed;
 }
 
+bool registers_attributed_test_functions() {
+    const dune::Bytecode bytecode = compile_source("test \"legacy block\" { }\n"
+                                                   "@test fn first(): unit { }\n"
+                                                   "@test fn second(): unit { }\n"
+                                                   "");
+    bool passed = true;
+    passed = expect(bytecode.tests.size() == 3, "expected attributed functions and test blocks to register") && passed;
+    if (bytecode.tests.size() == 3) {
+        passed = expect(bytecode.tests[0].name == "legacy block", "expected declaration-order legacy block") && passed;
+        passed = expect(bytecode.tests[1].name == "first", "expected first @test function name") && passed;
+        passed = expect(bytecode.tests[2].name == "second", "expected second @test function name") && passed;
+        for (const dune::Bytecode::Test& test : bytecode.tests) {
+            passed =
+                expect(test.function_index < bytecode.functions.size(), "expected registered test function") && passed;
+        }
+    }
+    return passed;
+}
+
 // Const generics / static shapes (issue #43) are compile-time only: a statically
 // shaped program compiles to ordinary bytecode with no shape residue.
 bool compiles_static_shape_matrix_program() {
@@ -1074,6 +1093,7 @@ int main() {
     passed = compiles_assignment_targets() && passed;
     passed = compiles_when_expression() && passed;
     passed = compiles_test_blocks_into_separate_chunks() && passed;
+    passed = registers_attributed_test_functions() && passed;
     passed = compiles_choice_variants_and_when() && passed;
     passed = compiles_arrow_style_choice_when() && passed;
     passed = compiles_tuples_and_destructuring() && passed;

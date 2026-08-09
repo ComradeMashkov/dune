@@ -4,16 +4,17 @@ Dune ships a Language Server (`dune lsp`) and a Zed extension.
 
 ## What the language server provides
 
-- **Diagnostics** — type errors with precise source ranges.
+- **Diagnostics** — type errors and `@deprecated` warnings with precise source ranges.
 - **Completions** — keywords, local symbols, imported module members, and typed
   receiver methods.
-- **Hover** — the signature of a symbol plus its [doc-comment](../language/comments.md),
+- **Hover** — the signature, [attributes](../language/attributes.md), and
+  [doc-comment](../language/comments.md) of a symbol,
   including symbols from other modules.
 - **Go-to-definition** — jumps to a local declaration or into the module file for
   imported symbols, aliases, and `from ... import` symbols.
 - **Semantic highlighting** — distinguishes functions, methods, types, generic
   parameters, constants, variables, fields, modules, literals, operators, and
-  doc comments. The server reports standard LSP token types and modifiers such
+  doc comments and attribute decorators. The server reports standard LSP token types and modifiers such
   as `declaration`, `readonly`, `static`, and `defaultLibrary`.
 
 Any editor that speaks LSP can talk to `dune lsp` over stdio.

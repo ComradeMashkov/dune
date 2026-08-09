@@ -183,14 +183,19 @@ dune::Program resolve_modules(dune::Program program, const std::filesystem::path
     return loader.resolve(std::move(program), source_directory, source_name);
 }
 
-void check_program(const dune::Program& program) {
+std::vector<dune::Diagnostic> check_program(const dune::Program& program) {
     dune::TypeChecker checker;
     checker.check(program);
+    return checker.diagnostics();
 }
 
-dune::Bytecode compile_bytecode(const dune::Program& program) {
+dune::Bytecode compile_bytecode(const dune::Program& program, std::vector<dune::Diagnostic>* diagnostics = nullptr) {
     dune::Compiler compiler;
-    return compiler.compile(program);
+    dune::Bytecode bytecode = compiler.compile(program);
+    if (diagnostics != nullptr) {
+        *diagnostics = compiler.diagnostics();
+    }
+    return bytecode;
 }
 
 template <typename Reporter>
@@ -216,11 +221,37 @@ void report_diagnostic(const dune::DiagnosticError& error, std::string_view sour
     }
 }
 
+void report_diagnostics(const std::vector<dune::Diagnostic>& diagnostics, std::string_view source,
+                        std::string_view filename) {
+    for (const dune::Diagnostic& diagnostic : diagnostics) {
+        std::string diagnostic_source(source);
+        std::string diagnostic_filename(filename);
+        if (!diagnostic.location.source_name.empty() && diagnostic.location.source_name != filename) {
+            diagnostic_filename = diagnostic.location.source_name;
+            try {
+                diagnostic_source = read_file(diagnostic_filename);
+            } catch (const std::exception&) {
+                diagnostic_source.clear();
+            }
+        }
+
+        const std::string snippet = dune::render_snippet(diagnostic, diagnostic_source, diagnostic_filename);
+        if (!snippet.empty()) {
+            std::cerr << snippet;
+        } else {
+            std::cerr << dune::severity_label(diagnostic.severity) << ": " << diagnostic.message << '\n';
+        }
+    }
+}
+
 int run_source_file(const std::string& path, std::vector<std::string> script_arguments) {
     const std::string source = read_file(path);
     try {
-        dune::VirtualMachine vm(compile_bytecode(parse_source(source, std::filesystem::path(path).parent_path(), path)),
-                                std::move(script_arguments));
+        std::vector<dune::Diagnostic> diagnostics;
+        dune::VirtualMachine vm(
+            compile_bytecode(parse_source(source, std::filesystem::path(path).parent_path(), path), &diagnostics),
+            std::move(script_arguments));
+        report_diagnostics(diagnostics, source, path);
         vm.run(std::cout);
     } catch (const dune::DiagnosticError& error) {
         report_diagnostic(error, source, path);
@@ -230,15 +261,19 @@ int run_source_file(const std::string& path, std::vector<std::string> script_arg
     return 0;
 }
 
-// Runs every `test "..." { ... }` block in a file. Each test runs in isolation;
+// Runs every `@test` function and `test "..." { ... }` block in a file. Each
+// test runs in isolation;
 // a failed assertion aborts that test (via runtime.panic → a thrown exception),
 // which is caught and reported without stopping the rest. Exits non-zero if any
-// test fails. Top-level executable code is not run — only the test blocks.
+// test fails. Top-level executable code is not run — only registered tests.
 int run_test_file(const std::string& path) {
     const std::string source = read_file(path);
     dune::Bytecode bytecode;
     try {
-        bytecode = compile_bytecode(parse_source(source, std::filesystem::path(path).parent_path(), path));
+        std::vector<dune::Diagnostic> diagnostics;
+        bytecode =
+            compile_bytecode(parse_source(source, std::filesystem::path(path).parent_path(), path), &diagnostics);
+        report_diagnostics(diagnostics, source, path);
     } catch (const dune::DiagnosticError& error) {
         report_diagnostic(error, source, path);
         return 1;
@@ -273,7 +308,9 @@ int run_test_file(const std::string& path) {
 int check_source_file(const std::string& source_path) {
     CliReporter reporter("check " + source_path);
     const dune::Program program = load_program_with_status(source_path, reporter);
-    run_step(reporter, "type check", [&] { check_program(program); });
+    const std::vector<dune::Diagnostic> diagnostics =
+        run_step(reporter, "type check", [&] { return check_program(program); });
+    report_diagnostics(diagnostics, read_file(source_path), source_path);
     return 0;
 }
 
