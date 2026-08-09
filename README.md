@@ -13,7 +13,9 @@ where they matter, overloads and generics, records with methods, choices matched
 by `when`, deterministic cleanup with `defer`, operator overloading, and modules
 loaded from `.dn` files. The type
 checker rejects mismatched assignments, calls, returns, and operators before
-execution; the VM adds runtime checks for things like invalid indexes and slices.
+execution; the VM adds categorized runtime failures with source-mapped Dune
+stack traces for things like invalid indexes, arithmetic failures, and explicit
+panics.
 
 📖 **[Documentation site](https://comrademashkov.github.io/dune/)** — the language
 reference, the standard-library reference (generated from source doc-comments,
@@ -185,7 +187,7 @@ Dune implements a compact but real language: a static type checker with
 overloads, generics and bounds, contracts, records, choices, tuples, and type
 aliases; first-class function values, lambdas, and capturing closures; array
 comprehensions; deterministic `defer` cleanup; operator overloading; a bytecode
-compiler and VM with runtime bounds checks; and the CLI,
+compiler and VM with categorized, source-mapped stack traces; and the CLI,
 LSP, doc generator, and test runner above. The
 [language reference](https://comrademashkov.github.io/dune/) covers each feature
 in detail.

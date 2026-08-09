@@ -77,10 +77,19 @@ A failing run looks like this:
 running 2 tests
 test "this assertion holds" ... ok
 test "this assertion fails" ... FAILED
-    assertion failed: values are not equal
+    panic: assertion failed: values are not equal
+    stack trace:
+      0: assert.assert_eq
+          at stdlib/assert.dn:54:9
+      1: test "this assertion fails"
+          at tests/example.dn:8:5
 
 test result: FAILED. 1 passed; 1 failed
 ```
+
+The named `test "..."` block is a real outer stack frame, so failures retain
+the assertion helper, user functions, imported module files, and the exact line
+inside the test. See [Runtime errors and stack traces](../language/runtime-errors.md).
 
 ## Rules
 

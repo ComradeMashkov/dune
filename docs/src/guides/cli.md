@@ -128,6 +128,21 @@ error: expected type 'int' but got 'text'
   |          ^^^^^^^
 ```
 
+Runtime failures use a category plus an innermost-first Dune stack trace:
+
+```text
+panic: invalid state
+stack trace:
+  0: validate
+      at program.dn:4:5
+  1: <top-level>
+      at program.dn:7:1
+```
+
+Imported pure-Dune modules keep their own file locations. The test runner,
+REPL, and notebook kernel use the same format; notebook locations include the
+cell ID. See [Runtime errors and stack traces](../language/runtime-errors.md).
+
 The `-->` line gives `file:line:column`, and the caret underline marks the
 offending token or expression. Lexer, parser, and type-check errors all use this
 format; `dune check` shows it beneath its per-stage progress trace. Errors from imported modules and runtime failures fall

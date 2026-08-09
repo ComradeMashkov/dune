@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <iosfwd>
 #include <string>
+#include <vector>
 
 namespace dune::repl {
 
@@ -26,8 +27,15 @@ public:
     void reset();
 
 private:
+    struct SourceEntry {
+        std::size_t first_line = 1;
+        std::size_t last_line = 1;
+        std::string source_name;
+    };
+
     std::filesystem::path source_directory_;
     std::string source_;
+    std::vector<SourceEntry> source_entries_;
     std::string previous_output_;
     std::string previous_error_;
 };

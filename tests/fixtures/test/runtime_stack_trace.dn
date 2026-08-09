@@ -1,0 +1,9 @@
+import runtime;
+
+fn helper(): unit {
+    runtime.panic("test boom");
+}
+
+test "reports runtime frames" {
+    helper();
+}

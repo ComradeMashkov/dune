@@ -20,7 +20,7 @@ dune::Bytecode compile_source(const std::string& source) {
     dune::Parser parser(lexer.tokenize());
     dune::ModuleLoader loader;
     dune::Compiler compiler;
-    return compiler.compile(loader.resolve(parser.parse()));
+    return compiler.compile(loader.resolve(parser.parse(), {}, "<compiler-test>"));
 }
 
 bool expect(bool condition, const char* message) {
@@ -48,12 +48,21 @@ bool compiles_function_table_and_call() {
     passed = expect(add_index < bytecode.functions.size(), "expected compiled add function") && passed;
     if (add_index < bytecode.functions.size()) {
         passed = expect(bytecode.functions[add_index].arity == 2, "expected function arity") && passed;
+        passed = expect(bytecode.functions[add_index].location.source_name == "<compiler-test>",
+                        "expected function declaration source name") &&
+                 passed;
     }
 
     bool saw_call = false;
     for (const dune::Instruction& instruction : bytecode.instructions) {
         if (instruction.op == dune::OpCode::call && instruction.operand == add_index) {
             saw_call = true;
+            passed = expect(instruction.location.source_name == "<compiler-test>",
+                            "expected call instruction source name") &&
+                     passed;
+            passed = expect(instruction.location.line == 1 && instruction.location.column > 1,
+                            "expected call instruction line and column") &&
+                     passed;
         }
     }
 

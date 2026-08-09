@@ -159,11 +159,12 @@ void write_file(const std::string& path, const std::string& content) {
     output << content;
 }
 
-dune::Program parse_source(const std::string& source, const std::filesystem::path& source_directory) {
+dune::Program parse_source(const std::string& source, const std::filesystem::path& source_directory,
+                           const std::string& source_name) {
     dune::Lexer lexer(source);
     dune::Parser parser(lexer.tokenize());
     dune::ModuleLoader loader;
-    return loader.resolve(parser.parse(), source_directory);
+    return loader.resolve(parser.parse(), source_directory, source_name);
 }
 
 std::vector<dune::Token> lex_source(const std::string& source) {
@@ -176,9 +177,10 @@ dune::Program parse_tokens(const std::vector<dune::Token>& tokens) {
     return parser.parse();
 }
 
-dune::Program resolve_modules(dune::Program program, const std::filesystem::path& source_directory) {
+dune::Program resolve_modules(dune::Program program, const std::filesystem::path& source_directory,
+                              const std::string& source_name = {}) {
     dune::ModuleLoader loader;
-    return loader.resolve(std::move(program), source_directory);
+    return loader.resolve(std::move(program), source_directory, source_name);
 }
 
 void check_program(const dune::Program& program) {
@@ -198,7 +200,8 @@ dune::Program load_program_with_status(const std::string& source_path, Reporter&
     reporter.set_source(source, source_path);
     const std::vector<dune::Token> tokens = run_step(reporter, "lex", [&] { return lex_source(source); });
     dune::Program parsed = run_step(reporter, "parse AST", [&] { return parse_tokens(tokens); });
-    return run_step(reporter, "resolve modules", [&] { return resolve_modules(std::move(parsed), source_directory); });
+    return run_step(reporter, "resolve modules",
+                    [&] { return resolve_modules(std::move(parsed), source_directory, source_path); });
 }
 
 // Prints a compile-time diagnostic for the plain (non-status) subcommands: a
@@ -216,7 +219,7 @@ void report_diagnostic(const dune::DiagnosticError& error, std::string_view sour
 int run_source_file(const std::string& path, std::vector<std::string> script_arguments) {
     const std::string source = read_file(path);
     try {
-        dune::VirtualMachine vm(compile_bytecode(parse_source(source, std::filesystem::path(path).parent_path())),
+        dune::VirtualMachine vm(compile_bytecode(parse_source(source, std::filesystem::path(path).parent_path(), path)),
                                 std::move(script_arguments));
         vm.run(std::cout);
     } catch (const dune::DiagnosticError& error) {
@@ -235,7 +238,7 @@ int run_test_file(const std::string& path) {
     const std::string source = read_file(path);
     dune::Bytecode bytecode;
     try {
-        bytecode = compile_bytecode(parse_source(source, std::filesystem::path(path).parent_path()));
+        bytecode = compile_bytecode(parse_source(source, std::filesystem::path(path).parent_path(), path));
     } catch (const dune::DiagnosticError& error) {
         report_diagnostic(error, source, path);
         return 1;
@@ -253,7 +256,11 @@ int run_test_file(const std::string& path) {
             ++passed;
         } catch (const std::exception& error) {
             std::cout << "test \"" << test.name << "\" ... FAILED\n";
-            std::cout << "    " << error.what() << '\n';
+            std::istringstream lines(error.what());
+            std::string line;
+            while (std::getline(lines, line)) {
+                std::cout << "    " << line << '\n';
+            }
             ++failed;
         }
     }
@@ -438,6 +445,9 @@ int main(int argc, char* argv[]) {
         print_usage();
         return 1;
     } catch (const CliReportedError&) {
+        return 1;
+    } catch (const dune::RuntimeError& error) {
+        std::cerr << error.what() << '\n';
         return 1;
     } catch (const std::exception& error) {
         std::cerr << "error: " << error.what() << '\n';

@@ -105,16 +105,31 @@ bool supports_commands_and_reset() {
 }
 
 bool recovers_from_runtime_errors() {
-    const ReplResult result = run_repl("import io;\nx = 1;\nio.println(1 / 0);\nx + 1\n:quit\n");
+    const ReplResult result = run_repl("import io;\n"
+                                       "import runtime;\n"
+                                       "x = 1;\n"
+                                       "fn explode(): unit { runtime.panic(\"repl boom\"); }\n"
+                                       "fn caller(): unit { explode(); }\n"
+                                       "caller();\n"
+                                       "x + 1\n"
+                                       ":quit\n");
 
     bool passed = true;
     passed = expect(result.status == 0, "expected runtime failure recovery") && passed;
     passed = expect(result.output == "Dune test\nType :help for help.\n2\n",
                     "expected the session to continue after a runtime error") &&
              passed;
-    passed = expect(result.error.find("division by zero") != std::string::npos,
-                    "expected the runtime error to be reported") &&
+    passed = expect(result.error.find("panic: repl boom\nstack trace:") != std::string::npos,
+                    "expected the runtime panic to be reported") &&
              passed;
+    passed = expect(result.error.find("0: explode") != std::string::npos &&
+                        result.error.find("1: caller") != std::string::npos &&
+                        result.error.find("2: <top-level>") != std::string::npos,
+                    "expected Dune function frames in the REPL") &&
+             passed;
+    passed =
+        expect(result.error.find("at <repl>:1:") != std::string::npos, "expected entry-local REPL source positions") &&
+        passed;
     return passed;
 }
 

@@ -70,7 +70,7 @@ std::string run_source(const std::string& source) {
     dune::Parser parser(lexer.tokenize());
     dune::ModuleLoader loader;
     dune::Compiler compiler;
-    dune::VirtualMachine vm(compiler.compile(loader.resolve(parser.parse())));
+    dune::VirtualMachine vm(compiler.compile(loader.resolve(parser.parse(), {}, "<vm-test>")));
 
     std::ostringstream output;
     vm.run(output);
@@ -82,7 +82,7 @@ RunStreams run_source_streams(const std::string& source) {
     dune::Parser parser(lexer.tokenize());
     dune::ModuleLoader loader;
     dune::Compiler compiler;
-    dune::VirtualMachine vm(compiler.compile(loader.resolve(parser.parse())));
+    dune::VirtualMachine vm(compiler.compile(loader.resolve(parser.parse(), {}, "<vm-test>")));
 
     std::ostringstream output;
     std::ostringstream diagnostics;
@@ -96,7 +96,7 @@ std::string run_source_with_args(const std::string& source, std::vector<std::str
     dune::Parser parser(lexer.tokenize());
     dune::ModuleLoader loader;
     dune::Compiler compiler;
-    dune::VirtualMachine vm(compiler.compile(loader.resolve(parser.parse())), std::move(arguments));
+    dune::VirtualMachine vm(compiler.compile(loader.resolve(parser.parse(), {}, "<vm-test>")), std::move(arguments));
 
     std::ostringstream output;
     vm.run(output);
@@ -111,7 +111,7 @@ std::string run_only_tests(const std::string& source) {
     dune::Parser parser(lexer.tokenize());
     dune::ModuleLoader loader;
     dune::Compiler compiler;
-    dune::Bytecode bytecode = compiler.compile(loader.resolve(parser.parse()));
+    dune::Bytecode bytecode = compiler.compile(loader.resolve(parser.parse(), {}, "<vm-test>"));
     const std::vector<dune::Bytecode::Test> tests(bytecode.tests);
     dune::VirtualMachine vm(std::move(bytecode));
 
@@ -138,7 +138,7 @@ RunResult run_source_with_streams(const std::string& source, const std::string& 
     dune::Parser parser(lexer.tokenize());
     dune::ModuleLoader loader;
     dune::Compiler compiler;
-    dune::VirtualMachine vm(compiler.compile(loader.resolve(parser.parse())));
+    dune::VirtualMachine vm(compiler.compile(loader.resolve(parser.parse(), {}, "<vm-test>")));
 
     std::istringstream input(input_text);
     std::ostringstream output;
@@ -152,7 +152,7 @@ RunFailure run_failing_source(const std::string& source) {
     dune::Parser parser(lexer.tokenize());
     dune::ModuleLoader loader;
     dune::Compiler compiler;
-    dune::VirtualMachine vm(compiler.compile(loader.resolve(parser.parse())));
+    dune::VirtualMachine vm(compiler.compile(loader.resolve(parser.parse(), {}, "<vm-test>")));
 
     std::ostringstream output;
     try {
@@ -397,6 +397,105 @@ bool test_failure_unwinds() {
 
     std::cerr << "expected a panicking test body to throw out of run_test\n";
     return false;
+}
+
+bool reports_typed_runtime_errors_with_source_mapped_frames() {
+    bool passed = true;
+
+    try {
+        run_source("import runtime;\n"
+                   "fn inner(): unit {\n"
+                   "    runtime.panic(\"boom\");\n"
+                   "}\n"
+                   "fn outer(): unit {\n"
+                   "    inner();\n"
+                   "}\n"
+                   "outer();");
+        passed = expect(false, "expected explicit panic to abort execution") && passed;
+    } catch (const dune::RuntimeError& error) {
+        passed = expect(error.kind() == dune::RuntimeErrorKind::panic, "expected explicit panic category") && passed;
+        passed =
+            expect(error.message() == "boom", "expected panic payload to remain separate from rendering") && passed;
+        passed = expect(error.frames().size() == 3, "expected inner, outer, and top-level frames") && passed;
+        if (error.frames().size() == 3) {
+            passed = expect(error.frames()[0].function == "inner", "expected innermost function first") && passed;
+            passed = expect(error.frames()[1].function == "outer", "expected caller frame second") && passed;
+            passed = expect(error.frames()[2].function == "<top-level>", "expected top-level frame last") && passed;
+            passed = expect(error.frames()[0].location.source_name == "<vm-test>" &&
+                                error.frames()[0].location.line == 3 && error.frames()[0].location.column == 5,
+                            "expected exact panic source position") &&
+                     passed;
+        }
+        passed = expect(std::string(error.what()).find("panic: boom\nstack trace:") != std::string::npos,
+                        "expected stable rendered panic header") &&
+                 passed;
+    } catch (const std::exception& error) {
+        std::cerr << "expected RuntimeError for panic, got: " << error.what() << '\n';
+        passed = false;
+    }
+
+    try {
+        run_source("values: [int] = [1]; io.println(values[9]);");
+        passed = expect(false, "expected bounds failure") && passed;
+    } catch (const dune::RuntimeError& error) {
+        passed = expect(error.kind() == dune::RuntimeErrorKind::bounds, "expected bounds category") && passed;
+        passed = expect(!error.frames().empty() && error.frames()[0].function == "<top-level>",
+                        "expected a top-level bounds frame") &&
+                 passed;
+    }
+
+    try {
+        run_source("io.println(1 / 0);");
+        passed = expect(false, "expected arithmetic failure") && passed;
+    } catch (const dune::RuntimeError& error) {
+        passed = expect(error.kind() == dune::RuntimeErrorKind::arithmetic, "expected arithmetic category") && passed;
+    }
+
+    try {
+        run_source("import assert;\n"
+                   "fn verify(): unit { assert.assert_true(false); }\n"
+                   "verify();");
+        passed = expect(false, "expected stdlib assertion panic") && passed;
+    } catch (const dune::RuntimeError& error) {
+        passed = expect(!error.frames().empty() && error.frames()[0].function == "assert.assert_true",
+                        "expected imported stdlib function frame") &&
+                 passed;
+        passed = expect(!error.frames().empty() && error.frames()[0].location.source_name.ends_with("stdlib/assert.dn"),
+                        "expected imported module source path") &&
+                 passed;
+    }
+
+    try {
+        run_only_tests("import runtime;\n"
+                       "test \"trace name\" { runtime.panic(\"test boom\"); }");
+        passed = expect(false, "expected panicking test") && passed;
+    } catch (const dune::RuntimeError& error) {
+        passed = expect(!error.frames().empty() && error.frames()[0].function == "test \"trace name\"",
+                        "expected test name in the stack") &&
+                 passed;
+    }
+
+    try {
+        run_source("import runtime; defer { runtime.panic(\"cleanup boom\"); } runtime.panic(\"primary boom\");");
+        passed = expect(false, "expected primary and cleanup panics") && passed;
+    } catch (const dune::RuntimeError& error) {
+        passed = expect(error.message() == "primary boom", "expected primary panic to win") && passed;
+        passed = expect(error.cleanup_errors().size() == 1, "expected one attached cleanup failure") && passed;
+        if (!error.cleanup_errors().empty()) {
+            passed = expect(error.cleanup_errors()[0].kind == dune::RuntimeErrorKind::panic &&
+                                error.cleanup_errors()[0].message == "cleanup boom",
+                            "expected a structured cleanup panic") &&
+                     passed;
+            passed =
+                expect(!error.cleanup_errors()[0].frames.empty(), "expected cleanup failure stack frames") && passed;
+        }
+    }
+
+    passed = expect_eq(run_source("import outcome; result = outcome.failed_int(\"expected\"); "
+                                  "io.println(result.is_failed());"),
+                       "1\n", "expected Outcome failure to remain an ordinary value") &&
+             passed;
+    return passed;
 }
 
 bool runs_deferred_cleanup_on_every_exit_path() {
@@ -1025,6 +1124,7 @@ io.println('\0' to int);)dune"),
 
     passed = runs_only_test_blocks() && passed;
     passed = test_failure_unwinds() && passed;
+    passed = reports_typed_runtime_errors_with_source_mapped_frames() && passed;
     passed = runs_deferred_cleanup_on_every_exit_path() && passed;
 
     return passed ? 0 : 1;

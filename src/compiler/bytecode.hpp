@@ -1,5 +1,7 @@
 #pragma once
 
+#include "diagnostics/source_location.hpp"
+
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -132,6 +134,7 @@ enum class OpCode {
 struct Instruction {
     OpCode op;
     std::size_t operand = 0;
+    SourceLocation location;
 };
 
 struct Bytecode {
@@ -147,6 +150,7 @@ struct Bytecode {
         std::size_t local_count = 0;
         std::vector<Instruction> instructions;
         bool is_extern = false;
+        SourceLocation location;
     };
 
     std::vector<Function> functions;
