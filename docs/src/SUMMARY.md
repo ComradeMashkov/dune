@@ -13,6 +13,7 @@
 - [Choices, `when`, and `?`](language/choices.md)
 - [Loops, ranges, and comprehensions](language/comprehensions.md)
 - [Deterministic cleanup with `defer`](language/resource-cleanup.md)
+- [Runtime errors and stack traces](language/runtime-errors.md)
 - [Modules](language/modules.md)
 - [Comments and doc-comments](language/comments.md)
 

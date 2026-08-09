@@ -1,6 +1,7 @@
 #pragma once
 
 #include "compiler/bytecode.hpp"
+#include "vm/runtime_error.hpp"
 
 #include <iosfwd>
 #include <optional>
@@ -32,12 +33,18 @@ private:
         std::vector<std::size_t> defer_scope_starts;
         std::optional<Value> pending_return;
         bool awaiting_defer_result = false;
+        std::string function_name = "<top-level>";
+        SourceLocation declaration;
+        std::size_t active_ip = 0;
+        bool has_active_instruction = false;
     };
 
     void call_callable(const Value& callable);
     void call_function(std::size_t function_index, const std::vector<Value>& captures = {});
     void unwind_frames_to(std::size_t frame_depth, std::ostream& output, std::ostream& error,
-                          std::istream& input, std::vector<std::string>& cleanup_errors);
+                          std::istream& input, std::vector<RuntimeFailure>& cleanup_errors);
+    std::vector<RuntimeStackFrame> capture_stack_trace() const;
+    RuntimeError make_runtime_error(const std::exception& exception) const;
     Value call_extern_function(const Bytecode::Function& function, std::vector<Value> arguments);
     Value pop();
 

@@ -193,11 +193,12 @@ std::string terminate_entry(std::string source) {
     return source;
 }
 
-Program parse_source(const std::string& source, const std::filesystem::path& source_directory) {
+Program parse_source(const std::string& source, const std::filesystem::path& source_directory,
+                     const std::vector<ModuleLoader::SourceUnit>& source_units) {
     Lexer lexer(source);
     Parser parser(lexer.tokenize());
     ModuleLoader loader;
-    return loader.resolve(parser.parse(), source_directory);
+    return loader.resolve(parser.parse(), source_directory, source_units);
 }
 
 std::size_t stable_output_prefix(std::string_view previous, std::string_view current) {
@@ -228,7 +229,7 @@ void print_help(std::ostream& output) {
 std::string report_diagnostic(const DiagnosticError& diagnostic, std::string_view source, std::string_view source_name,
                               std::size_t previous_lines) {
     Diagnostic localized = diagnostic.diagnostic();
-    if (localized.has_location && localized.location.line > previous_lines) {
+    if (localized.has_location && localized.location.source_name.empty() && localized.location.line > previous_lines) {
         localized.location.line -= previous_lines;
     }
 
@@ -253,15 +254,32 @@ EvaluationResult Session::evaluate(const std::string& source, const std::string&
         // reported source and location match what the user entered.
         entry_source = source;
     }
+    // Keep independently evaluated entries on disjoint physical lines in the
+    // accumulated source. Besides preventing token concatenation, this makes
+    // the source-unit map unambiguous for REPL and notebook stack frames.
+    if (entry_source.empty() || entry_source.back() != '\n') {
+        entry_source += '\n';
+    }
 
     const std::size_t previous_lines = static_cast<std::size_t>(std::count(source_.begin(), source_.end(), '\n'));
     const std::string candidate_source = source_ + entry_source;
+    const std::size_t first_line = previous_lines + 1;
+    const std::size_t line_breaks =
+        static_cast<std::size_t>(std::count(entry_source.begin(), entry_source.end(), '\n'));
+    const std::size_t last_line =
+        first_line + line_breaks - (!entry_source.empty() && entry_source.back() == '\n' ? 1 : 0);
+    std::vector<ModuleLoader::SourceUnit> source_units;
+    source_units.reserve(source_entries_.size() + 1);
+    for (const SourceEntry& entry : source_entries_) {
+        source_units.push_back({entry.first_line, entry.last_line, entry.source_name});
+    }
+    source_units.push_back({first_line, std::max(first_line, last_line), source_name});
     std::ostringstream runtime_output;
     std::ostringstream runtime_error;
     std::istringstream runtime_input;
     try {
         Compiler compiler;
-        VirtualMachine vm(compiler.compile_repl(parse_source(candidate_source, source_directory_)));
+        VirtualMachine vm(compiler.compile_repl(parse_source(candidate_source, source_directory_, source_units)));
         vm.run(runtime_output, runtime_error, runtime_input);
 
         const std::string current_output = runtime_output.str();
@@ -270,11 +288,15 @@ EvaluationResult Session::evaluate(const std::string& source, const std::string&
                                 new_output(previous_error_, current_error)};
 
         source_ = candidate_source;
+        source_entries_.push_back({first_line, std::max(first_line, last_line), source_name});
         previous_output_ = current_output;
         previous_error_ = current_error;
         return result;
     } catch (const DiagnosticError& diagnostic) {
         return EvaluationResult{false, {}, report_diagnostic(diagnostic, entry_source, source_name, previous_lines)};
+    } catch (const RuntimeError& runtime_failure) {
+        return EvaluationResult{false, new_output(previous_output_, runtime_output.str()),
+                                new_output(previous_error_, runtime_error.str()) + runtime_failure.what() + '\n'};
     } catch (const std::exception& runtime_failure) {
         const std::string context = source_name == "<repl>" ? "" : "  --> " + source_name + '\n';
         return EvaluationResult{false, new_output(previous_output_, runtime_output.str()),
@@ -285,6 +307,7 @@ EvaluationResult Session::evaluate(const std::string& source, const std::string&
 
 void Session::reset() {
     source_.clear();
+    source_entries_.clear();
     previous_output_.clear();
     previous_error_.clear();
 }

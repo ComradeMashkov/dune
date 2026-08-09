@@ -15,6 +15,21 @@ namespace dune {
 
 namespace {
 
+class SourceLocationGuard {
+public:
+    SourceLocationGuard(SourceLocation& current, const SourceLocation& next) : current_(current), previous_(current) {
+        current_ = next;
+    }
+
+    ~SourceLocationGuard() {
+        current_ = std::move(previous_);
+    }
+
+private:
+    SourceLocation& current_;
+    SourceLocation previous_;
+};
+
 Value make_signed(std::int64_t value) {
     Value result;
     result.kind = ValueKind::signed_integer;
@@ -1028,6 +1043,7 @@ Bytecode Compiler::compile_program(const Program& program, bool print_tail_expre
     collect_type_aliases(program.statements);
     const auto& instantiated_functions = type_checker.instantiated_functions();
     instructions_ = &bytecode_.instructions;
+    current_location_ = {};
     repl_expression_statement_ = nullptr;
     if (print_tail_expression && !program.statements.empty() &&
         program.statements.back().kind == StatementKind::expression_statement) {
@@ -1075,9 +1091,10 @@ Bytecode Compiler::compile_program(const Program& program, bool print_tail_expre
 }
 
 void Compiler::compile_test(const Statement& statement) {
+    const SourceLocationGuard location(current_location_, statement.location);
     const std::size_t function_index = bytecode_.functions.size();
     bytecode_.functions.push_back(
-        Bytecode::Function{"__test_" + std::to_string(function_index), "", 0, 0, 0, {}, false});
+        Bytecode::Function{"test \"" + statement.name + "\"", "", 0, 0, 0, {}, false, statement.location});
     bytecode_.tests.push_back(Bytecode::Test{statement.name, function_index});
 
     Bytecode::Function& function = bytecode_.functions.at(function_index);
@@ -1153,7 +1170,8 @@ void Compiler::collect_lambdas(const Expression& expression) {
                                                          capture_count,
                                                          0,
                                                          {},
-                                                         false});
+                                                         false,
+                                                         expression.location});
     }
     if (expression.left != nullptr) {
         collect_lambdas(*expression.left);
@@ -1193,8 +1211,8 @@ void Compiler::collect_function(const Statement& statement) {
         foreknown_functions_[key] = &statement;
     }
     const std::string extern_symbol = statement.extern_symbol.empty() ? statement.name : statement.extern_symbol;
-    bytecode_.functions.push_back(
-        Bytecode::Function{statement.name, extern_symbol, statement.parameters.size(), 0, 0, {}, statement.is_extern});
+    bytecode_.functions.push_back(Bytecode::Function{
+        statement.name, extern_symbol, statement.parameters.size(), 0, 0, {}, statement.is_extern, statement.location});
 }
 
 void Compiler::collect_structs(const std::unordered_map<std::string, TypeChecker::StructDefinition>& structs) {
@@ -1245,6 +1263,7 @@ void Compiler::evaluate_foreknown_constants() {
 }
 
 void Compiler::compile_function(const Statement& statement) {
+    const SourceLocationGuard location(current_location_, statement.location);
     std::vector<Type> parameters;
     parameters.reserve(statement.parameters.size());
     for (const Parameter& parameter : statement.parameters) {
@@ -1308,6 +1327,7 @@ void Compiler::compile_function(const Statement& statement) {
 }
 
 void Compiler::compile_lambda(const Expression& expression) {
+    const SourceLocationGuard location(current_location_, expression.location);
     const auto lambda = lambdas_.find(&expression);
     if (lambda == lambdas_.end()) {
         throw std::runtime_error("lambda was not collected before compilation");
@@ -1409,6 +1429,7 @@ void Compiler::compile_scoped_statements(const std::vector<Statement>& statement
 }
 
 void Compiler::compile_statement(const Statement& statement) {
+    const SourceLocationGuard location(current_location_, statement.location);
     switch (statement.kind) {
     case StatementKind::binding:
     case StatementKind::const_statement: {
@@ -1850,6 +1871,7 @@ void Compiler::compile_try_expression(const Expression& expression) {
 }
 
 void Compiler::compile_expression(const Expression& expression) {
+    const SourceLocationGuard location(current_location_, expression.location);
     if (resolved_variants_.contains(&expression)) {
         compile_variant_constructor(expression);
         return;
@@ -2770,7 +2792,7 @@ std::size_t Compiler::resolve_function(const std::string& name) const {
 }
 
 std::size_t Compiler::emit(OpCode op, std::size_t operand) {
-    instructions_->push_back(Instruction{op, operand});
+    instructions_->push_back(Instruction{op, operand, current_location_});
     return instructions_->size() - 1;
 }
 

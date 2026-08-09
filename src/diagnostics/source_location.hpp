@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <string>
 
 namespace dune {
 
@@ -11,6 +12,10 @@ struct SourceLocation {
     std::size_t line = 1;
     std::size_t column = 1;
     std::size_t length = 1;
+    // Empty for synthetic/unknown locations. The module loader fills this for
+    // user files, imported modules, REPL entries, and notebook cells before the
+    // compiler lowers the AST to source-mapped bytecode.
+    std::string source_name;
 };
 
 } // namespace dune

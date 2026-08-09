@@ -1,0 +1,11 @@
+import runtime;
+
+fn inner(): unit {
+    runtime.panic("boom");
+}
+
+fn outer(): unit {
+    inner();
+}
+
+outer();

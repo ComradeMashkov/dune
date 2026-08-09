@@ -12,10 +12,19 @@ namespace dune {
 
 class ModuleLoader {
 public:
+    struct SourceUnit {
+        std::size_t first_line = 1;
+        std::size_t last_line = 1;
+        std::string source_name;
+    };
+
     ModuleLoader();
     explicit ModuleLoader(std::vector<std::filesystem::path> search_paths);
 
     Program resolve(Program program, const std::filesystem::path& source_directory = {});
+    Program resolve(Program program, const std::filesystem::path& source_directory, const std::string& source_name);
+    Program resolve(Program program, const std::filesystem::path& source_directory,
+                    const std::vector<SourceUnit>& source_units);
 
 private:
     // Rewrite maps for one file's `import ... as` / `from ... import` directives:

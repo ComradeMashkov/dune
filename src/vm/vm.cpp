@@ -22,6 +22,45 @@ namespace dune {
 
 namespace {
 
+class VmFault final : public std::runtime_error {
+public:
+    VmFault(RuntimeErrorKind kind, std::string_view message) : std::runtime_error(std::string(message)), kind_(kind) {}
+
+    RuntimeErrorKind kind() const noexcept {
+        return kind_;
+    }
+
+private:
+    RuntimeErrorKind kind_;
+};
+
+bool contains(std::string_view text, std::string_view needle) {
+    return text.find(needle) != std::string_view::npos;
+}
+
+RuntimeErrorKind classify_runtime_failure(std::string_view message) {
+    if (contains(message, "out of bounds") || contains(message, "slice start") || contains(message, "empty array")) {
+        return RuntimeErrorKind::bounds;
+    }
+    if (contains(message, "division by zero") || contains(message, "modulo")) {
+        return RuntimeErrorKind::arithmetic;
+    }
+    if (contains(message, "foreign function") || contains(message, "closure captures")) {
+        return RuntimeErrorKind::foreign;
+    }
+    if (contains(message, "could not read") || contains(message, "could not write") ||
+        contains(message, "could not flush") || contains(message, "stdin") || contains(message, "stdout") ||
+        contains(message, "stderr")) {
+        return RuntimeErrorKind::io;
+    }
+    if (contains(message, "expected ") || contains(message, "invalid ") || contains(message, "type mismatch") ||
+        contains(message, "must be ") || contains(message, "cannot format") || contains(message, "format arguments") ||
+        contains(message, "non-function")) {
+        return RuntimeErrorKind::type;
+    }
+    return RuntimeErrorKind::internal;
+}
+
 Value make_signed(std::int64_t value) {
     Value result;
     result.kind = ValueKind::signed_integer;
@@ -153,7 +192,7 @@ Value make_callable(std::size_t function_index, std::vector<Value> captures = {}
 
 void expect_same_kind(const Value& left, const Value& right) {
     if (left.kind != right.kind) {
-        throw std::runtime_error("runtime type mismatch");
+        throw VmFault(RuntimeErrorKind::type, "runtime type mismatch");
     }
 }
 
@@ -192,7 +231,7 @@ Value add_values(const Value& left, const Value& right) {
         break;
     }
 
-    throw std::runtime_error("invalid addition operands");
+    throw VmFault(RuntimeErrorKind::type, "invalid addition operands");
 }
 
 Value subtract_values(const Value& left, const Value& right) {
@@ -216,7 +255,7 @@ Value subtract_values(const Value& left, const Value& right) {
         break;
     }
 
-    throw std::runtime_error("invalid subtraction operands");
+    throw VmFault(RuntimeErrorKind::type, "invalid subtraction operands");
 }
 
 Value multiply_values(const Value& left, const Value& right) {
@@ -240,7 +279,7 @@ Value multiply_values(const Value& left, const Value& right) {
         break;
     }
 
-    throw std::runtime_error("invalid multiplication operands");
+    throw VmFault(RuntimeErrorKind::type, "invalid multiplication operands");
 }
 
 Value divide_values(const Value& left, const Value& right) {
@@ -248,19 +287,19 @@ Value divide_values(const Value& left, const Value& right) {
     switch (left.kind) {
     case ValueKind::signed_integer:
         if (right.signed_value == 0) {
-            throw std::runtime_error("division by zero");
+            throw VmFault(RuntimeErrorKind::arithmetic, "division by zero");
         }
 
         return make_signed(left.signed_value / right.signed_value);
     case ValueKind::unsigned_integer:
         if (right.unsigned_value == 0) {
-            throw std::runtime_error("division by zero");
+            throw VmFault(RuntimeErrorKind::arithmetic, "division by zero");
         }
 
         return make_unsigned(left.unsigned_value / right.unsigned_value);
     case ValueKind::real:
         if (right.real_value == 0.0) {
-            throw std::runtime_error("division by zero");
+            throw VmFault(RuntimeErrorKind::arithmetic, "division by zero");
         }
 
         return make_real(left.real_value / right.real_value);
@@ -276,7 +315,7 @@ Value divide_values(const Value& left, const Value& right) {
         break;
     }
 
-    throw std::runtime_error("invalid division operands");
+    throw VmFault(RuntimeErrorKind::type, "invalid division operands");
 }
 
 Value modulo_values(const Value& left, const Value& right) {
@@ -284,13 +323,13 @@ Value modulo_values(const Value& left, const Value& right) {
     switch (left.kind) {
     case ValueKind::signed_integer:
         if (right.signed_value == 0) {
-            throw std::runtime_error("division by zero");
+            throw VmFault(RuntimeErrorKind::arithmetic, "division by zero");
         }
 
         return make_signed(left.signed_value % right.signed_value);
     case ValueKind::unsigned_integer:
         if (right.unsigned_value == 0) {
-            throw std::runtime_error("division by zero");
+            throw VmFault(RuntimeErrorKind::arithmetic, "division by zero");
         }
 
         return make_unsigned(left.unsigned_value % right.unsigned_value);
@@ -307,7 +346,7 @@ Value modulo_values(const Value& left, const Value& right) {
         break;
     }
 
-    throw std::runtime_error("invalid modulo operands");
+    throw VmFault(RuntimeErrorKind::type, "invalid modulo operands");
 }
 
 Value negate_value(const Value& value) {
@@ -330,12 +369,12 @@ Value negate_value(const Value& value) {
         break;
     }
 
-    throw std::runtime_error("invalid unary minus operand");
+    throw VmFault(RuntimeErrorKind::type, "invalid unary minus operand");
 }
 
 Value not_value(const Value& value) {
     if (value.kind != ValueKind::boolean) {
-        throw std::runtime_error("invalid logical not operand");
+        throw VmFault(RuntimeErrorKind::type, "invalid logical not operand");
     }
 
     return make_bool(!value.bool_value);
@@ -390,12 +429,12 @@ int compare_values(const Value& left, const Value& right) {
         break;
     }
 
-    throw std::runtime_error("invalid comparison operands");
+    throw VmFault(RuntimeErrorKind::type, "invalid comparison operands");
 }
 
 bool is_false(const Value& value) {
     if (value.kind != ValueKind::boolean) {
-        throw std::runtime_error("condition must be bool");
+        throw VmFault(RuntimeErrorKind::type, "condition must be bool");
     }
 
     return !value.bool_value;
@@ -422,23 +461,23 @@ std::string value_to_text(const Value& value) {
     case ValueKind::text:
         return value.text_value;
     case ValueKind::unit:
-        throw std::runtime_error("cannot format unit value");
+        throw VmFault(RuntimeErrorKind::type, "cannot format unit value");
     case ValueKind::array:
-        throw std::runtime_error("cannot format array value");
+        throw VmFault(RuntimeErrorKind::type, "cannot format array value");
     case ValueKind::tuple:
-        throw std::runtime_error("cannot format tuple value");
+        throw VmFault(RuntimeErrorKind::type, "cannot format tuple value");
     case ValueKind::record:
-        throw std::runtime_error("cannot format record value");
+        throw VmFault(RuntimeErrorKind::type, "cannot format record value");
     case ValueKind::variant:
         if (value.variant_payload == nullptr) {
             return value.variant_name;
         }
         return value.variant_name + "(" + value_to_text(*value.variant_payload) + ")";
     case ValueKind::callable:
-        throw std::runtime_error("cannot format function value");
+        throw VmFault(RuntimeErrorKind::type, "cannot format function value");
     }
 
-    throw std::runtime_error("cannot format unknown value");
+    throw VmFault(RuntimeErrorKind::type, "cannot format unknown value");
 }
 
 std::string format_value(const std::string& format, const std::vector<Value>& arguments) {
@@ -447,7 +486,7 @@ std::string format_value(const std::string& format, const std::vector<Value>& ar
     for (std::size_t index = 0; index < format.size(); ++index) {
         if (format[index] == '{' && index + 1 < format.size() && format[index + 1] == '}') {
             if (argument_index >= arguments.size()) {
-                throw std::runtime_error("not enough format arguments");
+                throw VmFault(RuntimeErrorKind::type, "not enough format arguments");
             }
 
             output << value_to_text(arguments[argument_index++]);
@@ -459,7 +498,7 @@ std::string format_value(const std::string& format, const std::vector<Value>& ar
     }
 
     if (argument_index != arguments.size()) {
-        throw std::runtime_error("too many format arguments");
+        throw VmFault(RuntimeErrorKind::type, "too many format arguments");
     }
 
     return output.str();
@@ -468,7 +507,7 @@ std::string format_value(const std::string& format, const std::vector<Value>& ar
 std::size_t index_value(const Value& value) {
     if (value.kind == ValueKind::signed_integer) {
         if (value.signed_value < 0) {
-            throw std::runtime_error("array index out of bounds");
+            throw VmFault(RuntimeErrorKind::bounds, "array index out of bounds");
         }
 
         return static_cast<std::size_t>(value.signed_value);
@@ -478,12 +517,12 @@ std::size_t index_value(const Value& value) {
         return static_cast<std::size_t>(value.unsigned_value);
     }
 
-    throw std::runtime_error("array index must be integer");
+    throw VmFault(RuntimeErrorKind::type, "array index must be integer");
 }
 
 std::vector<Value>& array_elements(const Value& value) {
     if (value.kind != ValueKind::array || value.array_value == nullptr) {
-        throw std::runtime_error("expected array value");
+        throw VmFault(RuntimeErrorKind::type, "expected array value");
     }
 
     return *value.array_value;
@@ -491,7 +530,7 @@ std::vector<Value>& array_elements(const Value& value) {
 
 std::vector<Value>& tuple_elements(const Value& value) {
     if (value.kind != ValueKind::tuple || value.tuple_value == nullptr) {
-        throw std::runtime_error("expected tuple value");
+        throw VmFault(RuntimeErrorKind::type, "expected tuple value");
     }
 
     return *value.tuple_value;
@@ -499,7 +538,7 @@ std::vector<Value>& tuple_elements(const Value& value) {
 
 std::vector<Value>& record_fields(const Value& value) {
     if (value.kind != ValueKind::record || value.record_value == nullptr) {
-        throw std::runtime_error("expected record value");
+        throw VmFault(RuntimeErrorKind::type, "expected record value");
     }
 
     return *value.record_value;
@@ -517,17 +556,17 @@ std::size_t slice_bound(const Value& value, std::size_t default_value, std::size
     std::size_t bound = 0;
     if (value.kind == ValueKind::signed_integer) {
         if (value.signed_value < 0) {
-            throw std::runtime_error("slice bound out of bounds");
+            throw VmFault(RuntimeErrorKind::bounds, "slice bound out of bounds");
         }
         bound = static_cast<std::size_t>(value.signed_value);
     } else if (value.kind == ValueKind::unsigned_integer) {
         bound = static_cast<std::size_t>(value.unsigned_value);
     } else {
-        throw std::runtime_error("slice bound must be integer");
+        throw VmFault(RuntimeErrorKind::type, "slice bound must be integer");
     }
 
     if (bound > length) {
-        throw std::runtime_error("slice bound out of bounds");
+        throw VmFault(RuntimeErrorKind::bounds, "slice bound out of bounds");
     }
 
     return bound;
@@ -553,7 +592,7 @@ double numeric_argument(const Value& value) {
         break;
     }
 
-    throw std::runtime_error("foreign function expected numeric argument");
+    throw VmFault(RuntimeErrorKind::foreign, "foreign function expected numeric argument");
 }
 
 Value cast_signed(const Value& value) {
@@ -578,7 +617,7 @@ Value cast_signed(const Value& value) {
         break;
     }
 
-    throw std::runtime_error("invalid signed cast operand");
+    throw VmFault(RuntimeErrorKind::type, "invalid signed cast operand");
 }
 
 Value cast_unsigned(const Value& value) {
@@ -603,7 +642,7 @@ Value cast_unsigned(const Value& value) {
         break;
     }
 
-    throw std::runtime_error("invalid unsigned cast operand");
+    throw VmFault(RuntimeErrorKind::type, "invalid unsigned cast operand");
 }
 
 Value cast_real(const Value& value) {
@@ -628,7 +667,7 @@ Value cast_real(const Value& value) {
         break;
     }
 
-    throw std::runtime_error("invalid real cast operand");
+    throw VmFault(RuntimeErrorKind::type, "invalid real cast operand");
 }
 
 Value cast_bool(const Value& value) {
@@ -653,7 +692,7 @@ Value cast_bool(const Value& value) {
         break;
     }
 
-    throw std::runtime_error("invalid bool cast operand");
+    throw VmFault(RuntimeErrorKind::type, "invalid bool cast operand");
 }
 
 Value cast_glyph(const Value& value) {
@@ -678,7 +717,7 @@ Value cast_glyph(const Value& value) {
         break;
     }
 
-    throw std::runtime_error("invalid glyph cast operand");
+    throw VmFault(RuntimeErrorKind::type, "invalid glyph cast operand");
 }
 
 } // namespace
@@ -696,19 +735,24 @@ void VirtualMachine::run(std::ostream& output) {
 void VirtualMachine::run(std::ostream& output, std::ostream& error, std::istream& input) {
     stack_.clear();
     frames_.clear();
-    frames_.push_back(CallFrame{&bytecode_.instructions, 0, std::vector<Value>(bytecode_.local_count), 0});
+    CallFrame frame{&bytecode_.instructions, 0, std::vector<Value>(bytecode_.local_count), 0};
+    frame.function_name = "<top-level>";
+    frames_.push_back(std::move(frame));
     execute(output, error, input);
 }
 
 // Runs a single compiled test chunk to completion. The caller (`dune test`)
 // wraps this in try/catch: a failed assertion aborts via `runtime.panic`
-// (a thrown std::runtime_error), which unwinds out of here and marks the test
+// (a thrown RuntimeError), which unwinds out of here and marks the test
 // failed without killing the process.
 void VirtualMachine::run_test(std::size_t function_index, std::ostream& output) {
     const Bytecode::Function& function = bytecode_.functions.at(function_index);
     stack_.clear();
     frames_.clear();
-    frames_.push_back(CallFrame{&function.instructions, 0, std::vector<Value>(function.local_count), 0});
+    CallFrame frame{&function.instructions, 0, std::vector<Value>(function.local_count), 0};
+    frame.function_name = function.name;
+    frame.declaration = function.location;
+    frames_.push_back(std::move(frame));
     execute(output, std::cerr, std::cin);
 }
 
@@ -716,15 +760,11 @@ void VirtualMachine::execute(std::ostream& output, std::ostream& error, std::ist
     try {
         execute_until(output, error, input, 0);
     } catch (const std::exception& exception) {
-        const std::string primary_error = exception.what();
-        std::vector<std::string> cleanup_errors;
+        const RuntimeError primary_error = make_runtime_error(exception);
+        std::vector<RuntimeFailure> cleanup_errors;
         unwind_frames_to(0, output, error, input, cleanup_errors);
-
-        std::string message = primary_error;
-        for (const std::string& cleanup_error : cleanup_errors) {
-            message += "\nwhile running deferred cleanup: " + cleanup_error;
-        }
-        throw std::runtime_error(message);
+        throw RuntimeError(primary_error.kind(), primary_error.message(), primary_error.frames(),
+                           std::move(cleanup_errors));
     }
 }
 
@@ -733,9 +773,11 @@ void VirtualMachine::execute_until(std::ostream& output, std::ostream& error, st
     while (frames_.size() > frame_depth) {
         CallFrame& frame = frames_.back();
         if (frame.ip >= frame.instructions->size()) {
-            throw std::runtime_error("instruction pointer moved past the end of a function");
+            throw VmFault(RuntimeErrorKind::internal, "instruction pointer moved past the end of a function");
         }
 
+        frame.active_ip = frame.ip;
+        frame.has_active_instruction = true;
         const Instruction& instruction = frame.instructions->at(frame.ip);
 
         switch (instruction.op) {
@@ -877,7 +919,7 @@ void VirtualMachine::execute_until(std::ostream& output, std::ostream& error, st
         case OpCode::make_closure: {
             const Bytecode::Function& function = bytecode_.functions.at(instruction.operand);
             if (stack_.size() < function.capture_count) {
-                throw std::runtime_error("not enough captured values on stack for closure");
+                throw VmFault(RuntimeErrorKind::internal, "not enough captured values on stack for closure");
             }
             std::vector<Value> captures(function.capture_count);
             for (std::size_t index = function.capture_count; index > 0; --index) {
@@ -902,7 +944,7 @@ void VirtualMachine::execute_until(std::ostream& output, std::ostream& error, st
         case OpCode::defer_push: {
             const Value callable = pop();
             if (callable.kind != ValueKind::callable) {
-                throw std::runtime_error("defer expects a callable cleanup");
+                throw VmFault(RuntimeErrorKind::type, "defer expects a callable cleanup");
             }
             frame.deferred_calls.push_back(callable);
             ++frame.ip;
@@ -914,7 +956,7 @@ void VirtualMachine::execute_until(std::ostream& output, std::ostream& error, st
                 frame.awaiting_defer_result = false;
             }
             if (frame.defer_scope_starts.empty()) {
-                throw std::runtime_error("defer scope stack underflow");
+                throw VmFault(RuntimeErrorKind::internal, "defer scope stack underflow");
             }
 
             const std::size_t scope_start = frame.defer_scope_starts.back();
@@ -967,7 +1009,7 @@ void VirtualMachine::execute_until(std::ostream& output, std::ostream& error, st
             break;
         case OpCode::make_array: {
             if (stack_.size() < instruction.operand) {
-                throw std::runtime_error("not enough values on stack for array literal");
+                throw VmFault(RuntimeErrorKind::internal, "not enough values on stack for array literal");
             }
 
             std::vector<Value> elements(instruction.operand);
@@ -981,7 +1023,7 @@ void VirtualMachine::execute_until(std::ostream& output, std::ostream& error, st
         }
         case OpCode::make_tuple: {
             if (stack_.size() < instruction.operand) {
-                throw std::runtime_error("not enough values on stack for tuple literal");
+                throw VmFault(RuntimeErrorKind::internal, "not enough values on stack for tuple literal");
             }
 
             std::vector<Value> elements(instruction.operand);
@@ -995,7 +1037,7 @@ void VirtualMachine::execute_until(std::ostream& output, std::ostream& error, st
         }
         case OpCode::make_record: {
             if (stack_.size() < instruction.operand) {
-                throw std::runtime_error("not enough values on stack for record literal");
+                throw VmFault(RuntimeErrorKind::internal, "not enough values on stack for record literal");
             }
 
             std::vector<Value> fields(instruction.operand);
@@ -1025,7 +1067,7 @@ void VirtualMachine::execute_until(std::ostream& output, std::ostream& error, st
         case OpCode::load_variant_tag: {
             const Value value = pop();
             if (value.kind != ValueKind::variant) {
-                throw std::runtime_error("expected choice value");
+                throw VmFault(RuntimeErrorKind::type, "expected choice value");
             }
 
             stack_.push_back(make_unsigned(value.variant_tag));
@@ -1035,7 +1077,7 @@ void VirtualMachine::execute_until(std::ostream& output, std::ostream& error, st
         case OpCode::load_variant_payload: {
             const Value value = pop();
             if (value.kind != ValueKind::variant || value.variant_payload == nullptr) {
-                throw std::runtime_error("expected choice variant payload");
+                throw VmFault(RuntimeErrorKind::type, "expected choice variant payload");
             }
 
             stack_.push_back(*value.variant_payload);
@@ -1050,7 +1092,7 @@ void VirtualMachine::execute_until(std::ostream& output, std::ostream& error, st
             if (indexed.kind == ValueKind::array) {
                 std::vector<Value>& elements = array_elements(indexed);
                 if (offset >= elements.size()) {
-                    throw std::runtime_error("array index out of bounds");
+                    throw VmFault(RuntimeErrorKind::bounds, "array index out of bounds");
                 }
 
                 stack_.push_back(elements[offset]);
@@ -1060,7 +1102,7 @@ void VirtualMachine::execute_until(std::ostream& output, std::ostream& error, st
 
             if (indexed.kind == ValueKind::text) {
                 if (offset >= indexed.text_value.size()) {
-                    throw std::runtime_error("text index out of bounds");
+                    throw VmFault(RuntimeErrorKind::bounds, "text index out of bounds");
                 }
 
                 stack_.push_back(make_glyph(indexed.text_value[offset]));
@@ -1068,13 +1110,13 @@ void VirtualMachine::execute_until(std::ostream& output, std::ostream& error, st
                 break;
             }
 
-            throw std::runtime_error("expected array or text value");
+            throw VmFault(RuntimeErrorKind::type, "expected array or text value");
         }
         case OpCode::load_tuple_element: {
             const Value tuple = pop();
             std::vector<Value>& elements = tuple_elements(tuple);
             if (instruction.operand >= elements.size()) {
-                throw std::runtime_error("tuple element out of bounds");
+                throw VmFault(RuntimeErrorKind::bounds, "tuple element out of bounds");
             }
 
             stack_.push_back(elements[instruction.operand]);
@@ -1085,7 +1127,7 @@ void VirtualMachine::execute_until(std::ostream& output, std::ostream& error, st
             const Value record = pop();
             std::vector<Value>& fields = record_fields(record);
             if (instruction.operand >= fields.size()) {
-                throw std::runtime_error("record field out of bounds");
+                throw VmFault(RuntimeErrorKind::bounds, "record field out of bounds");
             }
 
             stack_.push_back(fields[instruction.operand]);
@@ -1099,12 +1141,12 @@ void VirtualMachine::execute_until(std::ostream& output, std::ostream& error, st
             const std::size_t offset = index_value(index);
 
             if (indexed.kind != ValueKind::array) {
-                throw std::runtime_error("expected array value");
+                throw VmFault(RuntimeErrorKind::type, "expected array value");
             }
 
             std::vector<Value>& elements = array_elements(indexed);
             if (offset >= elements.size()) {
-                throw std::runtime_error("array index out of bounds");
+                throw VmFault(RuntimeErrorKind::bounds, "array index out of bounds");
             }
 
             elements[offset] = value;
@@ -1116,7 +1158,7 @@ void VirtualMachine::execute_until(std::ostream& output, std::ostream& error, st
             const Value record = pop();
             std::vector<Value>& fields = record_fields(record);
             if (instruction.operand >= fields.size()) {
-                throw std::runtime_error("record field out of bounds");
+                throw VmFault(RuntimeErrorKind::bounds, "record field out of bounds");
             }
 
             fields[instruction.operand] = value;
@@ -1133,7 +1175,7 @@ void VirtualMachine::execute_until(std::ostream& output, std::ostream& error, st
                 const std::size_t start = slice_bound(start_value, 0, elements.size());
                 const std::size_t end = slice_bound(end_value, elements.size(), elements.size());
                 if (start > end) {
-                    throw std::runtime_error("slice start cannot be greater than slice end");
+                    throw VmFault(RuntimeErrorKind::bounds, "slice start cannot be greater than slice end");
                 }
 
                 stack_.push_back(make_array(std::vector<Value>(elements.begin() + static_cast<std::ptrdiff_t>(start),
@@ -1146,7 +1188,7 @@ void VirtualMachine::execute_until(std::ostream& output, std::ostream& error, st
                 const std::size_t start = slice_bound(start_value, 0, sliced.text_value.size());
                 const std::size_t end = slice_bound(end_value, sliced.text_value.size(), sliced.text_value.size());
                 if (start > end) {
-                    throw std::runtime_error("slice start cannot be greater than slice end");
+                    throw VmFault(RuntimeErrorKind::bounds, "slice start cannot be greater than slice end");
                 }
 
                 stack_.push_back(make_text(sliced.text_value.substr(start, end - start)));
@@ -1154,7 +1196,7 @@ void VirtualMachine::execute_until(std::ostream& output, std::ostream& error, st
                 break;
             }
 
-            throw std::runtime_error("expected array or text value");
+            throw VmFault(RuntimeErrorKind::type, "expected array or text value");
         }
         case OpCode::array_len: {
             const Value array = pop();
@@ -1174,7 +1216,7 @@ void VirtualMachine::execute_until(std::ostream& output, std::ostream& error, st
             const Value array = pop();
             std::vector<Value>& elements = array_elements(array);
             if (elements.empty()) {
-                throw std::runtime_error("cannot pop from empty array");
+                throw VmFault(RuntimeErrorKind::bounds, "cannot pop from empty array");
             }
 
             stack_.push_back(elements.back());
@@ -1212,7 +1254,7 @@ void VirtualMachine::execute_until(std::ostream& output, std::ostream& error, st
         case OpCode::text_len: {
             const Value text = pop();
             if (text.kind != ValueKind::text) {
-                throw std::runtime_error("expected text value");
+                throw VmFault(RuntimeErrorKind::type, "expected text value");
             }
 
             stack_.push_back(make_signed(static_cast<std::int64_t>(text.text_value.size())));
@@ -1222,7 +1264,7 @@ void VirtualMachine::execute_until(std::ostream& output, std::ostream& error, st
         case OpCode::text_is_empty: {
             const Value text = pop();
             if (text.kind != ValueKind::text) {
-                throw std::runtime_error("expected text value");
+                throw VmFault(RuntimeErrorKind::type, "expected text value");
             }
 
             stack_.push_back(make_bool(text.text_value.empty()));
@@ -1233,7 +1275,7 @@ void VirtualMachine::execute_until(std::ostream& output, std::ostream& error, st
             const Value needle = pop();
             const Value text = pop();
             if (text.kind != ValueKind::text || needle.kind != ValueKind::text) {
-                throw std::runtime_error("expected text value");
+                throw VmFault(RuntimeErrorKind::type, "expected text value");
             }
 
             stack_.push_back(make_bool(text.text_value.find(needle.text_value) != std::string::npos));
@@ -1244,7 +1286,7 @@ void VirtualMachine::execute_until(std::ostream& output, std::ostream& error, st
             const Value text = pop();
             const Value needle = pop();
             if (text.kind != ValueKind::text || needle.kind != ValueKind::text) {
-                throw std::runtime_error("expected text value");
+                throw VmFault(RuntimeErrorKind::type, "expected text value");
             }
 
             stack_.push_back(make_bool(text.text_value.find(needle.text_value) != std::string::npos));
@@ -1255,7 +1297,7 @@ void VirtualMachine::execute_until(std::ostream& output, std::ostream& error, st
             const Value prefix = pop();
             const Value text = pop();
             if (text.kind != ValueKind::text || prefix.kind != ValueKind::text) {
-                throw std::runtime_error("expected text value");
+                throw VmFault(RuntimeErrorKind::type, "expected text value");
             }
 
             stack_.push_back(make_bool(text.text_value.starts_with(prefix.text_value)));
@@ -1265,7 +1307,7 @@ void VirtualMachine::execute_until(std::ostream& output, std::ostream& error, st
         case OpCode::read_file: {
             const Value path = pop();
             if (path.kind != ValueKind::text) {
-                throw std::runtime_error("read_file expects a text path");
+                throw VmFault(RuntimeErrorKind::type, "read_file expects a text path");
             }
 
             std::ifstream input(path.text_value, std::ios::binary);
@@ -1288,7 +1330,7 @@ void VirtualMachine::execute_until(std::ostream& output, std::ostream& error, st
             const Value content = pop();
             const Value path = pop();
             if (path.kind != ValueKind::text || content.kind != ValueKind::text) {
-                throw std::runtime_error("write_file expects text path and content");
+                throw VmFault(RuntimeErrorKind::type, "write_file expects text path and content");
             }
 
             std::ofstream file(path.text_value, std::ios::binary | std::ios::trunc);
@@ -1314,7 +1356,7 @@ void VirtualMachine::execute_until(std::ostream& output, std::ostream& error, st
         case OpCode::stdout_write: {
             const Value text = pop();
             if (text.kind != ValueKind::text) {
-                throw std::runtime_error("stdout_write expects text");
+                throw VmFault(RuntimeErrorKind::type, "stdout_write expects text");
             }
 
             output << text.text_value;
@@ -1334,7 +1376,7 @@ void VirtualMachine::execute_until(std::ostream& output, std::ostream& error, st
         case OpCode::stderr_write: {
             const Value text = pop();
             if (text.kind != ValueKind::text) {
-                throw std::runtime_error("stderr_write expects text");
+                throw VmFault(RuntimeErrorKind::type, "stderr_write expects text");
             }
 
             error << text.text_value;
@@ -1402,7 +1444,7 @@ void VirtualMachine::execute_until(std::ostream& output, std::ostream& error, st
         case OpCode::env_get: {
             const Value name = pop();
             if (name.kind != ValueKind::text) {
-                throw std::runtime_error("env_get expects a text name");
+                throw VmFault(RuntimeErrorKind::type, "env_get expects a text name");
             }
 
             const char* value = std::getenv(name.text_value.c_str());
@@ -1445,13 +1487,13 @@ void VirtualMachine::execute_until(std::ostream& output, std::ostream& error, st
             const Value label = pop();
             const Value level = pop();
             if (level.kind != ValueKind::signed_integer) {
-                throw std::runtime_error("log_emit expects an integer level");
+                throw VmFault(RuntimeErrorKind::type, "log_emit expects an integer level");
             }
             if (label.kind != ValueKind::text) {
-                throw std::runtime_error("log_emit expects a text label");
+                throw VmFault(RuntimeErrorKind::type, "log_emit expects a text label");
             }
             if (message.kind != ValueKind::text) {
-                throw std::runtime_error("log_emit expects a text message");
+                throw VmFault(RuntimeErrorKind::type, "log_emit expects a text message");
             }
 
             if (level.signed_value >= log_level_) {
@@ -1464,7 +1506,7 @@ void VirtualMachine::execute_until(std::ostream& output, std::ostream& error, st
         case OpCode::log_set_level: {
             const Value level = pop();
             if (level.kind != ValueKind::signed_integer) {
-                throw std::runtime_error("log_set_level expects an integer level");
+                throw VmFault(RuntimeErrorKind::type, "log_set_level expects an integer level");
             }
 
             log_level_ = static_cast<int>(level.signed_value);
@@ -1483,7 +1525,7 @@ void VirtualMachine::execute_until(std::ostream& output, std::ostream& error, st
         case OpCode::plot_backend_set: {
             const Value name = pop();
             if (name.kind != ValueKind::text) {
-                throw std::runtime_error("plot_backend_set expects a text name");
+                throw VmFault(RuntimeErrorKind::type, "plot_backend_set expects a text name");
             }
 
             plot_backend_ = name.text_value;
@@ -1494,7 +1536,7 @@ void VirtualMachine::execute_until(std::ostream& output, std::ostream& error, st
         case OpCode::plot_show_native: {
             const Value svg = pop();
             if (svg.kind != ValueKind::text) {
-                throw std::runtime_error("plot_show_native expects SVG text");
+                throw VmFault(RuntimeErrorKind::type, "plot_show_native expects SVG text");
             }
 
             const NativeCanvasDisplayResult display = show_native_canvas_svg("Dune Plot", svg.text_value);
@@ -1509,7 +1551,7 @@ void VirtualMachine::execute_until(std::ostream& output, std::ostream& error, st
             const Value svg = pop();
             const Value title = pop();
             if (title.kind != ValueKind::text || svg.kind != ValueKind::text) {
-                throw std::runtime_error("canvas_show_native expects text title and SVG text");
+                throw VmFault(RuntimeErrorKind::type, "canvas_show_native expects text title and SVG text");
             }
 
             const NativeCanvasDisplayResult display = show_native_canvas_svg(title.text_value, svg.text_value);
@@ -1528,7 +1570,7 @@ void VirtualMachine::execute_until(std::ostream& output, std::ostream& error, st
 
             const Value format = pop();
             if (format.kind != ValueKind::text) {
-                throw std::runtime_error("format string must be text");
+                throw VmFault(RuntimeErrorKind::type, "format string must be text");
             }
 
             stack_.push_back(make_text(format_value(format.text_value, arguments)));
@@ -1565,7 +1607,7 @@ void VirtualMachine::execute_until(std::ostream& output, std::ostream& error, st
 
 void VirtualMachine::call_callable(const Value& callable) {
     if (callable.kind != ValueKind::callable) {
-        throw std::runtime_error("attempted to call a non-function value");
+        throw VmFault(RuntimeErrorKind::type, "attempted to call a non-function value");
     }
 
     static const std::vector<Value> empty_captures;
@@ -1574,7 +1616,7 @@ void VirtualMachine::call_callable(const Value& callable) {
 }
 
 void VirtualMachine::unwind_frames_to(std::size_t frame_depth, std::ostream& output, std::ostream& error,
-                                      std::istream& input, std::vector<std::string>& cleanup_errors) {
+                                      std::istream& input, std::vector<RuntimeFailure>& cleanup_errors) {
     while (frames_.size() > frame_depth) {
         const std::size_t owner_depth = frames_.size();
         const std::size_t stack_base = frames_.back().stack_base;
@@ -1595,14 +1637,15 @@ void VirtualMachine::unwind_frames_to(std::size_t frame_depth, std::ostream& out
                     stack_.resize(stack_base);
                 }
             } catch (const std::exception& exception) {
-                const std::string cleanup_error = exception.what();
+                const RuntimeError cleanup_error = make_runtime_error(exception);
                 if (frames_.size() > owner_depth) {
                     unwind_frames_to(owner_depth, output, error, input, cleanup_errors);
                 }
                 if (stack_.size() > stack_base) {
                     stack_.resize(stack_base);
                 }
-                cleanup_errors.push_back(cleanup_error);
+                cleanup_errors.push_back(
+                    RuntimeFailure{cleanup_error.kind(), cleanup_error.message(), cleanup_error.frames()});
             }
         }
 
@@ -1613,15 +1656,39 @@ void VirtualMachine::unwind_frames_to(std::size_t frame_depth, std::ostream& out
     }
 }
 
+std::vector<RuntimeStackFrame> VirtualMachine::capture_stack_trace() const {
+    std::vector<RuntimeStackFrame> trace;
+    trace.reserve(frames_.size());
+    for (auto frame = frames_.rbegin(); frame != frames_.rend(); ++frame) {
+        SourceLocation location = frame->declaration;
+        if (frame->has_active_instruction && frame->instructions != nullptr &&
+            frame->active_ip < frame->instructions->size()) {
+            location = frame->instructions->at(frame->active_ip).location;
+        }
+        trace.push_back(RuntimeStackFrame{frame->function_name, std::move(location)});
+    }
+    return trace;
+}
+
+RuntimeError VirtualMachine::make_runtime_error(const std::exception& exception) const {
+    if (const auto* runtime = dynamic_cast<const RuntimeError*>(&exception)) {
+        return RuntimeError(runtime->kind(), runtime->message(), runtime->frames(), runtime->cleanup_errors());
+    }
+    if (const auto* fault = dynamic_cast<const VmFault*>(&exception)) {
+        return RuntimeError(fault->kind(), fault->what(), capture_stack_trace());
+    }
+    return RuntimeError(classify_runtime_failure(exception.what()), exception.what(), capture_stack_trace());
+}
+
 void VirtualMachine::call_function(std::size_t function_index, const std::vector<Value>& captures) {
     const Bytecode::Function& function = bytecode_.functions.at(function_index);
     if (stack_.size() < function.arity) {
-        throw std::runtime_error("not enough arguments on stack for function call");
+        throw VmFault(RuntimeErrorKind::internal, "not enough arguments on stack for function call");
     }
 
     if (function.is_extern) {
         if (!captures.empty()) {
-            throw std::runtime_error("foreign functions cannot have closure captures");
+            throw VmFault(RuntimeErrorKind::foreign, "foreign functions cannot have closure captures");
         }
         std::vector<Value> arguments(function.arity);
         for (std::size_t index = function.arity; index > 0; --index) {
@@ -1633,7 +1700,7 @@ void VirtualMachine::call_function(std::size_t function_index, const std::vector
     }
 
     if (captures.size() != function.capture_count) {
-        throw std::runtime_error("closure capture count mismatch");
+        throw VmFault(RuntimeErrorKind::internal, "closure capture count mismatch");
     }
 
     std::vector<Value> locals(function.local_count);
@@ -1645,13 +1712,16 @@ void VirtualMachine::call_function(std::size_t function_index, const std::vector
     }
 
     const std::size_t base = stack_.size();
-    frames_.push_back(CallFrame{&function.instructions, 0, std::move(locals), base});
+    CallFrame frame{&function.instructions, 0, std::move(locals), base};
+    frame.function_name = function.name;
+    frame.declaration = function.location;
+    frames_.push_back(std::move(frame));
 }
 
 Value VirtualMachine::call_extern_function(const Bytecode::Function& function, std::vector<Value> arguments) {
     const std::string& symbol = function.extern_symbol.empty() ? function.name : function.extern_symbol;
     if (symbol == "dune_panic" && arguments.size() == 1 && arguments[0].kind == ValueKind::text) {
-        throw std::runtime_error(arguments[0].text_value);
+        throw VmFault(RuntimeErrorKind::panic, arguments[0].text_value);
     }
 
     if (arguments.size() == 1) {
@@ -1692,12 +1762,12 @@ Value VirtualMachine::call_extern_function(const Bytecode::Function& function, s
         return make_real(std::pow(numeric_argument(arguments[0]), numeric_argument(arguments[1])));
     }
 
-    throw std::runtime_error("unsupported foreign function '" + symbol + "'");
+    throw VmFault(RuntimeErrorKind::foreign, "unsupported foreign function '" + symbol + "'");
 }
 
 Value VirtualMachine::pop() {
     if (stack_.empty()) {
-        throw std::runtime_error("stack underflow");
+        throw VmFault(RuntimeErrorKind::internal, "stack underflow");
     }
 
     const Value value = stack_.back();

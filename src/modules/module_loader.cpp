@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <iterator>
+#include <limits>
 #include <sstream>
 #include <stdexcept>
 #include <utility>
@@ -65,6 +66,90 @@ bool is_relative_to_parent(const std::filesystem::path& path) {
     }
 
     return false;
+}
+
+void annotate_expression(Expression& expression, const std::vector<ModuleLoader::SourceUnit>& source_units);
+void annotate_statement(Statement& statement, const std::vector<ModuleLoader::SourceUnit>& source_units);
+
+void annotate_location(SourceLocation& location, const std::vector<ModuleLoader::SourceUnit>& source_units) {
+    if (!location.source_name.empty()) {
+        return;
+    }
+    for (const ModuleLoader::SourceUnit& unit : source_units) {
+        if (location.line < unit.first_line || location.line > unit.last_line) {
+            continue;
+        }
+        location.line -= unit.first_line - 1;
+        location.source_name = unit.source_name;
+        return;
+    }
+}
+
+void annotate_parameter(Parameter& parameter, const std::vector<ModuleLoader::SourceUnit>& source_units) {
+    annotate_location(parameter.location, source_units);
+    if (parameter.default_value != nullptr) {
+        annotate_expression(*parameter.default_value, source_units);
+    }
+}
+
+void annotate_expression(Expression& expression, const std::vector<ModuleLoader::SourceUnit>& source_units) {
+    annotate_location(expression.location, source_units);
+    if (expression.left != nullptr) {
+        annotate_expression(*expression.left, source_units);
+    }
+    if (expression.right != nullptr) {
+        annotate_expression(*expression.right, source_units);
+    }
+    for (std::unique_ptr<Expression>& argument : expression.arguments) {
+        if (argument != nullptr) {
+            annotate_expression(*argument, source_units);
+        }
+    }
+    for (Parameter& parameter : expression.parameters) {
+        annotate_parameter(parameter, source_units);
+    }
+    for (Statement& statement : expression.body) {
+        annotate_statement(statement, source_units);
+    }
+}
+
+void annotate_statement(Statement& statement, const std::vector<ModuleLoader::SourceUnit>& source_units) {
+    annotate_location(statement.location, source_units);
+    if (statement.expression != nullptr) {
+        annotate_expression(*statement.expression, source_units);
+    }
+    if (statement.target != nullptr) {
+        annotate_expression(*statement.target, source_units);
+    }
+    for (std::unique_ptr<Expression>& argument : statement.arguments) {
+        if (argument != nullptr) {
+            annotate_expression(*argument, source_units);
+        }
+    }
+    for (Parameter& parameter : statement.parameters) {
+        annotate_parameter(parameter, source_units);
+    }
+    for (GenericParameter& parameter : statement.generic_parameters) {
+        annotate_location(parameter.location, source_units);
+    }
+    for (Statement& child : statement.body) {
+        annotate_statement(child, source_units);
+    }
+    for (Statement& child : statement.else_body) {
+        annotate_statement(child, source_units);
+    }
+    if (statement.initializer != nullptr) {
+        annotate_statement(*statement.initializer, source_units);
+    }
+    if (statement.increment != nullptr) {
+        annotate_statement(*statement.increment, source_units);
+    }
+}
+
+void annotate_program(Program& program, const std::vector<ModuleLoader::SourceUnit>& source_units) {
+    for (Statement& statement : program.statements) {
+        annotate_statement(statement, source_units);
+    }
 }
 
 Type clone_type(const Type& type) {
@@ -280,8 +365,22 @@ ModuleLoader::ModuleLoader() : ModuleLoader(default_search_paths()) {}
 ModuleLoader::ModuleLoader(std::vector<std::filesystem::path> search_paths) : search_paths_(std::move(search_paths)) {}
 
 Program ModuleLoader::resolve(Program program, const std::filesystem::path& source_directory) {
+    return resolve(std::move(program), source_directory, std::vector<SourceUnit>{});
+}
+
+Program ModuleLoader::resolve(Program program, const std::filesystem::path& source_directory,
+                              const std::string& source_name) {
+    return resolve(std::move(program), source_directory,
+                   source_name.empty()
+                       ? std::vector<SourceUnit>{}
+                       : std::vector<SourceUnit>{{1, (std::numeric_limits<std::size_t>::max)(), source_name}});
+}
+
+Program ModuleLoader::resolve(Program program, const std::filesystem::path& source_directory,
+                              const std::vector<SourceUnit>& source_units) {
     loaded_modules_.clear();
     module_exports_.clear();
+    annotate_program(program, source_units);
     desugar_impls(program);
 
     // Load every imported module (recording aliases / selective imports), then
@@ -305,6 +404,7 @@ std::vector<Statement> ModuleLoader::load_module(const std::string& module_name,
 
     const std::filesystem::path module_path = find_module(module_name, importer_directory);
     Program module = parse_file(module_path);
+    annotate_program(module, {{1, (std::numeric_limits<std::size_t>::max)(), module_path.lexically_normal().string()}});
     desugar_impls(module);
 
     // Resolve the module's own imports (including its aliases / selective imports),

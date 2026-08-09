@@ -152,10 +152,30 @@ bool executes_stateful_cells_and_recovers_after_edits() {
                     "expected Restart Kernel to reset execution counts") &&
              passed;
 
-    document.cells.push_back(dune::notebook::Cell{"runtime", dune::notebook::CellKind::code, "1 / 0", {}, {}, 0});
+    document.cells.push_back(
+        dune::notebook::Cell{"runtime-definition",
+                             dune::notebook::CellKind::code,
+                             "import runtime;\nfn explode(): unit {\n    runtime.panic(\"cell boom\");\n}",
+                             {},
+                             {},
+                             0});
+    document.cells.push_back(
+        dune::notebook::Cell{"runtime-call", dune::notebook::CellKind::code, "explode();", {}, {}, 0});
     report = kernel.execute(document);
-    passed = expect(!report.success && report.cells.back().error.find("state.dnb#cell-runtime") != std::string::npos,
-                    "expected runtime failures to identify their notebook cell") &&
+    const std::string runtime_error = report.cells.back().error;
+    passed = expect(!report.success && report.failed_cell == document.cells.size() - 1,
+                    "expected the call cell to report the runtime failure") &&
+             passed;
+    passed = expect(runtime_error.find("panic: cell boom\nstack trace:") != std::string::npos,
+                    "expected a rendered notebook panic stack") &&
+             passed;
+    passed = expect(runtime_error.find("0: explode") != std::string::npos &&
+                        runtime_error.find("state.dnb#cell-runtime-definition:3:5") != std::string::npos,
+                    "expected a function frame mapped to its defining cell") &&
+             passed;
+    passed = expect(runtime_error.find("1: <top-level>") != std::string::npos &&
+                        runtime_error.find("state.dnb#cell-runtime-call:1:1") != std::string::npos,
+                    "expected the caller frame mapped to the executing cell") &&
              passed;
     return passed;
 }

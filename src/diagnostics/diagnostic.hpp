@@ -39,7 +39,7 @@ inline std::string format_diagnostic(const SourceLocation& location, const std::
 // type can read the structured location via `diagnostic()`.
 class DiagnosticError : public std::runtime_error {
 public:
-    DiagnosticError(SourceLocation location, std::string message)
+    DiagnosticError(const SourceLocation& location, std::string message)
         : std::runtime_error(format_diagnostic(location, message)),
           diagnostic_{Severity::error, location, std::move(message), true} {}
 

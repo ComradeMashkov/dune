@@ -123,6 +123,7 @@ private:
     std::unordered_map<const Expression*, std::vector<TypeChecker::ClosureCapture>> closure_captures_;
     std::vector<LoopJumps> loop_stack_;
     std::vector<Instruction>* instructions_ = nullptr;
+    SourceLocation current_location_;
     const Statement* repl_expression_statement_ = nullptr;
     std::size_t temporary_count_ = 0;
     std::size_t local_count_ = 0;

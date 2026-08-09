@@ -381,6 +381,26 @@ add_test(
 )
 
 add_test(
+    NAME cli_runtime_stack_trace
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/errors/runtime_stack_trace.dn
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_runtime_trace_case.cmake
+)
+
+add_test(
+    NAME cli_test_runtime_stack_trace
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/test/runtime_stack_trace.dn
+        -D EXPECTED_ERROR="test result: FAILED"
+        -D EXPECTED_FRAME="test \"reports runtime frames\""
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_test_failure_case.cmake
+)
+
+add_test(
     NAME cli_check_status_error
     COMMAND
         ${CMAKE_COMMAND}
