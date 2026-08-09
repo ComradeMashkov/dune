@@ -404,7 +404,8 @@ std::vector<Statement> ModuleLoader::load_module(const std::string& module_name,
 
     const std::filesystem::path module_path = find_module(module_name, importer_directory);
     Program module = parse_file(module_path);
-    annotate_program(module, {{1, (std::numeric_limits<std::size_t>::max)(), module_path.lexically_normal().string()}});
+    annotate_program(module,
+                     {{1, (std::numeric_limits<std::size_t>::max)(), module_path.lexically_normal().generic_string()}});
     desugar_impls(module);
 
     // Resolve the module's own imports (including its aliases / selective imports),
