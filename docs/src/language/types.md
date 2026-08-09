@@ -50,6 +50,10 @@ io.println(values[0]);        // 1
 middle: [int] = values[1:3];
 ```
 
+Slice bounds are zero-based and the right bound is excluded. Either bound may
+be omitted (`values[:end]`, `values[start:]`, or `values[:]`). Both bounds must
+be within `0..values.len()` and the start cannot exceed the end.
+
 Array assignment shares the same mutable array. Use `import array;` and
 `values.copy()` for a fresh outer array; that operation is shallow. See
 [Values, copying, and mutation](value-semantics.md#explicit-copies).

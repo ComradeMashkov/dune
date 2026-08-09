@@ -3,7 +3,7 @@
 // methods simply forward to the VM's native text operations of the same name;
 // others are written in Dune on top of indexing and slicing.
 
-// The length in glyphs of this text (forwards to the native operation).
+// The length in UTF-8 bytes of this text (forwards to the VM operation).
 export method text.len(): int {
     return this.len();
 }
@@ -35,7 +35,7 @@ export method text.ends_with(suffix: text): bool {
         return false;
     }
 
-    // Slice off the last `suffix_len` glyphs and compare to `suffix`.
+    // Slice off the last `suffix_len` bytes and compare to `suffix`.
     return this[value_len - suffix_len:] == suffix;
 }
 
@@ -50,7 +50,7 @@ export method text.slice(start: int, end: int): text {
     return this[start:end];
 }
 
-// The first `end` glyphs of the text.
+// The first `end` UTF-8 bytes of the text.
 export method text.prefix(end: int): text {
     return this[:end];
 }

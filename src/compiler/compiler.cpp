@@ -2578,13 +2578,13 @@ void Compiler::compile_slice_expression(const Expression& expression) {
     if (!expression.arguments.empty() && expression.arguments[0] != nullptr) {
         compile_expression(*expression.arguments[0]);
     } else {
-        emit(OpCode::push_constant, add_constant(make_signed(-1)));
+        emit(OpCode::push_constant, add_constant(make_unit()));
     }
 
     if (expression.arguments.size() > 1 && expression.arguments[1] != nullptr) {
         compile_expression(*expression.arguments[1]);
     } else {
-        emit(OpCode::push_constant, add_constant(make_signed(-1)));
+        emit(OpCode::push_constant, add_constant(make_unit()));
     }
 
     emit(OpCode::load_slice);
