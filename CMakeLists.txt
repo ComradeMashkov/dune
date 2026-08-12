@@ -341,6 +341,16 @@ add_test(
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_doc_case.cmake
 )
 
+add_test(
+    NAME cli_doc_attributes
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/doc/attributes.dn
+        -D EXPECTED_OUTPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/golden/doc_attributes.out
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_doc_case.cmake
+)
+
 # `--check` regenerates in memory and must agree with the golden (exit 0).
 add_test(
     NAME cli_doc_check
@@ -348,7 +358,8 @@ add_test(
             --check -o ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/golden/doc_sample.out
 )
 
-# `dune test` runs every `test "..." { ... }` block and reports pass/fail.
+# `dune test` runs test blocks and attributed test functions with their
+# ignore/expected-failure policies.
 add_test(
     NAME cli_test_passing
     COMMAND
@@ -359,6 +370,59 @@ add_test(
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_test_case.cmake
 )
 
+add_test(
+    NAME cli_test_attributes
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/test/attributes.dn
+        -D EXPECTED_OUTPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/golden/test_attributes.out
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_test_case.cmake
+)
+
+add_test(
+    NAME cli_test_attribute_behaviors
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/test/attribute_behaviors.dn
+        -D EXPECTED_OUTPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/golden/test_attribute_behaviors.out
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_test_case.cmake
+)
+
+add_test(
+    NAME cli_deprecated_attribute_warning
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/language/deprecated_attribute.dn
+        -D EXPECTED_OUTPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/golden/deprecated_attribute.out
+        -D "EXPECTED_WARNING=use of deprecated function 'old': use fresh"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_warning_case.cmake
+)
+
+add_test(
+    NAME cli_experimental_attribute_warning
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/language/attribute_warnings.dn
+        -D EXPECTED_OUTPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/golden/attribute_warnings.out
+        -D "EXPECTED_WARNING=use of experimental function 'preview': the API may change"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_warning_case.cmake
+)
+
+add_test(
+    NAME cli_must_use_attribute_warning
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/language/attribute_warnings.dn
+        -D EXPECTED_OUTPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/golden/attribute_warnings.out
+        -D "EXPECTED_WARNING=unused return value of @must_use function 'calculate': store or inspect the result"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_warning_case.cmake
+)
+
 # A failing assertion must make `dune test` exit non-zero and report the failure.
 add_test(
     NAME cli_test_failing
@@ -367,6 +431,66 @@ add_test(
         -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
         -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/test/failing.dn
         -D EXPECTED_ERROR=test result: FAILED
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_test_failure_case.cmake
+)
+
+add_test(
+    NAME cli_test_attribute_failing
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/test/attribute_failing.dn
+        -D "EXPECTED_ERROR=test \"attribute_failure\" ... FAILED"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_test_failure_case.cmake
+)
+
+add_test(
+    NAME cli_test_should_panic_wrong_message
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/test/attribute_expectation_failing.dn
+        -D "EXPECTED_ERROR=expected panic message containing 'wrong_message'"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_test_failure_case.cmake
+)
+
+add_test(
+    NAME cli_test_should_panic_missing_panic
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/test/attribute_expectation_failing.dn
+        -D "EXPECTED_ERROR=expected test to panic"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_test_failure_case.cmake
+)
+
+add_test(
+    NAME cli_test_should_panic_rejects_typed_error
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/test/attribute_expectation_failing.dn
+        -D "EXPECTED_ERROR=expected test to panic, but got bounds error"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_test_failure_case.cmake
+)
+
+add_test(
+    NAME cli_test_should_fail_wrong_message
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/test/attribute_expectation_failing.dn
+        -D "EXPECTED_ERROR=expected failure message containing 'needle'"
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_test_failure_case.cmake
+)
+
+add_test(
+    NAME cli_test_should_fail_missing_failure
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/test/attribute_expectation_failing.dn
+        -D "EXPECTED_ERROR=expected test to fail"
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_test_failure_case.cmake
 )
 

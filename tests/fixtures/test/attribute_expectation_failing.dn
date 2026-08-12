@@ -1,0 +1,33 @@
+import runtime;
+import io;
+
+@test
+@should_panic("wrong_message")
+fn wrong_message(): unit {
+    runtime.panic("different message");
+}
+
+@test
+@should_panic
+fn missing_panic(): unit {
+    return;
+}
+
+@test
+@should_panic
+fn typed_error_is_not_panic(): unit {
+    values: [int] = [1];
+    io.println(values[4]);
+}
+
+@test
+@should_fail("needle")
+fn wrong_failure_message(): unit {
+    runtime.panic("different message");
+}
+
+@test
+@should_fail
+fn missing_failure(): unit {
+    return;
+}

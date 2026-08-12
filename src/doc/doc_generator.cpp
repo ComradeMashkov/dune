@@ -327,6 +327,54 @@ void append_doc(std::vector<std::string>& out, const std::string& doc) {
     out.emplace_back();
 }
 
+std::string quote_attribute_text(const std::string& value) {
+    std::string result = "\"";
+    for (const char current : value) {
+        if (current == '\\' || current == '"') {
+            result += '\\';
+        }
+        result += current;
+    }
+    return result + "\"";
+}
+
+std::string attribute_source(const Attribute& attribute) {
+    std::string source = "@" + attribute.name;
+    if (attribute.arguments.empty()) {
+        return source;
+    }
+    source += "(";
+    for (std::size_t index = 0; index < attribute.arguments.size(); ++index) {
+        if (index > 0) {
+            source += ", ";
+        }
+        const AttributeArgument& argument = attribute.arguments[index];
+        source += argument.kind == AttributeArgumentKind::text ? quote_attribute_text(argument.value) : argument.value;
+    }
+    return source + ")";
+}
+
+void append_attributes(std::vector<std::string>& out, const Statement& statement) {
+    for (const Attribute& attribute : statement.attributes) {
+        if (attribute.name == "deprecated" && !attribute.arguments.empty()) {
+            out.push_back("> **Deprecated:** " + attribute.arguments.front().value);
+        } else if (attribute.name == "experimental" && !attribute.arguments.empty()) {
+            out.push_back("> **Experimental:** " + attribute.arguments.front().value);
+        } else if (attribute.name == "must_use") {
+            std::string message = "> **Must use:** the returned value must not be discarded";
+            if (!attribute.arguments.empty()) {
+                message += " — " + attribute.arguments.front().value;
+            }
+            out.push_back(std::move(message));
+        } else if (attribute.name == "since" && !attribute.arguments.empty()) {
+            out.push_back("> **Available since:** " + attribute.arguments.front().value);
+        } else {
+            out.push_back("**Attribute:** `" + attribute_source(attribute) + "`");
+        }
+        out.emplace_back();
+    }
+}
+
 void append_declaration(std::vector<std::string>& out, const Statement& statement, bool module_has_exports) {
     const auto is_public = [module_has_exports](bool exported) { return exported || !module_has_exports; };
 
@@ -334,24 +382,28 @@ void append_declaration(std::vector<std::string>& out, const Statement& statemen
     case StatementKind::function:
         out.push_back("### `" + function_signature(statement) + "`");
         out.emplace_back();
+        append_attributes(out, statement);
         append_doc(out, statement.doc_comment);
         break;
 
     case StatementKind::const_statement:
         out.push_back("### `" + const_signature(statement) + "`");
         out.emplace_back();
+        append_attributes(out, statement);
         append_doc(out, statement.doc_comment);
         break;
 
     case StatementKind::type_alias_statement:
         out.push_back("### `" + type_alias_signature(statement) + "`");
         out.emplace_back();
+        append_attributes(out, statement);
         append_doc(out, statement.doc_comment);
         break;
 
     case StatementKind::struct_statement: {
         out.push_back("### `" + record_signature(statement) + "`");
         out.emplace_back();
+        append_attributes(out, statement);
         append_doc(out, statement.doc_comment);
 
         std::vector<const Parameter*> fields;
@@ -388,6 +440,7 @@ void append_declaration(std::vector<std::string>& out, const Statement& statemen
     case StatementKind::enum_statement: {
         out.push_back("### `" + choice_signature(statement) + "`");
         out.emplace_back();
+        append_attributes(out, statement);
         append_doc(out, statement.doc_comment);
         if (!statement.parameters.empty()) {
             out.emplace_back("**Variants**");
@@ -403,6 +456,7 @@ void append_declaration(std::vector<std::string>& out, const Statement& statemen
     case StatementKind::contract_statement: {
         out.push_back("### `contract " + statement.name + "`");
         out.emplace_back();
+        append_attributes(out, statement);
         append_doc(out, statement.doc_comment);
         std::vector<const Statement*> methods;
         for (const Statement& method : statement.body) {

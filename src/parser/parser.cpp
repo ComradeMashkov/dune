@@ -598,12 +598,97 @@ Statement Parser::statement() {
     // A declaration's doc-comment rides on the leading comment of its first
     // token; capture it before dispatch consumes the token.
     std::string doc = peek().leading_comment;
+    std::vector<Attribute> parsed_attributes = attributes();
+    if (!parsed_attributes.empty() && check(TokenType::eof)) {
+        throw DiagnosticError(location_from_token(peek()), "expected a top-level declaration after attribute");
+    }
+    if (!parsed_attributes.empty() && block_depth_ != 0) {
+        throw DiagnosticError(parsed_attributes.front().location,
+                              "attributes are only allowed on top-level declarations");
+    }
     Statement result = statement_dispatch();
     if (result.doc_comment.empty() && !doc.empty()) {
         result.doc_comment = std::move(doc);
     }
+    result.attributes = std::move(parsed_attributes);
 
     return result;
+}
+
+std::vector<Attribute> Parser::attributes() {
+    std::vector<Attribute> result;
+    while (check(TokenType::at)) {
+        result.push_back(attribute());
+    }
+    return result;
+}
+
+Attribute Parser::attribute() {
+    consume(TokenType::at, "expected '@' before attribute");
+    if (!check_identifier_like() && !check(TokenType::test_keyword)) {
+        throw DiagnosticError(location_from_token(peek()), "expected attribute name after '@'");
+    }
+
+    const Token name = advance();
+    Attribute result{name.lexeme, {}, location_from_token(name)};
+    while (match(TokenType::dot)) {
+        if (!check_identifier_like() && !check(TokenType::test_keyword)) {
+            throw DiagnosticError(location_from_token(peek()), "expected attribute name component after '.'");
+        }
+        result.name += "." + advance().lexeme;
+    }
+
+    if (!match(TokenType::left_paren)) {
+        return result;
+    }
+
+    if (!check(TokenType::right_paren)) {
+        while (true) {
+            result.arguments.push_back(attribute_argument());
+            if (!match(TokenType::comma)) {
+                break;
+            }
+            if (check(TokenType::right_paren)) {
+                break;
+            }
+        }
+    }
+    consume(TokenType::right_paren, "expected ')' after attribute arguments");
+    return result;
+}
+
+AttributeArgument Parser::attribute_argument() {
+    bool negative = false;
+    SourceLocation location = location_from_token(peek());
+    if (match(TokenType::minus)) {
+        negative = true;
+        if (!check(TokenType::number) && !check(TokenType::float_number)) {
+            throw DiagnosticError(location_from_token(peek()), "expected numeric literal after '-' in attribute");
+        }
+    }
+
+    if (match(TokenType::number)) {
+        return AttributeArgument{AttributeArgumentKind::integer, std::string(negative ? "-" : "") + previous().lexeme,
+                                 location};
+    }
+    if (match(TokenType::float_number)) {
+        return AttributeArgument{AttributeArgumentKind::real, std::string(negative ? "-" : "") + previous().lexeme,
+                                 location};
+    }
+    if (negative) {
+        throw DiagnosticError(location_from_token(peek()), "expected numeric literal after '-' in attribute");
+    }
+    if (match(TokenType::char_literal)) {
+        return AttributeArgument{AttributeArgumentKind::glyph, previous().lexeme, location};
+    }
+    if (match(TokenType::string_literal)) {
+        return AttributeArgument{AttributeArgumentKind::text, decode_string_literal(previous().lexeme), location};
+    }
+    if (match(TokenType::true_keyword) || match(TokenType::false_keyword)) {
+        return AttributeArgument{AttributeArgumentKind::boolean, previous().lexeme, location};
+    }
+
+    throw DiagnosticError(location_from_token(peek()), "attribute arguments must be literal values");
 }
 
 Statement Parser::statement_dispatch() {
@@ -1357,12 +1442,14 @@ Statement Parser::test_statement() {
 
 std::vector<Statement> Parser::block() {
     std::vector<Statement> statements;
+    ++block_depth_;
 
     while (!check(TokenType::right_brace) && !is_at_end()) {
         statements.push_back(statement());
     }
 
     consume(TokenType::right_brace, "expected '}' after block");
+    --block_depth_;
     return statements;
 }
 

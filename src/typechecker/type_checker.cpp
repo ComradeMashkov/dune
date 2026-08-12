@@ -33,6 +33,15 @@ std::string module_member_name(const std::string& name) {
     return separator == std::string::npos ? name : name.substr(separator + 1);
 }
 
+const Attribute* find_attribute(const Statement& statement, std::string_view name) {
+    for (const Attribute& attribute : statement.attributes) {
+        if (attribute.name == name) {
+            return &attribute;
+        }
+    }
+    return nullptr;
+}
+
 char decode_pattern_glyph(const std::string& lexeme) {
     if (lexeme.size() == 3) {
         return lexeme[1];
@@ -338,6 +347,7 @@ Statement clone_statement(const Statement& statement) {
     result.module_alias = statement.module_alias;
     result.import_symbols = statement.import_symbols;
     result.doc_comment = statement.doc_comment;
+    result.attributes = statement.attributes;
     return result;
 }
 
@@ -733,6 +743,8 @@ void TypeChecker::check(const Program& program) {
     generic_overloads_.clear();
     imports_.clear();
     global_constants_.clear();
+    deprecated_symbols_.clear();
+    experimental_symbols_.clear();
     foreknown_constants_.clear();
     module_exports_.clear();
     known_modules_.clear();
@@ -750,6 +762,12 @@ void TypeChecker::check(const Program& program) {
     scopes_.clear();
     lambda_contexts_.clear();
     loop_depth_ = 0;
+    diagnostics_.clear();
+    emitted_diagnostic_keys_.clear();
+
+    for (const Statement& statement : program.statements) {
+        validate_attributes(statement);
+    }
 
     for (const Statement& statement : program.statements) {
         if (statement.kind == StatementKind::struct_statement) {
@@ -923,6 +941,248 @@ const std::unordered_map<std::string, TypeChecker::EnumDefinition>& TypeChecker:
     return enums_;
 }
 
+const std::vector<Diagnostic>& TypeChecker::diagnostics() const {
+    return diagnostics_;
+}
+
+void TypeChecker::validate_attributes(const Statement& statement) {
+    if (statement.attributes.empty()) {
+        return;
+    }
+
+    const bool declaration =
+        statement.kind == StatementKind::function || statement.kind == StatementKind::const_statement ||
+        statement.kind == StatementKind::struct_statement || statement.kind == StatementKind::enum_statement ||
+        statement.kind == StatementKind::contract_statement || statement.kind == StatementKind::type_alias_statement;
+    if (!declaration) {
+        throw DiagnosticError(statement.attributes.front().location,
+                              "attributes can only be applied to top-level declarations");
+    }
+
+    const auto declaration_kind = [&statement]() -> std::string {
+        switch (statement.kind) {
+        case StatementKind::function:
+            return "function";
+        case StatementKind::const_statement:
+            return "constant";
+        case StatementKind::struct_statement:
+            return "record";
+        case StatementKind::enum_statement:
+            return "choice";
+        case StatementKind::contract_statement:
+            return "contract";
+        case StatementKind::type_alias_statement:
+            return "type alias";
+        default:
+            return {};
+        }
+    };
+    const auto validate_optional_message = [](const Attribute& attribute) {
+        if (attribute.arguments.size() > 1 ||
+            (!attribute.arguments.empty() && attribute.arguments.front().kind != AttributeArgumentKind::text)) {
+            throw DiagnosticError(attribute.location, "@" + attribute.name + " accepts at most one text message");
+        }
+        if (!attribute.arguments.empty() && attribute.arguments.front().value.empty()) {
+            throw DiagnosticError(attribute.arguments.front().location,
+                                  "@" + attribute.name + " message must not be empty");
+        }
+    };
+    const auto validate_required_message = [](const Attribute& attribute) {
+        if (attribute.arguments.size() != 1 || attribute.arguments.front().kind != AttributeArgumentKind::text) {
+            throw DiagnosticError(attribute.location,
+                                  "@" + attribute.name + " expects exactly one text message argument");
+        }
+        if (attribute.arguments.front().value.empty()) {
+            throw DiagnosticError(attribute.arguments.front().location,
+                                  "@" + attribute.name + " message must not be empty");
+        }
+    };
+
+    std::unordered_set<std::string> seen;
+    for (const Attribute& attribute : statement.attributes) {
+        if (!seen.insert(attribute.name).second) {
+            throw DiagnosticError(attribute.location, "duplicate attribute '@" + attribute.name + "'");
+        }
+    }
+
+    for (const Attribute& attribute : statement.attributes) {
+        if (attribute.name == "deprecated" || attribute.name == "experimental") {
+            validate_required_message(attribute);
+            UsageWarningSymbol symbol{declaration_kind(), attribute.arguments.front().value};
+            if (attribute.name == "deprecated") {
+                deprecated_symbols_[statement.name] = std::move(symbol);
+            } else {
+                experimental_symbols_[statement.name] = std::move(symbol);
+            }
+            continue;
+        }
+
+        if (attribute.name == "since") {
+            validate_required_message(attribute);
+            continue;
+        }
+
+        if (attribute.name == "test") {
+            if (!attribute.arguments.empty()) {
+                throw DiagnosticError(attribute.location, "@test does not accept arguments");
+            }
+            continue;
+        }
+
+        if (attribute.name == "must_use") {
+            validate_optional_message(attribute);
+            if (statement.kind != StatementKind::function) {
+                throw DiagnosticError(attribute.location, "@must_use can only be applied to a function");
+            }
+            if (!statement.type.has_type || normalize_type(statement.type.type).kind == ValueType::unit_type) {
+                throw DiagnosticError(attribute.location, "@must_use functions must explicitly return a value");
+            }
+            continue;
+        }
+
+        if (attribute.name == "ignore" || attribute.name == "should_panic" || attribute.name == "should_fail") {
+            validate_optional_message(attribute);
+            if (statement.kind != StatementKind::function) {
+                throw DiagnosticError(attribute.location, "@" + attribute.name + " can only be applied to a function");
+            }
+            continue;
+        }
+
+        throw DiagnosticError(attribute.location, "unknown attribute '@" + attribute.name + "'");
+    }
+
+    const Attribute* test = find_attribute(statement, "test");
+    const Attribute* ignore = find_attribute(statement, "ignore");
+    const Attribute* should_panic = find_attribute(statement, "should_panic");
+    const Attribute* should_fail = find_attribute(statement, "should_fail");
+    if ((ignore != nullptr || should_panic != nullptr || should_fail != nullptr) && test == nullptr) {
+        const Attribute* dependent = ignore != nullptr ? ignore : (should_panic != nullptr ? should_panic : should_fail);
+        throw DiagnosticError(dependent->location, "@" + dependent->name + " requires @test");
+    }
+    const std::size_t test_controls = static_cast<std::size_t>(ignore != nullptr) +
+                                      static_cast<std::size_t>(should_panic != nullptr) +
+                                      static_cast<std::size_t>(should_fail != nullptr);
+    if (test_controls > 1) {
+        const Attribute* conflicting = should_fail != nullptr ? should_fail : should_panic;
+        throw DiagnosticError(conflicting->location,
+                              "@ignore, @should_panic, and @should_fail cannot be combined");
+    }
+    if (find_attribute(statement, "deprecated") != nullptr && find_attribute(statement, "experimental") != nullptr) {
+        throw DiagnosticError(find_attribute(statement, "experimental")->location,
+                              "@deprecated and @experimental cannot be combined");
+    }
+
+    if (test == nullptr) {
+        return;
+    }
+    if (statement.kind != StatementKind::function) {
+        throw DiagnosticError(test->location, "@test can only be applied to a function");
+    }
+    if (statement.is_extern) {
+        throw DiagnosticError(test->location, "@test cannot be applied to a foreign function");
+    }
+    if (statement.is_foreknown) {
+        throw DiagnosticError(test->location, "@test cannot be applied to a foreknown function");
+    }
+    if (!statement.generic_parameters.empty()) {
+        throw DiagnosticError(test->location, "@test functions cannot be generic");
+    }
+    if (!statement.parameters.empty()) {
+        throw DiagnosticError(test->location, "@test functions must not have parameters");
+    }
+    if (!statement.type.has_type || normalize_type(statement.type.type).kind != ValueType::unit_type) {
+        throw DiagnosticError(test->location, "@test functions must explicitly return unit");
+    }
+}
+
+void TypeChecker::emit_deprecation_warning(const std::string& name, const UsageWarningSymbol& deprecated,
+                                           SourceLocation location) const {
+    const std::string message =
+        "use of deprecated " + deprecated.kind + " '" + base_name(name) + "': " + deprecated.message;
+    const std::string key = location.source_name + ":" + std::to_string(location.line) + ":" +
+                            std::to_string(location.column) + ":" + message;
+    if (!emitted_diagnostic_keys_.insert(key).second) {
+        return;
+    }
+    diagnostics_.push_back(Diagnostic{Severity::warning, std::move(location), message, true});
+}
+
+void TypeChecker::emit_experimental_warning(const std::string& name, const UsageWarningSymbol& experimental,
+                                            SourceLocation location) const {
+    const std::string message =
+        "use of experimental " + experimental.kind + " '" + base_name(name) + "': " + experimental.message;
+    const std::string key = location.source_name + ":" + std::to_string(location.line) + ":" +
+                            std::to_string(location.column) + ":" + message;
+    if (!emitted_diagnostic_keys_.insert(key).second) {
+        return;
+    }
+    diagnostics_.push_back(Diagnostic{Severity::warning, std::move(location), message, true});
+}
+
+void TypeChecker::emit_symbol_usage_warnings(const std::string& name, SourceLocation location) const {
+    if (const auto deprecated = deprecated_symbols_.find(name); deprecated != deprecated_symbols_.end()) {
+        emit_deprecation_warning(name, deprecated->second, location);
+    }
+    if (const auto experimental = experimental_symbols_.find(name); experimental != experimental_symbols_.end()) {
+        emit_experimental_warning(name, experimental->second, std::move(location));
+    }
+}
+
+void TypeChecker::emit_function_usage_warnings(const FunctionSignature& function, SourceLocation location) const {
+    if (!function.deprecated_message.empty()) {
+        emit_deprecation_warning(function.name, UsageWarningSymbol{"function", function.deprecated_message}, location);
+    }
+    if (!function.experimental_message.empty()) {
+        emit_experimental_warning(function.name, UsageWarningSymbol{"function", function.experimental_message},
+                                  std::move(location));
+    }
+}
+
+void TypeChecker::emit_type_usage_warnings(const Type& type, const SourceLocation& location,
+                                           std::string_view excluded_name) const {
+    if ((type.kind == ValueType::generic_type || type.kind == ValueType::struct_type ||
+         type.kind == ValueType::enum_type) &&
+        type.name != excluded_name) {
+        if (const auto deprecated = deprecated_symbols_.find(type.name); deprecated != deprecated_symbols_.end() &&
+                                                                         deprecated->second.kind != "function" &&
+                                                                         deprecated->second.kind != "constant") {
+            emit_deprecation_warning(type.name, deprecated->second, location);
+        }
+        if (const auto experimental = experimental_symbols_.find(type.name);
+            experimental != experimental_symbols_.end() && experimental->second.kind != "function" &&
+            experimental->second.kind != "constant") {
+            emit_experimental_warning(type.name, experimental->second, location);
+        }
+    }
+    if (type.element != nullptr) {
+        emit_type_usage_warnings(*type.element, location, excluded_name);
+    }
+    for (const Type& argument : type.arguments) {
+        emit_type_usage_warnings(argument, location, excluded_name);
+    }
+}
+
+void TypeChecker::emit_must_use_warning(const Expression& expression) const {
+    const auto resolved = resolved_calls_.find(&expression);
+    if (resolved == resolved_calls_.end()) {
+        return;
+    }
+    const FunctionSignature& function = find_function_by_key(resolved->second, expression.location);
+    if (!function.must_use) {
+        return;
+    }
+
+    std::string message = "unused return value of @must_use function '" + base_name(function.name) + "'";
+    if (!function.must_use_message.empty()) {
+        message += ": " + function.must_use_message;
+    }
+    const std::string key = expression.location.source_name + ":" + std::to_string(expression.location.line) + ":" +
+                            std::to_string(expression.location.column) + ":" + message;
+    if (emitted_diagnostic_keys_.insert(key).second) {
+        diagnostics_.push_back(Diagnostic{Severity::warning, expression.location, std::move(message), true});
+    }
+}
+
 void TypeChecker::declare_struct(const Statement& statement) {
     if (statement.name.empty()) {
         throw DiagnosticError(statement.location, "record needs a name");
@@ -970,6 +1230,9 @@ void TypeChecker::define_struct(const Statement& statement) {
     }
 
     for (const Parameter& field : statement.parameters) {
+        if (field.type.has_type) {
+            emit_type_usage_warnings(field.type.type, field.location, statement.name);
+        }
         if (definition->second.field_indices.contains(field.name)) {
             throw DiagnosticError(field.location,
                                   "duplicate field '" + field.name + "' in record '" + statement.name + "'");
@@ -987,6 +1250,7 @@ void TypeChecker::define_struct(const Statement& statement) {
     }
 
     for (const Type& contract : statement.contracts) {
+        emit_type_usage_warnings(contract, statement.location, statement.name);
         Type normalized = normalize_type(contract, generic_names);
         if (normalized.kind != ValueType::generic_type) {
             throw DiagnosticError(statement.location, "expected contract name");
@@ -1032,6 +1296,9 @@ void TypeChecker::define_enum(const Statement& statement) {
     }
 
     for (const Parameter& variant : statement.parameters) {
+        if (variant.type.has_type) {
+            emit_type_usage_warnings(variant.type.type, variant.location, statement.name);
+        }
         if (definition->second.variant_indices.contains(variant.name)) {
             throw DiagnosticError(variant.location,
                                   "duplicate variant '" + variant.name + "' in choice '" + statement.name + "'");
@@ -1118,9 +1385,15 @@ void TypeChecker::define_contract(const Statement& statement) {
 
         ContractMethod signature;
         signature.name = method.name;
+        if (method.type.has_type) {
+            emit_type_usage_warnings(method.type.type, method.location, statement.name);
+        }
         signature.return_type = annotation_or_default(method.type);
         signature.location = method.location;
         for (const Parameter& parameter : method.parameters) {
+            if (parameter.type.has_type) {
+                emit_type_usage_warnings(parameter.type.type, parameter.location, statement.name);
+            }
             signature.parameters.push_back(annotation_or_default(parameter.type));
         }
         definition->second.methods.push_back(std::move(signature));
@@ -1279,11 +1552,29 @@ void TypeChecker::collect_function(const Statement& statement) {
 
     FunctionSignature signature;
     signature.name = statement.name;
+    if (statement.type.has_type) {
+        emit_type_usage_warnings(statement.type.type, statement.location, statement.owner_record);
+    }
     signature.return_type = annotation_or_default(statement.type);
     signature.location = statement.location;
     signature.is_foreknown = statement.is_foreknown;
+    if (const Attribute* deprecated = find_attribute(statement, "deprecated")) {
+        signature.deprecated_message = deprecated->arguments.front().value;
+    }
+    if (const Attribute* experimental = find_attribute(statement, "experimental")) {
+        signature.experimental_message = experimental->arguments.front().value;
+    }
+    if (const Attribute* must_use = find_attribute(statement, "must_use")) {
+        signature.must_use = true;
+        if (!must_use->arguments.empty()) {
+            signature.must_use_message = must_use->arguments.front().value;
+        }
+    }
 
     for (const Parameter& parameter : statement.parameters) {
+        if (parameter.type.has_type) {
+            emit_type_usage_warnings(parameter.type.type, parameter.location, statement.owner_record);
+        }
         const Type parameter_type = annotation_or_default(parameter.type);
         if (parameter_type.kind == ValueType::unit_type) {
             throw DiagnosticError(parameter.location, "parameter '" + parameter.name + "' cannot have type 'unit'");
@@ -1312,14 +1603,42 @@ void TypeChecker::collect_generic_function(const Statement& statement) {
     std::unordered_set<std::string> generic_names;
     for (const GenericParameter& parameter : statement.generic_parameters) {
         generic_names.insert(parameter.name);
+        for (const std::string& bound : parameter.bounds) {
+            if (const auto deprecated = deprecated_symbols_.find(bound);
+                deprecated != deprecated_symbols_.end() && deprecated->second.kind == "contract") {
+                emit_deprecation_warning(bound, deprecated->second, parameter.location);
+            }
+            if (const auto experimental = experimental_symbols_.find(bound);
+                experimental != experimental_symbols_.end() && experimental->second.kind == "contract") {
+                emit_experimental_warning(bound, experimental->second, parameter.location);
+            }
+        }
     }
 
     FunctionSignature signature;
     signature.name = statement.name;
+    if (statement.type.has_type) {
+        emit_type_usage_warnings(statement.type.type, statement.location, statement.owner_record);
+    }
     signature.return_type = annotation_or_default(statement.type, generic_names);
     signature.location = statement.location;
+    if (const Attribute* deprecated = find_attribute(statement, "deprecated")) {
+        signature.deprecated_message = deprecated->arguments.front().value;
+    }
+    if (const Attribute* experimental = find_attribute(statement, "experimental")) {
+        signature.experimental_message = experimental->arguments.front().value;
+    }
+    if (const Attribute* must_use = find_attribute(statement, "must_use")) {
+        signature.must_use = true;
+        if (!must_use->arguments.empty()) {
+            signature.must_use_message = must_use->arguments.front().value;
+        }
+    }
 
     for (const Parameter& parameter : statement.parameters) {
+        if (parameter.type.has_type) {
+            emit_type_usage_warnings(parameter.type.type, parameter.location, statement.owner_record);
+        }
         signature.parameters.push_back(annotation_or_default(parameter.type, generic_names));
     }
 
@@ -1396,6 +1715,7 @@ void TypeChecker::check_statement(const Statement& statement) {
 
         TypeAnnotation expected = statement.type;
         if (expected.has_type) {
+            emit_type_usage_warnings(expected.type, statement.location);
             expected.type = normalize_type(expected.type);
         }
         Type actual = check_expression(*statement.expression, expected);
@@ -1563,6 +1883,7 @@ void TypeChecker::check_statement(const Statement& statement) {
         return;
     case StatementKind::expression_statement:
         check_expression(*statement.expression);
+        emit_must_use_warning(*statement.expression);
         return;
     case StatementKind::import_statement:
         throw DiagnosticError(statement.location, "import statements are only allowed at top level");
@@ -2026,6 +2347,9 @@ Type TypeChecker::check_expression(const Expression& expression, const TypeAnnot
     case ExpressionKind::identifier: {
         const VariableBinding* variable = find_binding(expression.lexeme);
         if (variable != nullptr) {
+            if (variable->constant) {
+                emit_symbol_usage_warnings(expression.lexeme, expression.location);
+            }
             actual = variable->type;
             if (const std::optional<std::size_t> scope = binding_scope_index(expression.lexeme)) {
                 record_closure_capture(expression.lexeme, actual, *scope);
@@ -2035,6 +2359,7 @@ Type TypeChecker::check_expression(const Expression& expression, const TypeAnnot
 
         const auto global_constant = global_constants_.find(expression.lexeme);
         if (global_constant != global_constants_.end()) {
+            emit_symbol_usage_warnings(expression.lexeme, expression.location);
             actual = global_constant->second;
             break;
         }
@@ -2565,6 +2890,7 @@ bool TypeChecker::resolve_function_reference(const Expression& expression, const
             Type function_type = signature_type(function);
             if (same_type(function_type, expected.type)) {
                 resolved_calls_[&expression] = function.key;
+                emit_function_usage_warnings(function, expression.location);
                 result = std::move(function_type);
                 return true;
             }
@@ -2582,6 +2908,7 @@ bool TypeChecker::resolve_function_reference(const Expression& expression, const
 
     const FunctionSignature& function = find_function_by_key(concrete->second.front(), expression.location);
     resolved_calls_[&expression] = function.key;
+    emit_function_usage_warnings(function, expression.location);
     result = signature_type(function);
     return true;
 }
@@ -2770,6 +3097,7 @@ Type TypeChecker::check_function_call(const Expression& expression, const std::s
     }
 
     resolved_calls_[&expression] = function.key;
+    emit_function_usage_warnings(function, location);
     return function.return_type;
 }
 
@@ -2786,6 +3114,7 @@ Type TypeChecker::check_variant_constructor(const Expression& expression, const 
         throw DiagnosticError(location,
                               "choice '" + type_name(expected.type) + "' has no variant '" + base_name(name) + "'");
     }
+    emit_symbol_usage_warnings(definition->name, location);
 
     const std::size_t expected_arguments = variant->has_payload ? 1 : 0;
     if (arguments.size() != expected_arguments) {
@@ -2875,6 +3204,7 @@ Type TypeChecker::check_constructor_call_expression(const Expression& expression
     if (record == structs_.end()) {
         throw DiagnosticError(expression.location, "unknown record '" + record_name + "'");
     }
+    emit_symbol_usage_warnings(record_name, expression.location);
 
     if (is_external_record_access(record_name)) {
         const std::string module = module_name(record_name);
@@ -2889,6 +3219,7 @@ Type TypeChecker::check_constructor_call_expression(const Expression& expression
 
 Type TypeChecker::check_static_method_call_expression(const Expression& expression, const std::string& record_name,
                                                       const TypeAnnotation& expected) {
+    emit_symbol_usage_warnings(record_name, expression.location);
     if (find_static_method(record_name, expression.lexeme) == nullptr) {
         throw DiagnosticError(expression.location, "record '" + base_name(record_name) + "' has no static method '" +
                                                        expression.lexeme + "'");
@@ -3026,6 +3357,10 @@ Type TypeChecker::check_receiver_method_call(const Expression& expression, const
         }
 
         resolved_calls_[&expression] = best_match->key;
+        emit_function_usage_warnings(*best_match, expression.location);
+        if (receiver.kind == ValueType::struct_type) {
+            emit_symbol_usage_warnings(receiver.name, expression.location);
+        }
         return refine_matrix_vector_result(expression, expression.lexeme, operand_types, best_match->return_type);
     }
 
@@ -3119,6 +3454,7 @@ const TypeChecker::FunctionSignature* TypeChecker::resolve_operator_overload(con
     }
 
     resolved_calls_[&expression] = best_match->key;
+    emit_function_usage_warnings(*best_match, expression.location);
     return best_match;
 }
 
@@ -3146,6 +3482,7 @@ Type TypeChecker::check_cast_expression(const Expression& expression) {
         throw DiagnosticError(expression.location, "expected cast target type");
     }
 
+    emit_type_usage_warnings(expression.type.type, expression.location);
     const Type source = check_expression(*expression.left);
     const Type target = normalize_type(expression.type.type);
     if (!is_cast_allowed(source, target)) {
@@ -3180,6 +3517,8 @@ Type TypeChecker::check_member_expression(const Expression& expression, const Ty
                                       "module '" + module_name + "' has no value '" + expression.lexeme + "'");
             }
 
+            emit_symbol_usage_warnings(qualified_name, expression.location);
+
             return global_constant->second;
         }
 
@@ -3195,6 +3534,7 @@ Type TypeChecker::check_member_expression(const Expression& expression, const Ty
 
     const Type receiver = check_expression(*expression.left);
     if (receiver.kind == ValueType::struct_type) {
+        emit_symbol_usage_warnings(receiver.name, expression.location);
         const auto definition = structs_.find(receiver.name);
         if (definition == structs_.end()) {
             throw DiagnosticError(expression.location, "unknown record '" + receiver.name + "'");
@@ -4196,6 +4536,7 @@ Type TypeChecker::check_struct_literal(const Expression& expression, const TypeA
     if (definition == structs_.end()) {
         throw DiagnosticError(expression.location, "unknown record '" + expression.lexeme + "'");
     }
+    emit_symbol_usage_warnings(expression.lexeme, expression.location);
 
     Type result_type = make_struct_type(expression.lexeme);
     if (expected.has_type && expected.type.kind == ValueType::struct_type && expected.type.name == expression.lexeme) {
@@ -4459,6 +4800,7 @@ Type TypeChecker::normalize_type(const Type& type, const std::unordered_set<std:
 
 void TypeChecker::validate_known_type(const Type& type, SourceLocation location,
                                       const std::unordered_set<std::string>& generic_parameters) const {
+    emit_type_usage_warnings(type, location);
     const Type normalized = normalize_type(type, generic_parameters);
     switch (normalized.kind) {
     case ValueType::array_type:

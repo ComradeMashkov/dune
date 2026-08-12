@@ -115,6 +115,12 @@ void annotate_expression(Expression& expression, const std::vector<ModuleLoader:
 
 void annotate_statement(Statement& statement, const std::vector<ModuleLoader::SourceUnit>& source_units) {
     annotate_location(statement.location, source_units);
+    for (Attribute& attribute : statement.attributes) {
+        annotate_location(attribute.location, source_units);
+        for (AttributeArgument& argument : attribute.arguments) {
+            annotate_location(argument.location, source_units);
+        }
+    }
     if (statement.expression != nullptr) {
         annotate_expression(*statement.expression, source_units);
     }
@@ -289,6 +295,7 @@ Statement clone_statement(const Statement& statement) {
     result.module_alias = statement.module_alias;
     result.import_symbols = statement.import_symbols;
     result.doc_comment = statement.doc_comment;
+    result.attributes = statement.attributes;
     return result;
 }
 

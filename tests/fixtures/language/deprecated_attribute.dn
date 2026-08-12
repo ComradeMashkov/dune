@@ -1,0 +1,8 @@
+import io;
+
+@deprecated("use fresh")
+fn old(): int {
+    return 42;
+}
+
+io.println(old());

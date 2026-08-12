@@ -1,0 +1,17 @@
+import io;
+
+@experimental("the API may change")
+fn preview(): int {
+    return 41;
+}
+
+@must_use("store or inspect the result")
+fn calculate(): int {
+    return 42;
+}
+
+preview();
+value: int = preview();
+calculate();
+answer: int = calculate();
+io.println(value + answer);

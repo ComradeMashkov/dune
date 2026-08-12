@@ -193,6 +193,8 @@ Token Lexer::scan_token() {
         return make_token(TokenType::dot, start, line, column);
     case '?':
         return make_token(TokenType::question, start, line, column);
+    case '@':
+        return make_token(TokenType::at, start, line, column);
     case ';':
         return make_token(TokenType::semicolon, start, line, column);
     case '(':

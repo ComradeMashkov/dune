@@ -38,6 +38,9 @@ private:
 
     Statement statement();
     Statement statement_dispatch();
+    std::vector<Attribute> attributes();
+    Attribute attribute();
+    AttributeArgument attribute_argument();
     Statement assignment_statement(bool require_semicolon = true);
     Statement tuple_assignment_statement();
     Statement block_statement();
@@ -97,6 +100,7 @@ private:
 
     std::vector<Token> tokens_;
     std::size_t current_ = 0;
+    std::size_t block_depth_ = 0;
 };
 
 } // namespace dune

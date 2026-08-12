@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <memory>
 #include <stdexcept>
+#include <string_view>
 #include <tuple>
 #include <unordered_map>
 #include <utility>
@@ -29,6 +30,12 @@ private:
     SourceLocation& current_;
     SourceLocation previous_;
 };
+
+const Attribute* find_attribute(const Statement& statement, std::string_view name) {
+    const auto attribute = std::find_if(statement.attributes.begin(), statement.attributes.end(),
+                                        [name](const Attribute& candidate) { return candidate.name == name; });
+    return attribute == statement.attributes.end() ? nullptr : &*attribute;
+}
 
 Value make_signed(std::int64_t value) {
     Value result;
@@ -1013,9 +1020,14 @@ Bytecode Compiler::compile_repl(const Program& program) {
     return compile_program(program, true);
 }
 
+const std::vector<Diagnostic>& Compiler::diagnostics() const {
+    return diagnostics_;
+}
+
 Bytecode Compiler::compile_program(const Program& program, bool print_tail_expression) {
     TypeChecker type_checker;
     type_checker.check(program);
+    diagnostics_ = type_checker.diagnostics();
 
     bytecode_ = Bytecode{};
     locals_.clear();
@@ -1078,6 +1090,24 @@ Bytecode Compiler::compile_program(const Program& program, bool print_tail_expre
     for (const Statement& statement : program.statements) {
         if (statement.kind == StatementKind::test_block) {
             compile_test(statement);
+            continue;
+        }
+        if (statement.kind == StatementKind::function && statement.generic_parameters.empty() &&
+            find_attribute(statement, "test") != nullptr) {
+            const Attribute* ignore = find_attribute(statement, "ignore");
+            const Attribute* should_panic = find_attribute(statement, "should_panic");
+            const Attribute* should_fail = find_attribute(statement, "should_fail");
+            bytecode_.tests.push_back(Bytecode::Test{
+                statement.name,
+                resolve_function(function_key(statement.name, {})),
+                ignore != nullptr,
+                ignore != nullptr && !ignore->arguments.empty() ? ignore->arguments.front().value : "",
+                should_panic != nullptr,
+                should_panic != nullptr && !should_panic->arguments.empty() ? should_panic->arguments.front().value
+                                                                            : "",
+                should_fail != nullptr,
+                should_fail != nullptr && !should_fail->arguments.empty() ? should_fail->arguments.front().value : "",
+            });
         }
     }
     for (const auto& [expression, index] : lambdas_) {

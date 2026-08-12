@@ -64,7 +64,8 @@ functions use their module-qualified names and point to the imported `.dn`
 file, including pure-Dune standard-library modules. Lambdas use a generated
 `<lambda@line:column>` name.
 
-`dune test` names the outer frame as `test "name"`. REPL entries use `<repl>`.
+`dune test` names the outer frame as `test "name"` for both test blocks and
+[`@test` functions](attributes.md#test). REPL entries use `<repl>`.
 Notebook frames use `<path>.dnb#cell-<id>` and report lines relative to that
 cell, so a function defined in one cell and called in another points to both
 cells correctly.

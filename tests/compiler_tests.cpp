@@ -1036,6 +1036,38 @@ bool compiles_test_blocks_into_separate_chunks() {
     return passed;
 }
 
+bool registers_attributed_test_functions() {
+    const dune::Bytecode bytecode = compile_source("test \"legacy block\" { }\n"
+                                                   "@test fn first(): unit { }\n"
+                                                   "@test @ignore(\"later\") fn second(): unit { }\n"
+                                                   "@test @should_panic(\"boom\") fn third(): unit { }\n"
+                                                   "@test @should_fail(\"bounds\") fn fourth(): unit { }\n"
+                                                   "");
+    bool passed = true;
+    passed = expect(bytecode.tests.size() == 5, "expected attributed functions and test blocks to register") && passed;
+    if (bytecode.tests.size() == 5) {
+        passed = expect(bytecode.tests[0].name == "legacy block", "expected declaration-order legacy block") && passed;
+        passed = expect(bytecode.tests[1].name == "first", "expected first @test function name") && passed;
+        passed = expect(bytecode.tests[2].name == "second", "expected second @test function name") && passed;
+        passed = expect(bytecode.tests[2].ignored && bytecode.tests[2].ignore_reason == "later",
+                        "expected @ignore metadata") &&
+                 passed;
+        passed = expect(bytecode.tests[3].name == "third" && bytecode.tests[3].should_panic &&
+                            bytecode.tests[3].expected_panic == "boom",
+                        "expected @should_panic metadata") &&
+                 passed;
+        passed = expect(bytecode.tests[4].name == "fourth" && bytecode.tests[4].should_fail &&
+                            bytecode.tests[4].expected_failure == "bounds",
+                        "expected @should_fail metadata") &&
+                 passed;
+        for (const dune::Bytecode::Test& test : bytecode.tests) {
+            passed =
+                expect(test.function_index < bytecode.functions.size(), "expected registered test function") && passed;
+        }
+    }
+    return passed;
+}
+
 // Const generics / static shapes (issue #43) are compile-time only: a statically
 // shaped program compiles to ordinary bytecode with no shape residue.
 bool compiles_static_shape_matrix_program() {
@@ -1074,6 +1106,7 @@ int main() {
     passed = compiles_assignment_targets() && passed;
     passed = compiles_when_expression() && passed;
     passed = compiles_test_blocks_into_separate_chunks() && passed;
+    passed = registers_attributed_test_functions() && passed;
     passed = compiles_choice_variants_and_when() && passed;
     passed = compiles_arrow_style_choice_when() && passed;
     passed = compiles_tuples_and_destructuring() && passed;

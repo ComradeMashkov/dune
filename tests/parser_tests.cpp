@@ -1443,6 +1443,63 @@ bool parses_deferred_expressions_and_blocks() {
     return passed;
 }
 
+bool parses_source_attributes_and_literal_arguments() {
+    const dune::Program program = parse_source("/// Legacy entry point.\n"
+                                               "@deprecated(\"use fresh\\nnow\")\n"
+                                               "@tool.flags(-2, 3.5, 'x', true, r\"raw\",)\n"
+                                               "export fn legacy(): unit { }\n"
+                                               "@test fn verifies(): unit { }");
+    if (!expect(program.statements.size() == 2, "expected two attributed functions")) {
+        return false;
+    }
+
+    bool passed = true;
+    const dune::Statement& legacy = program.statements[0];
+    passed = expect(legacy.attributes.size() == 2, "expected both attributes to be preserved") && passed;
+    passed = expect(legacy.doc_comment == "Legacy entry point.", "expected doc comment to attach across attributes") &&
+             passed;
+    passed = expect(legacy.attributes[0].name == "deprecated", "expected deprecated attribute name") && passed;
+    passed = expect(legacy.attributes[0].arguments.size() == 1 &&
+                        legacy.attributes[0].arguments[0].value == "use fresh\nnow",
+                    "expected decoded text attribute argument") &&
+             passed;
+    passed = expect(legacy.attributes[1].name == "tool.flags", "expected namespaced attribute name") && passed;
+    passed = expect(legacy.attributes[1].arguments.size() == 5, "expected every literal argument") && passed;
+    if (legacy.attributes[1].arguments.size() == 5) {
+        passed = expect(legacy.attributes[1].arguments[0].kind == dune::AttributeArgumentKind::integer &&
+                            legacy.attributes[1].arguments[0].value == "-2",
+                        "expected signed integer attribute argument") &&
+                 passed;
+        passed = expect(legacy.attributes[1].arguments[1].kind == dune::AttributeArgumentKind::real,
+                        "expected real attribute argument") &&
+                 passed;
+        passed = expect(legacy.attributes[1].arguments[2].kind == dune::AttributeArgumentKind::glyph,
+                        "expected glyph attribute argument") &&
+                 passed;
+        passed = expect(legacy.attributes[1].arguments[3].kind == dune::AttributeArgumentKind::boolean,
+                        "expected boolean attribute argument") &&
+                 passed;
+        passed = expect(legacy.attributes[1].arguments[4].kind == dune::AttributeArgumentKind::text &&
+                            legacy.attributes[1].arguments[4].value == "raw",
+                        "expected raw text attribute argument") &&
+                 passed;
+    }
+    passed = expect(program.statements[1].attributes.size() == 1 && program.statements[1].attributes[0].name == "test",
+                    "expected keyword-named @test attribute") &&
+             passed;
+
+    passed = expect_parse_error("@deprecated(message) fn old(): unit { }",
+                                "expected non-literal attribute argument to be rejected") &&
+             passed;
+    passed = expect_parse_error("fn outer(): unit { @test fn nested(): unit { } }",
+                                "expected nested attributes to be rejected") &&
+             passed;
+    passed =
+        expect_parse_error("@deprecated(\"unfinished\")", "expected a dangling attribute to require a declaration") &&
+        passed;
+    return passed;
+}
+
 } // namespace
 
 int main() {
@@ -1493,6 +1550,7 @@ int main() {
     passed = parses_const_generic_arguments() && passed;
     passed = parses_lambdas_and_callable_expression_chains() && passed;
     passed = parses_deferred_expressions_and_blocks() && passed;
+    passed = parses_source_attributes_and_literal_arguments() && passed;
 
     return passed ? 0 : 1;
 }

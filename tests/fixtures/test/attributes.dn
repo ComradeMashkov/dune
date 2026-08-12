@@ -1,0 +1,10 @@
+import io;
+
+@test
+fn attributed(): unit {
+    io.println("attribute");
+}
+
+test "block" {
+    io.println("block");
+}

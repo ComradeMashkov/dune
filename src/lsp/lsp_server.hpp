@@ -14,6 +14,8 @@ struct Diagnostic {
     std::size_t start_column = 1;
     std::size_t end_column = 1;
     std::string message;
+    // LSP DiagnosticSeverity: 1 = Error, 2 = Warning.
+    std::size_t severity = 1;
 };
 
 struct CompletionItem {
