@@ -83,6 +83,16 @@ target_link_libraries(dune_typechecker
         dune_parser
 )
 
+add_library(dune_project
+    src/project/project_config.cpp
+)
+dune_add_lint_dependencies(dune_project)
+
+target_include_directories(dune_project
+    PUBLIC
+        src
+)
+
 add_library(dune_modules
     src/modules/module_loader.cpp
 )
@@ -92,16 +102,7 @@ target_compile_definitions(dune_modules PRIVATE DUNE_STDLIB_PATH="${CMAKE_CURREN
 target_link_libraries(dune_modules
     PUBLIC
         dune_parser
-)
-
-add_library(dune_project
-    src/project/project_config.cpp
-)
-dune_add_lint_dependencies(dune_project)
-
-target_include_directories(dune_project
-    PUBLIC
-        src
+        dune_project
 )
 
 add_library(dune_compiler
@@ -123,7 +124,6 @@ target_compile_definitions(dune_lsp PRIVATE DUNE_STDLIB_PATH="${CMAKE_CURRENT_SO
 target_link_libraries(dune_lsp
     PUBLIC
         dune_modules
-        dune_project
         dune_typechecker
 )
 
@@ -202,7 +202,7 @@ if(WIN32)
 endif()
 
 add_executable(dune src/main.cpp)
-target_link_libraries(dune PRIVATE dune_doc dune_lsp dune_modules dune_notebook dune_project dune_repl dune_vm Threads::Threads)
+target_link_libraries(dune PRIVATE dune_doc dune_lsp dune_modules dune_notebook dune_repl dune_vm Threads::Threads)
 dune_add_lint_dependencies(dune)
 
 add_executable(diagnostics_tests tests/diagnostics_tests.cpp)
@@ -564,6 +564,14 @@ add_test(
         ${CMAKE_COMMAND}
         -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_project_shadow_case.cmake
+)
+
+add_test(
+    NAME cli_project_diagnostics
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_project_diagnostics_case.cmake
 )
 
 add_test(

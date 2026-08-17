@@ -15,7 +15,10 @@ struct ProjectConfig {
     std::vector<std::filesystem::path> sources;
     std::vector<std::filesystem::path> tests;
 
+    std::vector<std::filesystem::path> source_roots() const;
+    std::vector<std::filesystem::path> test_roots() const;
     std::vector<std::filesystem::path> module_roots() const;
+    std::vector<std::filesystem::path> module_roots_for(const std::filesystem::path& source) const;
 };
 
 std::optional<std::filesystem::path> find_project_root(const std::filesystem::path& start);

@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <filesystem>
+#include <fstream>
 #include <future>
 #include <iostream>
 #include <sstream>
@@ -178,6 +179,32 @@ bool executes_stateful_cells_and_recovers_after_edits() {
                     "expected the caller frame mapped to the executing cell") &&
              passed;
     return passed;
+}
+
+bool resolves_project_modules_from_notebook_directories() {
+    TemporaryDirectory temporary;
+    std::filesystem::create_directories(temporary.path / "src");
+    std::filesystem::create_directories(temporary.path / "notebooks");
+    {
+        std::ofstream manifest(temporary.path / "dune.toml");
+        manifest << "name = \"notebook-project\"\nsources = [\"src\"]\n";
+        std::ofstream helper(temporary.path / "src" / "helper.dn");
+        helper << "export fn answer(): int { return 42; }\n";
+    }
+
+    dune::notebook::Document document;
+    document.title = "Project notebook";
+    document.path = temporary.path / "notebooks" / "project.dnb";
+    document.cells = {
+        dune::notebook::Cell{"import", dune::notebook::CellKind::code, "import helper;", {}, {}, 0},
+        dune::notebook::Cell{"answer", dune::notebook::CellKind::code, "helper.answer()", {}, {}, 0},
+    };
+    dune::notebook::Kernel kernel(document.path.parent_path());
+    const dune::notebook::ExecutionReport report = kernel.execute(document);
+
+    return expect(report.success, "expected notebook project import to succeed") &&
+           expect(report.cells.size() == 2 && report.cells[1].output == "42\n",
+                  "expected notebook to execute module from configured source root");
 }
 
 bool renders_latex_math_in_markdown_and_static_exports() {
@@ -477,6 +504,7 @@ int main() {
     bool passed = true;
     passed = parses_and_serializes_versioned_dnb_documents() && passed;
     passed = executes_stateful_cells_and_recovers_after_edits() && passed;
+    passed = resolves_project_modules_from_notebook_directories() && passed;
     passed = renders_latex_math_in_markdown_and_static_exports() && passed;
     passed = serves_secure_workspace_routes() && passed;
     passed = rejects_unsafe_server_tokens() && passed;

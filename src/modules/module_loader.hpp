@@ -21,7 +21,6 @@ public:
     ModuleLoader();
     explicit ModuleLoader(std::vector<std::filesystem::path> search_paths);
 
-    void set_project_source_roots(std::vector<std::filesystem::path> source_roots);
     Program resolve(Program program, const std::filesystem::path& source_directory = {});
     Program resolve(Program program, const std::filesystem::path& source_directory, const std::string& source_name);
     Program resolve(Program program, const std::filesystem::path& source_directory,

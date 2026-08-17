@@ -3,6 +3,7 @@
 #include "diagnostics/diagnostic.hpp"
 #include "lexer/lexer.hpp"
 #include "parser/parser.hpp"
+#include "project/project_config.hpp"
 
 #include <algorithm>
 #include <cstdlib>
@@ -194,11 +195,6 @@ void add_unique_path(std::vector<std::filesystem::path>& paths, const std::files
     if (!exists) {
         paths.push_back(path);
     }
-}
-
-std::string diagnostic(SourceLocation location, const std::string& message) {
-    return "line " + std::to_string(location.line) + ", columns " + std::to_string(location.column) + "-" +
-           std::to_string(location.column + location.length - 1) + ": " + message;
 }
 
 Type clone_type(const Type& type) {
@@ -414,10 +410,6 @@ ModuleLoader::ModuleLoader() : ModuleLoader(default_search_paths()) {}
 
 ModuleLoader::ModuleLoader(std::vector<std::filesystem::path> search_paths) : search_paths_(std::move(search_paths)) {}
 
-void ModuleLoader::set_project_source_roots(std::vector<std::filesystem::path> source_roots) {
-    project_source_roots_ = std::move(source_roots);
-}
-
 Program ModuleLoader::resolve(Program program, const std::filesystem::path& source_directory) {
     return resolve(std::move(program), source_directory, std::vector<SourceUnit>{});
 }
@@ -434,6 +426,7 @@ Program ModuleLoader::resolve(Program program, const std::filesystem::path& sour
                               const std::vector<SourceUnit>& source_units) {
     loaded_modules_.clear();
     module_exports_.clear();
+    project_source_roots_ = project_module_roots_for(source_directory);
     annotate_program(program, source_units);
     desugar_impls(program);
 

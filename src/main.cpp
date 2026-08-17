@@ -7,7 +7,6 @@
 #include "modules/module_loader.hpp"
 #include "notebook/cli.hpp"
 #include "parser/parser.hpp"
-#include "project/project_config.hpp"
 #include "repl/repl.hpp"
 #include "typechecker/type_checker.hpp"
 #include "vm/vm.hpp"
@@ -165,7 +164,6 @@ dune::Program parse_source(const std::string& source, const std::filesystem::pat
     dune::Lexer lexer(source);
     dune::Parser parser(lexer.tokenize());
     dune::ModuleLoader loader;
-    loader.set_project_source_roots(dune::project_module_roots_for(source_directory));
     return loader.resolve(parser.parse(), source_directory, source_name);
 }
 
@@ -182,7 +180,6 @@ dune::Program parse_tokens(const std::vector<dune::Token>& tokens) {
 dune::Program resolve_modules(dune::Program program, const std::filesystem::path& source_directory,
                               const std::string& source_name = {}) {
     dune::ModuleLoader loader;
-    loader.set_project_source_roots(dune::project_module_roots_for(source_directory));
     return loader.resolve(std::move(program), source_directory, source_name);
 }
 

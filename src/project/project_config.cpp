@@ -23,6 +23,21 @@ std::filesystem::path absolute_normal(const std::filesystem::path& path) {
     return absolute.lexically_normal();
 }
 
+std::filesystem::path canonical_normal(const std::filesystem::path& path) {
+    std::error_code error;
+    std::filesystem::path canonical = std::filesystem::weakly_canonical(path, error);
+    return error ? absolute_normal(path) : canonical.lexically_normal();
+}
+
+bool path_is_within(const std::filesystem::path& path, const std::filesystem::path& directory) {
+    const std::filesystem::path normalized_path = canonical_normal(path);
+    const std::filesystem::path normalized_directory = canonical_normal(directory);
+    const auto [directory_end, path_position] = std::mismatch(normalized_directory.begin(), normalized_directory.end(),
+                                                              normalized_path.begin(), normalized_path.end());
+    (void)path_position;
+    return directory_end == normalized_directory.end();
+}
+
 std::filesystem::path directory_start(const std::filesystem::path& start) {
     if (start.empty()) {
         return absolute_normal(std::filesystem::current_path());
@@ -152,12 +167,16 @@ std::vector<std::string> split_array_items(const std::filesystem::path& path, st
         manifest_error(path, line, "expected an array of quoted strings");
     }
 
+    const std::string contents = trimmed.substr(1, trimmed.size() - 2);
+    if (trim(contents).empty()) {
+        return {};
+    }
+
     std::vector<std::string> items;
     std::string current;
     bool in_string = false;
     bool escaped = false;
-    for (std::size_t index = 1; index + 1 < trimmed.size(); ++index) {
-        const char character = trimmed[index];
+    for (const char character : contents) {
         if (escaped) {
             current += character;
             escaped = false;
@@ -189,8 +208,16 @@ std::vector<std::string> split_array_items(const std::filesystem::path& path, st
         manifest_error(path, line, "unterminated string in array");
     }
 
-    if (!trim(current).empty()) {
-        items.push_back(trim(current));
+    items.push_back(trim(current));
+    for (std::size_t index = 0; index < items.size(); ++index) {
+        if (!items[index].empty()) {
+            continue;
+        }
+        if (index + 1 == items.size()) {
+            items.pop_back();
+            break;
+        }
+        manifest_error(path, line, "expected a quoted string between array commas");
     }
 
     return items;
@@ -205,16 +232,47 @@ bool has_parent_segment(const std::filesystem::path& path) {
     return false;
 }
 
-std::vector<std::filesystem::path> parse_path_array(const std::filesystem::path& path, std::size_t line,
+std::filesystem::path validate_project_path(const std::filesystem::path& manifest_path,
+                                            const std::filesystem::path& project_root, std::size_t line,
+                                            const std::string& text) {
+    const std::filesystem::path root = text;
+    if (root.empty() || root.is_absolute() || has_parent_segment(root)) {
+        manifest_error(manifest_path, line, "project paths must be non-empty relative paths inside the project");
+    }
+
+    const std::filesystem::path normalized = root.lexically_normal();
+    if (!path_is_within(project_root / normalized, project_root)) {
+        manifest_error(manifest_path, line, "project path '" + text + "' resolves outside the project root");
+    }
+
+    std::error_code error;
+    const std::filesystem::path resolved = project_root / normalized;
+    const bool exists = std::filesystem::exists(resolved, error);
+    if (error) {
+        manifest_error(manifest_path, line, "could not inspect project path '" + text + "': " + error.message());
+    }
+    if (exists && !std::filesystem::is_directory(resolved, error)) {
+        if (error) {
+            manifest_error(manifest_path, line, "could not inspect project path '" + text + "': " + error.message());
+        }
+        manifest_error(manifest_path, line, "project path '" + text + "' must be a directory");
+    }
+
+    return normalized;
+}
+
+std::vector<std::filesystem::path> parse_path_array(const std::filesystem::path& path,
+                                                    const std::filesystem::path& project_root, std::size_t line,
                                                     const std::string& value) {
     std::vector<std::filesystem::path> result;
+    std::unordered_set<std::string> seen;
     for (const std::string& item : split_array_items(path, line, value)) {
         const std::string text = parse_string(path, line, item);
-        const std::filesystem::path root = text;
-        if (root.empty() || root.is_absolute() || has_parent_segment(root)) {
-            manifest_error(path, line, "project paths must be non-empty relative paths inside the project");
+        const std::filesystem::path normalized = validate_project_path(path, project_root, line, text);
+        if (!seen.insert(normalized.generic_string()).second) {
+            manifest_error(path, line, "duplicate project path '" + text + "'");
         }
-        result.push_back(root.lexically_normal());
+        result.push_back(normalized);
     }
 
     return result;
@@ -234,10 +292,16 @@ ProjectConfig parse_manifest(const std::filesystem::path& manifest_path) {
     ProjectConfig config;
     config.root = absolute_normal(manifest_path.parent_path());
     config.manifest_path = absolute_normal(manifest_path);
+    std::unordered_set<std::string> seen_keys;
+    bool sources_configured = false;
+    bool tests_configured = false;
 
     std::istringstream input(read_text_file(manifest_path));
     std::string line_text;
     for (std::size_t line = 1; std::getline(input, line_text); ++line) {
+        if (line == 1 && line_text.starts_with("\xef\xbb\xbf")) {
+            line_text.erase(0, 3);
+        }
         const std::string without_comment = strip_comment(line_text);
         const std::string statement = trim(without_comment);
         if (statement.empty()) {
@@ -251,24 +315,48 @@ ProjectConfig parse_manifest(const std::filesystem::path& manifest_path) {
 
         const std::string key = trim(statement.substr(0, equals));
         const std::string value = trim(statement.substr(equals + 1));
+        if (key.empty()) {
+            manifest_error(manifest_path, line, "expected a manifest key before '='");
+        }
+        if (value.empty()) {
+            manifest_error(manifest_path, line, "expected a value for '" + key + "'");
+        }
+        if (!seen_keys.insert(key).second) {
+            manifest_error(manifest_path, line, "duplicate project manifest key '" + key + "'");
+        }
+
         if (key == "name") {
             config.name = parse_string(manifest_path, line, value);
+            if (config.name.empty()) {
+                manifest_error(manifest_path, line, "project name cannot be empty");
+            }
         } else if (key == "version") {
             config.version = parse_string(manifest_path, line, value);
+            if (config.version.empty()) {
+                manifest_error(manifest_path, line, "project version cannot be empty");
+            }
         } else if (key == "sources") {
-            config.sources = parse_path_array(manifest_path, line, value);
+            sources_configured = true;
+            config.sources = parse_path_array(manifest_path, config.root, line, value);
+            if (config.sources.empty()) {
+                manifest_error(manifest_path, line, "project 'sources' must contain at least one directory");
+            }
         } else if (key == "tests") {
-            config.tests = parse_path_array(manifest_path, line, value);
+            tests_configured = true;
+            config.tests = parse_path_array(manifest_path, config.root, line, value);
         } else {
             manifest_error(manifest_path, line, "unsupported project manifest key '" + key + "'");
         }
     }
 
-    if (config.sources.empty()) {
-        config.sources.push_back("src");
+    if (!seen_keys.contains("name")) {
+        manifest_error(manifest_path, 1, "missing required project manifest key 'name'");
     }
-    if (config.tests.empty()) {
-        config.tests.push_back("tests");
+    if (!sources_configured) {
+        config.sources.push_back(validate_project_path(manifest_path, config.root, 1, "src"));
+    }
+    if (!tests_configured) {
+        config.tests.push_back(validate_project_path(manifest_path, config.root, 1, "tests"));
     }
 
     return config;
@@ -276,13 +364,40 @@ ProjectConfig parse_manifest(const std::filesystem::path& manifest_path) {
 
 } // namespace
 
-std::vector<std::filesystem::path> ProjectConfig::module_roots() const {
+std::vector<std::filesystem::path> ProjectConfig::source_roots() const {
     std::vector<std::filesystem::path> roots;
     for (const std::filesystem::path& source : sources) {
         add_unique_path(roots, root / source);
     }
+    return roots;
+}
+
+std::vector<std::filesystem::path> ProjectConfig::test_roots() const {
+    std::vector<std::filesystem::path> roots;
     for (const std::filesystem::path& test : tests) {
         add_unique_path(roots, root / test);
+    }
+    return roots;
+}
+
+std::vector<std::filesystem::path> ProjectConfig::module_roots() const {
+    std::vector<std::filesystem::path> roots = source_roots();
+    for (const std::filesystem::path& test : test_roots()) {
+        add_unique_path(roots, test);
+    }
+    return roots;
+}
+
+std::vector<std::filesystem::path> ProjectConfig::module_roots_for(const std::filesystem::path& source) const {
+    std::vector<std::filesystem::path> roots = source_roots();
+    const std::filesystem::path location = directory_start(source);
+    const std::vector<std::filesystem::path> configured_test_roots = test_roots();
+    const bool is_test_source = std::ranges::any_of(
+        configured_test_roots, [&](const std::filesystem::path& test) { return path_is_within(location, test); });
+    if (is_test_source) {
+        for (const std::filesystem::path& test : configured_test_roots) {
+            add_unique_path(roots, test);
+        }
     }
     return roots;
 }
@@ -321,7 +436,7 @@ std::vector<std::filesystem::path> project_module_roots_for(const std::filesyste
         return {};
     }
 
-    return project->module_roots();
+    return project->module_roots_for(start);
 }
 
 } // namespace dune

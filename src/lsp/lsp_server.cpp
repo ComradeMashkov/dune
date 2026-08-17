@@ -687,7 +687,14 @@ void add_search_path(std::vector<std::filesystem::path>& paths, const std::files
 std::vector<std::filesystem::path> module_search_paths(const std::filesystem::path& source_directory) {
     std::vector<std::filesystem::path> paths;
     add_search_path(paths, source_directory);
-    const std::vector<std::filesystem::path> project_roots = project_module_roots_for(source_directory);
+    std::vector<std::filesystem::path> project_roots;
+    try {
+        project_roots = project_module_roots_for(source_directory);
+    } catch (const std::exception&) {
+        // Diagnostics report malformed manifests through ModuleLoader. Editor
+        // completion/hover requests should remain available while it is fixed.
+        project_roots.clear();
+    }
     for (const std::filesystem::path& root : project_roots) {
         add_search_path(paths, root);
     }
@@ -759,7 +766,6 @@ std::optional<CheckedProgram> check_program_best_effort(const std::string& sourc
         Lexer lexer(source);
         Parser parser(lexer.tokenize());
         ModuleLoader loader;
-        loader.set_project_source_roots(project_module_roots_for(source_directory));
         TypeChecker checker;
         Program program = loader.resolve(parser.parse(), source_directory);
         checker.check(program);
@@ -3074,7 +3080,6 @@ std::vector<Diagnostic> diagnose_source(const std::string& source, const std::st
         Parser parser(lexer.tokenize());
         const std::filesystem::path directory = source_directory_for(uri, source_directory);
         ModuleLoader loader;
-        loader.set_project_source_roots(project_module_roots_for(directory));
         TypeChecker checker;
         checker.check(loader.resolve(parser.parse(), directory));
         std::vector<Diagnostic> diagnostics;

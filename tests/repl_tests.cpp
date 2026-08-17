@@ -1,6 +1,7 @@
 #include "repl/repl.hpp"
 
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -21,13 +22,35 @@ struct ReplResult {
     std::string error;
 };
 
-ReplResult run_repl(const std::string& source, bool show_prompts = false) {
+ReplResult run_repl(const std::string& source, bool show_prompts = false,
+                    const std::filesystem::path& source_directory = std::filesystem::current_path()) {
     std::istringstream input(source);
     std::ostringstream output;
     std::ostringstream error;
-    const int status = dune::repl::run(input, output, error,
-                                       dune::repl::Options{"test", std::filesystem::current_path(), show_prompts});
+    const int status =
+        dune::repl::run(input, output, error, dune::repl::Options{"test", source_directory, show_prompts});
     return ReplResult{status, output.str(), error.str()};
+}
+
+bool resolves_imports_from_project_source_roots() {
+    namespace fs = std::filesystem;
+    const fs::path root = fs::current_path() / "repl_project_roots";
+    fs::remove_all(root);
+    fs::create_directories(root / "src");
+    fs::create_directories(root / "scratch");
+    {
+        std::ofstream manifest(root / "dune.toml");
+        manifest << "name = \"repl-project\"\nsources = [\"src\"]\n";
+        std::ofstream helper(root / "src" / "helper.dn");
+        helper << "export fn answer(): int { return 42; }\n";
+    }
+
+    const ReplResult result = run_repl("import helper;\nhelper.answer()\n:quit\n", false, root / "scratch");
+    fs::remove_all(root);
+    return expect(result.status == 0, "expected project-aware REPL success") &&
+           expect(result.output == "Dune test\nType :help for help.\n42\n",
+                  "expected REPL import from configured source root") &&
+           expect(result.error.empty(), "expected no project-aware REPL diagnostics");
 }
 
 bool keeps_language_state_and_recovers_from_type_errors() {
@@ -201,5 +224,6 @@ int main() {
     passed = runs_top_level_defer_at_the_end_of_an_entry() && passed;
     passed = supports_multiline_attributes_and_usage_warnings() && passed;
     passed = renders_interactive_prompts_and_reports_incomplete_eof() && passed;
+    passed = resolves_imports_from_project_source_roots() && passed;
     return passed ? 0 : 1;
 }

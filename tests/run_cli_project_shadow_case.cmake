@@ -15,7 +15,8 @@ file(WRITE "${project_dir}/src/math.dn"
 
 file(WRITE "${project_dir}/src/main.dn"
     "import math;\n"
-    "print(math.answer());\n"
+    "import io;\n"
+    "io.println(math.answer());\n"
 )
 
 execute_process(

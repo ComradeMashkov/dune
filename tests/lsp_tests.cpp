@@ -1,6 +1,8 @@
 #include "lsp/lsp_server.hpp"
 
 #include <algorithm>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <limits>
 #include <optional>
@@ -32,6 +34,11 @@ bool has_completion(const std::vector<dune::lsp::CompletionItem>& completions, c
     }
 
     return false;
+}
+
+void write_file(const std::filesystem::path& path, const std::string& content) {
+    std::ofstream output(path);
+    output << content;
 }
 
 std::string with_test_print(const std::string& source) {
@@ -1013,6 +1020,36 @@ bool serves_lsp_completions_and_hover() {
     return passed;
 }
 
+bool uses_project_roots_for_diagnostics_and_completion() {
+    namespace fs = std::filesystem;
+    const fs::path root = fs::current_path() / "lsp_project_roots";
+    fs::remove_all(root);
+    fs::create_directories(root / "src" / "app");
+    write_file(root / "dune.toml", "name = \"lsp-project\"\nsources = [\"src\"]\n");
+    write_file(root / "src" / "helper.dn", "export fn answer(): int { return 42; }\n");
+
+    const fs::path directory = root / "src" / "app";
+    const std::string source = "import helper;\nvalue: int = helper.answer();";
+    const std::vector<dune::lsp::Diagnostic> diagnostics = dune::lsp::diagnose_source(source, {}, directory);
+    const std::vector<dune::lsp::CompletionItem> completions =
+        dune::lsp::complete_source("import helper;\nhelper.", {}, directory, 1, 7);
+
+    bool passed = expect(diagnostics.empty(), "expected LSP diagnostics to resolve a project source root") &&
+                  expect(has_completion(completions, "answer"), "expected LSP completion from a project source root");
+
+    write_file(root / "dune.toml", "name = \"first\"\nname = \"second\"\n");
+    const std::vector<dune::lsp::Diagnostic> invalid = dune::lsp::diagnose_source(source, {}, directory);
+    passed =
+        expect(!invalid.empty() && invalid.front().message.find("duplicate project manifest key") != std::string::npos,
+               "expected malformed project manifest diagnostic") &&
+        passed;
+    const std::vector<dune::lsp::CompletionItem> fallback =
+        dune::lsp::complete_source("value = 1;", {}, directory, 0, 10);
+    passed = expect(has_completion(fallback, "fn"), "expected completion to survive malformed manifest") && passed;
+    fs::remove_all(root);
+    return passed;
+}
+
 } // namespace
 
 int main() {
@@ -1062,5 +1099,6 @@ int main() {
     passed = serves_lsp_definition() && passed;
     passed = publishes_lsp_diagnostics() && passed;
     passed = serves_lsp_completions_and_hover() && passed;
+    passed = uses_project_roots_for_diagnostics_and_completion() && passed;
     return passed ? 0 : 1;
 }
