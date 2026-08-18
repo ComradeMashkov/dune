@@ -2,6 +2,10 @@
 
 The `dune` binary has a small set of commands.
 
+Every file-oriented command discovers the nearest [`dune.toml`
+project](projects.md). Project source roots participate in module lookup, while
+single-file behavior remains unchanged when no manifest exists.
+
 ## Run a program
 
 ```sh

@@ -96,6 +96,33 @@ elsewhere.
 Color is automatic on terminals; force it with `DUNE_COLOR=always` or disable it
 with `DUNE_COLOR=never` / `NO_COLOR=1`.
 
+## Projects
+
+Place a `dune.toml` file at the root of a multi-file project:
+
+```toml
+name = "my_app"
+version = "0.1.0"
+sources = ["src"]
+tests = ["tests"]
+```
+
+Dune discovers the nearest manifest by walking upward from the source file or
+workspace. Imports resolve beside the importing file, then through configured
+source roots, and finally through the standard library. Without a manifest,
+single-file programs retain their existing local-directory behavior.
+See the [projects and packages guide](https://comrademashkov.github.io/dune/guides/projects.html)
+for manifest validation, test-root isolation, nested projects, and tool integration.
+A ready-to-run multi-module project lives in
+[`examples/projects/hello_project`](examples/projects/hello_project):
+
+```sh
+cd examples/projects/hello_project
+../../../build/dune check src/app/main.dn
+../../../build/dune src/app/main.dn
+../../../build/dune test tests/specs/greeter_test.dn
+```
+
 Start an interactive session with `dune repl`. Bindings, imports, functions,
 records, choices, and aliases remain available between entries; a bare
 expression prints its value:

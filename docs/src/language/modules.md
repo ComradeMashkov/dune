@@ -53,3 +53,11 @@ export fn public(): int { return hidden(); }
 Receiver methods declared by a module become available on values of the receiver
 type after import — for example, `import array;` enables both `array.first(xs)`
 and `xs.first()`.
+
+## Project module roots
+
+A [`dune.toml` project](../guides/projects.md) can declare one or more source and
+test roots. Dune discovers the nearest project automatically and uses the same
+lookup rules in the CLI, REPL, notebooks, and language server. Imports beside
+the current file take precedence; duplicate modules across configured roots and
+standard-library shadowing are diagnosed explicitly.

@@ -1,0 +1,5 @@
+import greeter;
+import io;
+
+io.println(greeter.greeting("Ada"));
+io.println(greeter.greeting("Dune"));

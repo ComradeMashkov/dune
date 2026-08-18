@@ -1,0 +1,4 @@
+name = "hello_project"
+version = "0.1.0"
+sources = ["src"]
+tests = ["tests"]
