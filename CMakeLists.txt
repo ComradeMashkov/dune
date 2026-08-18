@@ -1309,3 +1309,23 @@ add_test(
         -D EXPECTED_OUTPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/examples/golden/statistical_analysis.out
         -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
 )
+
+add_test(
+    NAME cli_example_project
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/examples/projects/hello_project/src/app/main.dn
+        -D EXPECTED_OUTPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/examples/projects/hello_project/golden/main.out
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_case.cmake
+)
+
+add_test(
+    NAME cli_example_project_tests
+    COMMAND
+        ${CMAKE_COMMAND}
+        -D DUNE_EXECUTABLE=$<TARGET_FILE:dune>
+        -D SOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/examples/projects/hello_project/tests/specs/greeter_test.dn
+        -D EXPECTED_OUTPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/examples/projects/hello_project/golden/tests.out
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/run_cli_test_case.cmake
+)

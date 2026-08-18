@@ -25,6 +25,22 @@ sources = ["src"]
 tests = ["tests"]
 ```
 
+The repository includes this layout as a complete runnable example under
+[`examples/projects/hello_project`](https://github.com/ComradeMashkov/dune/tree/main/examples/projects/hello_project).
+After building Dune from the repository root, run it with:
+
+```sh
+cd examples/projects/hello_project
+../../../build/dune check src/app/main.dn
+../../../build/dune src/app/main.dn
+../../../build/dune test tests/specs/greeter_test.dn
+```
+
+The entrypoint sits below `src/app`, its `greeter` module sits directly in
+`src`, and the test imports both production code and a helper from the
+configured `tests` root. This makes project-root discovery and both kinds of
+module root visible in one small example.
+
 `name` is required and cannot be empty. `version` is optional. When omitted,
 `sources` defaults to `["src"]` and `tests` defaults to `["tests"]`. Set
 `tests = []` when a project deliberately has no test roots; `sources` must

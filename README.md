@@ -113,6 +113,15 @@ source roots, and finally through the standard library. Without a manifest,
 single-file programs retain their existing local-directory behavior.
 See the [projects and packages guide](https://comrademashkov.github.io/dune/guides/projects.html)
 for manifest validation, test-root isolation, nested projects, and tool integration.
+A ready-to-run multi-module project lives in
+[`examples/projects/hello_project`](examples/projects/hello_project):
+
+```sh
+cd examples/projects/hello_project
+../../../build/dune check src/app/main.dn
+../../../build/dune src/app/main.dn
+../../../build/dune test tests/specs/greeter_test.dn
+```
 
 Start an interactive session with `dune repl`. Bindings, imports, functions,
 records, choices, and aliases remain available between entries; a bare

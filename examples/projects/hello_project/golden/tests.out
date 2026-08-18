@@ -1,0 +1,5 @@
+running 2 tests
+test "greets a name" ... ok
+test "keeps punctuation for an empty name" ... ok
+
+test result: ok. 2 passed; 0 failed

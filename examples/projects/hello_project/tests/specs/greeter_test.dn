@@ -1,0 +1,11 @@
+from assert import assert_eq;
+import greeter;
+import test_support;
+
+test "greets a name" {
+    assert_eq(greeter.greeting("Ada"), test_support.expected_for_ada());
+}
+
+test "keeps punctuation for an empty name" {
+    assert_eq(greeter.greeting(""), "Hello, !");
+}
